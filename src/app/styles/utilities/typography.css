@@ -1,0 +1,77 @@
+/* Typography styles */
+h1 {
+  font-size: 2rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: #333;
+}
+
+h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: #333;
+}
+
+.subtitle {
+  font-size: 1.2rem;
+  font-weight: 400;
+  color: #666;
+  margin-bottom: 2rem;
+}
+
+.construction-notice {
+  font-size: 1rem;
+  color: #333;
+  margin-bottom: 1.5rem;
+}
+
+a {
+  color: #0066cc;
+  text-decoration: underline;
+}
+
+a:hover {
+  color: #004499;
+  text-decoration: none;
+}
+
+a:visited {
+  color: #551a8b;
+}
+
+/* Dark mode typography */
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #1a1a1a;
+    color: #e0e0e0;
+  }
+  
+  h1 {
+    color: #fff;
+  }
+  
+  h2 {
+    color: #fff;
+  }
+  
+  .subtitle {
+    color: #ccc;
+  }
+  
+  .construction-notice {
+    color: #e0e0e0;
+  }
+  
+  a {
+    color: #66b3ff;
+  }
+  
+  a:hover {
+    color: #99ccff;
+  }
+  
+  a:visited {
+    color: #cc99ff;
+  }
+}

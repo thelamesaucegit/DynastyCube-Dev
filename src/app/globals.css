@@ -7,16 +7,7 @@
 @import './styles/components/navigation.css';
 @import './styles/components/layout.css';
 
-/* Page-specific styles can be imported per page or here */
+/* Page-specific styles */
 @import './styles/pages/home.css';
 @import './styles/pages/about.css';
 @import './styles/pages/rules.css';
-
-/* Accessibility improvements */
-@media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}

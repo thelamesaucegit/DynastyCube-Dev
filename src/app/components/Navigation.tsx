@@ -4,17 +4,16 @@
 import React from 'react';
 import Link from 'next/link';
 import { useMobileNavigation } from '../hooks/useMobileNavigation';
-import styles from './Navigation.module.css';
 
 const Navigation: React.FC = () => {
   const { isMenuOpen, toggleMenu, menuRef, toggleRef } = useMobileNavigation();
 
   return (
-    <nav className={styles.nav}>
-      <div className={styles.navContainer}>
+    <nav className="nav">
+      <div className="nav-container">
         <button 
           ref={toggleRef}
-          className={styles.menuToggle}
+          className="menu-toggle"
           onClick={toggleMenu}
           aria-expanded={isMenuOpen}
           aria-label="Toggle navigation menu"
@@ -23,28 +22,28 @@ const Navigation: React.FC = () => {
         </button>
         <ul 
           ref={menuRef}
-          className={`${styles.navMenu} ${isMenuOpen ? styles.active : ''}`}
+          className={`nav-menu ${isMenuOpen ? 'active' : ''}`}
           role="menu"
         >
           <li>
-            <Link href="/" className={styles.navLink} role="menuitem">
+            <Link href="/" className="nav-link" role="menuitem">
               Home
             </Link>
           </li>
           <li>
-            <Link href="/about" className={styles.navLink} role="menuitem">
+            <Link href="/about" className="nav-link" role="menuitem">
               About
             </Link>
           </li>
           <li>
-            <Link href="/rules" className={styles.navLink} role="menuitem">
+            <Link href="/rules" className="nav-link" role="menuitem">
               Rules
             </Link>
           </li>
           <li>
             <a 
               href="https://cubecobra.com/cube/overview/TheDynastyCube" 
-              className={styles.navLink}
+              className="nav-link"
               role="menuitem"
               target="_blank"
               rel="noopener noreferrer"
