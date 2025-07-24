@@ -1,4 +1,4 @@
-// hooks/useMobileNavigation.ts
+// src/app/hooks/useMobileNavigation.ts
 import { useState, useEffect, useRef } from 'react';
 
 interface UseMobileNavigationReturn {

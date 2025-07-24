@@ -1,6 +1,11 @@
-// app/layout.tsx
-import './globals.css';
-import Navigation from './components/Navigation';
+// src/app/layout.tsx
+import './globals.css';  // ← This line is crucial
+import { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'The Dynasty Cube',
+  description: 'A collaborative, living draft format',
+};
 
 export default function RootLayout({
   children,
@@ -9,12 +14,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
-        <Navigation />
-        <div className="container">
-          {children}
-        </div>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

@@ -1,26 +1,22 @@
-@import "tailwindcss";
+/* Import utility styles first */
+@import './styles/utilities/reset.css';
+@import './styles/utilities/typography.css';
+@import './styles/utilities/responsive.css';
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* Import component styles */
+@import './styles/components/navigation.css';
+@import './styles/components/layout.css';
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* Page-specific styles can be imported per page or here */
+@import './styles/pages/home.css';
+@import './styles/pages/about.css';
+@import './styles/pages/rules.css';
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Accessibility improvements */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
 }
