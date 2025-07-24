@@ -16,6 +16,7 @@
   justify-content: flex-end;
   align-items: center;
   padding-right: 20px;
+  position: relative; /* Important for dropdown positioning */
 }
 
 .nav-menu {
@@ -59,10 +60,54 @@
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.9rem;
+  font-weight: 500;
 }
 
 .menu-toggle:hover {
   background-color: #f5f5f5;
+}
+
+/* Mobile styles - IMPORTANT: These need to be at the bottom */
+@media (max-width: 768px) {
+  .nav-container {
+    padding-right: 15px;
+  }
+  
+  .menu-toggle {
+    display: block;
+    z-index: 1001;
+  }
+  
+  .nav-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background-color: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    padding: 10px 0;
+    min-width: 150px;
+    flex-direction: column;
+    gap: 0;
+  }
+  
+  .nav-menu.active {
+    display: flex;
+  }
+  
+  .nav-link {
+    padding: 12px 20px;
+    border-radius: 0;
+    display: block;
+    width: 100%;
+    text-align: left;
+  }
+  
+  .nav-link:hover {
+    background-color: #f8f9fa;
+  }
 }
 
 /* Dark mode support for navigation */
@@ -97,9 +142,16 @@
   .menu-toggle:hover {
     background-color: #333;
   }
-  
+}
+
+/* Dark mode mobile styles */
+@media (max-width: 768px) and (prefers-color-scheme: dark) {
   .nav-menu {
     background-color: #1a1a1a;
     border-color: #333;
+  }
+  
+  .nav-link:hover {
+    background-color: #333;
   }
 }

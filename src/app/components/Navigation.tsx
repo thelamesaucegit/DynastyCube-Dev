@@ -31,13 +31,28 @@ const Navigation: React.FC = () => {
             </Link>
           </li>
           <li>
-            <Link href="/about" className="nav-link" role="menuitem">
-              About
+            <Link href="" className="nav-link" role="menuitem">
+              My Account
             </Link>
           </li>
           <li>
-            <Link href="/rules" className="nav-link" role="menuitem">
-              Rules
+            <Link href="" className="nav-link" role="menuitem">
+              Teams
+            </Link>
+          </li>
+          <li>
+            <Link href="" className="nav-link" role="menuitem">
+              Pools
+            </Link>
+          </li>
+          <li>
+            <Link href="" className="nav-link" role="menuitem">
+              Schedule
+            </Link>
+          </li>
+          <li>
+            <Link href="" className="nav-link" role="menuitem">
+              Vote
             </Link>
           </li>
           <li>
@@ -48,7 +63,7 @@ const Navigation: React.FC = () => {
               target="_blank"
               rel="noopener noreferrer"
             >
-              CubeCobra
+              Discord
             </a>
           </li>
         </ul>

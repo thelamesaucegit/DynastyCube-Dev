@@ -9,5 +9,3 @@
 
 /* Page-specific styles */
 @import './styles/pages/home.css';
-@import './styles/pages/about.css';
-@import './styles/pages/rules.css';

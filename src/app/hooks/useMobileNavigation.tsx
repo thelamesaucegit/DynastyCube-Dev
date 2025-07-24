@@ -5,15 +5,14 @@ interface UseMobileNavigationReturn {
   isMenuOpen: boolean;
   toggleMenu: () => void;
   closeMenu: () => void;
-  menuRef: React.RefObject<HTMLUListElement>;
-  toggleRef: React.RefObject<HTMLButtonElement>;
+  menuRef: React.RefObject<HTMLUListElement | null>;
+  toggleRef: React.RefObject<HTMLButtonElement | null>;
 }
 
 export const useMobileNavigation = (): UseMobileNavigationReturn => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLUListElement>(null);
-  const toggleRef = useRef<HTMLButtonElement>(null);
-
+  const menuRef = useRef<HTMLUListElement | null>(null); 
+  const toggleRef = useRef<HTMLButtonElement | null>(null);  
   const toggleMenu = () => {
     setIsMenuOpen(prev => !prev);
   };
