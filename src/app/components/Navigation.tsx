@@ -31,27 +31,27 @@ const Navigation: React.FC = () => {
             </Link>
           </li>
           <li>
-            <Link href="" className="nav-link" role="menuitem">
+            <Link href="/account" className="nav-link" role="menuitem">
               My Account
             </Link>
           </li>
           <li>
-            <Link href="" className="nav-link" role="menuitem">
+            <Link href="/teams" className="nav-link" role="menuitem">
               Teams
             </Link>
           </li>
           <li>
-            <Link href="" className="nav-link" role="menuitem">
+            <Link href="/pools" className="nav-link" role="menuitem">
               Pools
             </Link>
           </li>
           <li>
-            <Link href="" className="nav-link" role="menuitem">
+            <Link href="/schedule" className="nav-link" role="menuitem">
               Schedule
             </Link>
           </li>
           <li>
-            <Link href="" className="nav-link" role="menuitem">
+            <Link href="/vote" className="nav-link" role="menuitem">
               Vote
             </Link>
           </li>
