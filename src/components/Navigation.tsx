@@ -2,6 +2,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { useMobileNavigation } from '../hooks/useMobileNavigation';
 
 const Navigation: React.FC = () => {
@@ -24,11 +25,11 @@ const Navigation: React.FC = () => {
           className={`nav-menu ${isMenuOpen ? 'active' : ''}`}
           role="menu"
         >
-          <li><a href="/" className="nav-link" role="menuitem">Home</a></li>
-          <li><a href="/about" className="nav-link" role="menuitem">About</a></li>
-          <li><a href="/rules" className="nav-link" role="menuitem">Rules</a></li>
+          <li><Link href="/" className="nav-link" role="menuitem">Home</Link></li>
+          <li><Link href="/about" className="nav-link" role="menuitem">About</Link></li>
+          <li><Link href="/rules" className="nav-link" role="menuitem">Rules</Link></li>
           <li>
-            <a 
+            <Link 
               href="https://cubecobra.com/cube/overview/TheDynastyCube" 
               className="nav-link" 
               role="menuitem"
@@ -36,7 +37,7 @@ const Navigation: React.FC = () => {
               rel="noopener noreferrer"
             >
               CubeCobra
-            </a>
+            </Link>
           </li>
         </ul>
       </div>
