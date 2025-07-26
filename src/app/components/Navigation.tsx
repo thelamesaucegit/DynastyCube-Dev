@@ -56,7 +56,7 @@ const Navigation: React.FC = () => {
             </Link>
           </li>
           <li>
-            <a 
+            <Link 
               href="https://discord.gg/8qyEHDeJqg" 
               className="nav-link"
               role="menuitem"
@@ -64,7 +64,7 @@ const Navigation: React.FC = () => {
               rel="noopener noreferrer"
             >
               Discord
-            </a>
+            </Link>
           </li>
         </ul>
       </div>
