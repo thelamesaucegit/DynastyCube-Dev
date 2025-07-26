@@ -57,7 +57,7 @@ const Navigation: React.FC = () => {
           </li>
           <li>
             <a 
-              href="https://cubecobra.com/cube/overview/TheDynastyCube" 
+              href="https://discord.gg/8qyEHDeJqg" 
               className="nav-link"
               role="menuitem"
               target="_blank"
