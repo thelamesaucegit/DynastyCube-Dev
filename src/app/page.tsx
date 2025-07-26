@@ -1,7 +1,7 @@
 // src/app/page.tsx
 import React from 'react';
 import Image from 'next/image';
-import Layout from './components/Layout';
+import Layout from '@/components/Layout';
 
 export default function HomePage() {
   return (
