@@ -11,8 +11,9 @@ interface UseMobileNavigationReturn {
 
 export const useMobileNavigation = (): UseMobileNavigationReturn => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLUListElement | null>(null); 
-  const toggleRef = useRef<HTMLButtonElement | null>(null);  
+  const menuRef = useRef<HTMLUListElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+
   const toggleMenu = () => {
     setIsMenuOpen(prev => !prev);
   };
@@ -23,11 +24,11 @@ export const useMobileNavigation = (): UseMobileNavigationReturn => {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      if (!menuRef.current || !toggleRef.current) return;
+      
       const target = event.target as HTMLElement;
       
-      if (menuRef.current && toggleRef.current &&
-          !menuRef.current.contains(target) &&
-          !toggleRef.current.contains(target)) {
+      if (!menuRef.current.contains(target) && !toggleRef.current.contains(target)) {
         closeMenu();
       }
     };

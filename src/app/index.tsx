@@ -2,7 +2,7 @@
 'use client'; // Add this if using Next.js 13+ app directory
 import './global.css'
 import React from 'react';
-import { useMobileNavigation } from './hooks/useMobileNavigation';
+import { useMobileNavigation } from '@/hooks/useMobileNavigation'; 
 
 export default function Page() {
   const { isMenuOpen, toggleMenu, menuRef, toggleRef } = useMobileNavigation();

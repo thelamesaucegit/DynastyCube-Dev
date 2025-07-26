@@ -22,6 +22,11 @@
     "tailwindcss": "^4",
     "eslint": "^9",
     "eslint-config-next": "15.4.3",
+<<<<<<< Updated upstream
     "@eslint/eslintrc": "^3"
+=======
+    "tailwindcss": "^4",
+    "typescript": "5.8.3"
+>>>>>>> Stashed changes
   }
 }

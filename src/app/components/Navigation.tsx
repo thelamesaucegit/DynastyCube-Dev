@@ -3,7 +3,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { useMobileNavigation } from '../hooks/useMobileNavigation';
+import { useMobileNavigation } from '@/hooks/useMobileNavigation'; 
 
 const Navigation: React.FC = () => {
   const { isMenuOpen, toggleMenu, menuRef, toggleRef } = useMobileNavigation();
