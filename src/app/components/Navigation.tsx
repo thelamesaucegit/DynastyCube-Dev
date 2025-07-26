@@ -3,7 +3,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { useMobileNavigation } from '../hooks/useMobileNavigation';
+import { useMobileNavigation } from '@/hooks/useMobileNavigation'; 
 
 const Navigation: React.FC = () => {
   const { isMenuOpen, toggleMenu, menuRef, toggleRef } = useMobileNavigation();
@@ -31,32 +31,32 @@ const Navigation: React.FC = () => {
             </Link>
           </li>
           <li>
-            <Link href="" className="nav-link" role="menuitem">
+            <Link href="/account" className="nav-link" role="menuitem">
               My Account
             </Link>
           </li>
           <li>
-            <Link href="" className="nav-link" role="menuitem">
+            <Link href="/teams" className="nav-link" role="menuitem">
               Teams
             </Link>
           </li>
           <li>
-            <Link href="" className="nav-link" role="menuitem">
+            <Link href="/pools" className="nav-link" role="menuitem">
               Pools
             </Link>
           </li>
           <li>
-            <Link href="" className="nav-link" role="menuitem">
+            <Link href="/schedule" className="nav-link" role="menuitem">
               Schedule
             </Link>
           </li>
           <li>
-            <Link href="" className="nav-link" role="menuitem">
+            <Link href="/vote" className="nav-link" role="menuitem">
               Vote
             </Link>
           </li>
           <li>
-            <a 
+            <Link 
               href="https://discord.gg/8qyEHDeJqg" 
               className="nav-link"
               role="menuitem"
@@ -64,7 +64,7 @@ const Navigation: React.FC = () => {
               rel="noopener noreferrer"
             >
               Discord
-            </a>
+            </Link>
           </li>
         </ul>
       </div>
