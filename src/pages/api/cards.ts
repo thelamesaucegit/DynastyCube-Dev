@@ -1,6 +1,6 @@
 // src/pages/api/cards.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { Client } from 'pg';
+//import { Client } from 'pg';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const client = new Client({
