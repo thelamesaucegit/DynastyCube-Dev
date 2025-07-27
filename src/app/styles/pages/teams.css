@@ -1,0 +1,94 @@
+/* Teams page specific styles */
+.teams-container {
+  text-align: center;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 2rem 0;
+}
+
+.team-item {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.team-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(59, 130, 246, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.team-emoji {
+  font-size: 2rem;
+  margin-bottom: 0.75rem;
+  display: block;
+}
+
+.team-link {
+  display: inline-block;
+  margin: 0.5rem 0;
+  font-size: 1.2rem;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.team-link:hover {
+  transform: scale(1.05);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.team-motto {
+  font-style: italic;
+  color: #94a3b8;
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .teams-container {
+    max-width: 90%;
+    padding: 1rem 0;
+  }
+  
+  .team-item {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+  }
+  
+  .team-emoji {
+    font-size: 1.5rem;
+  }
+  
+  .team-link {
+    font-size: 1.1rem;
+  }
+  
+  .team-motto {
+    font-size: 0.85rem;
+  }
+}
+
+/* Dark mode specific adjustments */
+@media (prefers-color-scheme: dark) {
+  .team-item {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+  
+  .team-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(59, 130, 246, 0.4);
+  }
+  
+  .team-motto {
+    color: #64748b;
+  }
+}

@@ -9,3 +9,4 @@
 
 /* Page-specific styles */
 @import './styles/pages/home.css';
+@import './styles/pages/teams.css';
