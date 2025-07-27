@@ -1,8 +1,7 @@
-// src/app/page.tsx
+// src/app/teams/shards/page.tsx
 
 //import Image from 'next/image';
 import Layout from '@/components/Layout';
-// src/app/page.tsx
 'use client';
 
 import React, { useEffect, useState } from 'react';
