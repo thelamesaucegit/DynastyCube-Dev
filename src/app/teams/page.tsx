@@ -4,7 +4,7 @@ import React from 'react';
 import Image from 'next/image';
 import Layout from '@/components/Layout';
 
-export default function HomePage() {
+export default function Page() {
   return (
     <Layout>
       <div className="hero-section">
