@@ -1,6 +1,7 @@
-// src/app/teams/page.tsx
+// src/app/page.tsx
 import React from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import Layout from '@/components/Layout';
 
 export default function Page() {
@@ -14,44 +15,45 @@ export default function Page() {
       <p className="align-center">
         Meet the Teams
         <br /><br />
-        🌟 <strong>Alara Shards</strong> 🌟
+
+        🌟 <Link href="/teams/shards"><strong>Alara Shards</strong></Link> 🌟
         <br />
-        <i>"Why not both?"</i>
+        <i>&quot;Why not both?&quot;</i>
         <br /><br />
 
-        ⛩ <strong>Kamigawa Ninja</strong> ⛩
+        ⛩ <Link href="/teams/ninja"><strong>Kamigawa Ninja</strong></Link> ⛩
         <br />
-        <i>"Omae wa mou shindeiru."</i>
+        <i>&quot;Omae wa mou shindeiru.&quot;</i>
         <br /><br />
 
-        🧟 <strong>Innistrad Creeps</strong> 🧟
+        🧟 <Link href="/teams/creeps"><strong>Innistrad Creeps</strong></Link> 🧟
         <br />
-        <i>"Graveyard, Gatekeep, Girlboss"</i>
+        <i>&quot;Graveyard, Gatekeep, Girlboss&quot;</i>
         <br /><br />
 
-        🌞 <strong>Theros Demigods</strong> 🌞
+        🌞 <Link href="/teams/demigods"><strong>Theros Demigods</strong></Link> 🌞
         <br />
-        <i>"The Fates will decide"</i>
+        <i>&quot;The Fates will decide&quot;</i>
         <br /><br />
 
-        🔗 <strong>Ravnica Guildpact</strong> 🔗
+        🔗 <Link href="/teams/guildpact"><strong>Ravnica Guildpact</strong></Link> 🔗
         <br />
-        <i>"A Championship is won and lost before ever entering the battlefield"</i>
+        <i>&quot;A Championship is won and lost before ever entering the battlefield&quot;</i>
         <br /><br />
 
-        👽 <strong>Lorwyn Changelings</strong> 👽
+        👽 <Link href="/teams/changelings"><strong>Lorwyn Changelings</strong></Link> 👽
         <br />
-        <i>"Expect the unexpected"</i>
+        <i>&quot;Expect the unexpected&quot;</i>
         <br /><br />
 
-        💠 <strong>Zendikar Hedrons</strong> 💠
+        💠 <Link href="/teams/hedrons"><strong>Zendikar Hedrons</strong></Link> 💠
         <br />
-        <i>"Good Vibes, No Escape"</i>
+        <i>&quot;Good Vibes, No Escape&quot;</i>
         <br /><br />
 
-        🐲 <strong>Tarkir Dragons</strong> 🐲
+        🐲 <Link href="/teams/dragons"><strong>Tarkir Dragons</strong></Link> 🐲
         <br />
-        <i>"No cost too great"</i>
+        <i>&quot;No cost too great&quot;</i>
       </p>
 
       <div className="content-divider"></div>
