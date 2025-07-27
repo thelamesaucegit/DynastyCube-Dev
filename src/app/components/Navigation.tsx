@@ -57,7 +57,7 @@ const Navigation: React.FC = () => {
           </li>
           <li>
             <Link 
-              href="https://discord.gg/8qyEHDeJqg" 
+              href="https://discord.gg/9cfVJF4yrt" 
               className="nav-link"
               role="menuitem"
               target="_blank"
