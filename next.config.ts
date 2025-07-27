@@ -1,11 +1,16 @@
-import type { NextConfig } from "next";
+// next.config.js
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'cdn.discordapp.com',
+        port: '',
+        pathname: '/avatars/**',
+      },
+    ],
+  },
+}
 
-const nextConfig: NextConfig = {
-  /* config options here */
-  /* i18n: {
-    locales: ['en-gb'],
-    defaultLocale: 'en-gb',
-  }*/
-};
-
-export default nextConfig;
+module.exports = nextConfig

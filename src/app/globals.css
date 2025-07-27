@@ -6,7 +6,10 @@
 /* Import component styles */
 @import './styles/components/navigation.css';
 @import './styles/components/layout.css';
+@import './styles/components/loginForm.css';  
 
 /* Page-specific styles */
 @import './styles/pages/home.css';
+@import './styles/pages/about.css';
+@import './styles/pages/rules.css';
 @import './styles/pages/teams.css';
