@@ -3,7 +3,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 //import { Client } from 'pg';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const client = new Client({
+  const client = new client({
     user: $PGUSER,
     password: $PGPASSWORD,
     host: $PGHOST,
