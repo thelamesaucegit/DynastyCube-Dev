@@ -3,8 +3,22 @@
 import { supabase } from "@/lib/supabase";
 import { useState, useEffect } from "react";
 
+interface DebugInfo {
+  currentURL?: string;
+  origin?: string;
+  expectedCallback?: string;
+  supabaseURL?: string;
+  expectedDiscordRedirect?: string;
+  authError?: string;
+  authErrorDetails?: unknown;
+  authSuccess?: boolean;
+  oauthURL?: string;
+  oauthData?: unknown;
+  exception?: string;
+}
+
 export default function DiscordAuthDebug() {
-  const [debugInfo, setDebugInfo] = useState<any>({});
+  const [debugInfo, setDebugInfo] = useState<DebugInfo>({});
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -22,25 +36,24 @@ export default function DiscordAuthDebug() {
     try {
       console.log("Initiating Discord OAuth...");
 
-      // First, let's try to get the OAuth URL without redirecting
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "discord",
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
-          skipBrowserRedirect: true, // This prevents automatic redirect
+          skipBrowserRedirect: true,
         },
       });
 
       console.log("OAuth response:", { data, error });
 
       if (error) {
-        setDebugInfo((prev) => ({
+        setDebugInfo((prev: DebugInfo) => ({
           ...prev,
           authError: error.message,
           authErrorDetails: error,
         }));
       } else {
-        setDebugInfo((prev) => ({
+        setDebugInfo((prev: DebugInfo) => ({
           ...prev,
           authSuccess: true,
           oauthURL: data?.url,
@@ -49,16 +62,16 @@ export default function DiscordAuthDebug() {
       }
     } catch (err) {
       console.error("OAuth exception:", err);
-      setDebugInfo((prev) => ({
+      setDebugInfo((prev: DebugInfo) => ({
         ...prev,
         exception: String(err),
       }));
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const manualDiscordTest = () => {
-    // Manually redirect to test
     supabase.auth.signInWithOAuth({
       provider: "discord",
       options: {
@@ -123,7 +136,7 @@ export default function DiscordAuthDebug() {
         <code style={{ background: "#f0f0f0", padding: "0.5rem" }}>
           https://zaaqzthoquixvvelzxlr.supabase.co/auth/v1/callback
         </code>
-        <p>👆 This URL must be in your Discord app's OAuth2 redirects</p>
+        <p>👆 This URL must be in your Discord app&#39; OAuth2 redirects</p>
       </div>
     </div>
   );

@@ -5,7 +5,7 @@ import React from "react";
 import Link from "next/link";
 import { useMobileNavigation } from "@/hooks/useMobileNavigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
+// import { supabase } from "@/lib/supabase";
 
 const Navigation: React.FC = () => {
   const { isMenuOpen, toggleMenu, menuRef, toggleRef, closeMenu } =

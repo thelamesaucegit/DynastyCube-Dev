@@ -26,6 +26,7 @@ export const DiscordLogin: React.FC = () => {
       }
       // If successful, user will be redirected to Discord
     } catch (err) {
+      console.error(err);
       setError("An unexpected error occurred");
       setLoading(false);
     }

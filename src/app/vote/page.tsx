@@ -73,7 +73,7 @@ export default function VotePage() {
           >
             <h3>🗳️ Voting System Coming Soon!</h3>
             <p>
-              We're building an exciting voting platform where Dynasty Cube
+              We&#39;re building an exciting voting platform where Dynasty Cube
               members can:
             </p>
             <ul

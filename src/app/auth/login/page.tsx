@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
+import type { AuthError } from "@supabase/supabase-js";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -25,8 +26,13 @@ export default function Login() {
       if (error) throw error;
 
       setMessage("Check your email for the login link!");
-    } catch (error: any) {
-      setMessage(error.error_description || error.message);
+    } catch (err: unknown) {
+      // Narrow the unknown type safely
+      if ((err as AuthError).message) {
+        setMessage((err as AuthError).message);
+      } else {
+        setMessage("An unexpected error occurred");
+      }
     } finally {
       setLoading(false);
     }
