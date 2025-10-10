@@ -1,59 +1,81 @@
 // src/app/page.tsx
-import React from 'react';
-import Link from 'next/link';
-import Layout from '@/components/Layout';
+"use client";
+import React from "react";
+import { useRouter } from "next/navigation";
+import Layout from "@/components/Layout";
 
 export default function Page() {
+  const router = useRouter();
+
   const teams = [
     {
       name: "Alara Shards",
       href: "/teams/shards",
       emoji: "🌟",
-      motto: "Why not both?"
+      motto: "Why not both?",
     },
     {
       name: "Kamigawa Ninja",
       href: "/teams/ninja",
       emoji: "⛩",
-      motto: "Omae wa mou shindeiru."
+      motto: "Omae wa mou shindeiru.",
     },
     {
       name: "Innistrad Creeps",
       href: "/teams/creeps",
       emoji: "🧟",
-      motto: "Graveyard, Gatekeep, Girlboss"
+      motto: "Graveyard, Gatekeep, Girlboss",
     },
     {
       name: "Theros Demigods",
       href: "/teams/demigods",
       emoji: "🌞",
-      motto: "The Fates will decide"
+      motto: "The Fates will decide",
     },
     {
       name: "Ravnica Guildpact",
       href: "/teams/guildpact",
       emoji: "🔗",
-      motto: "A Championship is won and lost before ever entering the battlefield"
+      motto:
+        "A Championship is won and lost before ever entering the battlefield",
     },
     {
       name: "Lorwyn Changelings",
       href: "/teams/changelings",
       emoji: "👽",
-      motto: "Expect the unexpected"
+      motto: "Expect the unexpected",
     },
     {
       name: "Zendikar Hedrons",
       href: "/teams/hedrons",
       emoji: "💠",
-      motto: "Good Vibes, No Escape"
+      motto: "Good Vibes, No Escape",
     },
     {
       name: "Tarkir Dragons",
       href: "/teams/dragons",
       emoji: "🐲",
-      motto: "No cost too great"
-    }
+      motto: "No cost too great",
+    },
   ];
+
+  const handleTeamClick = (href: string, teamName: string) => {
+    // possible antalytics
+    console.log(`Navigating to ${teamName}`);
+    router.push(href);
+  };
+
+  const handleKeyDown = (
+    event: React.KeyboardEvent,
+    href: string,
+    teamName: string,
+  ) => {
+    // Handle Enter and Space key presses for accessibility
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      handleTeamClick(href, teamName);
+    }
+  };
 
   return (
     <Layout>
@@ -62,21 +84,26 @@ export default function Page() {
           <h3 className="text-2xl font-semibold">Teams</h3>
           <p className="hero-subtitle">Meet the Teams</p>
         </div>
-        
-        <div className="teams-container">
+
+        <div className="teams-grid">
           {teams.map((team, index) => (
-            <div key={index} className="team-item">
-              <span className="team-emoji">{team.emoji}</span>
-              <Link href={team.href} className="team-link text-blue-400">
-                <strong>{team.name}</strong>
-              </Link>
-              <div className="team-motto">
-                &quot;{team.motto}&quot;
-              </div>
-            </div>
+            <button
+              key={index}
+              className="team-card"
+              onClick={() => handleTeamClick(team.href, team.name)}
+              onKeyDown={(e) => handleKeyDown(e, team.href, team.name)}
+              aria-label={`View ${team.name} team page - ${team.motto}`}
+              type="button"
+            >
+              <span className="team-emoji" aria-hidden="true">
+                {team.emoji}
+              </span>
+              <span className="team-name">{team.name}</span>
+              <span className="team-motto">&quot;{team.motto}&quot;</span>
+            </button>
           ))}
         </div>
-        
+
         <div className="content-divider mt-8"></div>
       </div>
     </Layout>

@@ -1,157 +1,125 @@
-/* Navigation styles */
-.nav {
-  position: fixed;
-  top: 0;
-  right: 0;
-  left: 0;
-  background-color: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid #e0e0e0;
-  z-index: 1000;
-  padding: 15px 20px;
+/* Add this to your existing src/app/styles/components/navigation.css */
+
+/* Auth-specific styles */
+.nav-auth-section {
+  border-left: 1px solid #e0e0e0;
+  padding-left: 2rem;
+  margin-left: 1rem;
 }
 
-.nav-container {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  padding-right: 20px;
-  position: relative; /* Important for dropdown positioning */
-}
-
-.nav-menu {
-  display: flex;
-  list-style: none;
-  gap: 2rem;
-  margin: 0;
-  padding: 0;
-}
-
-.nav-link {
-  color: #333;
-  text-decoration: none;
-  font-size: 0.95rem;
-  font-weight: 500;
-  padding: 8px 12px;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-}
-
-.nav-link:hover {
-  color: #0066cc;
-  background-color: #f5f5f5;
-  text-decoration: none;
-}
-
-.nav-link:visited {
-  color: #333;
-}
-
-.nav-link:visited:hover {
-  color: #0066cc;
-}
-
-.menu-toggle {
-  display: none;
+.nav-auth-button {
   background: none;
-  border: 1px solid #ccc;
-  color: #333;
-  padding: 8px 12px;
+  border: 1px solid #0066cc;
+  color: #0066cc;
+  padding: 8px 16px;
   border-radius: 4px;
-  cursor: pointer;
   font-size: 0.9rem;
   font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
 }
 
-.menu-toggle:hover {
-  background-color: #f5f5f5;
+.nav-auth-button:hover {
+  background-color: #0066cc;
+  color: white;
 }
 
-/* Mobile styles - IMPORTANT: These need to be at the bottom */
+.nav-discord-signin {
+  background-color: #5865f2;
+  color: white;
+  border-color: #5865f2;
+}
+
+.nav-discord-signin:hover {
+  background-color: #4752c4;
+  border-color: #4752c4;
+}
+
+.nav-auth-user {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.nav-user-info {
+  font-size: 0.9rem;
+  color: #666;
+  font-weight: 500;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-auth-loading {
+  color: #666;
+  font-style: italic;
+}
+
+/* Mobile styles for auth - add this to your existing mobile section */
 @media (max-width: 768px) {
-  .nav-container {
-    padding-right: 15px;
+  .nav-auth-section {
+    border-left: none;
+    border-top: 1px solid #e0e0e0;
+    padding-left: 0;
+    padding-top: 10px;
+    margin-left: 0;
+    margin-top: 10px;
   }
-  
-  .menu-toggle {
-    display: block;
-    z-index: 1001;
+
+  .nav-auth-user {
+    padding: 0 20px;
+    align-items: flex-start;
   }
-  
-  .nav-menu {
-    display: none;
-    position: absolute;
-    top: 100%;
-    right: 0;
-    background-color: white;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    padding: 10px 0;
-    min-width: 150px;
-    flex-direction: column;
-    gap: 0;
+
+  .nav-user-info {
+    padding: 8px 0;
+    font-size: 0.85rem;
+    max-width: none;
   }
-  
-  .nav-menu.active {
-    display: flex;
+
+  .nav-auth-button {
+    width: calc(100% - 40px);
+    margin: 0 20px;
+    text-align: center;
+    justify-content: center;
   }
-  
-  .nav-link {
+
+  .nav-auth-loading {
     padding: 12px 20px;
-    border-radius: 0;
-    display: block;
-    width: 100%;
-    text-align: left;
-  }
-  
-  .nav-link:hover {
-    background-color: #f8f9fa;
   }
 }
 
-/* Dark mode support for navigation */
+/* Dark mode support for auth elements */
 @media (prefers-color-scheme: dark) {
-  .nav {
-    background-color: rgba(26, 26, 26, 0.95);
-    border-bottom-color: #333;
-  }
-  
-  .nav-link {
-    color: #e0e0e0;
-  }
-  
-  .nav-link:hover {
-    color: #66b3ff;
-    background-color: #333;
-  }
-  
-  .nav-link:visited {
-    color: #e0e0e0;
-  }
-  
-  .nav-link:visited:hover {
-    color: #66b3ff;
-  }
-  
-  .menu-toggle {
+  .nav-auth-section {
     border-color: #555;
-    color: #e0e0e0;
   }
-  
-  .menu-toggle:hover {
-    background-color: #333;
+
+  .nav-auth-button {
+    border-color: #66b3ff;
+    color: #66b3ff;
+  }
+
+  .nav-auth-button:hover {
+    background-color: #66b3ff;
+    color: #1a1a1a;
+  }
+
+  .nav-user-info {
+    color: #ccc;
+  }
+
+  .nav-auth-loading {
+    color: #ccc;
   }
 }
 
 /* Dark mode mobile styles */
 @media (max-width: 768px) and (prefers-color-scheme: dark) {
-  .nav-menu {
-    background-color: #1a1a1a;
-    border-color: #333;
-  }
-  
-  .nav-link:hover {
-    background-color: #333;
+  .nav-auth-section {
+    border-color: #555;
   }
 }

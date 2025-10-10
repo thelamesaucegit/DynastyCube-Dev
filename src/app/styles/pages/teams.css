@@ -1,94 +1,306 @@
-/* Teams page specific styles */
-.teams-container {
-  text-align: center;
-  max-width: 600px;
-  margin: 0 auto;
-  padding: 2rem 0;
+/* teams.css - Accessible Version with Clickable Cards */
+
+/* 2-Row Grid Container - Force Grid Layout */
+.teams-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  grid-template-rows: repeat(2, auto) !important;
+  gap: 1.5rem !important;
+  max-width: 1000px;
+  margin: 2rem auto !important;
+  padding: 0 1rem;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.team-item {
-  margin-bottom: 2rem;
-  padding: 1.5rem;
+/* Override any text-center conflicts */
+.text-center .teams-grid {
+  display: grid !important;
+  text-align: initial;
+}
+
+.text-center .teams-grid .team-card {
+  text-align: center !important;
+}
+
+/* Team Card Styles - Now as clickable buttons */
+.team-card {
+  /* Reset button styles */
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+
+  /* Card styling */
+  padding: 1.5rem !important;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   transition: all 0.3s ease;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center;
+  min-height: 180px;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  margin: 0 !important;
+  width: 100%;
+  height: auto;
+  grid-column: auto !important;
+  grid-row: auto !important;
 }
 
-.team-item:hover {
+/* Hover and focus states */
+.team-card:hover,
+.team-card:focus {
   background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(59, 130, 246, 0.3);
-  transform: translateY(-2px);
+  border-color: rgba(59, 130, 246, 0.5);
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+  outline: none;
+  /* Remove default focus outline */
+}
+
+/* Focus visible for keyboard navigation */
+.team-card:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+/* Active state */
+.team-card:active {
+  transform: translateY(-2px) scale(1.01);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
+/* Gradient overlay effect */
+.team-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg,
+      rgba(59, 130, 246, 0.05) 0%,
+      rgba(147, 51, 234, 0.05) 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.team-card:hover::before,
+.team-card:focus::before {
+  opacity: 1;
+}
+
+/* Team card content styling */
 .team-emoji {
-  font-size: 2rem;
+  font-size: 2.5rem;
   margin-bottom: 0.75rem;
   display: block;
+  position: relative;
+  z-index: 2;
+  transition: transform 0.3s ease;
 }
 
-.team-link {
-  display: inline-block;
+.team-card:hover .team-emoji,
+.team-card:focus .team-emoji {
+  transform: scale(1.1) rotate(5deg);
+}
+
+.team-name {
+  display: block;
   margin: 0.5rem 0;
-  font-size: 1.2rem;
-  text-decoration: none;
+  font-size: 1.1rem;
+  font-weight: bold;
+  position: relative;
+  z-index: 2;
+  color: #60a5fa;
   transition: all 0.2s ease;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
 }
 
-.team-link:hover {
+.team-card:hover .team-name,
+.team-card:focus .team-name {
+  color: #93c5fd;
   transform: scale(1.05);
-  background: rgba(59, 130, 246, 0.1);
 }
 
 .team-motto {
   font-style: italic;
   color: #94a3b8;
   margin-top: 0.75rem;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   line-height: 1.4;
+  position: relative;
+  z-index: 2;
+  opacity: 0.9;
+  display: block;
 }
 
-/* Mobile adjustments */
+/* Ensure proper text selection behavior */
+.team-card * {
+  user-select: none;
+  /* Prevent text selection on click/drag */
+  pointer-events: none;
+  /* Let the button handle all events */
+}
+
+/* Responsive Design for Different Screen Sizes */
+
+/* Large tablets and small desktops */
+@media (max-width: 1024px) {
+  .teams-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    grid-template-rows: repeat(3, auto) !important;
+    gap: 1.25rem !important;
+    max-width: 900px;
+  }
+
+  .team-card {
+    min-height: 160px;
+    padding: 1.25rem !important;
+  }
+}
+
+/* Tablets */
 @media (max-width: 768px) {
-  .teams-container {
-    max-width: 90%;
-    padding: 1rem 0;
+  .teams-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    grid-template-rows: repeat(4, auto) !important;
+    gap: 1rem !important;
+    max-width: 600px;
+    padding: 0 0.5rem;
   }
-  
-  .team-item {
-    margin-bottom: 1.5rem;
-    padding: 1rem;
+
+  .team-card {
+    min-height: 140px;
+    padding: 1rem !important;
   }
-  
+
   .team-emoji {
-    font-size: 1.5rem;
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
   }
-  
-  .team-link {
-    font-size: 1.1rem;
+
+  .team-name {
+    font-size: 1rem;
+    margin: 0.25rem 0;
   }
-  
+
   .team-motto {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+  }
+}
+
+/* Mobile phones */
+@media (max-width: 480px) {
+  .teams-grid {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: repeat(8, auto) !important;
+    gap: 1rem !important;
+    margin: 1rem auto !important;
+  }
+
+  .team-card {
+    min-height: 120px;
+    padding: 1rem !important;
+  }
+
+  .team-emoji {
+    font-size: 1.75rem;
+  }
+
+  .team-name {
+    font-size: 0.95rem;
+  }
+
+  .team-motto {
+    font-size: 0.75rem;
   }
 }
 
 /* Dark mode specific adjustments */
 @media (prefers-color-scheme: dark) {
-  .team-item {
+  .team-card {
     background: rgba(255, 255, 255, 0.03);
     border-color: rgba(255, 255, 255, 0.08);
   }
-  
-  .team-item:hover {
+
+  .team-card:hover,
+  .team-card:focus {
     background: rgba(255, 255, 255, 0.08);
     border-color: rgba(59, 130, 246, 0.4);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
   }
-  
+
+  .team-card::before {
+    background: linear-gradient(135deg,
+        rgba(59, 130, 246, 0.08) 0%,
+        rgba(147, 51, 234, 0.08) 100%);
+  }
+
   .team-motto {
     color: #64748b;
   }
+
+  .team-name {
+    color: #60a5fa;
+  }
+
+  .team-card:hover .team-name,
+  .team-card:focus .team-name {
+    color: #93c5fd;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .team-card {
+    border: 2px solid currentColor;
+  }
+
+  .team-card:focus-visible {
+    outline: 3px solid #60a5fa;
+    outline-offset: 3px;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+
+  .team-card,
+  .team-emoji,
+  .team-name {
+    transition: none;
+  }
+
+  .team-card:hover .team-emoji,
+  .team-card:focus .team-emoji {
+    transform: none;
+  }
+
+  .team-card:hover,
+  .team-card:focus {
+    transform: none;
+  }
+}
+
+/* Ensure grid behavior with Tailwind classes */
+.teams-grid * {
+  box-sizing: border-box;
+}
+
+/* Legacy styles for backward compatibility - HIDDEN */
+.teams-container {
+  display: none !important;
+}
+
+.team-item {
+  display: none !important;
 }

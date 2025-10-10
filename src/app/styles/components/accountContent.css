@@ -1,0 +1,322 @@
+/* Account Content Enhanced Styles */
+.account-container {
+  max-width: 48rem;
+  margin: 0 auto;
+  background: linear-gradient(145deg, rgba(31, 41, 55, 0.9), rgba(17, 24, 39, 0.9));
+  padding: 2rem;
+  border-radius: 16px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(75, 85, 99, 0.3);
+  color: #f9fafb; /* Ensure all text is white by default */
+}
+
+.account-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(75, 85, 99, 0.3);
+}
+
+.account-title-section {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+/* .user-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 3px solid #3b82f6;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+*/
+
+.user-avatar {
+  border-radius: 50%;
+  border: 3px solid #3b82f6;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  object-fit: cover;
+}
+.account-title {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: #f9fafb;
+  margin: 0;
+}
+
+.provider-badge {
+  font-size: 0.875rem;
+  color: #60a5fa;
+  margin-top: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.provider-badge::before {
+  content: "✓";
+  color: #10b981;
+  font-weight: bold;
+}
+
+.sign-out-button {
+  padding: 0.5rem 1rem;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: white;
+  font-weight: 500;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 0.875rem;
+}
+
+.sign-out-button:hover {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  transform: translateY(-1px);
+}
+
+/* Section Styling */
+.user-info-section,
+.stats-section,
+.actions-section {
+  margin-bottom: 2rem;
+} 
+
+.section-title,
+.stats-title,
+.actions-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #f9fafb;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.section-title::before {
+  content: "👤";
+}
+
+.stats-title::before {
+  content: "📊";
+}
+
+.actions-title::before {
+  content: "⚡";
+}
+
+/* Account Info */
+.account-info {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.info-item {
+  background: rgba(55, 65, 81, 0.8); /* Increased opacity for better contrast */
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(75, 85, 99, 0.5);
+  backdrop-filter: blur(4px); /* Add blur effect for better text readability */
+}
+
+.info-label {
+  font-size: 0.875rem;
+  font-weight: 600; /* Increase font weight for better visibility */
+  color: #e5e7eb; /* Slightly brighter gray for better contrast */
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.info-value {
+  color: #f9fafb;
+  font-size: 1rem;
+  font-weight: 500; /* Make text slightly bolder for better visibility */
+  word-break: break-all;
+}
+
+.discord-id,
+.user-id {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.875rem;
+  color: #f9fafb;
+  /* background: rgba(0, 0, 0, 0.6); /* Darker background for better contrast */
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid rgba(75, 85, 99, 0.4); /* Add border for definition */
+}
+
+/* Stats Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.stat-card {
+  background: rgba(55, 65, 81, 0.6);
+  padding: 1.5rem;
+  border-radius: 12px;
+  text-align: center;
+  border: 1px solid rgba(75, 85, 99, 0.4);
+  transition: transform 0.2s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+}
+
+.stat-label {
+  color: #e5e7eb; /* Brighter for better contrast */
+  font-size: 0.875rem;
+  font-weight: 500; /* Add font weight for better visibility */
+  margin-bottom: 0.5rem;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #60a5fa;
+}
+
+.win-rate {
+  color: #10b981;
+}
+
+.team-name {
+  color: #f59e0b;
+  font-size: 1.2rem;
+}
+
+.rank {
+  color: #8b5cf6;
+}
+
+/* Actions Grid */
+.actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.action-button {
+  padding: 1rem;
+  font-weight: 500;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 1rem;
+}
+
+.action-button-primary {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+}
+
+.action-button-primary:hover {
+  background: linear-gradient(135deg, #2563eb, #1e40af);
+  transform: translateY(-2px);
+}
+
+.action-button-secondary {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+}
+
+.action-button-secondary:hover {
+  background: linear-gradient(135deg, #059669, #047857);
+  transform: translateY(-2px);
+}
+
+.action-button-tertiary {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  color: white;
+}
+
+.action-button-tertiary:hover {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  transform: translateY(-2px);
+}
+
+/* Debug Section */
+.debug-section {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid rgba(75, 85, 99, 0.3);
+}
+
+.debug-toggle {
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+.debug-toggle:hover {
+  color: #d1d5db;
+}
+
+.debug-content {
+  background: rgba(0, 0, 0, 0.4);
+  padding: 1rem;
+  border-radius: 8px;
+  margin-top: 1rem;
+}
+
+.debug-json {
+  color: #10b981;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  overflow-x: auto;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .account-container {
+    padding: 1.5rem;
+  }
+  
+  .account-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+  
+  .account-title-section {
+    flex-direction: column;
+    text-align: center;
+    align-items: center;
+  }
+  
+  .account-info {
+    grid-template-columns: 1fr;
+  }
+  
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .actions-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .user-avatar {
+    width: 80px;
+    height: 80px;
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+}

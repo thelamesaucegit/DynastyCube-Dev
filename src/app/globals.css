@@ -1,12 +1,14 @@
 /* Import utility styles first */
-@import './styles/utilities/reset.css';
-@import './styles/utilities/typography.css';
-@import './styles/utilities/responsive.css';
+@import "./styles/utilities/reset.css";
+@import "./styles/utilities/typography.css";
+@import "./styles/utilities/responsive.css";
 
 /* Import component styles */
-@import './styles/components/navigation.css';
-@import './styles/components/layout.css';
+@import "./styles/components/navigation.css";
+@import "./styles/components/layout.css";
+@import "./styles/components/accountContent.css";
 
 /* Page-specific styles */
-@import './styles/pages/home.css';
-@import './styles/pages/teams.css';
+@import "./styles/pages/home.css";
+@import "./styles/pages/teams.css";
+@import "./styles/pages/account.css";

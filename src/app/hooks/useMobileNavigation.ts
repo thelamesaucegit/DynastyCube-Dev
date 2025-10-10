@@ -1,5 +1,5 @@
 // src/app/hooks/useMobileNavigation.ts
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from "react";
 
 interface UseMobileNavigationReturn {
   isMenuOpen: boolean;
@@ -15,7 +15,7 @@ export const useMobileNavigation = (): UseMobileNavigationReturn => {
   const toggleRef = useRef<HTMLButtonElement>(null);
 
   const toggleMenu = () => {
-    setIsMenuOpen(prev => !prev);
+    setIsMenuOpen((prev) => !prev);
   };
 
   const closeMenu = () => {
@@ -25,28 +25,31 @@ export const useMobileNavigation = (): UseMobileNavigationReturn => {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (!menuRef.current || !toggleRef.current) return;
-      
+
       const target = event.target as HTMLElement;
-      
-      if (!menuRef.current.contains(target) && !toggleRef.current.contains(target)) {
+
+      if (
+        !menuRef.current.contains(target) &&
+        !toggleRef.current.contains(target)
+      ) {
         closeMenu();
       }
     };
 
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         closeMenu();
       }
     };
 
     if (isMenuOpen) {
-      document.addEventListener('click', handleClickOutside);
-      document.addEventListener('keydown', handleEscape);
+      document.addEventListener("click", handleClickOutside);
+      document.addEventListener("keydown", handleEscape);
     }
 
     return () => {
-      document.removeEventListener('click', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
+      document.removeEventListener("click", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
     };
   }, [isMenuOpen]);
 
@@ -55,6 +58,6 @@ export const useMobileNavigation = (): UseMobileNavigationReturn => {
     toggleMenu,
     closeMenu,
     menuRef,
-    toggleRef
+    toggleRef,
   };
 };

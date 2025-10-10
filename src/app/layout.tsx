@@ -1,10 +1,11 @@
 // src/app/layout.tsx
-import './globals.css';  // ← This line is crucial
-import { Metadata } from 'next';
+import "./globals.css";
+import { Metadata } from "next";
+import { AuthProvider } from "../contexts/AuthContext";
 
 export const metadata: Metadata = {
-  title: 'The Dynasty Cube',
-  description: 'A collaborative, living draft format',
+  title: "The Dynasty Cube",
+  description: "A collaborative, living draft format",
 };
 
 export default function RootLayout({
@@ -14,7 +15,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }
