@@ -1,14 +1,44 @@
-/* Import utility styles first */
-@import "./styles/utilities/reset.css";
-@import "./styles/utilities/typography.css";
-@import "./styles/utilities/responsive.css";
+/* Tailwind CSS v4 */
+@import "tailwindcss";
 
-/* Import component styles */
-@import "./styles/components/navigation.css";
-@import "./styles/components/layout.css";
-@import "./styles/components/accountContent.css";
+/* Configure class-based dark mode for Tailwind v4 */
+@custom-variant dark (&:where(.dark, .dark *));
 
-/* Page-specific styles */
-@import "./styles/pages/home.css";
-@import "./styles/pages/teams.css";
-@import "./styles/pages/account.css";
+/* Base styles */
+@layer base {
+  body {
+    @apply min-h-screen font-sans antialiased;
+    @apply bg-gray-50 text-gray-900;
+    @apply dark:bg-gray-950 dark:text-gray-100;
+    @apply pt-20; /* Space for fixed navigation */
+  }
+
+  * {
+    @apply border-gray-200 dark:border-gray-700;
+  }
+}
+
+/* Component styles */
+@layer components {
+  .container {
+    @apply max-w-4xl mx-auto px-4 py-8;
+  }
+
+  .card {
+    @apply bg-white dark:bg-gray-800 border rounded-xl p-6 shadow-md;
+    @apply hover:-translate-y-0.5 hover:shadow-lg transition-all;
+  }
+}
+
+/* Backup: Old custom CSS (commented out - can be removed later) */
+/* @import "./styles/utilities/design-system.css"; */
+/* @import "./styles/utilities/reset.css"; */
+/* @import "./styles/utilities/typography.css"; */
+/* @import "./styles/components/layout.css"; */
+/* @import "./styles/components/auth.css"; */
+/* @import "./styles/components/accountContent.css"; */
+/* @import "./styles/utilities/responsive.css"; */
+/* @import "./styles/components/navigation.css"; */
+/* @import "./styles/pages/home.css"; */
+/* @import "./styles/pages/teams.css"; */
+/* @import "./styles/pages/account.css"; */

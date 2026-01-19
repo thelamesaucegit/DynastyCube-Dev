@@ -1,125 +1,642 @@
-/* Add this to your existing src/app/styles/components/navigation.css */
+/* =================================
+   NAVIGATION COMPONENT STYLES
+   Using Design System Variables
+   ================================= */
 
-/* Auth-specific styles */
+/* Nav Container */
+nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border-bottom: 1px solid var(--color-gray-200);
+  box-shadow: var(--shadow-sm);
+  z-index: var(--z-sticky);
+  transition: box-shadow var(--transition-base);
+}
+
+nav:hover {
+  box-shadow: var(--shadow-md);
+}
+
+/* Nav Inner Container */
+.nav-container {
+  max-width: var(--container-xl);
+  margin: 0 auto;
+  padding: var(--spacing-4) var(--spacing-6);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Nav Links */
+.nav-links {
+  display: flex;
+  gap: var(--spacing-6);
+  align-items: center;
+}
+
+.nav-links a {
+  color: var(--color-gray-700);
+  text-decoration: none;
+  font-weight: var(--font-medium);
+  font-size: var(--text-base);
+  padding: var(--spacing-2) var(--spacing-3);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+
+.nav-links a:hover {
+  color: var(--color-primary-600);
+  background: var(--color-gray-50);
+}
+
+.nav-links a:focus-visible {
+  outline: 2px solid var(--color-primary-500);
+  outline-offset: 2px;
+}
+
+/* Active Nav Link */
+.nav-links a.active {
+  color: var(--color-primary-600);
+  background: var(--color-primary-50);
+  font-weight: var(--font-semibold);
+}
+
+/* =================================
+   AUTH SECTION
+   ================================= */
+
 .nav-auth-section {
-  border-left: 1px solid #e0e0e0;
-  padding-left: 2rem;
-  margin-left: 1rem;
+  border-left: 1px solid var(--color-gray-200);
+  padding-left: var(--spacing-8);
+  margin-left: var(--spacing-4);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
 }
 
 .nav-auth-button {
   background: none;
-  border: 1px solid #0066cc;
-  color: #0066cc;
-  padding: 8px 16px;
-  border-radius: 4px;
-  font-size: 0.9rem;
-  font-weight: 500;
+  border: 1px solid var(--color-primary-600);
+  color: var(--color-primary-600);
+  padding: var(--spacing-2) var(--spacing-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
   cursor: pointer;
-  transition: all 0.2s ease;
-  font-family: inherit;
+  transition: all var(--transition-fast);
+  font-family: var(--font-sans);
 }
 
 .nav-auth-button:hover {
-  background-color: #0066cc;
+  background-color: var(--color-primary-600);
   color: white;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-primary);
 }
 
+.nav-auth-button:active {
+  transform: translateY(0);
+}
+
+/* Discord Signin Button */
 .nav-discord-signin {
-  background-color: #5865f2;
+  background-color: var(--color-discord);
   color: white;
-  border-color: #5865f2;
+  border-color: var(--color-discord);
 }
 
 .nav-discord-signin:hover {
-  background-color: #4752c4;
-  border-color: #4752c4;
+  background-color: var(--color-discord-dark);
+  border-color: var(--color-discord-dark);
+  box-shadow: var(--shadow-discord);
 }
 
+/* User Info */
 .nav-auth-user {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--spacing-2);
 }
 
 .nav-user-info {
-  font-size: 0.9rem;
-  color: #666;
-  font-weight: 500;
-  max-width: 120px;
+  font-size: var(--text-sm);
+  color: var(--color-gray-600);
+  font-weight: var(--font-medium);
+  max-width: 150px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .nav-auth-loading {
-  color: #666;
+  color: var(--color-gray-500);
   font-style: italic;
+  font-size: var(--text-sm);
 }
 
-/* Mobile styles for auth - add this to your existing mobile section */
+/* =================================
+   MOBILE NAVIGATION
+   ================================= */
+
+.mobile-menu-button {
+  display: none;
+  background: none;
+  border: none;
+  font-size: var(--text-2xl);
+  cursor: pointer;
+  padding: var(--spacing-2);
+  color: var(--color-gray-700);
+  transition: color var(--transition-fast);
+}
+
+.mobile-menu-button:hover {
+  color: var(--color-primary-600);
+}
+
+/* Mobile Menu */
+.mobile-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border-bottom: 1px solid var(--color-gray-200);
+  box-shadow: var(--shadow-lg);
+  animation: slideDown var(--transition-base) ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mobile-menu.open {
+  display: block;
+}
+
+.mobile-menu .nav-links {
+  flex-direction: column;
+  padding: var(--spacing-4);
+  gap: 0;
+}
+
+.mobile-menu .nav-links a {
+  width: 100%;
+  padding: var(--spacing-3);
+  border-radius: var(--radius-md);
+}
+
+.mobile-menu .nav-auth-section {
+  border-left: none;
+  border-top: 1px solid var(--color-gray-200);
+  padding: var(--spacing-4);
+  margin: 0;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.mobile-menu .nav-auth-button {
+  width: 100%;
+  text-align: center;
+  justify-content: center;
+}
+
+/* =================================
+   RESPONSIVE DESIGN
+   ================================= */
+
 @media (max-width: 768px) {
+  .nav-container {
+    padding: var(--spacing-3) var(--spacing-4);
+  }
+
+  .nav-links {
+    display: none;
+  }
+
   .nav-auth-section {
-    border-left: none;
-    border-top: 1px solid #e0e0e0;
-    padding-left: 0;
-    padding-top: 10px;
-    margin-left: 0;
-    margin-top: 10px;
+    display: none;
   }
 
-  .nav-auth-user {
-    padding: 0 20px;
-    align-items: flex-start;
-  }
-
-  .nav-user-info {
-    padding: 8px 0;
-    font-size: 0.85rem;
-    max-width: none;
-  }
-
-  .nav-auth-button {
-    width: calc(100% - 40px);
-    margin: 0 20px;
-    text-align: center;
-    justify-content: center;
-  }
-
-  .nav-auth-loading {
-    padding: 12px 20px;
+  .mobile-menu-button {
+    display: block;
   }
 }
 
-/* Dark mode support for auth elements */
+@media (max-width: 480px) {
+  .nav-container {
+    padding: var(--spacing-2) var(--spacing-3);
+  }
+}
+
+/* =================================
+   THEME TOGGLE BUTTON
+   ================================= */
+
+.theme-toggle {
+  background: none;
+  border: 1px solid var(--color-gray-300);
+  color: var(--color-gray-700);
+  padding: var(--spacing-2) var(--spacing-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-family: var(--font-sans);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.theme-toggle:hover {
+  background-color: var(--color-gray-100);
+  border-color: var(--color-primary-500);
+  color: var(--color-primary-600);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.theme-toggle:active {
+  transform: translateY(0);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--color-primary-500);
+  outline-offset: 2px;
+}
+
+/* =================================
+   THEME-SPECIFIC STYLES
+   ================================= */
+
+/* Dark Mode (System Preference) */
 @media (prefers-color-scheme: dark) {
+  nav {
+    background: #1f2937;
+    border-bottom-color: #374151;
+  }
+
+  .nav-links a {
+    color: var(--color-gray-300);
+  }
+
+  .nav-links a:hover {
+    color: var(--color-primary-400);
+    background: var(--color-gray-800);
+  }
+
+  .nav-links a.active {
+    color: var(--color-primary-400);
+    background: rgba(59, 130, 246, 0.1);
+  }
+
   .nav-auth-section {
-    border-color: #555;
+    border-left-color: var(--color-gray-800);
   }
 
   .nav-auth-button {
-    border-color: #66b3ff;
-    color: #66b3ff;
+    border-color: var(--color-primary-400);
+    color: var(--color-primary-400);
   }
 
   .nav-auth-button:hover {
-    background-color: #66b3ff;
-    color: #1a1a1a;
+    background-color: var(--color-primary-500);
+    color: white;
   }
 
   .nav-user-info {
-    color: #ccc;
+    color: var(--color-gray-400);
   }
 
   .nav-auth-loading {
-    color: #ccc;
+    color: var(--color-gray-500);
+  }
+
+  .mobile-menu-button {
+    color: var(--color-gray-300);
+  }
+
+  .mobile-menu-button:hover {
+    color: var(--color-primary-400);
+  }
+
+  .mobile-menu {
+    background: #1f2937;
+    border-bottom-color: #374151;
+  }
+
+  .mobile-menu .nav-auth-section {
+    border-top-color: var(--color-gray-800);
+  }
+
+  .theme-toggle {
+    border-color: var(--color-gray-700);
+    color: var(--color-gray-300);
+  }
+
+  .theme-toggle:hover {
+    background-color: var(--color-gray-800);
+    border-color: var(--color-primary-400);
+    color: var(--color-primary-400);
   }
 }
 
-/* Dark mode mobile styles */
-@media (max-width: 768px) and (prefers-color-scheme: dark) {
-  .nav-auth-section {
-    border-color: #555;
+/* Manual Dark Mode Toggle */
+html[data-theme="dark"] nav,
+html[data-theme="dark"] nav.nav {
+  background: #1f2937 !important;
+  border-bottom-color: #374151 !important;
+}
+
+html[data-theme="dark"] .nav-links a {
+  color: var(--color-gray-300) !important;
+}
+
+html[data-theme="dark"] .nav-links a:hover {
+  color: var(--color-primary-400) !important;
+  background: var(--color-gray-800) !important;
+}
+
+html[data-theme="dark"] .nav-links a.active {
+  color: var(--color-primary-400) !important;
+  background: rgba(59, 130, 246, 0.1) !important;
+}
+
+html[data-theme="dark"] .nav-auth-section {
+  border-left-color: var(--color-gray-800) !important;
+}
+
+html[data-theme="dark"] .nav-auth-button {
+  border-color: var(--color-primary-400) !important;
+  color: var(--color-primary-400) !important;
+}
+
+html[data-theme="dark"] .nav-auth-button:hover {
+  background-color: var(--color-primary-500) !important;
+  color: white !important;
+}
+
+html[data-theme="dark"] .nav-user-info {
+  color: var(--color-gray-400) !important;
+}
+
+html[data-theme="dark"] .nav-auth-loading {
+  color: var(--color-gray-500) !important;
+}
+
+html[data-theme="dark"] .mobile-menu-button {
+  color: var(--color-gray-300) !important;
+}
+
+html[data-theme="dark"] .mobile-menu-button:hover {
+  color: var(--color-primary-400) !important;
+}
+
+html[data-theme="dark"] .mobile-menu {
+  background: #1f2937 !important;
+  border-bottom-color: #374151 !important;
+}
+
+html[data-theme="dark"] .mobile-menu .nav-auth-section {
+  border-top-color: var(--color-gray-800) !important;
+}
+
+html[data-theme="dark"] .theme-toggle {
+  border-color: var(--color-gray-700) !important;
+  color: var(--color-gray-300) !important;
+}
+
+html[data-theme="dark"] .theme-toggle:hover {
+  background-color: var(--color-gray-800) !important;
+  border-color: var(--color-primary-400) !important;
+  color: var(--color-primary-400) !important;
+}
+
+/* System light mode - but user toggles to dark */
+@media (prefers-color-scheme: light) {
+  html[data-theme="dark"] nav,
+  html[data-theme="dark"] nav.nav {
+    background: #1f2937 !important;
+    border-bottom-color: #374151 !important;
   }
+
+  html[data-theme="dark"] .nav-links a {
+    color: var(--color-gray-300) !important;
+  }
+
+  html[data-theme="dark"] .nav-links a:hover {
+    color: var(--color-primary-400) !important;
+    background: var(--color-gray-800) !important;
+  }
+
+  html[data-theme="dark"] .nav-links a.active {
+    color: var(--color-primary-400) !important;
+    background: rgba(59, 130, 246, 0.1) !important;
+  }
+
+  html[data-theme="dark"] .nav-auth-section {
+    border-left-color: var(--color-gray-800) !important;
+  }
+
+  html[data-theme="dark"] .nav-auth-button {
+    border-color: var(--color-primary-400) !important;
+    color: var(--color-primary-400) !important;
+  }
+
+  html[data-theme="dark"] .nav-auth-button:hover {
+    background-color: var(--color-primary-500) !important;
+    color: white !important;
+  }
+
+  html[data-theme="dark"] .nav-user-info {
+    color: var(--color-gray-400) !important;
+  }
+
+  html[data-theme="dark"] .nav-auth-loading {
+    color: var(--color-gray-500) !important;
+  }
+
+  html[data-theme="dark"] .mobile-menu-button {
+    color: var(--color-gray-300) !important;
+  }
+
+  html[data-theme="dark"] .mobile-menu-button:hover {
+    color: var(--color-primary-400) !important;
+  }
+
+  html[data-theme="dark"] .mobile-menu {
+    background: #1f2937 !important;
+    border-bottom-color: #374151 !important;
+  }
+
+  html[data-theme="dark"] .mobile-menu .nav-auth-section {
+    border-top-color: var(--color-gray-800) !important;
+  }
+
+  html[data-theme="dark"] .theme-toggle {
+    border-color: var(--color-gray-700) !important;
+    color: var(--color-gray-300) !important;
+  }
+
+  html[data-theme="dark"] .theme-toggle:hover {
+    background-color: var(--color-gray-800) !important;
+    border-color: var(--color-primary-400) !important;
+    color: var(--color-primary-400) !important;
+  }
+}
+
+/* Manual Light Mode Toggle - Override system dark mode */
+@media (prefers-color-scheme: dark) {
+  html[data-theme="light"] nav,
+  html[data-theme="light"] nav.nav {
+    background: #ffffff !important;
+    border-bottom-color: var(--color-gray-200) !important;
+  }
+
+  html[data-theme="light"] .nav-links a {
+    color: var(--color-gray-700) !important;
+  }
+
+  html[data-theme="light"] .nav-links a:hover {
+    color: var(--color-primary-600) !important;
+    background: var(--color-gray-50) !important;
+  }
+
+  html[data-theme="light"] .nav-links a.active {
+    color: var(--color-primary-600) !important;
+    background: var(--color-primary-50) !important;
+  }
+
+  html[data-theme="light"] .nav-auth-section {
+    border-left-color: var(--color-gray-200) !important;
+  }
+
+  html[data-theme="light"] .nav-auth-button {
+    border-color: var(--color-primary-600) !important;
+    color: var(--color-primary-600) !important;
+  }
+
+  html[data-theme="light"] .nav-auth-button:hover {
+    background-color: var(--color-primary-600) !important;
+    color: white !important;
+  }
+
+  html[data-theme="light"] .nav-user-info {
+    color: var(--color-gray-600) !important;
+  }
+
+  html[data-theme="light"] .nav-auth-loading {
+    color: var(--color-gray-500) !important;
+  }
+
+  html[data-theme="light"] .mobile-menu-button {
+    color: var(--color-gray-700) !important;
+  }
+
+  html[data-theme="light"] .mobile-menu-button:hover {
+    color: var(--color-primary-600) !important;
+  }
+
+  html[data-theme="light"] .mobile-menu {
+    background: #ffffff !important;
+    border-bottom-color: var(--color-gray-200) !important;
+  }
+
+  html[data-theme="light"] .mobile-menu .nav-auth-section {
+    border-top-color: var(--color-gray-200) !important;
+  }
+
+  html[data-theme="light"] .theme-toggle {
+    border-color: var(--color-gray-300) !important;
+    color: var(--color-gray-700) !important;
+  }
+
+  html[data-theme="light"] .theme-toggle:hover {
+    background-color: var(--color-gray-100) !important;
+    border-color: var(--color-primary-500) !important;
+    color: var(--color-primary-600) !important;
+  }
+}
+
+/* Also apply outside media query for non-dark system preferences */
+html[data-theme="light"] nav,
+html[data-theme="light"] nav.nav {
+  background: #ffffff !important;
+  border-bottom-color: var(--color-gray-200) !important;
+}
+
+html[data-theme="light"] .nav-links a {
+  color: var(--color-gray-700) !important;
+}
+
+html[data-theme="light"] .nav-links a:hover {
+  color: var(--color-primary-600) !important;
+  background: var(--color-gray-50) !important;
+}
+
+html[data-theme="light"] .nav-links a.active {
+  color: var(--color-primary-600) !important;
+  background: var(--color-primary-50) !important;
+}
+
+html[data-theme="light"] .nav-auth-section {
+  border-left-color: var(--color-gray-200) !important;
+}
+
+html[data-theme="light"] .nav-auth-button {
+  border-color: var(--color-primary-600) !important;
+  color: var(--color-primary-600) !important;
+}
+
+html[data-theme="light"] .nav-auth-button:hover {
+  background-color: var(--color-primary-600) !important;
+  color: white !important;
+}
+
+html[data-theme="light"] .nav-user-info {
+  color: var(--color-gray-600) !important;
+}
+
+html[data-theme="light"] .nav-auth-loading {
+  color: var(--color-gray-500) !important;
+}
+
+html[data-theme="light"] .mobile-menu-button {
+  color: var(--color-gray-700) !important;
+}
+
+html[data-theme="light"] .mobile-menu-button:hover {
+  color: var(--color-primary-600) !important;
+}
+
+html[data-theme="light"] .mobile-menu {
+  background: #ffffff !important;
+  border-bottom-color: var(--color-gray-200) !important;
+}
+
+html[data-theme="light"] .mobile-menu .nav-auth-section {
+  border-top-color: var(--color-gray-200) !important;
+}
+
+html[data-theme="light"] .theme-toggle {
+  border-color: var(--color-gray-300) !important;
+  color: var(--color-gray-700) !important;
+}
+
+html[data-theme="light"] .theme-toggle:hover {
+  background-color: var(--color-gray-100) !important;
+  border-color: var(--color-primary-500) !important;
+  color: var(--color-primary-600) !important;
 }

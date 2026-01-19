@@ -1,35 +1,49 @@
 "use client";
 
 import { useEffect } from "react";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase-browser";
 import { useRouter } from "next/navigation";
 
 export default function AuthCallback() {
   const router = useRouter();
+  const supabase = getSupabaseClient();
 
   useEffect(() => {
     const handleAuthCallback = async () => {
       try {
-        console.log("Processing auth callback...");
+        // Get the code from the URL query parameters
+        const searchParams = new URLSearchParams(window.location.search);
+        const code = searchParams.get("code");
 
-        // Get the session from the URL hash
-        const { data, error } = await supabase.auth.getSession();
+        if (code) {
+          // Exchange the code for a session
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
-        if (error) {
-          console.error("Auth callback error:", error);
+          if (error) {
+            console.error("Auth callback error:", error);
+            router.push(`/auth/auth-code-error?error=session_error&error_description=${encodeURIComponent(error.message)}`);
+            return;
+          }
+
+          if (data.session) {
+            router.push("/");
+            return;
+          }
+        }
+
+        // Fallback: check for existing session
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+        if (sessionError) {
+          console.error("Session error:", sessionError);
           router.push("/auth/auth-code-error?error=session_error");
           return;
         }
 
-        if (data.session) {
-          console.log("✓ Authentication successful!");
-          console.log("User:", data.session.user.email);
+        if (sessionData.session) {
           router.push("/");
         } else {
-          console.log("No session found, checking URL...");
-          // Let Supabase handle the URL hash
-          await supabase.auth.getUser();
-          router.push("/");
+          router.push("/auth/login");
         }
       } catch (err) {
         console.error("Auth callback exception:", err);
@@ -38,7 +52,7 @@ export default function AuthCallback() {
     };
 
     handleAuthCallback();
-  }, [router]);
+  }, [router, supabase]);
 
   return (
     <div className="container">

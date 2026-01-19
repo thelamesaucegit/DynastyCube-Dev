@@ -68,38 +68,156 @@
 /* Dark mode support for navigation */
 @media (prefers-color-scheme: dark) {
   .nav {
-    background-color: rgba(26, 26, 26, 0.95);
-    border-bottom-color: #333;
+    background-color: #1f2937 !important;
+    border-bottom-color: #374151 !important;
   }
-  
+
   .nav-link {
     color: #e0e0e0;
   }
-  
+
   .nav-link:hover {
     color: #66b3ff;
     background-color: #333;
   }
-  
+
   .nav-link:visited {
     color: #e0e0e0;
   }
-  
+
   .nav-link:visited:hover {
     color: #66b3ff;
   }
-  
+
   .menu-toggle {
     border-color: #555;
     color: #e0e0e0;
   }
-  
+
   .menu-toggle:hover {
     background-color: #333;
   }
-  
+
   .nav-menu {
-    background-color: #1a1a1a;
+    background-color: transparent !important;
     border-color: #333;
   }
+
+  /* Light mode override - when user manually toggles to light */
+  html[data-theme="light"] .nav {
+    background-color: rgba(255, 255, 255, 0.95) !important;
+    border-bottom-color: #e0e0e0 !important;
+  }
+
+  html[data-theme="light"] .nav-link {
+    color: #333 !important;
+  }
+
+  html[data-theme="light"] .nav-link:hover {
+    color: #0066cc !important;
+    background-color: #f5f5f5 !important;
+  }
+
+  html[data-theme="light"] .nav-link:visited {
+    color: #333 !important;
+  }
+
+  html[data-theme="light"] .nav-link:visited:hover {
+    color: #0066cc !important;
+  }
+
+  html[data-theme="light"] .menu-toggle {
+    border-color: #ccc !important;
+    color: #333 !important;
+  }
+
+  html[data-theme="light"] .menu-toggle:hover {
+    background-color: #f5f5f5 !important;
+  }
+
+  html[data-theme="light"] .nav-menu {
+    background-color: rgba(255, 255, 255, 0.95) !important;
+    border-color: #e0e0e0 !important;
+  }
+}
+
+/* Light mode - when system preference is light but user toggles to dark */
+@media (prefers-color-scheme: light) {
+  html[data-theme="dark"] .nav {
+    background-color: #1f2937 !important;
+    border-bottom-color: #374151 !important;
+  }
+
+  html[data-theme="dark"] .nav-link {
+    color: #e0e0e0 !important;
+  }
+
+  html[data-theme="dark"] .nav-link:hover {
+    color: #66b3ff !important;
+    background-color: #333 !important;
+  }
+
+  html[data-theme="dark"] .nav-link:visited {
+    color: #e0e0e0 !important;
+  }
+
+  html[data-theme="dark"] .nav-link:visited:hover {
+    color: #66b3ff !important;
+  }
+
+  html[data-theme="dark"] .menu-toggle {
+    border-color: #555 !important;
+    color: #e0e0e0 !important;
+  }
+
+  html[data-theme="dark"] .menu-toggle:hover {
+    background-color: #333 !important;
+  }
+
+  html[data-theme="dark"] .nav-menu {
+    background-color: transparent !important;
+    border-color: #333 !important;
+  }
+}
+
+/* Also apply dark mode styles outside media query */
+html[data-theme="dark"] .nav {
+  background-color: #1f2937 !important;
+  border-bottom-color: #374151 !important;
+}
+
+html[data-theme="dark"] .nav-link {
+  color: #e0e0e0 !important;
+}
+
+html[data-theme="dark"] .nav-link:hover {
+  color: #66b3ff !important;
+  background-color: #333 !important;
+}
+
+html[data-theme="dark"] .nav-link:visited {
+  color: #e0e0e0 !important;
+}
+
+html[data-theme="dark"] .nav-link:visited:hover {
+  color: #66b3ff !important;
+}
+
+html[data-theme="dark"] .menu-toggle {
+  border-color: #555 !important;
+  color: #e0e0e0 !important;
+}
+
+html[data-theme="dark"] .menu-toggle:hover {
+  background-color: #333 !important;
+}
+
+html[data-theme="dark"] .nav {
+  background-color: #1f2937 !important;
+  border-bottom-color: #374151 !important;
+}
+
+html[data-theme="dark"] .nav-menu {
+  background-color: transparent !important;
+  border-color: #333 !important;
 }

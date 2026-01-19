@@ -79,32 +79,32 @@ export default function Page() {
 
   return (
     <Layout>
-      <div className="text-center text-gray-300">
-        <div className="hero-section">
-          <h3 className="text-2xl font-semibold">Teams</h3>
-          <p className="hero-subtitle">Meet the Teams</p>
+      <div className="text-center">
+        <div className="py-8">
+          <h3 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-2">Teams</h3>
+          <p className="text-lg text-gray-700 dark:text-gray-300">Meet the Teams</p>
         </div>
 
-        <div className="teams-grid">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 my-8">
           {teams.map((team, index) => (
             <button
               key={index}
-              className="team-card"
+              className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-md hover:shadow-lg hover:-translate-y-1 transition-all text-center group"
               onClick={() => handleTeamClick(team.href, team.name)}
               onKeyDown={(e) => handleKeyDown(e, team.href, team.name)}
               aria-label={`View ${team.name} team page - ${team.motto}`}
               type="button"
             >
-              <span className="team-emoji" aria-hidden="true">
+              <span className="text-5xl mb-3 block group-hover:scale-110 transition-transform" aria-hidden="true">
                 {team.emoji}
               </span>
-              <span className="team-name">{team.name}</span>
-              <span className="team-motto">&quot;{team.motto}&quot;</span>
+              <span className="text-lg font-bold text-gray-900 dark:text-gray-100 block mb-2">{team.name}</span>
+              <span className="text-sm text-gray-600 dark:text-gray-400 italic block">&quot;{team.motto}&quot;</span>
             </button>
           ))}
         </div>
 
-        <div className="content-divider mt-8"></div>
+        <div className="mt-12 border-t border-gray-300 dark:border-gray-700"></div>
       </div>
     </Layout>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { supabase } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase-browser";
 import { useState, useEffect } from "react";
 
 interface DebugInfo {
@@ -20,6 +20,7 @@ interface DebugInfo {
 export default function DiscordAuthDebug() {
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({});
   const [loading, setLoading] = useState(false);
+  const supabase = getSupabaseClient();
 
   useEffect(() => {
     setDebugInfo({
@@ -34,8 +35,6 @@ export default function DiscordAuthDebug() {
   const testDiscordAuth = async () => {
     setLoading(true);
     try {
-      console.log("Initiating Discord OAuth...");
-
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "discord",
         options: {
@@ -43,8 +42,6 @@ export default function DiscordAuthDebug() {
           skipBrowserRedirect: true,
         },
       });
-
-      console.log("OAuth response:", { data, error });
 
       if (error) {
         setDebugInfo((prev: DebugInfo) => ({

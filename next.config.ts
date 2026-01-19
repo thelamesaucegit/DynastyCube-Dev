@@ -4,10 +4,16 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       {
-        protocol: "https", // Discord serves images over HTTPS
+        protocol: "https",
         hostname: "cdn.discordapp.com",
-        port: "", // Leaving port empty means any port on the hostname is allowed
-        pathname: "/avatars/**", // This allows images within the '/avatars/' path or any subdirectories
+        port: "",
+        pathname: "/avatars/**",
+      },
+      {
+        protocol: "https",
+        hostname: "lh3.googleusercontent.com",
+        port: "",
+        pathname: "/**",
       },
     ],
   },

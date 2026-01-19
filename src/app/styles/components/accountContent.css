@@ -1,322 +1,277 @@
-/* Account Content Enhanced Styles */
-.account-container {
-  max-width: 48rem;
-  margin: 0 auto;
-  background: linear-gradient(145deg, rgba(31, 41, 55, 0.9), rgba(17, 24, 39, 0.9));
-  padding: 2rem;
-  border-radius: 16px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(75, 85, 99, 0.3);
-  color: #f9fafb; /* Ensure all text is white by default */
+/* =================================
+   ACCOUNT LINKING COMPONENT STYLES
+   ================================= */
+
+:root {
+  /* Primary Colors */
+  --color-primary-300: #93c5fd;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+
+  /* Gray Scale */
+  --color-gray-50: #f9fafb;
+  --color-gray-100: #f3f4f6;
+  --color-gray-200: #e5e7eb;
+  --color-gray-300: #d1d5db;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #4b5563;
+  --color-gray-700: #374151;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #111827;
+
+  /* Semantic Colors */
+  --color-success-500: #10b981;
+  --color-success-600: #059669;
+  --color-success-700: #047857;
+
+  --color-danger-500: #ef4444;
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
+
+  /* Spacing Scale */
+  --spacing-xs: 0.5rem;
+  --spacing-sm: 0.75rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+
+  /* Border Radius */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Shadows */
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+
+  /* Transitions */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.account-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 2rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid rgba(75, 85, 99, 0.3);
-}
+/* =================================
+   ACCOUNT LINKING CARD
+   ================================= */
 
-.account-title-section {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-/* .user-avatar {
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  border: 3px solid #3b82f6;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-}
-*/
-
-.user-avatar {
-  border-radius: 50%;
-  border: 3px solid #3b82f6;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-  object-fit: cover;
-}
-.account-title {
-  font-size: 1.875rem;
-  font-weight: 700;
-  color: #f9fafb;
-  margin: 0;
-}
-
-.provider-badge {
-  font-size: 0.875rem;
-  color: #60a5fa;
-  margin-top: 0.25rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.provider-badge::before {
-  content: "✓";
-  color: #10b981;
-  font-weight: bold;
-}
-
-.sign-out-button {
-  padding: 0.5rem 1rem;
-  background: linear-gradient(135deg, #ef4444, #dc2626);
-  color: white;
-  font-weight: 500;
+.account-linking-card {
+  background: transparent;
   border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 0.875rem;
+  padding: 0;
 }
 
-.sign-out-button:hover {
-  background: linear-gradient(135deg, #dc2626, #b91c1c);
-  transform: translateY(-1px);
-}
-
-/* Section Styling */
-.user-info-section,
-.stats-section,
-.actions-section {
-  margin-bottom: 2rem;
-} 
-
-.section-title,
-.stats-title,
-.actions-title {
+.account-linking-card h3 {
+  margin: 0 0 var(--spacing-xs) 0;
   font-size: 1.25rem;
   font-weight: 600;
-  color: #f9fafb;
-  margin-bottom: 1rem;
+}
+
+.account-linking-card > p {
+  margin: 0 0 var(--spacing-lg) 0;
+  line-height: 1.5;
+}
+
+/* Account Linking Sections */
+.account-linking-section {
+  margin-bottom: var(--spacing-lg);
+}
+
+.account-linking-section:last-child {
+  margin-bottom: 0;
+}
+
+.account-linking-section h4 {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+/* =================================
+   IDENTITY ITEMS
+   ================================= */
+
+.account-identity-item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: space-between;
+  background: var(--color-gray-50);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
+  transition: all var(--transition-base);
+  position: relative;
+  overflow: hidden;
 }
 
-.section-title::before {
-  content: "👤";
+.account-identity-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 3px;
+  background: var(--color-primary-500);
+  transform: scaleY(0);
+  transition: transform var(--transition-base);
 }
 
-.stats-title::before {
-  content: "📊";
+.account-identity-item:hover {
+  background: #ffffff;
+  border-color: var(--color-primary-300);
+  box-shadow: var(--shadow-md);
+  transform: translateX(4px);
 }
 
-.actions-title::before {
-  content: "⚡";
+.account-identity-item:hover::before {
+  transform: scaleY(1);
 }
 
-/* Account Info */
-.account-info {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1rem;
+.account-identity-item:last-child {
+  margin-bottom: 0;
 }
 
-.info-item {
-  background: rgba(55, 65, 81, 0.8); /* Increased opacity for better contrast */
-  padding: 1rem;
-  border-radius: 8px;
-  border: 1px solid rgba(75, 85, 99, 0.5);
-  backdrop-filter: blur(4px); /* Add blur effect for better text readability */
+.account-identity-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex: 1;
 }
 
-.info-label {
-  font-size: 0.875rem;
-  font-weight: 600; /* Increase font weight for better visibility */
-  color: #e5e7eb; /* Slightly brighter gray for better contrast */
+.account-identity-info span {
+  font-size: 1.5rem;
+  transition: transform var(--transition-fast);
+}
+
+.account-identity-item:hover .account-identity-info span {
+  transform: scale(1.1);
+}
+
+.account-identity-info strong {
   display: block;
+  font-size: 1rem;
+  font-weight: 600;
   margin-bottom: 0.25rem;
 }
 
-.info-value {
-  color: #f9fafb;
-  font-size: 1rem;
-  font-weight: 500; /* Make text slightly bolder for better visibility */
-  word-break: break-all;
-}
-
-.discord-id,
-.user-id {
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+.account-identity-info small {
   font-size: 0.875rem;
-  color: #f9fafb;
-  /* background: rgba(0, 0, 0, 0.6); /* Darker background for better contrast */
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  border: 1px solid rgba(75, 85, 99, 0.4); /* Add border for definition */
 }
 
-/* Stats Grid */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1rem;
-}
+/* =================================
+   BUTTON STYLES
+   ================================= */
 
-.stat-card {
-  background: rgba(55, 65, 81, 0.6);
-  padding: 1.5rem;
-  border-radius: 12px;
-  text-align: center;
-  border: 1px solid rgba(75, 85, 99, 0.4);
-  transition: transform 0.2s ease;
-}
-
-.stat-card:hover {
-  transform: translateY(-2px);
-}
-
-.stat-label {
-  color: #e5e7eb; /* Brighter for better contrast */
-  font-size: 0.875rem;
-  font-weight: 500; /* Add font weight for better visibility */
-  margin-bottom: 0.5rem;
-}
-
-.stat-value {
-  font-size: 2rem;
-  font-weight: 700;
-  color: #60a5fa;
-}
-
-.win-rate {
-  color: #10b981;
-}
-
-.team-name {
-  color: #f59e0b;
-  font-size: 1.2rem;
-}
-
-.rank {
-  color: #8b5cf6;
-}
-
-/* Actions Grid */
-.actions-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-}
-
-.action-button {
-  padding: 1rem;
-  font-weight: 500;
+.account-identity-item button {
+  padding: var(--spacing-xs) var(--spacing-md);
   border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 1rem;
-}
-
-.action-button-primary {
-  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-  color: white;
-}
-
-.action-button-primary:hover {
-  background: linear-gradient(135deg, #2563eb, #1e40af);
-  transform: translateY(-2px);
-}
-
-.action-button-secondary {
-  background: linear-gradient(135deg, #10b981, #059669);
-  color: white;
-}
-
-.action-button-secondary:hover {
-  background: linear-gradient(135deg, #059669, #047857);
-  transform: translateY(-2px);
-}
-
-.action-button-tertiary {
-  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
-  color: white;
-}
-
-.action-button-tertiary:hover {
-  background: linear-gradient(135deg, #7c3aed, #6d28d9);
-  transform: translateY(-2px);
-}
-
-/* Debug Section */
-.debug-section {
-  margin-top: 2rem;
-  padding-top: 2rem;
-  border-top: 1px solid rgba(75, 85, 99, 0.3);
-}
-
-.debug-toggle {
-  color: #9ca3af;
-  cursor: pointer;
+  border-radius: var(--radius-sm);
   font-size: 0.875rem;
-  margin-bottom: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  white-space: nowrap;
+  position: relative;
+  overflow: hidden;
 }
 
-.debug-toggle:hover {
-  color: #d1d5db;
+.account-identity-item button::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transform: translate(-50%, -50%);
+  transition: width var(--transition-slow), height var(--transition-slow);
 }
 
-.debug-content {
-  background: rgba(0, 0, 0, 0.4);
-  padding: 1rem;
-  border-radius: 8px;
-  margin-top: 1rem;
+.account-identity-item button:active::after {
+  width: 300px;
+  height: 300px;
 }
 
-.debug-json {
-  color: #10b981;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  font-size: 0.75rem;
-  white-space: pre-wrap;
-  overflow-x: auto;
-  max-height: 300px;
-  overflow-y: auto;
+.account-identity-item button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
 }
 
-/* Mobile Responsiveness */
+/* Link buttons (Discord, Google, etc.) */
+.account-linking-section button:not(.link-toggle-btn) {
+  background: linear-gradient(135deg, var(--color-success-500), var(--color-success-600));
+  color: white;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+}
+
+.account-linking-section button:not(.link-toggle-btn):hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--color-success-600), var(--color-success-700));
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(16, 185, 129, 0.4);
+}
+
+/* Unlink buttons (red gradient) */
+.account-identity-item button {
+  background: linear-gradient(135deg, var(--color-danger-500), var(--color-danger-600));
+  color: white;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
+}
+
+.account-identity-item button:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--color-danger-600), var(--color-danger-700));
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(239, 68, 68, 0.4);
+}
+
+/* =================================
+   MOBILE RESPONSIVE
+   ================================= */
+
 @media (max-width: 768px) {
-  .account-container {
-    padding: 1.5rem;
-  }
-  
-  .account-header {
+  .account-identity-item {
     flex-direction: column;
-    gap: 1rem;
     align-items: flex-start;
+    gap: var(--spacing-sm);
   }
-  
-  .account-title-section {
-    flex-direction: column;
-    text-align: center;
-    align-items: center;
-  }
-  
-  .account-info {
-    grid-template-columns: 1fr;
-  }
-  
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .actions-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .user-avatar {
-    width: 80px;
-    height: 80px;
+
+  .account-identity-item button {
+    width: 100%;
   }
 }
 
-@media (max-width: 480px) {
-  .stats-grid {
-    grid-template-columns: 1fr;
+/* =================================
+   DARK MODE SUPPORT
+   ================================= */
+
+@media (prefers-color-scheme: dark) {
+  .account-identity-item {
+    background: var(--color-gray-800);
+    border-color: var(--color-gray-700);
   }
+
+  .account-identity-item:hover {
+    background: var(--color-gray-900);
+    border-color: var(--color-gray-600);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  }
+}
+
+html[data-theme="dark"] .account-identity-item {
+  background: var(--color-gray-800);
+  border-color: var(--color-gray-700);
+}
+
+html[data-theme="dark"] .account-identity-item:hover {
+  background: var(--color-gray-900);
+  border-color: var(--color-gray-600);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Accessibility */
+.account-identity-item button:focus-visible {
+  outline: 2px solid var(--color-primary-500);
+  outline-offset: 2px;
 }

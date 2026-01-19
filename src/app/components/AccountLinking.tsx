@@ -3,14 +3,16 @@
 
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase-browser";
 import type { UserIdentity } from "@supabase/supabase-js";
+import "@/styles/components/accountContent.css";
 
 const AccountLinking: React.FC = () => {
   const { user, loading } = useAuth();
   const [identities, setIdentities] = useState<UserIdentity[]>([]);
   const [linking, setLinking] = useState(false);
   const [unlinking, setUnlinking] = useState<string | null>(null);
+  const supabase = getSupabaseClient();
 
   // Fetch identities on mount or when user changes
   useEffect(() => {
@@ -50,6 +52,29 @@ const AccountLinking: React.FC = () => {
     } catch (err) {
       console.error("Exception linking Discord:", err);
       alert("An error occurred while linking Discord.");
+    } finally {
+      setLinking(false);
+    }
+  };
+
+  // Link Google account
+  const linkGoogleAccount = async () => {
+    if (!user) return;
+    setLinking(true);
+
+    try {
+      const { error } = await supabase.auth.linkIdentity({
+        provider: "google",
+      });
+      if (error) {
+        console.error("Error linking Google:", error);
+        alert(`Failed to link Google account: ${error.message}`);
+      } else {
+        console.log("Google linking initiated.");
+      }
+    } catch (err) {
+      console.error("Exception linking Google:", err);
+      alert("An error occurred while linking Google.");
     } finally {
       setLinking(false);
     }
@@ -133,6 +158,7 @@ const AccountLinking: React.FC = () => {
   }
 
   const hasDiscord = identities.some((id) => id.provider === "discord");
+  const hasGoogle = identities.some((id) => id.provider === "google");
 
   return (
     <div className="account-linking-card">
@@ -188,6 +214,23 @@ const AccountLinking: React.FC = () => {
 
             <button onClick={linkDiscordAccount} disabled={linking}>
               {linking ? "Linking..." : "Link Discord"}
+            </button>
+          </div>
+        )}
+
+        {!hasGoogle && (
+          <div className="account-identity-item">
+            <div className="account-identity-info">
+              <span>📧</span>
+              <div>
+                <strong>Google</strong>
+                <br />
+                <small>Link your Google account for additional login options</small>
+              </div>
+            </div>
+
+            <button onClick={linkGoogleAccount} disabled={linking}>
+              {linking ? "Linking..." : "Link Google"}
             </button>
           </div>
         )}
