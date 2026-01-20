@@ -332,6 +332,33 @@ export async function addCardToDeck(
 }
 
 /**
+ * Update a deck card's quantity
+ */
+export async function updateDeckCardQuantity(
+  cardId: string,
+  newQuantity: number
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+
+  try {
+    const { error } = await supabase
+      .from("deck_cards")
+      .update({ quantity: newQuantity })
+      .eq("id", cardId);
+
+    if (error) {
+      console.error("Error updating deck card quantity:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Unexpected error updating deck card quantity:", error);
+    return { success: false, error: "An unexpected error occurred" };
+  }
+}
+
+/**
  * Remove a card from a deck
  */
 export async function removeCardFromDeck(

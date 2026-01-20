@@ -35,12 +35,14 @@ export const MatchExtensionManager: React.FC<MatchExtensionManagerProps> = ({ se
 
   useEffect(() => {
     loadWeeks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seasonId]);
 
   useEffect(() => {
     if (selectedWeek) {
       loadMatches();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedWeek]);
 
   const loadWeeks = async () => {
@@ -154,7 +156,6 @@ export const MatchExtensionManager: React.FC<MatchExtensionManagerProps> = ({ se
   }
 
   const selectedWeekData = weeks.find((w) => w.id === selectedWeek);
-  const currentMatch = matches.find((m) => m.id === selectedMatch);
 
   return (
     <div className="space-y-6">

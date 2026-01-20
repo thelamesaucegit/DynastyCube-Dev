@@ -84,7 +84,8 @@ export default function HomePage() {
   }
 
   return (
-    <Layout>
+    <div className="home-page-wrapper">
+      <div className="home-page">
       {/* Hero Section */}
       <div className="hero-section">
         <h1 className="text-4xl md:text-5xl font-bold mb-6">
@@ -310,6 +311,7 @@ export default function HomePage() {
           {" "}for complete cube details and card lists.
         </p>
       </div>
-    </Layout>
+      </div>
+    </div>
   );
 }

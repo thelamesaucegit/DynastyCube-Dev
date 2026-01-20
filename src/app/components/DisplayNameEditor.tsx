@@ -23,6 +23,7 @@ export const DisplayNameEditor: React.FC<DisplayNameEditorProps> = ({ onUpdate }
     if (user) {
       loadCurrentDisplayName();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const loadCurrentDisplayName = async () => {

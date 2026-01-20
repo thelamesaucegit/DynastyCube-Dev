@@ -45,6 +45,7 @@ export const MatchSchedulingWidget: React.FC<MatchSchedulingWidgetProps> = ({
     if (canSchedule) {
       loadMatches();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId, canSchedule]);
 
   useEffect(() => {

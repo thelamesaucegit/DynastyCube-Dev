@@ -41,6 +41,7 @@ export function MatchRecording({ teamId }: MatchRecordingProps) {
   useEffect(() => {
     loadMatchData();
     checkUserRoles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId]);
 
   const loadMatchData = async () => {

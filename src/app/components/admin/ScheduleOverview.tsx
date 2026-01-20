@@ -28,6 +28,7 @@ export const ScheduleOverview: React.FC<ScheduleOverviewProps> = ({ seasonId }) 
 
   useEffect(() => {
     loadWeeks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seasonId]);
 
   const loadWeeks = async () => {

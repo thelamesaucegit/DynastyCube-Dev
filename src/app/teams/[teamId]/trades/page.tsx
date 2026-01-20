@@ -63,6 +63,7 @@ export default function TradesPage({ params }: TradesPageProps) {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId]);
 
   useEffect(() => {
@@ -95,7 +96,7 @@ export default function TradesPage({ params }: TradesPageProps) {
 
   const loadTradeDetails = async (tradeId: string) => {
     try {
-      const { trade, items } = await getTradeDetails(tradeId);
+      const { items } = await getTradeDetails(tradeId);
       setSelectedTradeItems(items || []);
 
       const { messages } = await getTradeMessages(tradeId);

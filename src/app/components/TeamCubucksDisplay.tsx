@@ -27,6 +27,7 @@ export const TeamCubucksDisplay: React.FC<TeamCubucksDisplayProps> = ({
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId]);
 
   const loadData = async () => {

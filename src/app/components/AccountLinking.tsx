@@ -32,6 +32,7 @@ const AccountLinking: React.FC = () => {
     };
 
     fetchIdentities();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // Link Discord account

@@ -33,12 +33,14 @@ export const MatchScheduler: React.FC<MatchSchedulerProps> = ({ seasonId }) => {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seasonId]);
 
   useEffect(() => {
     if (selectedWeek) {
       loadWeekMatches();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedWeek]);
 
   const loadData = async () => {

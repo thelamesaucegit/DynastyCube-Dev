@@ -234,6 +234,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                       className="group relative bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-blue-400 transition-all hover:shadow-lg"
                     >
                       {pick.image_url && (
+                        /* eslint-disable-next-line @next/next/no-img-element */
                         <img
                           src={pick.image_url}
                           alt={pick.card_name}

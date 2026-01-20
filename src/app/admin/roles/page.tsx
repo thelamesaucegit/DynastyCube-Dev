@@ -17,6 +17,7 @@ export default function AdminRolesPage() {
 
   useEffect(() => {
     checkAdminStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, authLoading]);
 
   const checkAdminStatus = async () => {

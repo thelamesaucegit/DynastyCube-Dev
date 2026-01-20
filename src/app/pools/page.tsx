@@ -351,6 +351,7 @@ export default function PoolsPage() {
               >
                 {/* Card Image */}
                 {card.image_url ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img
                     src={card.image_url}
                     alt={card.card_name}

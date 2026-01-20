@@ -24,6 +24,7 @@ import {
   deleteDeck,
   getDeckCards,
   addCardToDeck,
+  updateDeckCardQuantity,
   removeCardFromDeck,
 } from "@/app/actions/draftActions";
 import type { DraftPick, Deck, DeckCard } from "@/app/actions/draftActions";
@@ -58,6 +59,7 @@ function DraggableCard({ pick }: { pick: DraftPick }) {
     >
       <div className="flex items-center gap-2">
         {pick.image_url && (
+          /* eslint-disable-next-line @next/next/no-img-element */
           <img
             src={pick.image_url}
             alt={pick.card_name}
@@ -149,7 +151,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId }) => {
     if (selectedDeck) {
       loadDeckCards(selectedDeck.id!);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDeck]);
 
   const loadData = async () => {
@@ -280,16 +281,10 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId }) => {
       (dc) => dc.card_name === landName && dc.category === activeCategory
     );
 
-    if (existingLand) {
-      // Increment quantity
-      const result = await addCardToDeck({
-        deck_id: selectedDeck.id!,
-        draft_pick_id: undefined, // Basic lands don't have draft picks
-        card_id: `basic-${landName.toLowerCase()}`,
-        card_name: landName,
-        quantity: (existingLand.quantity || 1) + 1,
-        category: activeCategory,
-      });
+    if (existingLand && existingLand.id) {
+      // Update existing land quantity
+      const newQuantity = (existingLand.quantity || 1) + 1;
+      const result = await updateDeckCardQuantity(existingLand.id, newQuantity);
 
       if (result.success) {
         setSuccess(`Added ${landName} to ${activeCategory}!`);
@@ -332,16 +327,9 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId }) => {
     if (newQuantity <= 0) {
       // Remove the land
       await handleRemoveCardFromDeck(existingLand.id!, landName);
-    } else {
+    } else if (existingLand.id) {
       // Update quantity
-      const result = await addCardToDeck({
-        deck_id: selectedDeck.id!,
-        draft_pick_id: undefined,
-        card_id: `basic-${landName.toLowerCase()}`,
-        card_name: landName,
-        quantity: newQuantity,
-        category: activeCategory,
-      });
+      const result = await updateDeckCardQuantity(existingLand.id, newQuantity);
 
       if (result.success) {
         await loadDeckCards(selectedDeck.id!);
@@ -971,6 +959,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId }) => {
           <div className="w-64 p-3 bg-white dark:bg-gray-800 rounded-lg border-2 border-blue-400 shadow-2xl opacity-90">
             <div className="flex items-center gap-2">
               {activeDragPick.image_url && (
+                /* eslint-disable-next-line @next/next/no-img-element */
                 <img
                   src={activeDragPick.image_url}
                   alt={activeDragPick.card_name}

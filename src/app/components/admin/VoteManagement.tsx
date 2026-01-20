@@ -6,7 +6,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   getAllPolls,
   createPoll,
-  updatePoll,
   deletePoll,
   togglePollActive,
   getPollResults,

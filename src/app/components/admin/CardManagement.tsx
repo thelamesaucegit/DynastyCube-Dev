@@ -234,6 +234,7 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
                 className="flex items-center gap-4 p-3 bg-gray-50 dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700 hover:border-blue-400 transition-colors"
               >
                 {card.imageUrl && (
+                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img
                     src={card.imageUrl}
                     alt={card.name}
@@ -298,6 +299,7 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
                 className="group relative bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-blue-400 transition-all"
               >
                 {card.image_url && (
+                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img
                     src={card.image_url}
                     alt={card.card_name}

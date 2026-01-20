@@ -3,6 +3,21 @@
    Using Design System Variables
    ================================= */
 
+/* Home Page Wrapper - bypasses the narrow default container */
+.home-page-wrapper {
+  width: 100%;
+  padding: 2rem 0;
+  animation: fadeIn var(--transition-slow) ease-in;
+}
+
+/* Home Page Content Container */
+.home-page {
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 2.5rem;
+}
+
 /* Hero Section */
 .hero-section {
   text-align: center;
@@ -160,24 +175,55 @@
   background: #ffffff;
   border: 1px solid #e5e7eb;
   border-radius: var(--radius-xl);
-  padding: var(--spacing-8);
-  margin: var(--spacing-6) auto;
-  max-width: 800px;
+  padding: 1.5rem 2rem;
   box-shadow: var(--shadow-md);
   transition: all var(--transition-base);
+  height: fit-content;
 }
 
 .content-card:hover {
-  transform: translateY(-4px);
+  transform: translateY(-2px);
   box-shadow: var(--shadow-lg);
+}
+
+/* Card headers need breathing room */
+.content-card h2 {
+  padding-bottom: 0.5rem;
+}
+
+/* Full width content card (for sections that span full width) */
+.content-card.full-width {
+  grid-column: 1 / -1;
 }
 
 /* =================================
    RESPONSIVE DESIGN
    ================================= */
 
+/* Large screens */
+@media (min-width: 1400px) {
+  .home-page {
+    max-width: 1300px;
+    padding: 0 3rem;
+  }
+}
+
 /* Tablets */
+@media (max-width: 1024px) {
+  .home-page {
+    padding: 0 2rem;
+  }
+}
+
 @media (max-width: 768px) {
+  .home-page-wrapper {
+    padding: 1.5rem 0;
+  }
+
+  .home-page {
+    padding: 0 1.5rem;
+  }
+
   .hero-section {
     padding: var(--spacing-6) 0;
     margin-bottom: var(--spacing-8);
@@ -211,13 +257,20 @@
   }
 
   .content-card {
-    padding: var(--spacing-6);
-    margin: var(--spacing-4) auto;
+    padding: 1.25rem 1.5rem;
   }
 }
 
 /* Mobile */
 @media (max-width: 480px) {
+  .home-page-wrapper {
+    padding: 1rem 0;
+  }
+
+  .home-page {
+    padding: 0 1rem;
+  }
+
   .hero-section h1 {
     font-size: var(--text-2xl);
   }
@@ -229,6 +282,10 @@
   .logo-divider {
     width: 60px;
     height: 2px;
+  }
+
+  .content-card {
+    padding: 1rem 1.25rem;
   }
 }
 

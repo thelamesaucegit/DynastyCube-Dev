@@ -59,6 +59,7 @@ export default function CreateTradePage({ params }: TradePageProps) {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId]);
 
   const loadData = async () => {

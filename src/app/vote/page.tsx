@@ -29,6 +29,7 @@ export default function VotePage() {
     } else if (!authLoading) {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, authLoading]);
 
   const loadPolls = async () => {

@@ -65,7 +65,6 @@ export const TeamStats: React.FC<TeamStatsProps> = ({ teamId }) => {
   }
 
   const maxColorCount = Math.max(...Object.values(stats.colorDistribution), 1);
-  const _maxTypeCount = Math.max(...Object.values(stats.typeDistribution), 1);
   const maxCMCCount = Math.max(...Object.values(stats.cmcDistribution), 1);
 
   return (
