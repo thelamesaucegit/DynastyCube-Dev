@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { getCardPool } from "@/app/actions/cardActions";
+import { getAvailableCardsForDraft } from "@/app/actions/cardActions";
 import { getTeamDraftPicks, addDraftPick } from "@/app/actions/draftActions";
 import { getTeamBalance, spendCubucksOnDraft } from "@/app/actions/cubucksActions";
 import type { CardData } from "@/app/actions/cardActions";
@@ -39,8 +39,8 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
     setLoading(true);
     setError(null);
     try {
-      // Load available cards from pool
-      const { cards } = await getCardPool();
+      // Load available cards from pool (excludes cards already drafted by other teams)
+      const { cards } = await getAvailableCardsForDraft();
       setAvailableCards(cards);
 
       // Load already drafted cards for this team

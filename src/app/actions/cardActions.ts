@@ -76,6 +76,75 @@ export async function getCardPool(
 }
 
 /**
+ * Fetch available cards for drafting (excludes cards already drafted by any team)
+ */
+export async function getAvailableCardsForDraft(
+  poolName: string = "default"
+): Promise<{ cards: CardData[]; error?: string }> {
+  const supabase = await createClient();
+
+  try {
+    // First get all cards in the pool
+    const { data: allCards, error: poolError } = await supabase
+      .from("card_pools")
+      .select("*")
+      .eq("pool_name", poolName)
+      .order("card_name", { ascending: true });
+
+    if (poolError) {
+      console.error("Error fetching card pool:", poolError);
+      return { cards: [], error: poolError.message };
+    }
+
+    // Get all drafted card IDs (from all teams)
+    const { data: draftedPicks, error: draftError } = await supabase
+      .from("team_draft_picks")
+      .select("card_id");
+
+    if (draftError) {
+      console.error("Error fetching drafted cards:", draftError);
+      return { cards: [], error: draftError.message };
+    }
+
+    // Create a map to count how many times each card_id has been drafted
+    const draftedCounts = new Map<string, number>();
+    (draftedPicks || []).forEach((pick) => {
+      const currentCount = draftedCounts.get(pick.card_id) || 0;
+      draftedCounts.set(pick.card_id, currentCount + 1);
+    });
+
+    // Create a map to count available copies of each card_id in the pool
+    const poolCounts = new Map<string, { count: number; cards: CardData[] }>();
+    (allCards || []).forEach((card) => {
+      const existing = poolCounts.get(card.card_id);
+      if (existing) {
+        existing.count++;
+        existing.cards.push(card);
+      } else {
+        poolCounts.set(card.card_id, { count: 1, cards: [card] });
+      }
+    });
+
+    // Filter to only include cards that still have available copies
+    const availableCards: CardData[] = [];
+    poolCounts.forEach((poolData, cardId) => {
+      const draftedCount = draftedCounts.get(cardId) || 0;
+      const availableCopies = poolData.count - draftedCount;
+
+      // Add one card entry for each available copy
+      for (let i = 0; i < availableCopies && i < poolData.cards.length; i++) {
+        availableCards.push(poolData.cards[i]);
+      }
+    });
+
+    return { cards: availableCards };
+  } catch (error) {
+    console.error("Unexpected error fetching available cards:", error);
+    return { cards: [], error: "An unexpected error occurred" };
+  }
+}
+
+/**
  * Add a card to the pool
  */
 export async function addCardToPool(
