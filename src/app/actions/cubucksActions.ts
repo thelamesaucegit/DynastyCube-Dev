@@ -472,6 +472,144 @@ export async function getAllTransactions(): Promise<{
 // ============================================
 
 /**
+ * Refund Cubucks when undrafting a card
+ * This reverses the draft transaction and removes the draft pick
+ */
+export async function refundDraftPick(
+  teamId: string,
+  draftPickId: string,
+  cardId: string,
+  cardName: string
+): Promise<{ success: boolean; refundAmount?: number; error?: string }> {
+  try {
+    const supabase = await createServerClient();
+
+    // Check authentication
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return { success: false, error: "Not authenticated" };
+    }
+
+    // Find the original draft transaction to get the cost
+    const { data: originalTransaction, error: txError } = await supabase
+      .from("cubucks_transactions")
+      .select("*")
+      .eq("team_id", teamId)
+      .eq("card_id", cardId)
+      .eq("transaction_type", "draft_pick")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (txError || !originalTransaction) {
+      console.error("Error finding original transaction:", txError);
+      // If we can't find the transaction, try to get cost from card pool
+      const { data: cardPool } = await supabase
+        .from("card_pools")
+        .select("cubucks_cost")
+        .eq("card_id", cardId)
+        .single();
+
+      // Default to 1 if we can't find the cost
+      const refundAmount = cardPool?.cubucks_cost || 1;
+
+      // Proceed with refund using the card pool cost
+      return await processRefund(supabase, teamId, draftPickId, cardId, cardName, refundAmount, user.id);
+    }
+
+    // The original transaction amount is negative (spent), so we refund the absolute value
+    const refundAmount = Math.abs(originalTransaction.amount);
+
+    return await processRefund(supabase, teamId, draftPickId, cardId, cardName, refundAmount, user.id);
+  } catch (error) {
+    console.error("Unexpected error refunding draft pick:", error);
+    return { success: false, error: String(error) };
+  }
+}
+
+// Helper function to process the refund
+async function processRefund(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
+  teamId: string,
+  draftPickId: string,
+  cardId: string,
+  cardName: string,
+  refundAmount: number,
+  userId: string
+): Promise<{ success: boolean; refundAmount?: number; error?: string }> {
+  // Get current team balance
+  const { data: team, error: teamError } = await supabase
+    .from("teams")
+    .select("cubucks_balance, cubucks_total_spent")
+    .eq("id", teamId)
+    .single();
+
+  if (teamError || !team) {
+    return { success: false, error: "Failed to fetch team balance" };
+  }
+
+  const newBalance = team.cubucks_balance + refundAmount;
+  const newTotalSpent = Math.max(0, team.cubucks_total_spent - refundAmount);
+
+  // Update team balance
+  const { error: updateError } = await supabase
+    .from("teams")
+    .update({
+      cubucks_balance: newBalance,
+      cubucks_total_spent: newTotalSpent,
+    })
+    .eq("id", teamId);
+
+  if (updateError) {
+    console.error("Error updating team balance:", updateError);
+    return { success: false, error: "Failed to update team balance" };
+  }
+
+  // Get active season for the transaction
+  const { data: activeSeason } = await supabase
+    .from("seasons")
+    .select("id")
+    .eq("is_active", true)
+    .single();
+
+  // Create refund transaction record
+  const { error: txInsertError } = await supabase
+    .from("cubucks_transactions")
+    .insert({
+      team_id: teamId,
+      season_id: activeSeason?.id || null,
+      transaction_type: "refund",
+      amount: refundAmount, // Positive amount for refund
+      balance_after: newBalance,
+      card_id: cardId,
+      card_name: cardName,
+      draft_pick_id: draftPickId,
+      description: `Refund for undrafting ${cardName}`,
+      created_by: userId,
+    });
+
+  if (txInsertError) {
+    console.error("Error creating refund transaction:", txInsertError);
+    // Don't fail the whole operation if just the transaction log fails
+  }
+
+  // Delete the draft pick
+  const { error: deleteError } = await supabase
+    .from("team_draft_picks")
+    .delete()
+    .eq("id", draftPickId);
+
+  if (deleteError) {
+    console.error("Error deleting draft pick:", deleteError);
+    return { success: false, error: "Failed to remove draft pick" };
+  }
+
+  return { success: true, refundAmount };
+}
+
+/**
  * Spend Cubucks on a draft pick
  */
 export async function spendCubucksOnDraft(

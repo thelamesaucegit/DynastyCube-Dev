@@ -6,6 +6,7 @@ import { use } from "react";
 import Layout from "@/components/Layout";
 import { getTeamsWithMembers } from "@/app/actions/teamActions";
 import { getTeamDraftPicks, getTeamDecks } from "@/app/actions/draftActions";
+import { refundDraftPick } from "@/app/actions/cubucksActions";
 import { DraftInterface } from "@/app/components/DraftInterface";
 import { DeckBuilder } from "@/app/components/DeckBuilder";
 import { TeamStats } from "@/app/components/TeamStats";
@@ -46,6 +47,9 @@ export default function TeamPage({ params }: TeamPageProps) {
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>("draft");
+  const [undrafting, setUndrafting] = useState<string | null>(null);
+  const [undraftMessage, setUndraftMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [cubucksRefreshKey, setCubucksRefreshKey] = useState(0);
 
   useEffect(() => {
     loadTeamData();
@@ -113,6 +117,47 @@ export default function TeamPage({ params }: TeamPageProps) {
     // Reload draft picks when a card is drafted
     const { picks } = await getTeamDraftPicks(teamId);
     setDraftPicks(picks);
+    // Refresh the cubucks display
+    setCubucksRefreshKey((prev) => prev + 1);
+  };
+
+  const handleUndraftCard = async (pick: DraftPick) => {
+    if (!pick.id || undrafting) return;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to undraft "${pick.card_name}"? The cubucks spent will be refunded to your team.`
+    );
+    if (!confirmed) return;
+
+    setUndrafting(pick.id);
+    setUndraftMessage(null);
+
+    const result = await refundDraftPick(
+      teamId,
+      pick.id,
+      pick.card_id,
+      pick.card_name
+    );
+
+    if (result.success) {
+      setUndraftMessage({
+        type: "success",
+        text: `Undrafted ${pick.card_name}! Refunded ${result.refundAmount} Cubucks.`,
+      });
+      // Reload draft picks
+      const { picks } = await getTeamDraftPicks(teamId);
+      setDraftPicks(picks);
+      // Refresh the cubucks display
+      setCubucksRefreshKey((prev) => prev + 1);
+    } else {
+      setUndraftMessage({
+        type: "error",
+        text: result.error || "Failed to undraft card",
+      });
+    }
+
+    setUndrafting(null);
+    setTimeout(() => setUndraftMessage(null), 5000);
   };
 
   const tabs = [
@@ -170,7 +215,7 @@ export default function TeamPage({ params }: TeamPageProps) {
 
         {/* Team Cubucks Balance */}
         <div className="mb-6">
-          <TeamCubucksDisplay teamId={teamId} showTransactions={true} />
+          <TeamCubucksDisplay teamId={teamId} showTransactions={true} refreshKey={cubucksRefreshKey} />
         </div>
 
         {/* Tabs */}
@@ -221,6 +266,20 @@ export default function TeamPage({ params }: TeamPageProps) {
                   Draft Picks
                 </h2>
               </div>
+
+              {/* Success/Error Messages */}
+              {undraftMessage && (
+                <div
+                  className={`mb-4 p-4 rounded-lg border ${
+                    undraftMessage.type === "success"
+                      ? "bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 text-green-800 dark:text-green-200"
+                      : "bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 text-red-800 dark:text-red-200"
+                  }`}
+                >
+                  {undraftMessage.type === "success" ? "✓" : "✗"} {undraftMessage.text}
+                </div>
+              )}
+
               {draftPicks.length === 0 ? (
                 <div className="text-center py-12 text-gray-500 dark:text-gray-500">
                   <p className="text-lg mb-2">No cards drafted yet</p>
@@ -228,29 +287,47 @@ export default function TeamPage({ params }: TeamPageProps) {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                  {draftPicks.map((pick) => (
-                    <div
-                      key={pick.id}
-                      className="group relative bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-blue-400 transition-all hover:shadow-lg"
-                    >
-                      {pick.image_url && (
-                        /* eslint-disable-next-line @next/next/no-img-element */
-                        <img
-                          src={pick.image_url}
-                          alt={pick.card_name}
-                          className="w-full h-64 object-cover"
-                        />
-                      )}
-                      <div className="p-2">
-                        <h4 className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
-                          {pick.card_name}
-                        </h4>
-                        <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
-                          {pick.card_set}
-                        </p>
+                  {draftPicks.map((pick) => {
+                    const isUndrafting = undrafting === pick.id;
+                    return (
+                      <div
+                        key={pick.id}
+                        className="group relative bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-blue-400 transition-all hover:shadow-lg"
+                      >
+                        {pick.image_url && (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img
+                            src={pick.image_url}
+                            alt={pick.card_name}
+                            className="w-full h-64 object-cover"
+                          />
+                        )}
+                        <div className="p-2">
+                          <h4 className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
+                            {pick.card_name}
+                          </h4>
+                          <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
+                            {pick.card_set}
+                          </p>
+                        </div>
+
+                        {/* Undraft Button Overlay */}
+                        <button
+                          onClick={() => handleUndraftCard(pick)}
+                          disabled={isUndrafting || !!undrafting}
+                          className={`
+                            absolute inset-0 bg-black/60 flex items-center justify-center
+                            opacity-0 group-hover:opacity-100 transition-opacity
+                            disabled:opacity-50 disabled:cursor-not-allowed
+                          `}
+                        >
+                          <span className="px-4 py-2 rounded-lg font-semibold shadow-lg bg-red-600 hover:bg-red-700 text-white">
+                            {isUndrafting ? "Removing..." : "Undraft & Refund"}
+                          </span>
+                        </button>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

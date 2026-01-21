@@ -13,12 +13,14 @@ interface TeamCubucksDisplayProps {
   teamId: string;
   showTransactions?: boolean;
   compact?: boolean;
+  refreshKey?: number; // Increment this to trigger a refresh
 }
 
 export const TeamCubucksDisplay: React.FC<TeamCubucksDisplayProps> = ({
   teamId,
   showTransactions = false,
   compact = false,
+  refreshKey = 0,
 }) => {
   const [team, setTeam] = useState<TeamBalance | null>(null);
   const [transactions, setTransactions] = useState<CubucksTransaction[]>([]);
@@ -28,7 +30,7 @@ export const TeamCubucksDisplay: React.FC<TeamCubucksDisplayProps> = ({
   useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teamId]);
+  }, [teamId, refreshKey]);
 
   const loadData = async () => {
     setLoading(true);
