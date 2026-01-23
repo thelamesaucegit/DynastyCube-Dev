@@ -26,6 +26,23 @@ export default function RootLayout({
                   document.documentElement.classList.add('dark');
                 }
               } catch (e) {}
+
+              // Handle chunk load errors (deployment mismatch) - auto refresh once
+              window.addEventListener('error', function(e) {
+                if (e.message && e.message.includes('Loading chunk') ||
+                    (e.target && e.target.tagName === 'SCRIPT')) {
+                  const reloaded = sessionStorage.getItem('chunk_reload');
+                  if (!reloaded) {
+                    sessionStorage.setItem('chunk_reload', 'true');
+                    window.location.reload();
+                  }
+                }
+              }, true);
+
+              // Clear reload flag on successful load
+              window.addEventListener('load', function() {
+                sessionStorage.removeItem('chunk_reload');
+              });
             `,
           }}
         />
