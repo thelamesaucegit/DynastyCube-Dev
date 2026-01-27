@@ -10,11 +10,15 @@ import type { DraftPick } from "@/app/actions/draftActions";
 
 interface DraftInterfaceProps {
   teamId: string;
+  teamName?: string;
+  isUserTeamMember?: boolean;
   onDraftComplete?: () => void;
 }
 
 export const DraftInterface: React.FC<DraftInterfaceProps> = ({
   teamId,
+  teamName = "This team",
+  isUserTeamMember = true,
   onDraftComplete,
 }) => {
   const [availableCards, setAvailableCards] = useState<CardData[]>([]);
@@ -65,7 +69,9 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
 
     // Check if already drafted
     if (draftedCards.some((pick) => pick.card_id === card.card_id)) {
-      setError("This card has already been drafted by your team");
+      setError(isUserTeamMember
+        ? "This card has already been drafted by your team"
+        : `This card has already been drafted by ${teamName}`);
       setTimeout(() => setError(null), 3000);
       return;
     }
@@ -243,7 +249,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
               Draft Progress
             </h3>
             <p className="text-sm text-blue-800 dark:text-blue-200">
-              Your team has drafted{" "}
+              {isUserTeamMember ? "Your team has" : `${teamName} has`} drafted{" "}
               <strong>{draftedCards.length}</strong> cards from the pool
             </p>
           </div>
@@ -255,6 +261,15 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Read-only notice for non-members */}
+      {!isUserTeamMember && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg p-4">
+          <p className="text-yellow-800 dark:text-yellow-200 text-sm">
+            👀 You are viewing {teamName}&apos;s draft pool in read-only mode. Only team members can draft cards.
+          </p>
+        </div>
+      )}
 
       {/* Search and Filters */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-4">
@@ -355,16 +370,18 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
               </select>
             </div>
 
-            {/* Balance Display */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Your Balance
-              </label>
-              <div className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex items-center gap-2 font-semibold">
-                <span className="text-lg">💰</span>
-                <span>{cubucksBalance.toLocaleString()}</span>
+            {/* Balance Display - Only show to team members */}
+            {isUserTeamMember && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Your Balance
+                </label>
+                <div className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex items-center gap-2 font-semibold">
+                  <span className="text-lg">💰</span>
+                  <span>{cubucksBalance.toLocaleString()}</span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
 
@@ -428,8 +445,8 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
                     <span>{card.cubucks_cost || 1}</span>
                   </div>
 
-                  {/* Draft Button Overlay */}
-                  {!isDrafted && (
+                  {/* Draft Button Overlay - Only show to team members */}
+                  {!isDrafted && isUserTeamMember && (
                     <button
                       onClick={() => handleDraftCard(card)}
                       disabled={isDrafting || cubucksBalance < (card.cubucks_cost || 1)}

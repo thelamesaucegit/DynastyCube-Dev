@@ -7,6 +7,8 @@ import { createServerClient } from "@/lib/supabase";
 // TYPES
 // =================================================================================================
 
+export type VoteType = "individual" | "team" | "league";
+
 export interface Poll {
   id: string;
   title: string;
@@ -17,6 +19,7 @@ export interface Poll {
   is_active: boolean;
   allow_multiple_votes: boolean;
   show_results_before_end: boolean;
+  vote_type: VoteType;
   total_votes: number;
   created_at: string;
   updated_at: string;
@@ -38,6 +41,8 @@ export interface PollVote {
   poll_id: string;
   option_id: string;
   user_id: string;
+  team_id?: string;
+  vote_weight: number;
   voted_at: string;
 }
 
@@ -48,10 +53,39 @@ export interface PollResult {
   percentage: number;
 }
 
+export interface TeamPollResult {
+  team_id: string;
+  team_name: string;
+  team_emoji: string;
+  winning_option_id: string | null;
+  winning_option_text: string | null;
+  total_weighted_votes: number;
+}
+
+export interface LeaguePollResult {
+  winning_option_id: string | null;
+  winning_option_text: string | null;
+  teams_for_option: Record<string, string[]>;
+}
+
+export interface TypedPollResults {
+  type: VoteType;
+  results?: PollResult[];
+  team_results?: TeamPollResult[];
+  league_result?: LeaguePollResult;
+  all_options?: {
+    option_id: string;
+    option_text: string;
+    teams_voting: { team_id: string; team_name: string; team_emoji: string }[] | null;
+  }[];
+}
+
 export interface PollWithOptions extends Poll {
   options: PollOption[];
   userVotes?: string[]; // option IDs user has voted for
   hasVoted?: boolean;
+  userVoteWeight?: number; // For league polls
+  userTeamId?: string; // For team/league polls
 }
 
 // =================================================================================================
@@ -129,6 +163,9 @@ export async function getPollWithOptions(pollId: string, userId?: string) {
 
     // Get user's votes if userId provided
     let userVotes: string[] = [];
+    let userVoteWeight: number | undefined;
+    let userTeamId: string | undefined;
+
     if (userId) {
       const { data: votes } = await supabase
         .from("poll_votes")
@@ -137,6 +174,22 @@ export async function getPollWithOptions(pollId: string, userId?: string) {
         .eq("user_id", userId);
 
       userVotes = votes?.map((v) => v.option_id) || [];
+
+      // For team/league polls, get user's team and vote weight
+      if (poll.vote_type === "team" || poll.vote_type === "league") {
+        const { data: teamData } = await supabase.rpc("get_user_team_for_voting", {
+          p_user_id: userId,
+        });
+        userTeamId = teamData || undefined;
+
+        if (poll.vote_type === "league" && userTeamId) {
+          const { data: weightData } = await supabase.rpc("get_user_vote_weight", {
+            p_user_id: userId,
+            p_team_id: userTeamId,
+          });
+          userVoteWeight = weightData || 1;
+        }
+      }
     }
 
     // Determine status
@@ -153,6 +206,8 @@ export async function getPollWithOptions(pollId: string, userId?: string) {
       userVotes,
       hasVoted: userVotes.length > 0,
       status,
+      userVoteWeight,
+      userTeamId,
     };
 
     return { poll: pollWithOptions, success: true };
@@ -191,10 +246,10 @@ export async function castVote(
 ) {
   try {
     const supabase = await createServerClient();
-    // Get poll to check if it allows multiple votes
+    // Get poll to check settings and vote type
     const { data: poll, error: pollError } = await supabase
       .from("polls")
-      .select("allow_multiple_votes, ends_at")
+      .select("allow_multiple_votes, ends_at, vote_type")
       .eq("id", pollId)
       .single();
 
@@ -214,6 +269,35 @@ export async function castVote(
       };
     }
 
+    // For team/league polls, get user's team
+    let teamId: string | null = null;
+    let voteWeight = 1;
+
+    if (poll.vote_type === "team" || poll.vote_type === "league") {
+      // Get user's team
+      const { data: userTeamId } = await supabase.rpc("get_user_team_for_voting", {
+        p_user_id: userId,
+      });
+
+      if (!userTeamId) {
+        return {
+          success: false,
+          error: "You must be on a team to vote in this poll",
+        };
+      }
+
+      teamId = userTeamId;
+
+      // For league polls, get vote weight based on roles
+      if (poll.vote_type === "league") {
+        const { data: weight } = await supabase.rpc("get_user_vote_weight", {
+          p_user_id: userId,
+          p_team_id: teamId,
+        });
+        voteWeight = weight || 1;
+      }
+    }
+
     // Delete existing votes for this user on this poll
     const { error: deleteError } = await supabase
       .from("poll_votes")
@@ -228,6 +312,8 @@ export async function castVote(
       poll_id: pollId,
       option_id: optionId,
       user_id: userId,
+      team_id: teamId,
+      vote_weight: voteWeight,
     }));
 
     const { error: insertError } = await supabase
@@ -235,6 +321,14 @@ export async function castVote(
       .insert(votes);
 
     if (insertError) throw insertError;
+
+    // Recalculate team/league results if applicable
+    if (poll.vote_type === "team" || poll.vote_type === "league") {
+      await supabase.rpc("recalculate_poll_results", {
+        p_poll_id: pollId,
+        p_team_id: teamId,
+      });
+    }
 
     return { success: true, message: "Vote cast successfully!" };
   } catch (error) {
@@ -303,7 +397,8 @@ export async function createPoll(
   allowMultipleVotes: boolean,
   showResultsBeforeEnd: boolean,
   options: string[],
-  createdBy: string
+  createdBy: string,
+  voteType: VoteType = "individual"
 ) {
   try {
     const supabase = await createServerClient();
@@ -330,6 +425,7 @@ export async function createPoll(
         ends_at: endsAt,
         allow_multiple_votes: allowMultipleVotes,
         show_results_before_end: showResultsBeforeEnd,
+        vote_type: voteType,
         created_by: createdBy,
         is_active: true,
       })
@@ -485,5 +581,118 @@ export async function deletePollOption(optionId: string) {
   } catch (error) {
     console.error("Error deleting option:", error);
     return { success: false, error: "Failed to delete option" };
+  }
+}
+
+// =================================================================================================
+// MULTI-TYPE VOTING FUNCTIONS
+// =================================================================================================
+
+/**
+ * Get poll results by type (individual, team, or league)
+ */
+export async function getPollResultsByType(pollId: string) {
+  try {
+    const supabase = await createServerClient();
+
+    // Get poll type first
+    const { data: poll, error: pollError } = await supabase
+      .from("polls")
+      .select("vote_type")
+      .eq("id", pollId)
+      .single();
+
+    if (pollError) throw pollError;
+    if (!poll) return { results: null, success: false, error: "Poll not found" };
+
+    // For individual polls, use the existing function
+    if (poll.vote_type === "individual") {
+      const { data, error } = await supabase.rpc("get_poll_results", {
+        p_poll_id: pollId,
+      });
+
+      if (error) throw error;
+
+      const typedResults: TypedPollResults = {
+        type: "individual",
+        results: data as PollResult[],
+      };
+
+      return { results: typedResults, success: true };
+    }
+
+    // For team/league polls, use the typed results function
+    const { data, error } = await supabase.rpc("get_poll_results_by_type", {
+      p_poll_id: pollId,
+    });
+
+    if (error) throw error;
+
+    return { results: data as TypedPollResults, success: true };
+  } catch (error) {
+    console.error("Error fetching typed poll results:", error);
+    return { results: null, success: false, error: "Failed to fetch results" };
+  }
+}
+
+/**
+ * Get user's vote weight for league polls
+ */
+export async function getUserVoteWeight(userId: string, teamId: string) {
+  try {
+    const supabase = await createServerClient();
+
+    const { data, error } = await supabase.rpc("get_user_vote_weight", {
+      p_user_id: userId,
+      p_team_id: teamId,
+    });
+
+    if (error) throw error;
+
+    return { weight: data || 1, success: true };
+  } catch (error) {
+    console.error("Error fetching vote weight:", error);
+    return { weight: 1, success: false, error: "Failed to fetch vote weight" };
+  }
+}
+
+/**
+ * Get user's team for voting purposes
+ */
+export async function getUserTeamForVoting(userId: string) {
+  try {
+    const supabase = await createServerClient();
+
+    const { data, error } = await supabase.rpc("get_user_team_for_voting", {
+      p_user_id: userId,
+    });
+
+    if (error) throw error;
+
+    return { teamId: data || null, success: true };
+  } catch (error) {
+    console.error("Error fetching user team:", error);
+    return { teamId: null, success: false, error: "Failed to fetch user team" };
+  }
+}
+
+/**
+ * Recalculate poll results (admin only)
+ */
+export async function recalculatePollResults(pollId: string, teamId?: string) {
+  try {
+    const supabase = await createServerClient();
+
+    const { error } = await supabase.rpc("recalculate_poll_results", {
+      p_poll_id: pollId,
+      p_team_id: teamId || null,
+    });
+
+    if (error) throw error;
+
+    return { success: true, message: "Results recalculated successfully!" };
+  } catch (error) {
+    console.error("Error recalculating results:", error);
+    return { success: false, error: "Failed to recalculate results" };
   }
 }

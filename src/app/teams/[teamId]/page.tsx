@@ -4,11 +4,13 @@
 import React, { useState, useEffect } from "react";
 import { use } from "react";
 import Layout from "@/components/Layout";
+import { useAuth } from "@/contexts/AuthContext";
 import { getTeamsWithMembers } from "@/app/actions/teamActions";
 import { getTeamDraftPicks, getTeamDecks } from "@/app/actions/draftActions";
 import { refundDraftPick } from "@/app/actions/cubucksActions";
 import { DraftInterface } from "@/app/components/DraftInterface";
 import { DeckBuilder } from "@/app/components/DeckBuilder";
+import { CardPreview } from "@/app/components/CardPreview";
 import { TeamStats } from "@/app/components/TeamStats";
 import { TeamRoles } from "@/app/components/TeamRoles";
 import { TeamCubucksDisplay } from "@/app/components/TeamCubucksDisplay";
@@ -21,6 +23,7 @@ import "@/styles/pages/teams.css";
 
 interface TeamMember {
   id: string;
+  user_id: string;
   user_display_name?: string;
   joined_at: string;
 }
@@ -41,15 +44,21 @@ type TabType = "picks" | "decks" | "members" | "draft" | "stats" | "roles" | "tr
 
 export default function TeamPage({ params }: TeamPageProps) {
   const { teamId } = use(params);
+  const { user } = useAuth();
   const [team, setTeam] = useState<Team | null>(null);
   const [draftPicks, setDraftPicks] = useState<DraftPick[]>([]);
   const [decks, setDecks] = useState<Deck[]>([]);
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<TabType>("draft");
+  const [activeTab, setActiveTab] = useState<TabType>("picks");
   const [undrafting, setUndrafting] = useState<string | null>(null);
   const [undraftMessage, setUndraftMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [cubucksRefreshKey, setCubucksRefreshKey] = useState(0);
+
+  // Check if current user is a member of this team
+  const isUserTeamMember = team?.members?.some(
+    (member) => member.user_id === user?.id
+  ) || userRoles.length > 0;
 
   useEffect(() => {
     loadTeamData();
@@ -125,7 +134,7 @@ export default function TeamPage({ params }: TeamPageProps) {
     if (!pick.id || undrafting) return;
 
     const confirmed = window.confirm(
-      `Are you sure you want to undraft "${pick.card_name}"? The cubucks spent will be refunded to your team.`
+      `Are you sure you want to undraft "${pick.card_name}"? The cubucks spent will be refunded to the team.`
     );
     if (!confirmed) return;
 
@@ -161,13 +170,15 @@ export default function TeamPage({ params }: TeamPageProps) {
   };
 
   const tabs = [
-    { id: "draft" as TabType, label: "🎯 Draft Cards", count: undefined },
+    // Only show Draft Cards tab to team members
+    ...(isUserTeamMember ? [{ id: "draft" as TabType, label: "🎯 Draft Cards", count: undefined }] : []),
     { id: "picks" as TabType, label: "🎴 Draft Picks", count: draftPicks.length },
     { id: "decks" as TabType, label: "📚 Decks", count: decks.length },
     { id: "trades" as TabType, label: "🔄 Trades", count: undefined },
     { id: "matches" as TabType, label: "⚔️ Matches", count: undefined },
     { id: "stats" as TabType, label: "📊 Statistics", count: undefined },
-    { id: "roles" as TabType, label: "👑 Team Roles", count: undefined },
+    // Only show roles tab to team members
+    ...(isUserTeamMember ? [{ id: "roles" as TabType, label: "👑 Team Roles", count: undefined }] : []),
     { id: "members" as TabType, label: "👥 Members", count: team.members?.length || 0 },
   ];
 
@@ -215,7 +226,7 @@ export default function TeamPage({ params }: TeamPageProps) {
 
         {/* Team Cubucks Balance */}
         <div className="mb-6">
-          <TeamCubucksDisplay teamId={teamId} showTransactions={true} refreshKey={cubucksRefreshKey} />
+          <TeamCubucksDisplay teamId={teamId} showTransactions={true} refreshKey={cubucksRefreshKey} isUserTeamMember={isUserTeamMember} />
         </div>
 
         {/* Tabs */}
@@ -245,7 +256,7 @@ export default function TeamPage({ params }: TeamPageProps) {
 
         {/* Tab Content */}
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-md">
-          {activeTab === "draft" && (
+          {activeTab === "draft" && isUserTeamMember && (
             <div>
               <div className="mb-6">
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
@@ -255,7 +266,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                   Select cards from the available pool to add to your team&apos;s collection
                 </p>
               </div>
-              <DraftInterface teamId={teamId} onDraftComplete={handleDraftComplete} />
+              <DraftInterface teamId={teamId} teamName={team.name} isUserTeamMember={isUserTeamMember} onDraftComplete={handleDraftComplete} />
             </div>
           )}
 
@@ -283,49 +294,60 @@ export default function TeamPage({ params }: TeamPageProps) {
               {draftPicks.length === 0 ? (
                 <div className="text-center py-12 text-gray-500 dark:text-gray-500">
                   <p className="text-lg mb-2">No cards drafted yet</p>
-                  <p className="text-sm">This team hasn&apos;t selected any cards from the pool</p>
+                  <p className="text-sm">
+                    {isUserTeamMember
+                      ? "Your team hasn't selected any cards from the pool"
+                      : `${team.name} hasn't selected any cards from the pool`}
+                  </p>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                   {draftPicks.map((pick) => {
                     const isUndrafting = undrafting === pick.id;
                     return (
-                      <div
+                      <CardPreview
                         key={pick.id}
-                        className="group relative bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-blue-400 transition-all hover:shadow-lg"
+                        imageUrl={pick.image_url || ""}
+                        cardName={pick.card_name}
                       >
-                        {pick.image_url && (
-                          /* eslint-disable-next-line @next/next/no-img-element */
-                          <img
-                            src={pick.image_url}
-                            alt={pick.card_name}
-                            className="w-full h-64 object-cover"
-                          />
-                        )}
-                        <div className="p-2">
-                          <h4 className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
-                            {pick.card_name}
-                          </h4>
-                          <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
-                            {pick.card_set}
-                          </p>
-                        </div>
-
-                        {/* Undraft Button Overlay */}
-                        <button
-                          onClick={() => handleUndraftCard(pick)}
-                          disabled={isUndrafting || !!undrafting}
-                          className={`
-                            absolute inset-0 bg-black/60 flex items-center justify-center
-                            opacity-0 group-hover:opacity-100 transition-opacity
-                            disabled:opacity-50 disabled:cursor-not-allowed
-                          `}
+                        <div
+                          className="group relative bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-blue-400 transition-all hover:shadow-lg"
                         >
-                          <span className="px-4 py-2 rounded-lg font-semibold shadow-lg bg-red-600 hover:bg-red-700 text-white">
-                            {isUndrafting ? "Removing..." : "Undraft & Refund"}
-                          </span>
-                        </button>
-                      </div>
+                          {pick.image_url && (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img
+                              src={pick.image_url}
+                              alt={pick.card_name}
+                              className="w-full h-64 object-cover"
+                            />
+                          )}
+                          <div className="p-2">
+                            <h4 className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
+                              {pick.card_name}
+                            </h4>
+                            <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
+                              {pick.card_set}
+                            </p>
+                          </div>
+
+                          {/* Undraft Button Overlay - Only show to team members */}
+                          {isUserTeamMember && (
+                            <button
+                              onClick={() => handleUndraftCard(pick)}
+                              disabled={isUndrafting || !!undrafting}
+                              className={`
+                                absolute inset-0 bg-black/60 flex items-center justify-center
+                                opacity-0 group-hover:opacity-100 transition-opacity
+                                disabled:opacity-50 disabled:cursor-not-allowed
+                              `}
+                            >
+                              <span className="px-4 py-2 rounded-lg font-semibold shadow-lg bg-red-600 hover:bg-red-700 text-white">
+                                {isUndrafting ? "Removing..." : "Undraft & Refund"}
+                              </span>
+                            </button>
+                          )}
+                        </div>
+                      </CardPreview>
                     );
                   })}
                 </div>
@@ -340,10 +362,12 @@ export default function TeamPage({ params }: TeamPageProps) {
                   Deck Builder
                 </h2>
                 <p className="text-gray-600 dark:text-gray-400">
-                  Create and manage decks from your drafted cards
+                  {isUserTeamMember
+                    ? "Create and manage decks from your drafted cards"
+                    : `View and manage ${team.name}'s decks`}
                 </p>
               </div>
-              <DeckBuilder teamId={teamId} />
+              <DeckBuilder teamId={teamId} teamName={team.name} isUserTeamMember={isUserTeamMember} />
             </div>
           )}
 
@@ -413,7 +437,7 @@ export default function TeamPage({ params }: TeamPageProps) {
             </div>
           )}
 
-          {activeTab === "roles" && (
+          {activeTab === "roles" && isUserTeamMember && (
             <div>
               <div className="mb-6">
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
@@ -423,7 +447,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                   Manage team member roles and responsibilities
                 </p>
               </div>
-              <TeamRoles teamId={teamId} />
+              <TeamRoles teamId={teamId} teamName={team.name} isUserTeamMember={isUserTeamMember} />
             </div>
           )}
 

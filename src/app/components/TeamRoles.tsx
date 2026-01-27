@@ -19,11 +19,13 @@ import {
 
 interface TeamRolesProps {
   teamId: string;
+  teamName?: string;
+  isUserTeamMember?: boolean;
 }
 
 const ALL_ROLES: TeamRole[] = ["captain", "broker", "historian", "pilot"];
 
-export const TeamRoles: React.FC<TeamRolesProps> = ({ teamId }) => {
+export const TeamRoles: React.FC<TeamRolesProps> = ({ teamId, teamName = "This team", isUserTeamMember = true }) => {
   const { user } = useAuth();
   const [members, setMembers] = useState<TeamMemberWithRoles[]>([]);
   const [userRoles, setUserRoles] = useState<TeamRole[]>([]);
@@ -150,8 +152,9 @@ export const TeamRoles: React.FC<TeamRolesProps> = ({ teamId }) => {
       {!isCaptain && (
         <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg p-4">
           <p className="text-yellow-800 dark:text-yellow-200 text-sm">
-            ℹ️ Only team captains can assign or remove roles. Contact your team captain to request
-            a role change.
+            {isUserTeamMember
+              ? "ℹ️ Only team captains can assign or remove roles. Contact your team captain to request a role change."
+              : `ℹ️ Only ${teamName}'s captains can assign or remove roles.`}
           </p>
         </div>
       )}
@@ -165,7 +168,11 @@ export const TeamRoles: React.FC<TeamRolesProps> = ({ teamId }) => {
         {members.length === 0 ? (
           <div className="text-center py-12 text-gray-500 dark:text-gray-500">
             <p className="text-lg mb-2">No team members yet</p>
-            <p className="text-sm">Add members to your team to assign roles</p>
+            <p className="text-sm">
+              {isUserTeamMember
+                ? "Add members to your team to assign roles"
+                : `${teamName} doesn't have any members yet`}
+            </p>
           </div>
         ) : (
           <div className="space-y-4">

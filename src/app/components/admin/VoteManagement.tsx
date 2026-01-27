@@ -8,9 +8,11 @@ import {
   createPoll,
   deletePoll,
   togglePollActive,
-  getPollResults,
+  getPollResultsByType,
   type Poll,
-  type PollResult,
+  type VoteType,
+  type TypedPollResults,
+  type TeamPollResult,
 } from "@/app/actions/voteActions";
 
 export function VoteManagement() {
@@ -19,7 +21,7 @@ export function VoteManagement() {
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedPoll, setSelectedPoll] = useState<Poll | null>(null);
-  const [results, setResults] = useState<PollResult[]>([]);
+  const [results, setResults] = useState<TypedPollResults | null>(null);
   const [showResults, setShowResults] = useState(false);
 
   // Form state
@@ -29,6 +31,7 @@ export function VoteManagement() {
     endsAt: "",
     allowMultipleVotes: false,
     showResultsBeforeEnd: true,
+    voteType: "individual" as VoteType,
     options: ["", ""],
   });
 
@@ -77,7 +80,8 @@ export function VoteManagement() {
       formData.allowMultipleVotes,
       formData.showResultsBeforeEnd,
       validOptions,
-      user.id
+      user.id,
+      formData.voteType
     );
 
     if (result.success) {
@@ -89,6 +93,7 @@ export function VoteManagement() {
         endsAt: "",
         allowMultipleVotes: false,
         showResultsBeforeEnd: true,
+        voteType: "individual",
         options: ["", ""],
       });
       loadPolls();
@@ -125,8 +130,8 @@ export function VoteManagement() {
     setSelectedPoll(poll);
     setShowResults(true);
 
-    const result = await getPollResults(poll.id);
-    if (result.success) {
+    const result = await getPollResultsByType(poll.id);
+    if (result.success && result.results) {
       setResults(result.results);
     }
   };
@@ -250,6 +255,27 @@ export function VoteManagement() {
               />
             </div>
 
+            {/* Vote Type */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                Vote Type *
+              </label>
+              <select
+                value={formData.voteType}
+                onChange={(e) => setFormData({ ...formData, voteType: e.target.value as VoteType })}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+              >
+                <option value="individual">Individual Vote (1 person = 1 vote)</option>
+                <option value="team">Team Vote (each team gets separate result)</option>
+                <option value="league">League Vote (weighted team representation)</option>
+              </select>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {formData.voteType === "individual" && "Standard voting where each user's vote counts equally toward a single global result."}
+                {formData.voteType === "team" && "Members vote within their team, and each team gets its own result."}
+                {formData.voteType === "league" && "Votes are weighted by role (Captain: 3x, Pilot/Broker: 2x, Others: 1x), teams decide, then league aggregates."}
+              </p>
+            </div>
+
             {/* Options */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
@@ -365,12 +391,23 @@ export function VoteManagement() {
               >
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
+                    <div className="flex items-center gap-3 mb-2 flex-wrap">
                       <h4 className="text-xl font-bold text-gray-900 dark:text-gray-100">
                         {poll.title}
                       </h4>
                       <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusColor}`}>
                         {poll.is_active ? (isEnded ? "Ended" : "Active") : "Inactive"}
+                      </span>
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                        poll.vote_type === "individual"
+                          ? "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300"
+                          : poll.vote_type === "team"
+                          ? "bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300"
+                          : "bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300"
+                      }`}>
+                        {poll.vote_type === "individual" && "Individual"}
+                        {poll.vote_type === "team" && "Team"}
+                        {poll.vote_type === "league" && "League"}
                       </span>
                     </div>
                     {poll.description && (
@@ -426,9 +463,22 @@ export function VoteManagement() {
                 <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
                   {selectedPoll.title}
                 </h3>
-                <p className="text-gray-600 dark:text-gray-400">
-                  Total Votes: {selectedPoll.total_votes}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-gray-600 dark:text-gray-400">
+                    Total Votes: {selectedPoll.total_votes}
+                  </p>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                    selectedPoll.vote_type === "individual"
+                      ? "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300"
+                      : selectedPoll.vote_type === "team"
+                      ? "bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300"
+                      : "bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300"
+                  }`}>
+                    {selectedPoll.vote_type === "individual" && "Individual"}
+                    {selectedPoll.vote_type === "team" && "Team"}
+                    {selectedPoll.vote_type === "league" && "League"}
+                  </span>
+                </div>
               </div>
               <button
                 onClick={() => setShowResults(false)}
@@ -438,26 +488,145 @@ export function VoteManagement() {
               </button>
             </div>
 
-            <div className="space-y-4">
-              {results.map((result) => (
-                <div key={result.option_id} className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-semibold text-gray-900 dark:text-gray-100">
-                      {result.option_text}
-                    </span>
-                    <span className="text-gray-600 dark:text-gray-400">
-                      {result.vote_count} votes ({result.percentage}%)
-                    </span>
+            {/* Individual Results */}
+            {results?.type === "individual" && results.results && (
+              <div className="space-y-4">
+                {results.results.map((result) => (
+                  <div key={result.option_id} className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-semibold text-gray-900 dark:text-gray-100">
+                        {result.option_text}
+                      </span>
+                      <span className="text-gray-600 dark:text-gray-400">
+                        {result.vote_count} votes ({result.percentage}%)
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
+                      <div
+                        className="bg-blue-600 h-4 rounded-full transition-all"
+                        style={{ width: `${result.percentage}%` }}
+                      ></div>
+                    </div>
                   </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
+                ))}
+              </div>
+            )}
+
+            {/* Team Results */}
+            {results?.type === "team" && results.team_results && (
+              <div className="space-y-4">
+                <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                  Team Results
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {results.team_results.map((teamResult: TeamPollResult) => (
                     <div
-                      className="bg-blue-600 h-4 rounded-full transition-all"
-                      style={{ width: `${result.percentage}%` }}
-                    ></div>
-                  </div>
+                      key={teamResult.team_id}
+                      className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4"
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-2xl">{teamResult.team_emoji}</span>
+                        <span className="font-bold text-gray-900 dark:text-gray-100">
+                          {teamResult.team_name}
+                        </span>
+                      </div>
+                      <p className="text-gray-600 dark:text-gray-400">
+                        {teamResult.winning_option_text || "No votes yet"}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                        {teamResult.total_weighted_votes} weighted votes
+                      </p>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
+
+            {/* League Results */}
+            {results?.type === "league" && (
+              <div className="space-y-6">
+                {/* League Winner */}
+                {results.league_result && results.league_result.winning_option_text && (
+                  <div className="bg-gradient-to-r from-orange-50 to-yellow-50 dark:from-orange-900/20 dark:to-yellow-900/20 border border-orange-200 dark:border-orange-700 rounded-lg p-4">
+                    <h4 className="font-semibold text-orange-800 dark:text-orange-300 mb-2">
+                      League Winner
+                    </h4>
+                    <p className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                      {results.league_result.winning_option_text}
+                    </p>
+                  </div>
+                )}
+
+                {/* Team Breakdown */}
+                {results.team_results && (
+                  <div>
+                    <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                      Team Votes
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {results.team_results.map((teamResult: TeamPollResult) => (
+                        <div
+                          key={teamResult.team_id}
+                          className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4"
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-2xl">{teamResult.team_emoji}</span>
+                            <span className="font-bold text-gray-900 dark:text-gray-100">
+                              {teamResult.team_name}
+                            </span>
+                          </div>
+                          <p className="text-gray-600 dark:text-gray-400">
+                            {teamResult.winning_option_text || "No votes yet"}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                            {teamResult.total_weighted_votes} weighted votes
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Option Breakdown */}
+                {results.all_options && (
+                  <div>
+                    <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                      Vote Distribution by Option
+                    </h4>
+                    <div className="space-y-3">
+                      {results.all_options.map((option) => (
+                        <div
+                          key={option.option_id}
+                          className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-semibold text-gray-900 dark:text-gray-100">
+                              {option.option_text}
+                            </span>
+                            <span className="text-sm text-gray-600 dark:text-gray-400">
+                              {option.teams_voting?.length || 0} team(s)
+                            </span>
+                          </div>
+                          {option.teams_voting && option.teams_voting.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {option.teams_voting.map((team) => (
+                                <span
+                                  key={team.team_id}
+                                  className="inline-flex items-center gap-1 px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-sm"
+                                >
+                                  <span>{team.team_emoji}</span>
+                                  <span>{team.team_name}</span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <button
               onClick={() => setShowResults(false)}

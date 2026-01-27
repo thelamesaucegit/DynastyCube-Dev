@@ -5,8 +5,10 @@ import React, { useState, useEffect } from "react";
 import {
   getTeamBalance,
   getTeamTransactions,
+  getActiveSeason,
   type TeamBalance,
   type CubucksTransaction,
+  type Season,
 } from "@/app/actions/cubucksActions";
 
 interface TeamCubucksDisplayProps {
@@ -14,6 +16,7 @@ interface TeamCubucksDisplayProps {
   showTransactions?: boolean;
   compact?: boolean;
   refreshKey?: number; // Increment this to trigger a refresh
+  isUserTeamMember?: boolean;
 }
 
 export const TeamCubucksDisplay: React.FC<TeamCubucksDisplayProps> = ({
@@ -21,8 +24,10 @@ export const TeamCubucksDisplay: React.FC<TeamCubucksDisplayProps> = ({
   showTransactions = false,
   compact = false,
   refreshKey = 0,
+  isUserTeamMember = true,
 }) => {
   const [team, setTeam] = useState<TeamBalance | null>(null);
+  const [activeSeason, setActiveSeason] = useState<Season | null>(null);
   const [transactions, setTransactions] = useState<CubucksTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
@@ -35,8 +40,13 @@ export const TeamCubucksDisplay: React.FC<TeamCubucksDisplayProps> = ({
   const loadData = async () => {
     setLoading(true);
     try {
-      const teamRes = await getTeamBalance(teamId);
+      const [teamRes, seasonRes] = await Promise.all([
+        getTeamBalance(teamId),
+        getActiveSeason(),
+      ]);
+
       setTeam(teamRes.team);
+      setActiveSeason(seasonRes.season);
 
       if (showTransactions) {
         const txRes = await getTeamTransactions(teamId);
@@ -124,9 +134,11 @@ export const TeamCubucksDisplay: React.FC<TeamCubucksDisplayProps> = ({
         {/* Stats */}
         <div className="grid grid-cols-2 gap-4 pt-4 border-t border-yellow-300 dark:border-yellow-700">
           <div>
-            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total Earned</div>
-            <div className="text-lg font-semibold text-green-600 dark:text-green-400">
-              +{team.cubucks_total_earned.toLocaleString()}
+            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+              Season {activeSeason?.season_number || "?"} Cap
+            </div>
+            <div className="text-lg font-semibold text-blue-600 dark:text-blue-400">
+              {(activeSeason?.cubucks_allocation || 0).toLocaleString()}
             </div>
           </div>
           <div>
@@ -214,10 +226,15 @@ export const TeamCubucksDisplay: React.FC<TeamCubucksDisplayProps> = ({
           💡 About Cubucks
         </h4>
         <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1 ml-4 list-disc">
-          <li>Use Cubucks to draft cards from the pool</li>
-          <li>Each card has a different cost based on power level</li>
-          <li>Earn more Cubucks through season allocations and rewards</li>
-          <li>Budget wisely - you can&apos;t draft if you run out!</li>
+          <li>Cubucks are a finite resource that each Team allocates to the cards in their Pool.</li>
+          <li>Each card has a different value based on power level and number of times it has been drafted.</li>
+          <li>The Season Cap ({(activeSeason?.cubucks_allocation || 0).toLocaleString()} this season) is set at the beginning of each season and remains fixed.</li>
+          <li>
+            {isUserTeamMember
+              ? "Your Cubucks Balance reflects remaining funds for the Draft, Free Agency, Waivers, and Trades."
+              : "The Cubucks Balance reflects remaining funds for the Draft, Free Agency, Waivers, and Trades."}
+          </li>
+          <li>Budget wisely - teams can&apos;t draft if they run out!</li>
         </ul>
       </div>
     </div>

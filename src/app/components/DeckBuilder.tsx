@@ -31,6 +31,8 @@ import type { DraftPick, Deck, DeckCard } from "@/app/actions/draftActions";
 
 interface DeckBuilderProps {
   teamId: string;
+  teamName?: string;
+  isUserTeamMember?: boolean;
 }
 
 // Draggable Card Component
@@ -117,7 +119,7 @@ const BASIC_LANDS = [
   { name: "Forest", color: "G", emoji: "🟢", image: "https://cards.scryfall.io/normal/front/b/9/b9c3c8d4-3a51-4c8e-971e-b2e2f3d8b6e0.jpg" },
 ];
 
-export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId }) => {
+export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "This team", isUserTeamMember = true }) => {
   const [draftPicks, setDraftPicks] = useState<DraftPick[]>([]);
   const [decks, setDecks] = useState<Deck[]>([]);
   const [selectedDeck, setSelectedDeck] = useState<Deck | null>(null);
@@ -162,7 +164,13 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId }) => {
       const { decks: teamDecks } = await getTeamDecks(teamId);
       setDecks(teamDecks);
 
+      // Auto-select the first deck (most recent) - especially important for non-members
       if (teamDecks.length > 0 && !selectedDeck) {
+        setSelectedDeck(teamDecks[0]);
+      }
+
+      // For non-members, always show the first (most recent) deck
+      if (!isUserTeamMember && teamDecks.length > 0) {
         setSelectedDeck(teamDecks[0]);
       }
     } catch (err) {
@@ -524,22 +532,28 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId }) => {
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-            Your Decks
+            {isUserTeamMember ? "Your Decks" : `${teamName}'s Decks`}
           </h3>
-          <button
-            onClick={() => setShowNewDeckModal(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-          >
-            + New Deck
-          </button>
+          {isUserTeamMember && (
+            <button
+              onClick={() => setShowNewDeckModal(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+            >
+              + New Deck
+            </button>
+          )}
         </div>
 
         {decks.length === 0 ? (
           <div className="text-center py-8 text-gray-500 dark:text-gray-500">
             <p className="text-lg mb-2">No decks yet</p>
-            <p className="text-sm">Create your first deck to get started</p>
+            <p className="text-sm">
+              {isUserTeamMember
+                ? "Create your first deck to get started"
+                : `${teamName} hasn't created any decks yet`}
+            </p>
           </div>
-        ) : (
+        ) : isUserTeamMember ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {decks.map((deck) => (
               <button
@@ -568,11 +582,33 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId }) => {
               </button>
             ))}
           </div>
+        ) : (
+          /* Non-members only see the most recent deck */
+          <div className="text-center py-4">
+            {decks.length > 0 && (
+              <div className="inline-block text-left p-4 rounded-lg border-2 border-blue-500 bg-blue-50 dark:bg-blue-900/30">
+                <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-1">
+                  {decks[0].deck_name}
+                </h4>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                  {decks[0].format}
+                </p>
+                {decks[0].description && (
+                  <p className="text-xs text-gray-500 dark:text-gray-500">
+                    {decks[0].description}
+                  </p>
+                )}
+              </div>
+            )}
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">
+              Showing the most recent deck. Join the team to see all decks.
+            </p>
+          </div>
         )}
       </div>
 
-      {/* New Deck Modal */}
-      {showNewDeckModal && (
+      {/* New Deck Modal - Only for team members */}
+      {showNewDeckModal && isUserTeamMember && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full shadow-2xl">
             <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">
@@ -600,7 +636,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId }) => {
                 <textarea
                   value={newDeckDescription}
                   onChange={(e) => setNewDeckDescription(e.target.value)}
-                  placeholder="Describe your deck strategy..."
+                  placeholder="Describe the deck strategy..."
                   rows={3}
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                 />
@@ -649,8 +685,8 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId }) => {
         </div>
       )}
 
-      {/* Deck Builder Interface */}
-      {selectedDeck && (
+      {/* Deck Builder Interface - Full editing for team members */}
+      {selectedDeck && isUserTeamMember && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left: Available Cards & Basic Lands */}
           <div className="lg:col-span-1 space-y-4">
@@ -944,11 +980,91 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId }) => {
         </div>
       )}
 
+      {/* Read-only Deck View for Non-Members */}
+      {selectedDeck && !isUserTeamMember && (
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+              {selectedDeck.deck_name}
+            </h3>
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              {deckCards.length} cards
+            </span>
+          </div>
+
+          {selectedDeck.description && (
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
+              {selectedDeck.description}
+            </p>
+          )}
+
+          {/* Category Tabs - Read Only */}
+          <div className="flex gap-2 mb-4 border-b border-gray-200 dark:border-gray-700">
+            {[
+              { id: "mainboard" as const, label: "Mainboard", count: deckCards.filter(c => c.category === "mainboard").length },
+              { id: "sideboard" as const, label: "Sideboard", count: deckCards.filter(c => c.category === "sideboard").length },
+              { id: "maybeboard" as const, label: "Maybeboard", count: deckCards.filter(c => c.category === "maybeboard").length },
+            ].map((category) => (
+              <button
+                key={category.id}
+                onClick={() => setActiveCategory(category.id)}
+                className={`
+                  px-4 py-2 font-medium transition-colors relative
+                  ${
+                    activeCategory === category.id
+                      ? "text-blue-600 dark:text-blue-400"
+                      : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                  }
+                `}
+              >
+                {category.label} ({category.count})
+                {activeCategory === category.id && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 dark:bg-blue-400"></div>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Card List - Read Only */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {deckCards
+              .filter((card) => card.category === activeCategory)
+              .map((card) => (
+                <div
+                  key={card.id}
+                  className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700"
+                >
+                  <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
+                    {card.card_name}
+                  </p>
+                  {(card.quantity || 1) > 1 && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      x{card.quantity}
+                    </p>
+                  )}
+                </div>
+              ))}
+          </div>
+
+          {deckCards.filter((card) => card.category === activeCategory).length === 0 && (
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              No cards in {activeCategory}
+            </div>
+          )}
+
+          <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
+              This is a read-only view. Join {teamName} to edit decks.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* No Deck Selected */}
-      {!selectedDeck && decks.length > 0 && (
+      {!selectedDeck && decks.length > 0 && isUserTeamMember && (
         <div className="text-center py-12 text-gray-500 dark:text-gray-500">
           <p className="text-lg mb-2">Select a deck to start building</p>
-          <p className="text-sm">Choose from your decks above</p>
+          <p className="text-sm">Choose from the decks above</p>
         </div>
       )}
       </div>

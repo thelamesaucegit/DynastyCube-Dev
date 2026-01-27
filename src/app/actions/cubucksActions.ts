@@ -44,6 +44,40 @@ export interface TeamBalance {
 }
 
 // ============================================
+// AUTHENTICATION HELPERS
+// ============================================
+
+/**
+ * Verify that the current user is authenticated and is a member of the specified team
+ */
+async function verifyTeamMembership(
+  teamId: string
+): Promise<{ authorized: boolean; userId?: string; error?: string }> {
+  const supabase = await createServerClient();
+
+  // Check authentication
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { authorized: false, error: "You must be logged in to perform this action" };
+  }
+
+  // Check team membership
+  const { data: membership, error: membershipError } = await supabase
+    .from("team_members")
+    .select("id")
+    .eq("team_id", teamId)
+    .eq("user_id", user.id)
+    .single();
+
+  if (membershipError || !membership) {
+    return { authorized: false, userId: user.id, error: "You must be a member of this team to perform this action" };
+  }
+
+  return { authorized: true, userId: user.id };
+}
+
+// ============================================
 // SEASON MANAGEMENT
 // ============================================
 
@@ -484,12 +518,10 @@ export async function refundDraftPick(
   try {
     const supabase = await createServerClient();
 
-    // Check authentication
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return { success: false, error: "Not authenticated" };
+    // Verify user is authenticated and is a member of the team
+    const authCheck = await verifyTeamMembership(teamId);
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error };
     }
 
     // Find the original draft transaction to get the cost
@@ -516,13 +548,13 @@ export async function refundDraftPick(
       const refundAmount = cardPool?.cubucks_cost || 1;
 
       // Proceed with refund using the card pool cost
-      return await processRefund(supabase, teamId, draftPickId, cardId, cardName, refundAmount, user.id);
+      return await processRefund(supabase, teamId, draftPickId, cardId, cardName, refundAmount, authCheck.userId!);
     }
 
     // The original transaction amount is negative (spent), so we refund the absolute value
     const refundAmount = Math.abs(originalTransaction.amount);
 
-    return await processRefund(supabase, teamId, draftPickId, cardId, cardName, refundAmount, user.id);
+    return await processRefund(supabase, teamId, draftPickId, cardId, cardName, refundAmount, authCheck.userId!);
   } catch (error) {
     console.error("Unexpected error refunding draft pick:", error);
     return { success: false, error: String(error) };
@@ -623,12 +655,10 @@ export async function spendCubucksOnDraft(
   try {
     const supabase = await createServerClient();
 
-    // Check authentication
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return { success: false, error: "Not authenticated" };
+    // Verify user is authenticated and is a member of the team
+    const authCheck = await verifyTeamMembership(teamId);
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error };
     }
 
     // Call the stored procedure

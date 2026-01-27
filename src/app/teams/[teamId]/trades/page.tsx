@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from "react";
 import { use } from "react";
 import Layout from "@/components/Layout";
+import { useAuth } from "@/contexts/AuthContext";
 import { getTeamsWithMembers } from "@/app/actions/teamActions";
 import {
   getTeamTrades,
@@ -18,10 +19,15 @@ import {
 } from "@/app/actions/tradeActions";
 import Link from "next/link";
 
+interface TeamMember {
+  user_id: string;
+}
+
 interface Team {
   id: string;
   name: string;
   emoji: string;
+  members?: TeamMember[];
 }
 
 interface Trade {
@@ -50,7 +56,13 @@ interface TradesPageProps {
 
 export default function TradesPage({ params }: TradesPageProps) {
   const { teamId } = use(params);
+  const { user } = useAuth();
   const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
+
+  // Check if current user is a member of this team
+  const isUserTeamMember = currentTeam?.members?.some(
+    (member) => member.user_id === user?.id
+  ) ?? false;
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
   const [tradesEnabled, setTradesEnabled] = useState(true);
@@ -252,7 +264,9 @@ export default function TradesPage({ params }: TradesPageProps) {
               🔄 {currentTeam.emoji} {currentTeam.name} Trades
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
-              Manage your trade proposals and negotiate with other teams
+              {isUserTeamMember
+                ? "Manage your trade proposals and negotiate with other teams"
+                : `View ${currentTeam.name}'s trade proposals and negotiations`}
             </p>
           </div>
           {tradesEnabled && (
@@ -325,17 +339,19 @@ export default function TradesPage({ params }: TradesPageProps) {
               No Trades Found
             </h3>
             <p className="text-gray-600 dark:text-gray-400 mb-4">
-              {filter === "all" && "You don't have any trade proposals yet"}
+              {filter === "all" && (isUserTeamMember
+                ? "You don't have any trade proposals yet"
+                : `${currentTeam.name} doesn't have any trade proposals yet`)}
               {filter === "incoming" && "No incoming trade proposals"}
               {filter === "outgoing" && "No outgoing trade proposals"}
               {filter === "history" && "No trade history"}
             </p>
-            {tradesEnabled && filter !== "history" && (
+            {tradesEnabled && filter !== "history" && isUserTeamMember && (
               <Link
                 href={`/teams/${teamId}/trades/new`}
                 className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
               >
-                Create Your First Trade
+                Create a Trade
               </Link>
             )}
           </div>

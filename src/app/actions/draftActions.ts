@@ -69,6 +69,87 @@ export interface DeckCard {
 }
 
 /**
+ * Verify that the current user is authenticated and is a member of the specified team
+ */
+async function verifyTeamMembership(
+  teamId: string
+): Promise<{ authorized: boolean; userId?: string; error?: string }> {
+  const supabase = await createClient();
+
+  // Check authentication
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { authorized: false, error: "You must be logged in to perform this action" };
+  }
+
+  // Check team membership
+  const { data: membership, error: membershipError } = await supabase
+    .from("team_members")
+    .select("id")
+    .eq("team_id", teamId)
+    .eq("user_id", user.id)
+    .single();
+
+  if (membershipError || !membership) {
+    return { authorized: false, userId: user.id, error: "You must be a member of this team to perform this action" };
+  }
+
+  return { authorized: true, userId: user.id };
+}
+
+/**
+ * Get the team_id for a deck
+ */
+async function getDeckTeamId(deckId: string): Promise<string | null> {
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from("team_decks")
+    .select("team_id")
+    .eq("id", deckId)
+    .single();
+
+  return data?.team_id || null;
+}
+
+/**
+ * Get the team_id for a deck card (via deck lookup)
+ */
+async function getDeckCardTeamId(cardId: string): Promise<string | null> {
+  const supabase = await createClient();
+
+  // Get the deck_id for this card
+  const { data: cardData } = await supabase
+    .from("deck_cards")
+    .select("deck_id")
+    .eq("id", cardId)
+    .single();
+
+  if (!cardData?.deck_id) {
+    return null;
+  }
+
+  // Get the team_id for this deck
+  return getDeckTeamId(cardData.deck_id);
+}
+
+/**
+ * Get the team_id for a draft pick
+ */
+async function getDraftPickTeamId(pickId: string): Promise<string | null> {
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from("team_draft_picks")
+    .select("team_id")
+    .eq("id", pickId)
+    .single();
+
+  return data?.team_id || null;
+}
+
+/**
  * Get all draft picks for a team
  */
 export async function getTeamDraftPicks(
@@ -104,7 +185,11 @@ export async function addDraftPick(
   const supabase = await createClient();
 
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    // Verify user is authenticated and is a member of the team
+    const authCheck = await verifyTeamMembership(pick.team_id);
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error };
+    }
 
     const { error } = await supabase.from("team_draft_picks").insert({
       team_id: pick.team_id,
@@ -118,7 +203,7 @@ export async function addDraftPick(
       mana_cost: pick.mana_cost,
       cmc: pick.cmc,
       pick_number: pick.pick_number,
-      drafted_by: user?.id || null,
+      drafted_by: authCheck.userId,
     });
 
     if (error) {
@@ -142,6 +227,18 @@ export async function removeDraftPick(
   const supabase = await createClient();
 
   try {
+    // Get the team_id for this draft pick
+    const teamId = await getDraftPickTeamId(pickId);
+    if (!teamId) {
+      return { success: false, error: "Draft pick not found" };
+    }
+
+    // Verify user is authenticated and is a member of the team
+    const authCheck = await verifyTeamMembership(teamId);
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error };
+    }
+
     const { error } = await supabase
       .from("team_draft_picks")
       .delete()
@@ -195,21 +292,11 @@ export async function createDeck(
   const supabase = await createClient();
 
   try {
-    // Get user for audit purposes - gracefully handle auth errors
-    let user = null;
-    try {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      user = authUser;
-    } catch {
-      // Auth errors are non-blocking - we'll just create without user attribution
-      console.log("Note: Creating deck without auth session (user attribution unavailable)");
+    // Verify user is authenticated and is a member of the team
+    const authCheck = await verifyTeamMembership(deck.team_id);
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error };
     }
-
-    console.log("Creating deck with data:", {
-      team_id: deck.team_id,
-      deck_name: deck.deck_name,
-      user_id: user?.id || 'no user',
-    });
 
     const { data, error } = await supabase
       .from("team_decks")
@@ -219,7 +306,7 @@ export async function createDeck(
         description: deck.description,
         format: deck.format || "standard",
         is_public: deck.is_public || false,
-        created_by: user?.id || null,
+        created_by: authCheck.userId,
       })
       .select()
       .single();
@@ -256,6 +343,18 @@ export async function deleteDeck(
   const supabase = await createClient();
 
   try {
+    // Get the team_id for this deck
+    const teamId = await getDeckTeamId(deckId);
+    if (!teamId) {
+      return { success: false, error: "Deck not found" };
+    }
+
+    // Verify user is authenticated and is a member of the team
+    const authCheck = await verifyTeamMembership(teamId);
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error };
+    }
+
     const { error } = await supabase
       .from("team_decks")
       .delete()
@@ -309,6 +408,18 @@ export async function addCardToDeck(
   const supabase = await createClient();
 
   try {
+    // Get the team_id for this deck
+    const teamId = await getDeckTeamId(deckCard.deck_id);
+    if (!teamId) {
+      return { success: false, error: "Deck not found" };
+    }
+
+    // Verify user is authenticated and is a member of the team
+    const authCheck = await verifyTeamMembership(teamId);
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error };
+    }
+
     const { error } = await supabase.from("deck_cards").insert({
       deck_id: deckCard.deck_id,
       draft_pick_id: deckCard.draft_pick_id,
@@ -341,6 +452,18 @@ export async function updateDeckCardQuantity(
   const supabase = await createClient();
 
   try {
+    // Get the team_id for this deck card
+    const teamId = await getDeckCardTeamId(cardId);
+    if (!teamId) {
+      return { success: false, error: "Card not found" };
+    }
+
+    // Verify user is authenticated and is a member of the team
+    const authCheck = await verifyTeamMembership(teamId);
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error };
+    }
+
     const { error } = await supabase
       .from("deck_cards")
       .update({ quantity: newQuantity })
@@ -367,6 +490,18 @@ export async function removeCardFromDeck(
   const supabase = await createClient();
 
   try {
+    // Get the team_id for this deck card
+    const teamId = await getDeckCardTeamId(cardId);
+    if (!teamId) {
+      return { success: false, error: "Card not found" };
+    }
+
+    // Verify user is authenticated and is a member of the team
+    const authCheck = await verifyTeamMembership(teamId);
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error };
+    }
+
     const { error } = await supabase
       .from("deck_cards")
       .delete()
