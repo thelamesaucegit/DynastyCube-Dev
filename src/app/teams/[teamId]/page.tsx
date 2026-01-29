@@ -16,7 +16,8 @@ import { TeamRoles } from "@/app/components/TeamRoles";
 import { TeamCubucksDisplay } from "@/app/components/TeamCubucksDisplay";
 import { MatchRecording } from "@/app/components/MatchRecording";
 import { MatchSchedulingWidget } from "@/app/components/team/MatchSchedulingWidget";
-import { getCurrentUserRolesForTeam } from "@/app/actions/roleActions";
+import { getCurrentUserRolesForTeam, getTeamMembersWithRoles, type TeamMemberWithRoles } from "@/app/actions/roleActions";
+import { getRoleEmoji, getRoleDisplayName } from "@/app/utils/roleUtils";
 import type { DraftPick, Deck } from "@/app/actions/draftActions";
 import Link from "next/link";
 import "@/styles/pages/teams.css";
@@ -49,6 +50,7 @@ export default function TeamPage({ params }: TeamPageProps) {
   const [draftPicks, setDraftPicks] = useState<DraftPick[]>([]);
   const [decks, setDecks] = useState<Deck[]>([]);
   const [userRoles, setUserRoles] = useState<string[]>([]);
+  const [membersWithRoles, setMembersWithRoles] = useState<TeamMemberWithRoles[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>("picks");
   const [undrafting, setUndrafting] = useState<string | null>(null);
@@ -87,6 +89,10 @@ export default function TeamPage({ params }: TeamPageProps) {
       console.log("[TeamPage] Roles returned:", roles);
       console.log("[TeamPage] Roles error:", rolesError);
       setUserRoles(roles);
+
+      // Load all members with their roles
+      const { members: allMembersWithRoles } = await getTeamMembersWithRoles(teamId);
+      setMembersWithRoles(allMembersWithRoles);
     } catch (error) {
       console.error("Error loading team data:", error);
     } finally {
@@ -463,21 +469,45 @@ export default function TeamPage({ params }: TeamPageProps) {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {team.members.map((member) => (
-                    <div
-                      key={member.id}
-                      className="flex items-center justify-between bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700"
-                    >
-                      <div>
-                        <p className="font-semibold text-gray-900 dark:text-gray-100">
-                          {member.user_display_name || "Unknown User"}
-                        </p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Joined {new Date(member.joined_at).toLocaleDateString()}
-                        </p>
+                  {team.members.map((member) => {
+                    // Find this member's roles from membersWithRoles
+                    const memberRoleData = membersWithRoles.find(
+                      (m) => m.user_id === member.user_id
+                    );
+                    const memberRoles = memberRoleData?.roles || [];
+
+                    return (
+                      <div
+                        key={member.id}
+                        className="flex items-center justify-between bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-semibold text-gray-900 dark:text-gray-100">
+                              {member.user_display_name || "Unknown User"}
+                            </p>
+                            {/* Display role badges */}
+                            {memberRoles.length > 0 && (
+                              <div className="flex gap-1 flex-wrap">
+                                {memberRoles.map((role) => (
+                                  <span
+                                    key={role}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200"
+                                    title={getRoleDisplayName(role)}
+                                  >
+                                    {getRoleEmoji(role)} {getRoleDisplayName(role)}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            Joined {new Date(member.joined_at).toLocaleDateString()}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

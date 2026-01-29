@@ -49,6 +49,46 @@ interface Team {
   members?: TeamMember[];
 }
 
+export interface UserForDropdown {
+  id: string;
+  display_name: string;
+  discord_username?: string;
+  email?: string;
+}
+
+/**
+ * Get all users for dropdown selection (Admin only)
+ */
+export async function getUsersForDropdown(): Promise<{
+  users: UserForDropdown[];
+  error?: string;
+}> {
+  const supabase = await createClient();
+
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("id, display_name, discord_username")
+      .order("display_name");
+
+    if (error) {
+      console.error("Error fetching users for dropdown:", error);
+      return { users: [], error: error.message };
+    }
+
+    return {
+      users: (data || []).map((u) => ({
+        id: u.id,
+        display_name: u.display_name || u.discord_username || "Unknown User",
+        discord_username: u.discord_username,
+      })),
+    };
+  } catch (error) {
+    console.error("Unexpected error fetching users:", error);
+    return { users: [], error: "An unexpected error occurred" };
+  }
+}
+
 /**
  * Fetch all teams with their members
  */
@@ -149,6 +189,62 @@ export async function addMemberToTeam(
     }
 
     return { success: true };
+  } catch (error) {
+    console.error("Unexpected error adding member:", error);
+    return { success: false, error: "An unexpected error occurred" };
+  }
+}
+
+/**
+ * Add a user to a team by user_id (returns member_id for role assignment)
+ */
+export async function addMemberToTeamById(
+  teamId: string,
+  userId: string
+): Promise<{ success: boolean; memberId?: string; error?: string }> {
+  const supabase = await createClient();
+
+  try {
+    // Get the user's profile to get their email/display name
+    const { data: userProfile, error: profileError } = await supabase
+      .from("users")
+      .select("id, display_name, discord_username")
+      .eq("id", userId)
+      .single();
+
+    if (profileError || !userProfile) {
+      return { success: false, error: "User not found" };
+    }
+
+    // Check if user is already in the team
+    const { data: existingMember } = await supabase
+      .from("team_members")
+      .select("id")
+      .eq("team_id", teamId)
+      .eq("user_id", userId)
+      .single();
+
+    if (existingMember) {
+      return { success: false, error: "User is already a member of this team" };
+    }
+
+    // Insert team member with user_id
+    const { data, error } = await supabase
+      .from("team_members")
+      .insert({
+        team_id: teamId,
+        user_id: userId,
+        user_email: userProfile.display_name || userProfile.discord_username || userId,
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      console.error("Error adding member to team:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, memberId: data.id };
   } catch (error) {
     console.error("Unexpected error adding member:", error);
     return { success: false, error: "An unexpected error occurred" };

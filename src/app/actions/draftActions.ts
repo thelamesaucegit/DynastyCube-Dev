@@ -290,7 +290,7 @@ export async function getTeamDecks(
     let creatorMap: Record<string, string> = {};
     if (creatorIds.length > 0) {
       const { data: profiles } = await supabase
-        .from("user_profiles")
+        .from("users")
         .select("id, display_name")
         .in("id", creatorIds);
 
