@@ -568,12 +568,19 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                   }
                 `}
               >
-                <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-1">
-                  {deck.deck_name}
-                </h4>
+                <div className="flex items-start justify-between gap-2 mb-1">
+                  <h4 className="font-semibold text-gray-900 dark:text-gray-100">
+                    {deck.deck_name}
+                  </h4>
+                </div>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
                   {deck.format}
                 </p>
+                {deck.created_by_name && (
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-1">
+                    <span>👤</span> Created by {deck.created_by_name}
+                  </p>
+                )}
                 {deck.description && (
                   <p className="text-xs text-gray-500 dark:text-gray-500 line-clamp-2">
                     {deck.description}
@@ -593,6 +600,11 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
                   {decks[0].format}
                 </p>
+                {decks[0].created_by_name && (
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-1">
+                    <span>👤</span> Created by {decks[0].created_by_name}
+                  </p>
+                )}
                 {decks[0].description && (
                   <p className="text-xs text-gray-500 dark:text-gray-500">
                     {decks[0].description}
@@ -781,9 +793,16 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
           {/* Right: Deck Contents */}
           <div className="lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                {selectedDeck.deck_name}
-              </h3>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                  {selectedDeck.deck_name}
+                </h3>
+                {selectedDeck.created_by_name && (
+                  <p className="text-sm text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                    <span>👤</span> Created by {selectedDeck.created_by_name}
+                  </p>
+                )}
+              </div>
               <div className="flex gap-2">
                 <div className="relative group">
                   <button
@@ -984,9 +1003,16 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
       {selectedDeck && !isUserTeamMember && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
-              {selectedDeck.deck_name}
-            </h3>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                {selectedDeck.deck_name}
+              </h3>
+              {selectedDeck.created_by_name && (
+                <p className="text-sm text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                  <span>👤</span> Created by {selectedDeck.created_by_name}
+                </p>
+              )}
+            </div>
             <span className="text-sm text-gray-500 dark:text-gray-400">
               {deckCards.length} cards
             </span>

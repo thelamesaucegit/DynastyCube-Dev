@@ -55,6 +55,8 @@ export interface Deck {
   is_public?: boolean;
   created_at?: string;
   updated_at?: string;
+  created_by?: string;
+  created_by_name?: string;
 }
 
 export interface DeckCard {
@@ -265,6 +267,7 @@ export async function getTeamDecks(
   const supabase = await createClient();
 
   try {
+    // Fetch decks
     const { data, error } = await supabase
       .from("team_decks")
       .select("*")
@@ -276,7 +279,44 @@ export async function getTeamDecks(
       return { decks: [], error: error.message };
     }
 
-    return { decks: data || [] };
+    if (!data || data.length === 0) {
+      return { decks: [] };
+    }
+
+    // Get unique creator IDs
+    const creatorIds = [...new Set(data.map((d) => d.created_by).filter(Boolean))];
+
+    // Fetch creator names if there are any
+    let creatorMap: Record<string, string> = {};
+    if (creatorIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("user_profiles")
+        .select("id, display_name")
+        .in("id", creatorIds);
+
+      if (profiles) {
+        creatorMap = profiles.reduce((acc, p) => {
+          acc[p.id] = p.display_name;
+          return acc;
+        }, {} as Record<string, string>);
+      }
+    }
+
+    // Transform data to include created_by_name
+    const decks: Deck[] = data.map((deck) => ({
+      id: deck.id,
+      team_id: deck.team_id,
+      deck_name: deck.deck_name,
+      description: deck.description,
+      format: deck.format,
+      is_public: deck.is_public,
+      created_at: deck.created_at,
+      updated_at: deck.updated_at,
+      created_by: deck.created_by,
+      created_by_name: deck.created_by ? creatorMap[deck.created_by] : undefined,
+    }));
+
+    return { decks };
   } catch (error) {
     console.error("Unexpected error fetching decks:", error);
     return { decks: [], error: "An unexpected error occurred" };
