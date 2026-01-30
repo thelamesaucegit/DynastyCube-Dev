@@ -65,23 +65,26 @@ export async function GET(request: Request) {
 
   const cookieStore = await cookies();
 
+  // Use getAll/setAll (recommended by @supabase/ssr) so session cookies are applied correctly
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value;
+      getAll() {
+        return cookieStore.getAll();
       },
-      set(name: string, value: string, options: Record<string, unknown>) {
-        try {
-          response.cookies.set(name, value, options as { path?: string; maxAge?: number; domain?: string; sameSite?: boolean | "lax" | "strict" | "none"; secure?: boolean; httpOnly?: boolean });
-        } catch {
-          // ignore
-        }
-      },
-      remove(name: string, options: Record<string, unknown>) {
-        try {
-          response.cookies.set(name, "", { ...options, maxAge: 0 });
-        } catch {
-          // ignore
+      setAll(cookiesToSet) {
+        for (const { name, value, options } of cookiesToSet) {
+          const opts = options ?? {};
+          if (value) {
+            response.cookies.set(name, value, {
+              path: opts.path ?? "/",
+              maxAge: opts.maxAge ?? 60 * 60 * 24 * 400,
+              sameSite: (opts.sameSite as "lax" | "strict" | "none") ?? "lax",
+              secure: opts.secure ?? origin.startsWith("https://"),
+              httpOnly: opts.httpOnly ?? false,
+            });
+          } else {
+            response.cookies.set(name, "", { path: opts.path ?? "/", maxAge: 0 });
+          }
         }
       },
     },
