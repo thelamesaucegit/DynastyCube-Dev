@@ -6,13 +6,41 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 /**
+ * Get the public origin (for redirects). Behind a reverse proxy, request.url
+ * can be internal (e.g. http://localhost:3000). Use X-Forwarded-* when present,
+ * or NEXT_PUBLIC_APP_URL / VERCEL_URL if set.
+ */
+function getRedirectOrigin(request: Request): string {
+  // Explicit app URL (e.g. https://yourapp.com) overrides everything
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (appUrl) {
+    return appUrl.replace(/\/$/, "");
+  }
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const forwardedProto = request.headers.get("x-forwarded-proto");
+  if (forwardedHost) {
+    const proto = forwardedProto ?? (process.env.NODE_ENV === "development" ? "http" : "https");
+    return `${proto}://${forwardedHost}`;
+  }
+  // Vercel sets VERCEL_URL (e.g. yourapp.vercel.app) without protocol
+  const vercelUrl = process.env.VERCEL_URL;
+  if (vercelUrl) {
+    return `https://${vercelUrl}`;
+  }
+  const { origin } = new URL(request.url);
+  return origin;
+}
+
+/**
  * OAuth callback route (PKCE flow).
  * Discord/Google redirect here with ?code=... after login.
  * We create the redirect response first, then use a Supabase client whose
  * cookie adapter writes to that response so Set-Cookie headers are sent.
  */
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const requestUrl = new URL(request.url);
+  const { searchParams } = requestUrl;
+  const origin = getRedirectOrigin(request);
   const code = searchParams.get("code");
   const errorParam = searchParams.get("error");
   const errorDescription = searchParams.get("error_description");
