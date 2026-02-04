@@ -99,7 +99,7 @@ const AccountLinking: React.FC = () => {
         return;
       }
 
-      const identity = data?.identities.find((i) => i.provider === provider);
+      const identity = data?.identities.find((i: UserIdentity) => i.provider === provider);
       if (!identity) {
         alert(`No linked identity found for ${provider}`);
         return;

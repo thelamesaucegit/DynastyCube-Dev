@@ -3,7 +3,7 @@
 
 import React from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { DiscordLogin } from "@/components/auth/DiscordLogin";
+import DiscordLogin from "@/components/auth/DiscordLogin";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;

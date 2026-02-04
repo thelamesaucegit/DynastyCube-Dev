@@ -340,82 +340,56 @@ export async function reportMatchGame(gameData: {
       return { success: false, error: error.message };
     }
 
-    // Update match win counts - fetch current state and increment
-    console.log("[reportMatchGame] Fetching current match state for match ID:", gameData.match_id);
-    const { data: currentMatch, error: fetchError } = await supabase
+    // Update match win counts using the RPC function (bypasses RLS properly)
+    console.log("[reportMatchGame] Calling update_match_game_stats RPC for match ID:", gameData.match_id);
+    console.log("[reportMatchGame] Winner team ID:", gameData.winner_team_id);
+
+    const { data: rpcResult, error: rpcError } = await supabase
+      .rpc("update_match_game_stats", {
+        p_match_id: gameData.match_id,
+        p_winner_team_id: gameData.winner_team_id,
+      });
+
+    if (rpcError) {
+      console.error("[reportMatchGame] RPC error:", rpcError);
+      // Game was recorded but match stats update failed - still return success for the game
+      return { success: true, game: data };
+    }
+
+    console.log("[reportMatchGame] RPC result:", rpcResult);
+
+    // RPC returns an array with one row containing the updated stats
+    const updatedStats = rpcResult?.[0];
+
+    if (updatedStats) {
+      console.log("[reportMatchGame] Match updated successfully to:", updatedStats.home_wins, "-", updatedStats.away_wins);
+      return {
+        success: true,
+        game: data,
+        updatedStats: {
+          home_wins: updatedStats.home_wins,
+          away_wins: updatedStats.away_wins,
+          match_status: updatedStats.match_status,
+        },
+      };
+    }
+
+    // Fallback: fetch the match to get current state if RPC didn't return stats
+    console.log("[reportMatchGame] RPC didn't return stats, fetching match state...");
+    const { data: currentMatch } = await supabase
       .from("matches")
-      .select("id, home_team_id, away_team_id, home_team_wins, away_team_wins, best_of, status")
+      .select("home_team_wins, away_team_wins, status")
       .eq("id", gameData.match_id)
       .single();
-
-    if (fetchError || !currentMatch) {
-      console.error("Error fetching match:", fetchError);
-      return { success: true, game: data };
-    }
-
-    console.log("[reportMatchGame] Fetched match ID:", currentMatch.id);
-    console.log("[reportMatchGame] Current match state:", {
-      home_wins: currentMatch.home_team_wins,
-      away_wins: currentMatch.away_team_wins,
-      status: currentMatch.status,
-    });
-
-    // Calculate new win counts
-    const isHomeWinner = gameData.winner_team_id === currentMatch.home_team_id;
-    const newHomeWins = (currentMatch.home_team_wins || 0) + (isHomeWinner ? 1 : 0);
-    const newAwayWins = (currentMatch.away_team_wins || 0) + (isHomeWinner ? 0 : 1);
-
-    console.log("[reportMatchGame] Calculated new wins:", {
-      home: newHomeWins,
-      away: newAwayWins,
-    });
-
-    // Check if match is complete
-    const winsNeeded = Math.ceil(currentMatch.best_of / 2);
-    let newStatus = currentMatch.status;
-    let winnerId = null;
-
-    if (newHomeWins >= winsNeeded) {
-      newStatus = "completed";
-      winnerId = currentMatch.home_team_id;
-    } else if (newAwayWins >= winsNeeded) {
-      newStatus = "completed";
-      winnerId = currentMatch.away_team_id;
-    } else {
-      newStatus = "in_progress";
-    }
-
-    // Update using the RPC function with the calculated values
-    console.log("[reportMatchGame] Updating match ID:", gameData.match_id);
-    console.log("[reportMatchGame] New values - home:", newHomeWins, "away:", newAwayWins);
-    const { data: updateResult, error: updateError } = await supabase
-      .from("matches")
-      .update({
-        home_team_wins: newHomeWins,
-        away_team_wins: newAwayWins,
-        status: newStatus,
-        winner_team_id: winnerId,
-        completed_at: newStatus === "completed" ? new Date().toISOString() : null,
-      })
-      .eq("id", gameData.match_id)
-      .select("id, home_team_wins, away_team_wins");
-
-    if (updateError) {
-      console.error("Error updating match:", updateError);
-      return { success: true, game: data };
-    }
-
-    console.log("[reportMatchGame] Update result:", updateResult);
-    console.log("[reportMatchGame] Match updated successfully to:", newHomeWins, "-", newAwayWins);
 
     return {
       success: true,
       game: data,
-      updatedStats: {
-        home_wins: newHomeWins,
-        away_wins: newAwayWins,
-        match_status: newStatus,
-      },
+      updatedStats: currentMatch ? {
+        home_wins: currentMatch.home_team_wins || 0,
+        away_wins: currentMatch.away_team_wins || 0,
+        match_status: currentMatch.status,
+      } : undefined,
     };
   } catch (error) {
     console.error("Unexpected error reporting match game:", error);

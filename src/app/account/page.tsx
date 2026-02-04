@@ -7,7 +7,7 @@ import Link from "next/link";
 import Layout from "@/components/Layout";
 import { ProtectedRoute } from "../components/auth/ProtectedRoute";
 import { useAuth } from "@/contexts/AuthContext";
-import { DiscordLogin } from "../components/auth/DiscordLogin";
+import DiscordLogin from "../components/auth/DiscordLogin";
 import AccountLinking from "../components/AccountLinking";
 import { TeamSelection } from "../components/TeamSelection";
 import { DisplayNameEditor } from "../components/DisplayNameEditor";

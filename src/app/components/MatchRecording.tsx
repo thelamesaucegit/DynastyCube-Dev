@@ -77,19 +77,17 @@ export function MatchRecording({ teamId }: MatchRecordingProps) {
   const canRecordResults = userRoles.includes("pilot") || userRoles.includes("captain");
 
   const handleSelectMatch = async (match: MatchType) => {
-    // Reload the match to get fresh data including current win counts
-    const matchResult = await getTeamMatches(teamId);
-    const freshMatch = matchResult.matches?.find((m) => m.id === match.id);
+    // use the match we already have - DO NOT re-fetch
+    setSelectedMatch(match);
+    setWinnerTeamId(match.home_team_id); // default to home team
 
-    setSelectedMatch(freshMatch || match);
-    setWinnerTeamId((freshMatch || match).home_team_id); // Default to home team
-
-    // Load games for this match
+    // load games for this match 
     const gamesResult = await getMatchGames(match.id);
     if (!gamesResult.error && gamesResult.games) {
       setGameNumber((gamesResult.games.length || 0) + 1);
+    
     }
-  };
+};
 
   const handleRecordGame = async () => {
     if (!selectedMatch || !user || !winnerTeamId) return;
@@ -242,7 +240,10 @@ export function MatchRecording({ teamId }: MatchRecordingProps) {
                   <input
                     type="number"
                     value={gameNumber}
-                    onChange={(e) => setGameNumber(parseInt(e.target.value))}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      setGameNumber(isNaN(val) ? 1 : val);
+                    }}
                     min="1"
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                   />

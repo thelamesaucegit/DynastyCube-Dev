@@ -4,64 +4,86 @@ import { useEffect, useRef, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase-browser";
 import { useRouter } from "next/navigation";
 
-/**
- * OAuth callback page (PKCE flow).
- * Discord/Google redirect here with ?code=... after login.
- * We do the code exchange in the browser so the PKCE code_verifier
- * (stored in document.cookie when the user clicked Login) is in the same
- * context. Server-side exchange often fails with "Unable to exchange
- * external code" because the code_verifier cookie may not be sent on
- * the redirect request.
- */
 export default function AuthCallback() {
   const router = useRouter();
   const supabase = getSupabaseClient();
   const [status, setStatus] = useState("Processing authentication...");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const hasHandledAuth = useRef(false);
+  const hasRun = useRef(false);
 
   useEffect(() => {
-    if (hasHandledAuth.current) return;
+    if (hasRun.current) return;
+    hasRun.current = true;
 
-    const searchParams = new URLSearchParams(window.location.search);
-    const errorParam = searchParams.get("error");
-    const errorDescription = searchParams.get("error_description");
-    const code = searchParams.get("code");
-
-    if (errorParam) {
-      hasHandledAuth.current = true;
-      router.push(
-        `/auth/auth-code-error?error=${errorParam}&error_description=${encodeURIComponent(errorDescription || "")}`
-      );
-      return;
-    }
-
-    if (!code) {
-      hasHandledAuth.current = true;
-      router.push("/auth/login");
-      return;
-    }
-
-    (async () => {
+    const handleCallback = async () => {
       try {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        const queryParams = new URLSearchParams(window.location.search);
+        const error = queryParams.get("error");
+        const code = queryParams.get("code");
+
+        // Check for OAuth error first
         if (error) {
-          hasHandledAuth.current = true;
-          setErrorMessage(error.message);
-          setStatus("Authentication failed.");
-          setTimeout(() => router.push("/auth/login"), 4000);
+          setStatus("Authentication failed");
+          setErrorMessage(queryParams.get("error_description") || error);
+          setTimeout(() => router.push("/auth/auth-code-error?error=" + error), 2000);
           return;
         }
-        hasHandledAuth.current = true;
-        setStatus("Success! Redirecting...");
-        router.replace("/");
+
+        // Always check for existing session first
+        // @supabase/ssr may have already exchanged the code automatically
+        setStatus("Verifying session...");
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (session) {
+          setStatus("Success! Redirecting...");
+          router.push("/");
+          return;
+        }
+
+        // No session yet - try to exchange code if present
+        if (code) {
+          setStatus("Exchanging code for session...");
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+
+          if (exchangeError) {
+            // Check if session was established despite the error (race condition)
+            const { data: { session: retrySession } } = await supabase.auth.getSession();
+            if (retrySession) {
+              setStatus("Success! Redirecting...");
+              router.push("/");
+              return;
+            }
+
+            setStatus("Exchange failed");
+            setErrorMessage(exchangeError.message);
+            setTimeout(() => router.push("/auth/auth-code-error?error=exchange_failed"), 2000);
+            return;
+          }
+
+          setStatus("Success! Redirecting...");
+          router.push("/");
+          return;
+        }
+
+        // No code and no session
+        setStatus("No authentication data found");
+        setTimeout(() => router.push("/auth/login"), 2000);
       } catch (err) {
-        hasHandledAuth.current = true;
-        setErrorMessage(err instanceof Error ? err.message : "Something went wrong.");
-        setStatus("Authentication failed.");
-        setTimeout(() => router.push("/auth/login"), 4000);
+        // Even on error, check if we got a session
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          setStatus("Success! Redirecting...");
+          router.push("/");
+          return;
+        }
+
+        setStatus("Error processing authentication");
+        setErrorMessage(err instanceof Error ? err.message : "Unknown error");
+        setTimeout(() => router.push("/auth/login"), 3000);
       }
-    })();
+    };
+
+    handleCallback();
   }, [router, supabase]);
 
   return (
