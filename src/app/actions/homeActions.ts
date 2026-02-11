@@ -59,6 +59,15 @@ export interface AdminNews {
   author_name: string;
 }
 
+export interface CountdownTimer {
+  id: string;
+  title: string;
+  end_time: string;
+  link_url: string;
+  link_text: string;
+  is_active: boolean;
+}
+
 export interface RecentGame {
   id: string;
   team1_id: string;
@@ -71,6 +80,38 @@ export interface RecentGame {
   team2_score: number;
   winner_id?: string;
   played_at: string;
+}
+
+/**
+ * Get the currently active countdown timer
+ */
+export async function getActiveCountdownTimer(): Promise<{
+  timer: CountdownTimer | null;
+  error?: string;
+}> {
+  const supabase = await createClient();
+
+  try {
+    const { data, error } = await supabase
+      .from("countdown_timers")
+      .select("id, title, end_time, link_url, link_text, is_active")
+      .eq("is_active", true)
+      .single();
+
+    if (error) {
+      // No active timer is not an error
+      if (error.code === "PGRST116") {
+        return { timer: null };
+      }
+      console.error("Error fetching active countdown timer:", error);
+      return { timer: null, error: error.message };
+    }
+
+    return { timer: data };
+  } catch (error) {
+    console.error("Unexpected error fetching active countdown timer:", error);
+    return { timer: null, error: "An unexpected error occurred" };
+  }
 }
 
 /**

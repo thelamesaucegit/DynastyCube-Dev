@@ -16,11 +16,12 @@ import { CMCDataManagement } from "../components/admin/CMCDataManagement";
 import { NewsManagement } from "../components/admin/NewsManagement";
 import { VoteManagement } from "../components/admin/VoteManagement";
 import { MatchManagement } from "../components/admin/MatchManagement";
+import { CountdownTimerManagement } from "../components/admin/CountdownTimerManagement";
 import { getTeamsWithMembers } from "../actions/teamActions";
 import { getCardPool } from "../actions/cardActions";
 import "@/styles/pages/admin.css";
 
-type TabType = "users" | "teams" | "cards" | "cubucks" | "seasons" | "ratings" | "news" | "reports" | "votes" | "matches" | "settings";
+type TabType = "users" | "teams" | "cards" | "cubucks" | "seasons" | "ratings" | "news" | "timers" | "reports" | "votes" | "matches" | "settings";
 
 interface Stats {
   totalUsers: number;
@@ -76,6 +77,7 @@ export default function AdminPage() {
     { id: "ratings" as TabType, label: "📊 Ratings", icon: "📊" },
     { id: "news" as TabType, label: "📢 News", icon: "📢" },
     { id: "votes" as TabType, label: "🗳️ Voting", icon: "🗳️" },
+    { id: "timers" as TabType, label: "⏳ Timers", icon: "⏳" },
     { id: "reports" as TabType, label: "⚠️ Reports", icon: "⚠️" },
     { id: "settings" as TabType, label: "⚙️ Settings", icon: "⚙️" },
   ];
@@ -110,6 +112,8 @@ export default function AdminPage() {
             <MatchManagement />
           </div>
         );
+      case "timers":
+        return <CountdownTimerManagement />;
       case "reports":
         return (
           <div className="admin-section">

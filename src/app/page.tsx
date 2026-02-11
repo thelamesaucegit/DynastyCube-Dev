@@ -6,15 +6,18 @@ import Image from 'next/image';
 import Link from 'next/link';
 import Layout from '@/components/Layout';
 import '@/styles/pages/home.css';
+import CountdownTimer from '@/components/CountdownTimer';
 import {
   getRecentDraftPicks,
   getCurrentSeason,
   getAdminNews,
   getRecentGames,
+  getActiveCountdownTimer,
   type RecentDraftPick,
   type CurrentSeason,
   type AdminNews,
   type RecentGame,
+  type CountdownTimer as CountdownTimerType,
 } from '@/app/actions/homeActions';
 
 // Helper function to get relative time
@@ -35,6 +38,7 @@ export default function HomePage() {
   const [adminNews, setAdminNews] = useState<AdminNews[]>([]);
   const [recentPicks, setRecentPicks] = useState<RecentDraftPick[]>([]);
   const [recentGames, setRecentGames] = useState<RecentGame[]>([]);
+  const [countdownTimer, setCountdownTimer] = useState<CountdownTimerType | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -44,17 +48,19 @@ export default function HomePage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [seasonResult, newsResult, picksResult, gamesResult] = await Promise.all([
+      const [seasonResult, newsResult, picksResult, gamesResult, timerResult] = await Promise.all([
         getCurrentSeason(),
         getAdminNews(3),
         getRecentDraftPicks(5),
         getRecentGames(5),
+        getActiveCountdownTimer(),
       ]);
 
       setSeason(seasonResult.season);
       setAdminNews(newsResult.news);
       setRecentPicks(picksResult.picks);
       setRecentGames(gamesResult.games);
+      setCountdownTimer(timerResult.timer);
     } catch (error) {
       console.error('Error loading home page data:', error);
     } finally {
@@ -104,6 +110,16 @@ export default function HomePage() {
           A collaborative, living draft format
         </p>
       </div>
+
+      {/* Countdown Timer */}
+      {countdownTimer && (
+        <CountdownTimer
+          title={countdownTimer.title}
+          endTime={countdownTimer.end_time}
+          linkUrl={countdownTimer.link_url}
+          linkText={countdownTimer.link_text}
+        />
+      )}
 
       {/* Current Season Banner */}
       {season && (

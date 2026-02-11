@@ -15,10 +15,11 @@ export default function Page() {
       motto: "Why not both?",
     },
     {
-      name: "Kamigawa Ninja",
-      href: "/teams/ninja",
-      emoji: "⛩",
-      motto: "Omae wa mou shindeiru.",
+      name: "The Drainlings",
+      href: "/teams/drainlings",
+      emoji: "✴️",
+      motto: "....",
+      hidden: true,
     },
     {
       name: "Innistrad Creeps",
@@ -27,10 +28,23 @@ export default function Page() {
       motto: "Graveyard, Gatekeep, Girlboss",
     },
     {
-      name: "Theros Demigods",
-      href: "/teams/demigods",
-      emoji: "🌞",
-      motto: "The Fates will decide",
+      name: "Kamigawa Ninja",
+      href: "/teams/ninja",
+      emoji: "⛩",
+      motto: "Omae wa mou shindeiru.",
+    },
+    {
+      name: "Lorwyn Changelings",
+      href: "/teams/changelings",
+      emoji: "👽",
+      motto: "Expect the unexpected",
+    },
+    {
+      name: "Rabiah Nomads",
+      href: "/teams/nomads",
+      emoji: "🐫",
+      motto: "....",
+      hidden: true,
     },
     {
       name: "Ravnica Guildpact",
@@ -40,22 +54,22 @@ export default function Page() {
         "A Championship is won and lost before ever entering the battlefield",
     },
     {
-      name: "Lorwyn Changelings",
-      href: "/teams/changelings",
-      emoji: "👽",
-      motto: "Expect the unexpected",
+      name: "Tarkir Dragons",
+      href: "/teams/dragons",
+      emoji: "🐲",
+      motto: "No cost too great",
+    },
+    {
+      name: "Theros Demigods",
+      href: "/teams/demigods",
+      emoji: "🌞",
+      motto: "The Fates will decide",
     },
     {
       name: "Zendikar Hedrons",
       href: "/teams/hedrons",
       emoji: "💠",
       motto: "Good Vibes, No Escape",
-    },
-    {
-      name: "Tarkir Dragons",
-      href: "/teams/dragons",
-      emoji: "🐲",
-      motto: "No cost too great",
     },
   ];
 
@@ -86,7 +100,7 @@ export default function Page() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 my-8">
-          {teams.map((team, index) => (
+          {teams.filter((team) => !team.hidden).map((team, index) => (
             <button
               key={index}
               className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-md hover:shadow-lg hover:-translate-y-1 transition-all text-center group"
