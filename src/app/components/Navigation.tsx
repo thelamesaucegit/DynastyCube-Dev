@@ -111,6 +111,26 @@ const Navigation: React.FC = () => {
               Schedule
             </Link>
           </li>
+          <li>
+            <Link
+              href="/history"
+              className={STYLES.navLink}
+              role="menuitem"
+              onClick={handleLinkClick}
+            >
+              History
+            </Link>
+          </li>
+          <li>
+            <Link
+              href="/glossary"
+              className={STYLES.navLink}
+              role="menuitem"
+              onClick={handleLinkClick}
+            >
+              Glossary
+            </Link>
+          </li>
 
           {/* Conditionally show Vote button only when logged in */}
           {user && (

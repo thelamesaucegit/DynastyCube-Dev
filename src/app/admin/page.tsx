@@ -17,11 +17,13 @@ import { NewsManagement } from "../components/admin/NewsManagement";
 import { VoteManagement } from "../components/admin/VoteManagement";
 import { MatchManagement } from "../components/admin/MatchManagement";
 import { CountdownTimerManagement } from "../components/admin/CountdownTimerManagement";
+import { HistoryRequestManagement } from "../components/admin/HistoryRequestManagement";
+import { GlossaryManagement } from "../components/admin/GlossaryManagement";
 import { getTeamsWithMembers } from "../actions/teamActions";
 import { getCardPool } from "../actions/cardActions";
 import "@/styles/pages/admin.css";
 
-type TabType = "users" | "teams" | "cards" | "cubucks" | "seasons" | "ratings" | "news" | "timers" | "reports" | "votes" | "matches" | "settings";
+type TabType = "users" | "teams" | "cards" | "cubucks" | "seasons" | "ratings" | "news" | "timers" | "reports" | "votes" | "matches" | "settings" | "history" | "glossary";
 
 interface Stats {
   totalUsers: number;
@@ -79,6 +81,8 @@ export default function AdminPage() {
     { id: "votes" as TabType, label: "🗳️ Voting", icon: "🗳️" },
     { id: "timers" as TabType, label: "⏳ Timers", icon: "⏳" },
     { id: "reports" as TabType, label: "⚠️ Reports", icon: "⚠️" },
+    { id: "history" as TabType, label: "📜 History", icon: "📜" },
+    { id: "glossary" as TabType, label: "📖 Glossary", icon: "📖" },
     { id: "settings" as TabType, label: "⚙️ Settings", icon: "⚙️" },
   ];
 
@@ -126,6 +130,10 @@ export default function AdminPage() {
             <ReportManagement />
           </div>
         );
+      case "history":
+        return <HistoryRequestManagement />;
+      case "glossary":
+        return <GlossaryManagement />;
       case "settings":
         return (
           <div className="admin-section">
