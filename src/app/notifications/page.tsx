@@ -2,9 +2,24 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Layout from "@/components/Layout";
 import { getUserNotifications, markNotificationRead, markAllNotificationsRead } from "@/app/actions/tradeActions";
 import Link from "next/link";
+import { Card, CardContent } from "@/app/components/ui/card";
+import { Badge } from "@/app/components/ui/badge";
+import { Button } from "@/app/components/ui/button";
+import {
+  Loader2,
+  Bell,
+  BellOff,
+  CheckCheck,
+  Mail,
+  CheckCircle2,
+  XCircle,
+  MessageSquare,
+  Clock,
+  ExternalLink,
+  Eye,
+} from "lucide-react";
 
 interface Notification {
   id: string;
@@ -75,17 +90,17 @@ export default function NotificationsPage() {
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case "trade_proposal":
-        return "📨";
+        return <Mail className="h-6 w-6 text-primary" />;
       case "trade_accepted":
-        return "✅";
+        return <CheckCircle2 className="h-6 w-6 text-emerald-500" />;
       case "trade_rejected":
-        return "❌";
+        return <XCircle className="h-6 w-6 text-destructive" />;
       case "trade_message":
-        return "💬";
+        return <MessageSquare className="h-6 w-6 text-blue-500" />;
       case "trade_expired":
-        return "⏰";
+        return <Clock className="h-6 w-6 text-yellow-500" />;
       default:
-        return "🔔";
+        return <Bell className="h-6 w-6 text-muted-foreground" />;
     }
   };
 
@@ -118,104 +133,109 @@ export default function NotificationsPage() {
   };
 
   return (
-    <Layout>
-      <div className="max-w-4xl mx-auto p-6">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-            🔔 Notifications
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Stay updated on trade proposals, acceptances, and messages
-          </p>
-        </div>
+    <div className="container max-w-4xl mx-auto px-4 py-8">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-4xl font-bold tracking-tight mb-2">
+          Notifications
+        </h1>
+        <p className="text-muted-foreground">
+          Stay updated on trade proposals, acceptances, and messages
+        </p>
+      </div>
 
-        {/* Stats and Actions Bar */}
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-6 flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-6">
-            <div>
-              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                {notifications.length}
+      {/* Stats and Actions Bar */}
+      <Card className="mb-6">
+        <CardContent className="py-4">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-6">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-primary">
+                  {notifications.length}
+                </div>
+                <div className="text-xs text-muted-foreground">Total</div>
               </div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">Total</div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-orange-500">
+                  {unreadCount}
+                </div>
+                <div className="text-xs text-muted-foreground">Unread</div>
+              </div>
             </div>
-            <div>
-              <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                {unreadCount}
+
+            <div className="flex items-center gap-3">
+              {/* Filter Buttons */}
+              <div className="flex gap-1">
+                <Button
+                  variant={filter === "all" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilter("all")}
+                >
+                  All
+                </Button>
+                <Button
+                  variant={filter === "unread" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilter("unread")}
+                >
+                  Unread ({unreadCount})
+                </Button>
               </div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">Unread</div>
+
+              {/* Mark All Read Button */}
+              {unreadCount > 0 && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleMarkAllAsRead}
+                  className="gap-1.5"
+                >
+                  <CheckCheck className="h-4 w-4" />
+                  Mark All Read
+                </Button>
+              )}
             </div>
           </div>
+        </CardContent>
+      </Card>
 
-          <div className="flex items-center gap-3">
-            {/* Filter Buttons */}
-            <div className="flex gap-2">
-              <button
-                onClick={() => setFilter("all")}
-                className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
-                  filter === "all"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
-                }`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setFilter("unread")}
-                className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
-                  filter === "unread"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
-                }`}
-              >
-                Unread ({unreadCount})
-              </button>
-            </div>
-
-            {/* Mark All Read Button */}
-            {unreadCount > 0 && (
-              <button
-                onClick={handleMarkAllAsRead}
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-semibold transition-colors"
-              >
-                ✓ Mark All Read
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Notifications List */}
-        <div className="space-y-3">
-          {loading ? (
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-12 text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-gray-600 dark:text-gray-400">Loading notifications...</p>
-            </div>
-          ) : filteredNotifications.length === 0 ? (
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-12 text-center">
-              <div className="text-6xl mb-4">🔕</div>
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+      {/* Notifications List */}
+      <div className="space-y-3">
+        {loading ? (
+          <Card>
+            <CardContent className="py-16 text-center">
+              <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto mb-4" />
+              <p className="text-muted-foreground">Loading notifications...</p>
+            </CardContent>
+          </Card>
+        ) : filteredNotifications.length === 0 ? (
+          <Card>
+            <CardContent className="py-16 text-center">
+              <BellOff className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-xl font-semibold mb-2">
                 {filter === "unread" ? "No unread notifications" : "No notifications yet"}
               </h3>
-              <p className="text-gray-600 dark:text-gray-400">
+              <p className="text-muted-foreground">
                 {filter === "unread"
                   ? "You're all caught up!"
                   : "When teams send you trade proposals or messages, they'll appear here"}
               </p>
-            </div>
-          ) : (
-            filteredNotifications.map((notification) => (
-              <div
-                key={notification.id}
-                className={`bg-white dark:bg-gray-800 border rounded-lg p-5 transition-all hover:shadow-md ${
-                  !notification.is_read
-                    ? "border-blue-400 dark:border-blue-600 bg-blue-50 dark:bg-blue-900/20"
-                    : "border-gray-200 dark:border-gray-700"
-                }`}
-              >
+            </CardContent>
+          </Card>
+        ) : (
+          filteredNotifications.map((notification) => (
+            <Card
+              key={notification.id}
+              className={`transition-all hover:shadow-md ${
+                !notification.is_read
+                  ? "border-primary/50 bg-primary/5"
+                  : ""
+              }`}
+            >
+              <CardContent className="py-5">
                 <div className="flex items-start gap-4">
                   {/* Icon */}
-                  <div className="text-4xl flex-shrink-0">
+                  <div className="shrink-0 mt-0.5">
                     {getNotificationIcon(notification.notification_type)}
                   </div>
 
@@ -223,50 +243,48 @@ export default function NotificationsPage() {
                   <div className="flex-1 min-w-0">
                     {/* Type Badge */}
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="inline-block px-3 py-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs font-semibold rounded-full">
+                      <Badge variant="secondary">
                         {getNotificationTypeLabel(notification.notification_type)}
-                      </span>
+                      </Badge>
                       {!notification.is_read && (
-                        <span className="inline-block px-2 py-1 bg-blue-600 text-white text-xs font-bold rounded-full">
+                        <Badge>
                           NEW
-                        </span>
+                        </Badge>
                       )}
                     </div>
 
                     {/* Message */}
-                    <p className="text-base text-gray-900 dark:text-gray-100 mb-2">
+                    <p className="text-base mb-2">
                       {notification.message}
                     </p>
 
                     {/* Footer */}
-                    <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <span>{formatDateTime(notification.created_at)}</span>
-                      <span>•</span>
                       <Link
                         href={`/trades/${notification.trade_id}`}
-                        className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                        className="text-primary hover:underline font-medium flex items-center gap-1"
                       >
-                        View Trade →
+                        View Trade
+                        <ExternalLink className="h-3 w-3" />
                       </Link>
                       {!notification.is_read && (
-                        <>
-                          <span>•</span>
-                          <button
-                            onClick={() => handleMarkAsRead(notification.id)}
-                            className="text-green-600 dark:text-green-400 hover:underline font-medium"
-                          >
-                            Mark as read
-                          </button>
-                        </>
+                        <button
+                          onClick={() => handleMarkAsRead(notification.id)}
+                          className="text-muted-foreground hover:text-foreground font-medium flex items-center gap-1 transition-colors"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          Mark as read
+                        </button>
                       )}
                     </div>
                   </div>
                 </div>
-              </div>
-            ))
-          )}
-        </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
       </div>
-    </Layout>
+    </div>
   );
 }

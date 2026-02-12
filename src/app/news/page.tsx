@@ -3,8 +3,11 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import Layout from "@/components/Layout";
 import { getAdminNews, type AdminNews } from "@/app/actions/homeActions";
+import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
+import { Badge } from "@/app/components/ui/badge";
+import { Button } from "@/app/components/ui/button";
+import { Loader2, CalendarDays, User, ArrowLeft, Newspaper, AlertCircle } from "lucide-react";
 
 export default function NewsPage() {
   const [news, setNews] = useState<AdminNews[]>([]);
@@ -36,142 +39,130 @@ export default function NewsPage() {
 
   if (loading) {
     return (
-      <Layout>
-        <div className="py-8 text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Loading news...</p>
+      <div className="container max-w-7xl mx-auto px-4 py-8">
+        <div className="flex flex-col items-center justify-center py-20">
+          <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
+          <p className="text-muted-foreground">Loading news...</p>
         </div>
-      </Layout>
+      </div>
     );
   }
 
   return (
-    <Layout>
-      <div className="py-8">
-        {/* Header */}
-        <div className="mb-8 text-center">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-4">
-            📢 Community News
-          </h1>
-          <p className="text-lg text-gray-600 dark:text-gray-400">
-            Stay updated with the latest announcements from The Dynasty Cube
-          </p>
-        </div>
+    <div className="container max-w-7xl mx-auto px-4 py-8">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-4xl font-bold tracking-tight mb-2">
+          Community News
+        </h1>
+        <p className="text-lg text-muted-foreground">
+          Stay updated with the latest announcements from The Dynasty Cube
+        </p>
+      </div>
 
-        {/* Error Message */}
-        {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg p-4 mb-6 text-red-800 dark:text-red-200">
-            ✗ {error}
-          </div>
-        )}
+      {/* Error Message */}
+      {error && (
+        <Card className="mb-6 border-destructive">
+          <CardContent className="pt-6 flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
+            <p className="text-muted-foreground">{error}</p>
+          </CardContent>
+        </Card>
+      )}
 
-        {/* News List */}
-        {news.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-12 text-center">
-            <div className="text-6xl mb-4">📰</div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+      {/* News List */}
+      {news.length === 0 ? (
+        <Card>
+          <CardContent className="py-16 text-center">
+            <Newspaper className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h2 className="text-2xl font-bold mb-2">
               No News Yet
             </h2>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-muted-foreground">
               Check back soon for updates and announcements!
             </p>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {news.map((newsItem) => (
-              <article
-                key={newsItem.id}
-                className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-8 shadow-md hover:shadow-lg transition-shadow"
-              >
-                {/* News Header */}
-                <div className="mb-4">
-                  <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-3">
-                    {newsItem.title}
-                  </h2>
-                  <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
-                    <span className="flex items-center gap-1">
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                        />
-                      </svg>
-                      {new Date(newsItem.created_at).toLocaleDateString("en-US", {
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                      })}
-                    </span>
-                    <span>•</span>
-                    <span className="flex items-center gap-1">
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                        />
-                      </svg>
-                      {newsItem.author_name}
-                    </span>
-                  </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-6">
+          {/* Featured Post (first item) */}
+          {news.length > 0 && (
+            <Card className="overflow-hidden">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Badge>Latest</Badge>
                 </div>
-
-                {/* News Content */}
-                <div className="prose prose-lg dark:prose-invert max-w-none">
-                  <p className="text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
-                    {newsItem.content}
-                  </p>
+                <CardTitle className="text-3xl">
+                  {news[0].title}
+                </CardTitle>
+                <div className="flex items-center gap-4 text-sm text-muted-foreground pt-2">
+                  <span className="flex items-center gap-1.5">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    {new Date(news[0].created_at).toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <User className="h-3.5 w-3.5" />
+                    {news[0].author_name}
+                  </span>
                 </div>
+              </CardHeader>
+              <CardContent>
+                <p className="leading-relaxed whitespace-pre-line">
+                  {news[0].content}
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
-                {/* Divider */}
-                <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-500 dark:text-gray-400">
-                      Posted by {newsItem.author_name}
-                    </span>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
+          {/* Remaining posts in grid */}
+          {news.length > 1 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {news.slice(1).map((newsItem) => (
+                <Card key={newsItem.id} className="transition-shadow hover:shadow-md">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-xl line-clamp-2">
+                      {newsItem.title}
+                    </CardTitle>
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground pt-1">
+                      <span className="flex items-center gap-1.5">
+                        <CalendarDays className="h-3.5 w-3.5" />
+                        {new Date(newsItem.created_at).toLocaleDateString("en-US", {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })}
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <User className="h-3.5 w-3.5" />
+                        {newsItem.author_name}
+                      </span>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-muted-foreground leading-relaxed whitespace-pre-line line-clamp-4">
+                      {newsItem.content}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
-        {/* Back to Home Link */}
-        <div className="mt-8 text-center">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:underline font-medium"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M10 19l-7-7m0 0l7-7m-7 7h18"
-              />
-            </svg>
+      {/* Back to Home Link */}
+      <div className="mt-8 text-center">
+        <Button variant="ghost" asChild>
+          <Link href="/" className="gap-2">
+            <ArrowLeft className="h-4 w-4" />
             Back to Home
           </Link>
-        </div>
+        </Button>
       </div>
-    </Layout>
+    </div>
   );
 }

@@ -4,7 +4,6 @@
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import Layout from "@/components/Layout";
 import { ProtectedRoute } from "../components/auth/ProtectedRoute";
 import { useAuth } from "@/contexts/AuthContext";
 import DiscordLogin from "../components/auth/DiscordLogin";
@@ -15,6 +14,9 @@ import { TimezoneSelector } from "../components/TimezoneSelector";
 import { getUserTeam } from "../actions/teamActions";
 import { useUserTimezone } from "../hooks/useUserTimezone";
 import { formatDate } from "../utils/timezoneUtils";
+import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
+import { Button } from "@/app/components/ui/button";
+import { Loader2, LogOut, Link2, ChevronRight, Users } from "lucide-react";
 
 interface Team {
     id: string;
@@ -57,52 +59,69 @@ export default function AccountPage() {
 
     const UserProfile = () => (
         <div className="space-y-6">
-            <div className="flex items-center gap-4 p-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-md">
-                {user?.user_metadata?.avatar_url && (
-                    <Image
-                        src={user.user_metadata.avatar_url}
-                        alt="Discord Avatar"
-                        className="rounded-full border-2 border-blue-500 dark:border-blue-400"
-                        width={60}
-                        height={60}
-                    />
-                )}
-                <div>
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                        Welcome,{" "}
-                        {user?.user_metadata?.full_name ||
-                            user?.user_metadata?.username ||
-                            "Dynasty Cube Member"}
-                        !
-                    </h2>
-                    {user?.user_metadata?.username && (
-                        <p className="text-gray-600 dark:text-gray-400 text-sm">
-                            @{user.user_metadata.username || "Unknown"}
-                        </p>
-                    )}
-                </div>
-            </div>
+            {/* Profile Header Card */}
+            <Card>
+                <CardContent className="pt-6">
+                    <div className="flex items-center gap-4">
+                        {user?.user_metadata?.avatar_url && (
+                            <Image
+                                src={user.user_metadata.avatar_url}
+                                alt="Discord Avatar"
+                                className="rounded-full border-2 border-primary"
+                                width={60}
+                                height={60}
+                            />
+                        )}
+                        <div>
+                            <h2 className="text-2xl font-bold">
+                                Welcome,{" "}
+                                {user?.user_metadata?.full_name ||
+                                    user?.user_metadata?.username ||
+                                    "Dynasty Cube Member"}
+                                !
+                            </h2>
+                            {user?.user_metadata?.username && (
+                                <p className="text-muted-foreground text-sm">
+                                    @{user.user_metadata.username || "Unknown"}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
 
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-md">
-                <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Account Information</h3>
-                <div className="space-y-2 text-gray-700 dark:text-gray-300">
-                    <p>
-                        <strong className="text-gray-900 dark:text-gray-100">Discord Username:</strong>{" "}
-                        {user?.user_metadata?.full_name || user?.user_metadata?.username}
-                    </p>
-                    <p>
-                        <strong className="text-gray-900 dark:text-gray-100">Email:</strong> {user?.email}
-                    </p>
-                    <p>
-                        <strong className="text-gray-900 dark:text-gray-100">Member since:</strong>{" "}
-                        {user?.created_at ? formatDate(user.created_at, timezone) : "N/A"}
-                    </p>
-                    <p>
-                        <strong className="text-gray-900 dark:text-gray-100">Last sign in:</strong>{" "}
-                        {user?.last_sign_in_at ? formatDate(user.last_sign_in_at, timezone) : "N/A"}
-                    </p>
-                </div>
-            </div>
+            {/* Account Information */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Account Information</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="space-y-3 text-sm">
+                        <div className="flex justify-between py-2 border-b border-border">
+                            <span className="text-muted-foreground">Discord Username</span>
+                            <span className="font-medium">
+                                {user?.user_metadata?.full_name || user?.user_metadata?.username}
+                            </span>
+                        </div>
+                        <div className="flex justify-between py-2 border-b border-border">
+                            <span className="text-muted-foreground">Email</span>
+                            <span className="font-medium">{user?.email}</span>
+                        </div>
+                        <div className="flex justify-between py-2 border-b border-border">
+                            <span className="text-muted-foreground">Member since</span>
+                            <span className="font-medium">
+                                {user?.created_at ? formatDate(user.created_at, timezone) : "N/A"}
+                            </span>
+                        </div>
+                        <div className="flex justify-between py-2">
+                            <span className="text-muted-foreground">Last sign in</span>
+                            <span className="font-medium">
+                                {user?.last_sign_in_at ? formatDate(user.last_sign_in_at, timezone) : "N/A"}
+                            </span>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
 
             {/* Display Name Editor */}
             <DisplayNameEditor />
@@ -111,77 +130,94 @@ export default function AccountPage() {
             <TimezoneSelector />
 
             {/* Team Section */}
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-md">
-                <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">My Team</h3>
-                {loadingTeam ? (
-                    <div className="text-center py-4">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Loading team...</p>
-                    </div>
-                ) : userTeam ? (
-                    <Link href={`/teams/${userTeam.id}`}>
-                        <div className="bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border-2 border-blue-200 dark:border-blue-700 rounded-lg p-6 hover:border-blue-400 dark:hover:border-blue-500 transition-all cursor-pointer hover:shadow-lg">
-                            <div className="flex items-center gap-4">
-                                <span className="text-5xl">{userTeam.emoji}</span>
-                                <div className="flex-1">
-                                    <h4 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                                        {userTeam.name}
-                                    </h4>
-                                    <p className="text-gray-700 dark:text-gray-300 italic mt-1">
-                                        &quot;{userTeam.motto}&quot;
-                                    </p>
-                                    <p className="text-sm text-blue-600 dark:text-blue-400 mt-2 font-medium">
-                                        → View Team Page
-                                    </p>
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Users className="h-5 w-5" />
+                        My Team
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {loadingTeam ? (
+                        <div className="text-center py-4">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-2" />
+                            <p className="text-sm text-muted-foreground">Loading team...</p>
+                        </div>
+                    ) : userTeam ? (
+                        <Link href={`/teams/${userTeam.id}`}>
+                            <div className="bg-accent rounded-lg p-6 hover:bg-accent/80 transition-all cursor-pointer group">
+                                <div className="flex items-center gap-4">
+                                    <span className="text-5xl">{userTeam.emoji}</span>
+                                    <div className="flex-1">
+                                        <h4 className="text-2xl font-bold">
+                                            {userTeam.name}
+                                        </h4>
+                                        <p className="text-muted-foreground italic mt-1">
+                                            &quot;{userTeam.motto}&quot;
+                                        </p>
+                                        <p className="text-sm text-primary mt-2 font-medium flex items-center gap-1 group-hover:gap-2 transition-all">
+                                            View Team Page
+                                            <ChevronRight className="h-4 w-4" />
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </Link>
-                ) : user?.email ? (
-                    <TeamSelection userEmail={user.email} onTeamJoined={loadUserTeam} />
-                ) : null}
-            </div>
+                        </Link>
+                    ) : user?.email ? (
+                        <TeamSelection userEmail={user.email} onTeamJoined={loadUserTeam} />
+                    ) : null}
+                </CardContent>
+            </Card>
 
             {/* Account Linking Toggle */}
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-md">
-                <h3 className="text-xl font-semibold mb-3 text-gray-900 dark:text-gray-100">Manage Authentication Methods</h3>
-                <p className="text-gray-700 dark:text-gray-300 mb-4">
-                    Link additional sign-in methods to your account for easier access.
-                </p>
-                <button
-                    onClick={() => setShowLinking(!showLinking)}
-                    className="bg-blue-600 dark:bg-blue-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors"
-                >
-                    {showLinking ? "Hide Account Linking" : "Manage Linked Accounts"}
-                </button>
-            </div>
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Link2 className="h-5 w-5" />
+                        Manage Authentication Methods
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-muted-foreground mb-4">
+                        Link additional sign-in methods to your account for easier access.
+                    </p>
+                    <Button
+                        variant="secondary"
+                        onClick={() => setShowLinking(!showLinking)}
+                    >
+                        {showLinking ? "Hide Account Linking" : "Manage Linked Accounts"}
+                    </Button>
+                </CardContent>
+            </Card>
 
             {/* Account Linking Section */}
             {showLinking && (
-                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-md">
-                    <AccountLinking />
-                </div>
+                <Card>
+                    <CardContent className="pt-6">
+                        <AccountLinking />
+                    </CardContent>
+                </Card>
             )}
 
             <div className="flex justify-center">
-                <button
+                <Button
+                    variant="destructive"
                     onClick={handleSignOut}
-                    className="bg-red-600 dark:bg-red-500 text-white px-6 py-2 rounded-lg font-medium hover:bg-red-700 dark:hover:bg-red-600 transition-colors"
+                    className="gap-2"
                 >
+                    <LogOut className="h-4 w-4" />
                     Sign Out
-                </button>
+                </Button>
             </div>
         </div>
     );
 
     return (
-        <Layout>
-            <div className="py-8">
-                <h1 className="text-3xl md:text-4xl font-bold mb-6 text-gray-900 dark:text-gray-100">My Account</h1>
-                <ProtectedRoute fallback={<DiscordLogin />}>
-                    <UserProfile />
-                </ProtectedRoute>
-            </div>
-        </Layout>
+        <div className="container max-w-7xl mx-auto px-4 py-8">
+            <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-8">My Account</h1>
+            <ProtectedRoute fallback={<DiscordLogin />}>
+                <UserProfile />
+            </ProtectedRoute>
+        </div>
     );
 }

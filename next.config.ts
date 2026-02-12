@@ -5,23 +5,26 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "cdn.discordapp.com",
-        port: "",
-        pathname: "/avatars/**",
+        hostname: "images.unsplash.com",
+      },
+      {
+        protocol: "https",
+        hostname: "api.dicebear.com",
+      },
+      {
+        protocol: "https",
+        hostname: "cards.scryfall.io",
       },
       {
         protocol: "https",
         hostname: "lh3.googleusercontent.com",
-        port: "",
-        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "cdn.discordapp.com",
       },
     ],
   },
-  /* config options here */
-  /* i18n: {
-    locales: ['en-gb'],
-    defaultLocale: 'en-gb',
-  }*/
 };
 
 export default nextConfig;

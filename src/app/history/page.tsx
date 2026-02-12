@@ -2,7 +2,6 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import Layout from "@/components/Layout";
 import { HistoryTabBar } from "@/components/history/HistoryTabBar";
 import { HistoryContent } from "@/components/history/HistoryContent";
 import { HistoryRequestForm } from "@/components/history/HistoryRequestForm";
@@ -17,7 +16,8 @@ import {
   type HistorySection,
   type HistoryUpdateRequest,
 } from "@/app/actions/historyActions";
-import "@/styles/pages/history.css";
+import { Card, CardContent } from "@/app/components/ui/card";
+import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 
 export default function HistoryPage() {
   const [teams, setTeams] = useState<TeamBasic[]>([]);
@@ -148,69 +148,79 @@ export default function HistoryPage() {
   };
 
   return (
-    <Layout>
-      <div className="history-page">
-        <div className="history-header">
-          <h1>History</h1>
-          <p>Records and chronicles of the Dynasty Cube league</p>
-        </div>
-
-        <HistoryTabBar
-          teams={teams}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-        />
-
-        {loading ? (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-            <p className="text-gray-600 dark:text-gray-400">Loading history...</p>
-          </div>
-        ) : error ? (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg p-4 text-red-800 dark:text-red-200">
-            {error}
-          </div>
-        ) : (
-          <>
-            <HistoryContent
-              sections={sections}
-              ownerType={activeTab === "league" ? "league" : "team"}
-              ownerId={activeTab === "league" ? null : activeTab}
-              canEdit={canEdit}
-              isAdmin={isAdmin}
-              onRefresh={loadContent}
-            />
-
-            {/* Request form for historians viewing other teams/league */}
-            {showRequestForm && (
-              <>
-                {requestSuccess && (
-                  <div className="bg-green-50 dark:bg-green-900/20 border border-green-300 dark:border-green-700 rounded-lg p-3 mt-4 text-green-800 dark:text-green-200 text-sm">
-                    {requestSuccess}
-                  </div>
-                )}
-                {requestError && (
-                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg p-3 mt-4 text-red-800 dark:text-red-200 text-sm">
-                    {requestError}
-                  </div>
-                )}
-                <HistoryRequestForm
-                  sections={sections}
-                  pendingCount={pendingCount}
-                  maxAllowed={maxAllowed}
-                  onSubmit={handleSubmitRequest}
-                  loading={requestLoading}
-                />
-                <HistoryRequestStatus
-                  requests={myRequests}
-                  pendingCount={pendingCount}
-                  maxAllowed={maxAllowed}
-                />
-              </>
-            )}
-          </>
-        )}
+    <div className="container max-w-7xl mx-auto px-4 py-8">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-4xl font-bold tracking-tight mb-2">History</h1>
+        <p className="text-lg text-muted-foreground">
+          Records and chronicles of the Dynasty Cube league
+        </p>
       </div>
-    </Layout>
+
+      <HistoryTabBar
+        teams={teams}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
+
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-16">
+          <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
+          <p className="text-muted-foreground">Loading history...</p>
+        </div>
+      ) : error ? (
+        <Card className="border-destructive">
+          <CardContent className="pt-6 flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
+            <p className="text-muted-foreground">{error}</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <HistoryContent
+            sections={sections}
+            ownerType={activeTab === "league" ? "league" : "team"}
+            ownerId={activeTab === "league" ? null : activeTab}
+            canEdit={canEdit}
+            isAdmin={isAdmin}
+            onRefresh={loadContent}
+          />
+
+          {/* Request form for historians viewing other teams/league */}
+          {showRequestForm && (
+            <div className="mt-6 space-y-4">
+              {requestSuccess && (
+                <Card className="border-emerald-500/50">
+                  <CardContent className="pt-6 flex items-center gap-3">
+                    <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
+                    <p className="text-sm">{requestSuccess}</p>
+                  </CardContent>
+                </Card>
+              )}
+              {requestError && (
+                <Card className="border-destructive">
+                  <CardContent className="pt-6 flex items-center gap-3">
+                    <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
+                    <p className="text-sm">{requestError}</p>
+                  </CardContent>
+                </Card>
+              )}
+              <HistoryRequestForm
+                sections={sections}
+                pendingCount={pendingCount}
+                maxAllowed={maxAllowed}
+                onSubmit={handleSubmitRequest}
+                loading={requestLoading}
+              />
+              <HistoryRequestStatus
+                requests={myRequests}
+                pendingCount={pendingCount}
+                maxAllowed={maxAllowed}
+              />
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }

@@ -1,242 +1,256 @@
 // src/app/components/Navigation.tsx
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
-import { useMobileNavigation } from "@/hooks/useMobileNavigation";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { NotificationBell } from "./NotificationBell";
 import { MessageDropdown } from "./MessageDropdown";
 import { ReportButton } from "./ReportButton";
+import { Button } from "./ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
+import { Sheet, SheetContent, SheetTrigger } from "./ui/sheet";
+import {
+  Sparkles,
+  Menu,
+  X,
+  User,
+  LogOut,
+  Settings,
+  Sun,
+  Moon,
+  Shield,
+} from "lucide-react";
 
-// Extracted class strings for maintainability
-const STYLES = {
-  nav: "fixed top-0 left-0 right-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm z-[1020]",
-  container: "max-w-7xl mx-auto px-4 sm:px-6 py-3 flex justify-between items-center",
-  mobileMenuButton: "md:hidden bg-transparent border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer",
-  navList: "md:flex flex-col md:flex-row list-none gap-2 m-0 p-0 items-center",
-  navLink: "text-gray-700 dark:text-gray-300 no-underline font-medium text-sm px-3 py-2 rounded-md transition-colors hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700",
-  adminLink: "text-orange-600 dark:text-orange-400 no-underline font-semibold text-sm px-3 py-2 rounded-md transition-colors hover:text-orange-700 dark:hover:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/20 border border-orange-400 dark:border-orange-600",
-  themeToggle: "bg-transparent border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-blue-500 dark:hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 flex items-center gap-1.5 cursor-pointer h-9",
-  authSection: "border-l border-gray-200 dark:border-gray-700 pl-4 ml-2 flex items-center gap-3",
-  userName: "text-sm text-gray-700 dark:text-gray-300 font-medium max-w-[120px] overflow-hidden text-ellipsis whitespace-nowrap hidden sm:inline",
-  signOutButton: "bg-transparent border border-blue-600 dark:border-blue-400 text-blue-600 dark:text-blue-400 px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-blue-600 dark:hover:bg-blue-500 hover:text-white cursor-pointer h-9",
-  signInButton: "bg-[#5865f2] text-white border border-[#5865f2] px-4 py-2 rounded-md text-sm font-medium transition-colors hover:bg-[#4752c4] hover:border-[#4752c4] inline-flex items-center cursor-pointer h-9",
-  loading: "text-gray-500 dark:text-gray-400 italic text-sm",
-  iconGroup: "flex items-center gap-1",
-} as const;
+const navItems = [
+  { href: "/", label: "Home" },
+  { href: "/pools", label: "Cube" },
+  { href: "/teams", label: "Teams" },
+  { href: "/schedule", label: "Matches" },
+  { href: "/history", label: "History" },
+  { href: "/news", label: "News" },
+  { href: "/glossary", label: "Glossary" },
+];
+
+const authNavItems = [
+  { href: "/vote", label: "Vote" },
+];
 
 const Navigation: React.FC = () => {
-  const { isMenuOpen, toggleMenu, menuRef, toggleRef, closeMenu } =
-    useMobileNavigation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const pathname = usePathname();
   const { user, loading, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { isAdmin } = useIsAdmin();
 
   const handleSignOut = async () => {
     await signOut();
-    closeMenu();
+    setMobileMenuOpen(false);
   };
 
-  const handleLinkClick = () => {
-    closeMenu();
+  const displayName =
+    user?.user_metadata?.custom_claims?.global_name ||
+    user?.user_metadata?.global_name ||
+    user?.user_metadata?.username ||
+    user?.user_metadata?.full_name ||
+    user?.user_metadata?.name ||
+    user?.email?.split("@")[0] ||
+    "User";
+
+  const avatarUrl =
+    user?.user_metadata?.avatar_url ||
+    `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`;
+
+  const isActive = (href: string) => {
+    if (href === "/") return pathname === "/";
+    return pathname.startsWith(href);
   };
+
+  const allNavItems = [
+    ...navItems,
+    ...(user ? authNavItems : []),
+  ];
 
   return (
-    <nav className={STYLES.nav}>
-      <div className={STYLES.container}>
-        <button
-          ref={toggleRef}
-          className={STYLES.mobileMenuButton}
-          onClick={toggleMenu}
-          aria-expanded={isMenuOpen}
-          aria-label="Toggle navigation menu"
-        >
-          Menu
-        </button>
-        <ul
-          ref={menuRef}
-          className={`${isMenuOpen ? "flex" : "hidden"} ${STYLES.navList}`}
-          role="menu"
-        >
-          <li>
-            <Link
-              href="/"
-              className={STYLES.navLink}
-              role="menuitem"
-              onClick={handleLinkClick}
-            >
-              Home
-            </Link>
-          </li>
-          <li>
-            <Link
-              href="/account"
-              className={STYLES.navLink}
-              role="menuitem"
-              onClick={handleLinkClick}
-            >
-              My Account
-            </Link>
-          </li>
-          <li>
-            <Link
-              href="/teams"
-              className={STYLES.navLink}
-              role="menuitem"
-              onClick={handleLinkClick}
-            >
-              Teams
-            </Link>
-          </li>
-          <li>
-            <Link
-              href="/pools"
-              className={STYLES.navLink}
-              role="menuitem"
-              onClick={handleLinkClick}
-            >
-              Pools
-            </Link>
-          </li>
-          <li>
-            <Link
-              href="/schedule"
-              className={STYLES.navLink}
-              role="menuitem"
-              onClick={handleLinkClick}
-            >
-              Schedule
-            </Link>
-          </li>
-          <li>
-            <Link
-              href="/history"
-              className={STYLES.navLink}
-              role="menuitem"
-              onClick={handleLinkClick}
-            >
-              History
-            </Link>
-          </li>
-          <li>
-            <Link
-              href="/glossary"
-              className={STYLES.navLink}
-              role="menuitem"
-              onClick={handleLinkClick}
-            >
-              Glossary
-            </Link>
-          </li>
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="container max-w-7xl mx-auto flex h-16 items-center justify-between px-4">
+        {/* Logo */}
+        <div className="flex items-center gap-8">
+          <Link
+            href="/"
+            className="flex items-center gap-2 transition-opacity hover:opacity-80"
+          >
+            <div className="relative">
+              <Sparkles className="size-8 text-purple-500" />
+              <div className="absolute inset-0 animate-pulse bg-purple-500/20 blur-lg" />
+            </div>
+            <span className="font-bold text-xl bg-gradient-to-r from-purple-500 to-blue-500 bg-clip-text text-transparent">
+              Dynasty Cube
+            </span>
+          </Link>
 
-          {/* Conditionally show Vote button only when logged in */}
-          {user && (
-            <li>
+          {/* Desktop Nav */}
+          <nav className="hidden md:flex items-center gap-1">
+            {allNavItems.map((item) => (
               <Link
-                href="/vote"
-                className={STYLES.navLink}
-                role="menuitem"
-                onClick={handleLinkClick}
+                key={item.href}
+                href={item.href}
+                className={`px-3 py-2 rounded-md text-sm transition-colors ${
+                  isActive(item.href)
+                    ? "bg-accent text-accent-foreground font-medium"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                }`}
               >
-                Vote
+                {item.label}
               </Link>
-            </li>
-          )}
-
-          {/* Conditionally show Admin button only for admin users */}
-          {user && isAdmin && (
-            <li>
+            ))}
+            {user && isAdmin && (
               <Link
                 href="/admin"
-                className={STYLES.adminLink}
-                role="menuitem"
-                onClick={handleLinkClick}
+                className={`px-3 py-2 rounded-md text-sm transition-colors flex items-center gap-1.5 ${
+                  isActive("/admin")
+                    ? "bg-orange-500/20 text-orange-600 dark:text-orange-400 font-medium"
+                    : "text-orange-600 dark:text-orange-400 hover:bg-orange-500/10"
+                }`}
               >
-                🛠️ Admin
+                <Shield className="size-3.5" />
+                Admin
               </Link>
-            </li>
-          )}
+            )}
+          </nav>
+        </div>
 
-          <li>
-            <Link
-              href="https://discord.gg/8qyEHDeJqg"
-              className={STYLES.navLink}
-              role="menuitem"
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={handleLinkClick}
-            >
-              Discord
-            </Link>
-          </li>
-
-          {/* Icon Buttons Group - Only show when logged in */}
+        {/* Right section */}
+        <div className="flex items-center gap-3">
+          {/* Icon buttons for logged-in users */}
           {user && (
-            <li className={STYLES.iconGroup}>
+            <div className="hidden md:flex items-center gap-1">
               <ReportButton />
               <MessageDropdown />
               <NotificationBell />
-            </li>
+            </div>
           )}
 
-          {/* Theme Toggle */}
-          <li>
-            <button
-              onClick={toggleTheme}
-              className={STYLES.themeToggle}
-              role="menuitem"
-              aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
-              suppressHydrationWarning
-            >
-              <span suppressHydrationWarning>
-                {theme === "light" ? "🌙" : "☀️"}
-              </span>
-              <span className="hidden sm:inline" suppressHydrationWarning>
-                {theme === "light" ? "Dark" : "Light"}
-              </span>
-            </button>
-          </li>
-
-          {/* Auth section */}
-          <li className={STYLES.authSection}>
-            {loading ? (
-              <span className={STYLES.loading}>Loading...</span>
-            ) : user ? (
-              <>
-                <span className={STYLES.userName}>
-                  {user.user_metadata?.custom_claims?.global_name ||
-                    user.user_metadata?.global_name ||
-                    user.user_metadata?.username ||
-                    user.user_metadata?.full_name ||
-                    user.user_metadata?.name ||
-                    user.email?.split("@")[0] ||
-                    "User"}
-                </span>
-                <button
-                  onClick={handleSignOut}
-                  className={STYLES.signOutButton}
-                  role="menuitem"
-                >
-                  Sign Out
-                </button>
-              </>
+          {/* Theme toggle */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleTheme}
+            className="size-9"
+            suppressHydrationWarning
+          >
+            {theme === "light" ? (
+              <Moon className="size-4" />
             ) : (
-              <Link
-                href="/auth/login"
-                onClick={handleLinkClick}
-                className={STYLES.signInButton}
-                role="menuitem"
-              >
-                Sign in
-              </Link>
+              <Sun className="size-4" />
             )}
-          </li>
-        </ul>
+          </Button>
+
+          {/* User menu / Sign in */}
+          {loading ? (
+            <div className="size-8 rounded-full bg-muted animate-pulse" />
+          ) : user ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+                  <div className="hidden sm:block text-right">
+                    <p className="text-sm font-medium">{displayName}</p>
+                  </div>
+                  <Avatar className="size-8">
+                    <AvatarImage src={avatarUrl} alt={displayName} />
+                    <AvatarFallback>{displayName[0]?.toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>{displayName}</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/account">
+                    <User className="mr-2 size-4" />
+                    My Account
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/messages">
+                    <Settings className="mr-2 size-4" />
+                    Messages
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleSignOut}>
+                  <LogOut className="mr-2 size-4" />
+                  Sign Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Button asChild variant="default" size="sm">
+              <Link href="/auth/login">Sign In</Link>
+            </Button>
+          )}
+
+          {/* Mobile menu */}
+          <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+            <SheetTrigger asChild className="md:hidden">
+              <Button variant="ghost" size="icon">
+                {mobileMenuOpen ? (
+                  <X className="size-5" />
+                ) : (
+                  <Menu className="size-5" />
+                )}
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-72">
+              <nav className="flex flex-col gap-2 mt-8">
+                {allNavItems.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`px-4 py-2 rounded-md text-left transition-colors ${
+                      isActive(item.href)
+                        ? "bg-accent text-accent-foreground font-medium"
+                        : "text-muted-foreground hover:bg-accent/50"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+                {user && isAdmin && (
+                  <Link
+                    href="/admin"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-4 py-2 rounded-md text-left transition-colors text-orange-600 dark:text-orange-400 hover:bg-orange-500/10 flex items-center gap-2"
+                  >
+                    <Shield className="size-4" />
+                    Admin
+                  </Link>
+                )}
+                {user && (
+                  <div className="flex items-center gap-2 px-4 py-2 border-t mt-2 pt-4">
+                    <ReportButton />
+                    <MessageDropdown />
+                    <NotificationBell />
+                  </div>
+                )}
+              </nav>
+            </SheetContent>
+          </Sheet>
+        </div>
       </div>
-    </nav>
+    </header>
   );
 };
 

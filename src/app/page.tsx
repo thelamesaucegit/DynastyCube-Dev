@@ -1,12 +1,13 @@
 // src/app/page.tsx
 "use client";
 
-import React, { useEffect, useState } from 'react';
-import Image from 'next/image';
-import Link from 'next/link';
-import Layout from '@/components/Layout';
-import '@/styles/pages/home.css';
-import CountdownTimer from '@/components/CountdownTimer';
+import React, { useEffect, useState } from "react";
+import Link from "next/link";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/components/ui/card";
+import { Button } from "@/app/components/ui/button";
+import { Badge } from "@/app/components/ui/badge";
+import { Sparkles, Users, Trophy, Calendar, ArrowRight } from "lucide-react";
+import CountdownTimer from "@/app/components/CountdownTimer";
 import {
   getRecentDraftPicks,
   getCurrentSeason,
@@ -18,18 +19,17 @@ import {
   type AdminNews,
   type RecentGame,
   type CountdownTimer as CountdownTimerType,
-} from '@/app/actions/homeActions';
+} from "@/app/actions/homeActions";
 
-// Helper function to get relative time
 function getRelativeTime(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
-  if (diffInSeconds < 60) return 'Just now';
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
-  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
-  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} days ago`;
+  if (diffInSeconds < 60) return "Just now";
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
   return date.toLocaleDateString();
 }
 
@@ -55,61 +55,73 @@ export default function HomePage() {
         getRecentGames(5),
         getActiveCountdownTimer(),
       ]);
-
       setSeason(seasonResult.season);
       setAdminNews(newsResult.news);
       setRecentPicks(picksResult.picks);
       setRecentGames(gamesResult.games);
       setCountdownTimer(timerResult.timer);
     } catch (error) {
-      console.error('Error loading home page data:', error);
+      console.error("Error loading home page data:", error);
     } finally {
       setLoading(false);
     }
   };
 
   const getWinnerName = (game: RecentGame) => {
-    if (!game.winner_id) return 'Draw';
+    if (!game.winner_id) return "Draw";
     return game.winner_id === game.team1_id ? game.team1_name : game.team2_name;
   };
 
   const getWinnerEmoji = (game: RecentGame) => {
-    if (!game.winner_id) return '🤝';
+    if (!game.winner_id) return "";
     return game.winner_id === game.team1_id ? game.team1_emoji : game.team2_emoji;
   };
 
   if (loading) {
     return (
-      <Layout>
-        <div className="py-8 text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Loading...</p>
-        </div>
-      </Layout>
+      <div className="container max-w-7xl mx-auto px-4 py-16 text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4" />
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
     );
   }
 
   return (
-    <div className="home-page-wrapper">
-      <div className="home-page">
+    <div className="container max-w-7xl mx-auto px-4 py-8 space-y-12">
       {/* Hero Section */}
-      <div className="hero-section">
-        <h1 className="text-4xl md:text-5xl font-bold mb-6">
-          Welcome to The Dynasty Cube
-        </h1>
-        <div className="logo-container">
-          <Image
-            src="/images/logo/logo.jpg"
-            alt="Dynasty Cube"
-            width={300}
-            height={300}
-            className="hero-logo"
-          />
+      <section className="relative overflow-hidden rounded-2xl">
+        <div className="absolute inset-0 bg-gradient-to-br from-purple-600/20 via-blue-600/20 to-indigo-600/20" />
+        <div className="relative px-8 py-16 md:py-24">
+          <div className="max-w-3xl">
+            <div className="flex items-center gap-2 mb-4">
+              <Sparkles className="size-6 text-purple-400" />
+              {season && (
+                <Badge variant="secondary" className="text-xs">
+                  {season.name} {season.status === "active" ? "Active" : ""}
+                </Badge>
+              )}
+            </div>
+            <h1 className="text-4xl md:text-6xl font-bold mb-4 bg-gradient-to-r from-foreground to-purple-400 bg-clip-text text-transparent">
+              The Dynasty Cube
+            </h1>
+            <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl">
+              A collaborative, living draft league where teams compete, evolve, and shape the fate of the multiverse.
+              Part draft league, part fantasy sports, part cosmic entity.
+            </p>
+            <div className="flex flex-wrap gap-4">
+              <Button size="lg" asChild>
+                <Link href="/pools">
+                  Browse Cube
+                  <ArrowRight className="ml-2 size-4" />
+                </Link>
+              </Button>
+              <Button size="lg" variant="outline" asChild>
+                <Link href="/schedule">View Schedule</Link>
+              </Button>
+            </div>
+          </div>
         </div>
-        <p className="hero-subtitle">
-          A collaborative, living draft format
-        </p>
-      </div>
+      </section>
 
       {/* Countdown Timer */}
       {countdownTimer && (
@@ -121,213 +133,227 @@ export default function HomePage() {
         />
       )}
 
-      {/* Current Season Banner */}
-      {season && (
-        <div className="bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-800 dark:to-purple-800 text-white rounded-xl p-6 mb-8 shadow-lg">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-2xl font-bold mb-2">{season.name}</h2>
-              <p className="text-blue-100">
-                Started {new Date(season.start_date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-              </p>
-            </div>
-            <div className="mt-4 md:mt-0">
-              <span className={`inline-block px-4 py-2 rounded-full font-semibold ${
-                season.status === 'active' ? 'bg-green-500' : 'bg-gray-500'
-              } text-white`}>
-                {season.status.charAt(0).toUpperCase() + season.status.slice(1)}
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-
-        {/* Admin News Section */}
-        <div className="content-card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              Admin News
-            </h2>
-            <span className="text-2xl">📢</span>
-          </div>
-          {adminNews.length > 0 ? (
-            <>
-              <div className="space-y-4">
-                {adminNews.map((news) => (
-                  <div
-                    key={news.id}
-                    className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-2"
-                  >
-                    <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-1">
-                      {news.title}
-                    </h3>
-                    <p className="text-gray-700 dark:text-gray-300 text-sm mb-2">
-                      {news.content}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {new Date(news.created_at).toLocaleDateString()} • {news.author_name}
-                    </p>
-                  </div>
-                ))}
-              </div>
-              <Link
-                href="/news"
-                className="inline-block mt-4 text-blue-600 dark:text-blue-400 hover:underline text-sm font-medium"
-              >
-                View all news →
-              </Link>
-            </>
-          ) : (
-            <p className="text-gray-500 dark:text-gray-400 text-center py-8">
-              No news available yet. Check back soon!
+      {/* Stats Overview */}
+      <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardDescription>Current Season</CardDescription>
+            <CardTitle className="text-3xl flex items-center gap-2">
+              <Trophy className="size-6 text-yellow-500" />
+              {season?.name || "—"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              {season ? `Started ${new Date(season.start_date).toLocaleDateString("en-US", { month: "short", year: "numeric" })}` : "No active season"}
             </p>
-          )}
-        </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardDescription>Active Teams</CardDescription>
+            <CardTitle className="text-3xl flex items-center gap-2">
+              <Users className="size-6" />8
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">Competing this season</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardDescription>Recent Picks</CardDescription>
+            <CardTitle className="text-3xl">{recentPicks.length > 0 ? recentPicks.length + "+" : "—"}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">Draft picks this season</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardDescription>Recent Games</CardDescription>
+            <CardTitle className="text-3xl">{recentGames.length > 0 ? recentGames.length + "+" : "—"}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">Games played</p>
+          </CardContent>
+        </Card>
+      </section>
 
-        {/* Recent Drafts Section */}
-        <div className="content-card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              Recent Draft Picks
-            </h2>
-            <span className="text-2xl">🎴</span>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Recent Draft Picks */}
+        <section className="lg:col-span-2 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold">Recent Draft Picks</h2>
+            <Button variant="ghost" asChild>
+              <Link href="/pools">View All</Link>
+            </Button>
           </div>
-          {recentPicks.length > 0 ? (
-            <>
-              <div className="space-y-3">
-                {recentPicks.map((pick) => (
-                  <div
-                    key={pick.id}
-                    className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors border-l-4 border-blue-500 dark:border-blue-400"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className="font-bold text-gray-900 dark:text-gray-100 mb-1">
-                          {pick.card_name}
-                        </p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-                          <span className="mr-1">{pick.team_emoji}</span>
-                          <span className="font-medium">{pick.team_name}</span>
-                          {pick.pick_number && <> • Pick #{pick.pick_number}</>}
-                        </p>
-                        <div className="flex items-center gap-2">
-                          {pick.card_type && (
-                            <span className="text-xs bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 px-2 py-1 rounded">
-                              {pick.card_type}
-                            </span>
-                          )}
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
-                            {getRelativeTime(pick.drafted_at)}
-                          </span>
+          <Card>
+            <CardContent className="p-0">
+              {recentPicks.length > 0 ? (
+                <div className="divide-y">
+                  {recentPicks.map((pick) => (
+                    <div key={pick.id} className="p-4 hover:bg-accent/50 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-semibold">{pick.card_name}</span>
+                            {pick.card_type && (
+                              <Badge variant="secondary" className="text-xs">
+                                {pick.card_type}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {pick.team_emoji} {pick.team_name}
+                            {pick.pick_number && <> &middot; Pick #{pick.pick_number}</>}
+                          </p>
                         </div>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap ml-4">
+                          {getRelativeTime(pick.drafted_at)}
+                        </span>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-              <Link
-                href="/pools"
-                className="inline-block mt-4 text-blue-600 dark:text-blue-400 hover:underline text-sm font-medium"
-              >
-                View all draft picks →
-              </Link>
-            </>
-          ) : (
-            <p className="text-gray-500 dark:text-gray-400 text-center py-8">
-              No draft picks yet. Check back once the draft begins!
-            </p>
-          )}
-        </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-8 text-center text-muted-foreground">
+                  No draft picks yet. Check back once the draft begins!
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* Recent Games */}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold">Recent Games</h2>
+            <Button variant="ghost" asChild>
+              <Link href="/schedule">View All</Link>
+            </Button>
+          </div>
+          <div className="space-y-3">
+            {recentGames.length > 0 ? (
+              recentGames.map((game) => (
+                <Card key={game.id} className="hover:shadow-lg transition-shadow">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-2 mb-3">
+                      <Calendar className="size-4 text-muted-foreground mt-0.5" />
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(game.played_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="font-semibold text-sm">
+                        {game.team1_emoji} {game.team1_name}
+                        <span className="text-muted-foreground font-normal ml-2">{game.team1_score}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground">vs</p>
+                      <p className="font-semibold text-sm">
+                        {game.team2_emoji} {game.team2_name}
+                        <span className="text-muted-foreground font-normal ml-2">{game.team2_score}</span>
+                      </p>
+                    </div>
+                    {game.winner_id && (
+                      <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+                        <Trophy className="size-3 text-yellow-500" />
+                        {getWinnerEmoji(game)} {getWinnerName(game)}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              <Card>
+                <CardContent className="p-8 text-center text-muted-foreground">
+                  No games played yet.
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </section>
       </div>
 
-      {/* Recent Games Section - Full Width */}
-      <div className="content-card">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            Recent Games & Results
-          </h2>
-          <span className="text-2xl">🏆</span>
+      {/* Latest News */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold">Latest News</h2>
+          <Button variant="ghost" asChild>
+            <Link href="/news">View All</Link>
+          </Button>
         </div>
-        {recentGames.length > 0 ? (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-300 dark:border-gray-600">
-                    <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-300 font-semibold">
-                      Date
-                    </th>
-                    <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-300 font-semibold">
-                      Matchup
-                    </th>
-                    <th className="text-center py-3 px-4 text-gray-700 dark:text-gray-300 font-semibold">
-                      Score
-                    </th>
-                    <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-300 font-semibold">
-                      Winner
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentGames.map((game) => (
-                    <tr
-                      key={game.id}
-                      className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                    >
-                      <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400">
-                        {new Date(game.played_at).toLocaleDateString()}
-                      </td>
-                      <td className="py-3 px-4 text-gray-900 dark:text-gray-100">
-                        <span className="mr-1">{game.team1_emoji}</span>
-                        {game.team1_name} vs <span className="mr-1">{game.team2_emoji}</span>
-                        {game.team2_name}
-                      </td>
-                      <td className="py-3 px-4 text-center font-semibold text-gray-900 dark:text-gray-100">
-                        {game.team1_score}-{game.team2_score}
-                      </td>
-                      <td className="py-3 px-4 text-gray-900 dark:text-gray-100">
-                        <span className="inline-flex items-center">
-                          <span className="mr-2">{getWinnerEmoji(game)}</span>
-                          {getWinnerName(game)}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <Link
-              href="/schedule"
-              className="inline-block mt-4 text-blue-600 dark:text-blue-400 hover:underline text-sm font-medium"
-            >
-              View full schedule & results →
-            </Link>
-          </>
+        {adminNews.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {adminNews.map((item) => (
+              <Card key={item.id} className="hover:shadow-lg transition-shadow">
+                <CardHeader>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="outline">News</Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(item.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <CardTitle className="text-lg">{item.title}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground line-clamp-3">
+                    {item.content}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">{item.author_name}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         ) : (
-          <p className="text-gray-500 dark:text-gray-400 text-center py-8">
-            No games played yet. Check back once the season starts!
-          </p>
+          <Card>
+            <CardContent className="p-8 text-center text-muted-foreground">
+              No news available yet. Check back soon!
+            </CardContent>
+          </Card>
         )}
-      </div>
+      </section>
 
       {/* CubeCobra Link */}
-      <div className="mt-8 p-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg">
-        <p className="text-center text-amber-800 dark:text-amber-300">
-          <a
-            href="https://cubecobra.com/cube/overview/TheDynastyCube"
-            className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Visit our CubeCobra page
-          </a>
-          {" "}for complete cube details and card lists.
-        </p>
-      </div>
-      </div>
+      <section>
+        <Card className="border-2 border-purple-500/20 bg-gradient-to-r from-purple-500/5 to-blue-500/5">
+          <CardContent className="p-6 text-center">
+            <p className="text-muted-foreground mb-4">
+              Visit our CubeCobra page for complete cube details and card lists.
+            </p>
+            <Button variant="outline" asChild>
+              <a
+                href="https://cubecobra.com/cube/overview/TheDynastyCube"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Open CubeCobra
+                <ArrowRight className="ml-2 size-4" />
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* About Section */}
+      <section className="space-y-4">
+        <h2 className="text-2xl font-bold">About Dynasty Cube</h2>
+        <Card>
+          <CardContent className="p-6 space-y-4">
+            <p className="text-muted-foreground">
+              Dynasty Cube is a collaborative, living draft league for Magic: The Gathering that combines elements
+              of rotisserie draft, fantasy sports, and the chaos of Blaseball. Eight teams compete weekly in matches
+              played on Cockatrice, while the cube itself evolves based on player choices and team voting.
+            </p>
+            <p className="text-muted-foreground">
+              Starting from Magic&apos;s earliest sets, new sets are gradually introduced each season while undrafted
+              cards are removed. Cards that are repeatedly drafted become harder to retain, creating an ever-shifting
+              metagame where strategy and adaptation are key.
+            </p>
+          </CardContent>
+        </Card>
+      </section>
     </div>
   );
 }

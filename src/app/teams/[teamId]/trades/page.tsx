@@ -3,7 +3,6 @@
 
 import React, { useState, useEffect } from "react";
 import { use } from "react";
-import Layout from "@/components/Layout";
 import { useAuth } from "@/contexts/AuthContext";
 import { getTeamsWithMembers } from "@/app/actions/teamActions";
 import {
@@ -18,6 +17,11 @@ import {
   type TradeItem as TradeItemType,
 } from "@/app/actions/tradeActions";
 import Link from "next/link";
+import { Card, CardContent, CardTitle } from "@/app/components/ui/card";
+import { Button } from "@/app/components/ui/button";
+import { Badge } from "@/app/components/ui/badge";
+import { Input } from "@/app/components/ui/input";
+import { Loader2, ArrowLeft, AlertCircle, X, Send, MessageSquare } from "lucide-react";
 
 interface TeamMember {
   user_id: string;
@@ -59,7 +63,6 @@ export default function TradesPage({ params }: TradesPageProps) {
   const { user } = useAuth();
   const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
 
-  // Check if current user is a member of this team
   const isUserTeamMember = currentTeam?.members?.some(
     (member) => member.user_id === user?.id
   ) ?? false;
@@ -87,16 +90,13 @@ export default function TradesPage({ params }: TradesPageProps) {
   const loadData = async () => {
     setLoading(true);
     try {
-      // Check if trades enabled
       const { enabled } = await areTradesEnabled();
       setTradesEnabled(enabled);
 
-      // Load team
       const teams = await getTeamsWithMembers();
       const current = teams.find((t) => t.id === teamId);
       setCurrentTeam(current || null);
 
-      // Load trades
       const { trades: teamTrades } = await getTeamTrades(teamId);
       setTrades(teamTrades || []);
     } catch (error) {
@@ -214,131 +214,107 @@ export default function TradesPage({ params }: TradesPageProps) {
     return `${hours}h`;
   };
 
-  const getStatusBadge = (status: string) => {
-    const badges = {
-      pending: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300 border-yellow-400",
-      accepted: "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 border-green-400",
-      rejected: "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border-red-400",
-      cancelled: "bg-gray-100 dark:bg-gray-900/40 text-gray-700 dark:text-gray-300 border-gray-400",
-      expired: "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 border-orange-400",
-    };
-    return badges[status as keyof typeof badges] || badges.pending;
+  const getStatusVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
+    switch (status) {
+      case "accepted": return "default";
+      case "pending": return "secondary";
+      case "rejected": return "destructive";
+      default: return "outline";
+    }
   };
 
   const filteredTrades = getFilteredTrades();
 
   if (loading) {
     return (
-      <Layout>
-        <div className="py-8 text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Loading trades...</p>
+      <div className="container max-w-7xl mx-auto px-4 py-8">
+        <div className="flex flex-col items-center justify-center py-20">
+          <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
+          <p className="text-muted-foreground">Loading trades...</p>
         </div>
-      </Layout>
+      </div>
     );
   }
 
   if (!currentTeam) {
     return (
-      <Layout>
-        <div className="py-8 text-center">
-          <p className="text-red-600 dark:text-red-400">Team not found</p>
-        </div>
-      </Layout>
+      <div className="container max-w-7xl mx-auto px-4 py-8">
+        <Card className="border-destructive">
+          <CardContent className="pt-6 text-center">
+            <AlertCircle className="h-8 w-8 text-destructive mx-auto mb-2" />
+            <p className="text-muted-foreground">Team not found</p>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   return (
-    <Layout>
-      <div className="max-w-7xl mx-auto p-6">
-        {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <Link
-              href={`/teams/${teamId}`}
-              className="text-blue-600 dark:text-blue-400 hover:underline mb-2 inline-block"
-            >
-              ← Back to Team
+    <div className="container max-w-7xl mx-auto px-4 py-8">
+      {/* Header */}
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <Button variant="ghost" asChild className="mb-4 gap-2">
+            <Link href={`/teams/${teamId}`}>
+              <ArrowLeft className="h-4 w-4" />
+              Back to Team
             </Link>
-            <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-              🔄 {currentTeam.emoji} {currentTeam.name} Trades
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              {isUserTeamMember
-                ? "Manage your trade proposals and negotiate with other teams"
-                : `View ${currentTeam.name}'s trade proposals and negotiations`}
-            </p>
-          </div>
-          {tradesEnabled && (
-            <Link
-              href={`/teams/${teamId}/trades/new`}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
-            >
-              + New Trade
-            </Link>
-          )}
+          </Button>
+          <h1 className="text-4xl font-bold tracking-tight mb-2">
+            {currentTeam.emoji} {currentTeam.name} Trades
+          </h1>
+          <p className="text-lg text-muted-foreground">
+            {isUserTeamMember
+              ? "Manage your trade proposals and negotiate with other teams"
+              : `View ${currentTeam.name}'s trade proposals and negotiations`}
+          </p>
         </div>
-
-        {!tradesEnabled && (
-          <div className="mb-6 p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-300 dark:border-orange-700 rounded-lg text-orange-800 dark:text-orange-200">
-            ⚠️ Trades are currently disabled by an administrator
-          </div>
+        {tradesEnabled && isUserTeamMember && (
+          <Button asChild>
+            <Link href={`/teams/${teamId}/trades/new`}>+ New Trade</Link>
+          </Button>
         )}
+      </div>
 
-        {/* Filter Tabs */}
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-6">
-          <div className="flex gap-3 flex-wrap">
-            <button
-              onClick={() => setFilter("all")}
-              className={`px-4 py-2 rounded font-semibold transition-colors ${
-                filter === "all"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
-              }`}
-            >
-              All ({trades.length})
-            </button>
-            <button
-              onClick={() => setFilter("incoming")}
-              className={`px-4 py-2 rounded font-semibold transition-colors ${
-                filter === "incoming"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
-              }`}
-            >
-              📨 Incoming ({trades.filter((t) => t.to_team_id === teamId && t.status === "pending").length})
-            </button>
-            <button
-              onClick={() => setFilter("outgoing")}
-              className={`px-4 py-2 rounded font-semibold transition-colors ${
-                filter === "outgoing"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
-              }`}
-            >
-              📤 Outgoing ({trades.filter((t) => t.from_team_id === teamId && t.status === "pending").length})
-            </button>
-            <button
-              onClick={() => setFilter("history")}
-              className={`px-4 py-2 rounded font-semibold transition-colors ${
-                filter === "history"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
-              }`}
-            >
-              📜 History ({trades.filter((t) => ["accepted", "rejected", "cancelled", "expired"].includes(t.status)).length})
-            </button>
-          </div>
-        </div>
+      {!tradesEnabled && (
+        <Card className="mb-6 border-orange-500/50">
+          <CardContent className="pt-6 flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-orange-500 shrink-0" />
+            <p className="text-muted-foreground">Trades are currently disabled by an administrator</p>
+          </CardContent>
+        </Card>
+      )}
 
-        {/* Trades List */}
-        {filteredTrades.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-12 text-center">
-            <div className="text-6xl mb-4">📭</div>
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
-              No Trades Found
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">
+      {/* Filter Tabs */}
+      <div className="flex gap-2 flex-wrap mb-6">
+        {(["all", "incoming", "outgoing", "history"] as const).map((f) => {
+          const counts = {
+            all: trades.length,
+            incoming: trades.filter((t) => t.to_team_id === teamId && t.status === "pending").length,
+            outgoing: trades.filter((t) => t.from_team_id === teamId && t.status === "pending").length,
+            history: trades.filter((t) => ["accepted", "rejected", "cancelled", "expired"].includes(t.status)).length,
+          };
+          const labels = { all: "All", incoming: "Incoming", outgoing: "Outgoing", history: "History" };
+          return (
+            <Button
+              key={f}
+              variant={filter === f ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFilter(f)}
+            >
+              {labels[f]} ({counts[f]})
+            </Button>
+          );
+        })}
+      </div>
+
+      {/* Trades List */}
+      {filteredTrades.length === 0 ? (
+        <Card>
+          <CardContent className="py-16 text-center">
+            <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-xl font-semibold mb-2">No Trades Found</h3>
+            <p className="text-muted-foreground mb-4">
               {filter === "all" && (isUserTeamMember
                 ? "You don't have any trade proposals yet"
                 : `${currentTeam.name} doesn't have any trade proposals yet`)}
@@ -347,191 +323,183 @@ export default function TradesPage({ params }: TradesPageProps) {
               {filter === "history" && "No trade history"}
             </p>
             {tradesEnabled && filter !== "history" && isUserTeamMember && (
-              <Link
-                href={`/teams/${teamId}/trades/new`}
-                className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
-              >
-                Create a Trade
-              </Link>
+              <Button asChild>
+                <Link href={`/teams/${teamId}/trades/new`}>Create a Trade</Link>
+              </Button>
             )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {filteredTrades.map((trade) => {
-              const isIncoming = trade.to_team_id === teamId;
-              const isPending = trade.status === "pending";
-              const otherTeam = isIncoming
-                ? { name: trade.from_team_name, emoji: trade.from_team_emoji }
-                : { name: trade.to_team_name, emoji: trade.to_team_emoji };
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {filteredTrades.map((trade) => {
+            const isIncoming = trade.to_team_id === teamId;
+            const isPending = trade.status === "pending";
+            const otherTeam = isIncoming
+              ? { name: trade.from_team_name, emoji: trade.from_team_emoji }
+              : { name: trade.to_team_name, emoji: trade.to_team_emoji };
 
-              return (
-                <div
-                  key={trade.id}
-                  className={`bg-white dark:bg-gray-800 border-2 rounded-lg p-5 transition-all hover:shadow-lg ${
-                    isPending
-                      ? "border-blue-400 dark:border-blue-600"
-                      : "border-gray-200 dark:border-gray-700"
-                  }`}
-                >
+            return (
+              <Card
+                key={trade.id}
+                className={`transition-shadow hover:shadow-lg ${
+                  isPending ? "border-primary/50" : ""
+                }`}
+              >
+                <CardContent className="pt-6">
                   {/* Header */}
                   <div className="flex items-start justify-between mb-4">
                     <div>
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-2xl">{otherTeam.emoji}</span>
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                        <h3 className="text-lg font-bold">
                           {isIncoming ? "From" : "To"} {otherTeam.name}
                         </h3>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold border ${getStatusBadge(trade.status)}`}>
+                        <Badge variant={getStatusVariant(trade.status)}>
                           {trade.status.toUpperCase()}
-                        </span>
+                        </Badge>
                         {isPending && (
-                          <span className="text-xs text-gray-600 dark:text-gray-400">
-                            ⏰ {formatTimeRemaining(trade.deadline)} left
+                          <span className="text-xs text-muted-foreground">
+                            {formatTimeRemaining(trade.deadline)} left
                           </span>
                         )}
                       </div>
                     </div>
                   </div>
 
-                  {/* Quick Summary */}
-                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  <p className="text-sm text-muted-foreground mb-4">
                     Created {new Date(trade.created_at).toLocaleDateString()}
-                  </div>
+                  </p>
 
                   {/* Actions */}
                   <div className="flex items-center gap-2">
-                    <button
+                    <Button
+                      className="flex-1"
                       onClick={() => setSelectedTradeId(trade.id)}
-                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-semibold transition-colors"
                     >
                       View Details
-                    </button>
-                    {isPending && isIncoming && (
+                    </Button>
+                    {isPending && isIncoming && isUserTeamMember && (
                       <>
-                        <button
+                        <Button
+                          variant="outline"
+                          className="text-emerald-600 border-emerald-600 hover:bg-emerald-50"
                           onClick={() => handleAcceptTrade(trade.id)}
-                          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-semibold transition-colors"
                         >
-                          ✓ Accept
-                        </button>
-                        <button
+                          Accept
+                        </Button>
+                        <Button
+                          variant="destructive"
                           onClick={() => handleRejectTrade(trade.id)}
-                          className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-semibold transition-colors"
                         >
-                          ✗ Reject
-                        </button>
+                          Reject
+                        </Button>
                       </>
                     )}
-                    {isPending && !isIncoming && (
-                      <button
+                    {isPending && !isIncoming && isUserTeamMember && (
+                      <Button
+                        variant="outline"
                         onClick={() => handleCancelTrade(trade.id)}
-                        className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded font-semibold transition-colors"
                       >
                         Cancel
-                      </button>
+                      </Button>
                     )}
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
-        {/* Trade Details Modal */}
-        {selectedTradeId && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-6 z-[1040]">
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-              {/* Modal Header */}
-              <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-6 flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                  Trade Details
-                </h2>
-                <button
-                  onClick={() => setSelectedTradeId(null)}
-                  className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 text-2xl"
-                >
-                  ✕
-                </button>
-              </div>
+      {/* Trade Details Modal */}
+      {selectedTradeId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-6 z-[1040]">
+          <Card className="max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="sticky top-0 bg-card border-b p-6 flex items-center justify-between">
+              <CardTitle>Trade Details</CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedTradeId(null)}
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
 
-              {/* Trade Items */}
-              <div className="p-6">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
-                  Trade Items
-                </h3>
-                <div className="space-y-3">
-                  {selectedTradeItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg flex items-center justify-between"
-                    >
-                      <div>
-                        {item.item_type === "card" ? (
-                          <div className="font-semibold text-gray-900 dark:text-gray-100">
-                            🃏 {item.card_name}
-                          </div>
-                        ) : (
-                          <div className="font-semibold text-gray-900 dark:text-gray-100">
-                            🎯 Round {item.draft_pick_round} Pick
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">
-                        Offered by: Team {item.offering_team_id.slice(0, 8)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Messages */}
-              <div className="p-6 border-t border-gray-200 dark:border-gray-700">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
-                  💬 Messages ({selectedTradeMessages.length})
-                </h3>
-                <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
-                  {selectedTradeMessages.length === 0 ? (
-                    <p className="text-gray-500 dark:text-gray-400 text-center py-4">
-                      No messages yet. Start the conversation!
-                    </p>
-                  ) : (
-                    selectedTradeMessages.map((msg) => (
-                      <div
-                        key={msg.id}
-                        className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg"
-                      >
-                        <p className="text-gray-900 dark:text-gray-100">{msg.message}</p>
-                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                          {new Date(msg.created_at).toLocaleString()}
-                        </p>
-                      </div>
-                    ))
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
-                    placeholder="Type your message..."
-                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                  />
-                  <button
-                    onClick={handleSendMessage}
-                    disabled={sendingMessage || !newMessage.trim()}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-6 py-2 rounded font-semibold transition-colors"
+            {/* Trade Items */}
+            <CardContent className="pt-6">
+              <h3 className="text-xl font-bold mb-4">Trade Items</h3>
+              <div className="space-y-3">
+                {selectedTradeItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className="p-4 bg-muted rounded-lg flex items-center justify-between"
                   >
-                    {sendingMessage ? "Sending..." : "Send"}
-                  </button>
-                </div>
+                    <div className="font-semibold">
+                      {item.item_type === "card"
+                        ? `Card: ${item.card_name}`
+                        : `Round ${item.draft_pick_round} Pick`}
+                    </div>
+                    <Badge variant="outline">
+                      Team {item.offering_team_id.slice(0, 8)}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+
+            {/* Messages */}
+            <div className="p-6 border-t">
+              <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" />
+                Messages ({selectedTradeMessages.length})
+              </h3>
+              <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
+                {selectedTradeMessages.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-4">
+                    No messages yet. Start the conversation!
+                  </p>
+                ) : (
+                  selectedTradeMessages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className="p-3 bg-primary/5 rounded-lg"
+                    >
+                      <p>{msg.message}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {new Date(msg.created_at).toLocaleString()}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
+                  placeholder="Type your message..."
+                />
+                <Button
+                  onClick={handleSendMessage}
+                  disabled={sendingMessage || !newMessage.trim()}
+                  className="gap-2"
+                >
+                  {sendingMessage ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                  Send
+                </Button>
               </div>
             </div>
-          </div>
-        )}
-      </div>
-    </Layout>
+          </Card>
+        </div>
+      )}
+    </div>
   );
 }

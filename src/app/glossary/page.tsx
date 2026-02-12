@@ -2,14 +2,16 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import Layout from "@/components/Layout";
 import { GlossaryList } from "@/components/glossary/GlossaryList";
 import {
   getGlossaryItems,
   type GlossaryItem,
 } from "@/app/actions/glossaryActions";
-import "@/styles/pages/glossary.css";
-import "@/styles/pages/history.css";
+import { Card, CardContent } from "@/app/components/ui/card";
+import { Input } from "@/app/components/ui/input";
+import { Button } from "@/app/components/ui/button";
+import { Badge } from "@/app/components/ui/badge";
+import { Loader2, Search, X, BookOpen, AlertCircle } from "lucide-react";
 
 export default function GlossaryPage() {
   const [items, setItems] = useState<GlossaryItem[]>([]);
@@ -63,64 +65,85 @@ export default function GlossaryPage() {
   }, [filteredItems]);
 
   return (
-    <Layout>
-      <div className="glossary-page">
-        {/* Header */}
-        <div className="glossary-header">
-          <h1>Glossary</h1>
-          <p>Terms, rules, and mechanics of the Dynasty Cube</p>
-        </div>
+    <div className="container max-w-7xl mx-auto px-4 py-8">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-4xl font-bold tracking-tight mb-2">Glossary</h1>
+        <p className="text-lg text-muted-foreground">
+          Terms, rules, and mechanics of the Dynasty Cube
+        </p>
+      </div>
 
-        {/* Search Bar */}
-        <div className="glossary-search">
-          <input
-            type="text"
-            className="glossary-search-input"
-            placeholder="Search terms..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          {searchQuery && (
-            <button
-              className="glossary-search-clear"
-              onClick={() => setSearchQuery("")}
-            >
-              Clear
-            </button>
-          )}
-        </div>
-
-        {/* Alphabet Quick Jump */}
-        {uniqueLetters.length > 0 && !loading && (
-          <div className="glossary-alphabet">
-            {uniqueLetters.map((letter) => (
-              <a
-                key={letter}
-                href={`#letter-${letter}`}
-                className="glossary-alphabet-link"
-              >
-                {letter}
-              </a>
-            ))}
-          </div>
-        )}
-
-        {/* Content */}
-        {loading ? (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-            <p className="text-gray-600 dark:text-gray-400">
-              Loading glossary...
-            </p>
-          </div>
-        ) : error ? (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg p-4 text-red-800 dark:text-red-200">
-            {error}
-          </div>
-        ) : (
-          <GlossaryList items={filteredItems} />
+      {/* Search Bar */}
+      <div className="relative mb-6">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          type="text"
+          className="pl-10 pr-10"
+          placeholder="Search terms..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        {searchQuery && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+            onClick={() => setSearchQuery("")}
+          >
+            <X className="h-4 w-4" />
+          </Button>
         )}
       </div>
-    </Layout>
+
+      {/* Alphabet Quick Jump */}
+      {uniqueLetters.length > 0 && !loading && (
+        <div className="flex flex-wrap gap-1.5 mb-6">
+          {uniqueLetters.map((letter) => (
+            <a
+              key={letter}
+              href={`#letter-${letter}`}
+              className="inline-flex"
+            >
+              <Badge
+                variant="outline"
+                className="hover:bg-primary hover:text-primary-foreground transition-colors cursor-pointer text-xs px-2 py-0.5"
+              >
+                {letter}
+              </Badge>
+            </a>
+          ))}
+        </div>
+      )}
+
+      {/* Content */}
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-20">
+          <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
+          <p className="text-muted-foreground">Loading glossary...</p>
+        </div>
+      ) : error ? (
+        <Card className="border-destructive">
+          <CardContent className="pt-6 flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
+            <p className="text-muted-foreground">{error}</p>
+          </CardContent>
+        </Card>
+      ) : filteredItems.length === 0 ? (
+        <Card>
+          <CardContent className="py-16 text-center">
+            <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h2 className="text-2xl font-bold mb-2">No Terms Found</h2>
+            <p className="text-muted-foreground">
+              {searchQuery
+                ? "Try adjusting your search query"
+                : "The glossary is empty"}
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <GlossaryList items={filteredItems} />
+      )}
+    </div>
   );
 }

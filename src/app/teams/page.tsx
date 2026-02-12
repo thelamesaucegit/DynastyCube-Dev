@@ -1,125 +1,62 @@
-// src/app/page.tsx
+// src/app/teams/page.tsx
 "use client";
+
 import React from "react";
-import { useRouter } from "next/navigation";
-import Layout from "@/components/Layout";
+import Link from "next/link";
+import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
+import { Button } from "@/app/components/ui/button";
+import { Users, ArrowRight } from "lucide-react";
 
-export default function Page() {
-  const router = useRouter();
+const teams = [
+  { name: "Alara Shards", href: "/teams/shards", emoji: "🌟", motto: "Why not both?", color: "bg-purple-500" },
+  { name: "Innistrad Creeps", href: "/teams/creeps", emoji: "🧟", motto: "Graveyard, Gatekeep, Girlboss", color: "bg-indigo-500" },
+  { name: "Kamigawa Ninja", href: "/teams/ninja", emoji: "⛩", motto: "Omae wa mou shindeiru.", color: "bg-red-500" },
+  { name: "Lorwyn Changelings", href: "/teams/changelings", emoji: "👽", motto: "Expect the unexpected", color: "bg-cyan-500" },
+  { name: "Ravnica Guildpact", href: "/teams/guildpact", emoji: "🔗", motto: "A Championship is won and lost before ever entering the battlefield", color: "bg-blue-500" },
+  { name: "Tarkir Dragons", href: "/teams/dragons", emoji: "🐲", motto: "No cost too great", color: "bg-pink-500" },
+  { name: "Theros Demigods", href: "/teams/demigods", emoji: "🌞", motto: "The Fates will decide", color: "bg-yellow-500" },
+  { name: "Zendikar Hedrons", href: "/teams/hedrons", emoji: "💠", motto: "Good Vibes, No Escape", color: "bg-green-500" },
+];
 
-  const teams = [
-    {
-      name: "Alara Shards",
-      href: "/teams/shards",
-      emoji: "🌟",
-      motto: "Why not both?",
-    },
-    {
-      name: "The Drainlings",
-      href: "/teams/drainlings",
-      emoji: "✴️",
-      motto: "....",
-      hidden: true,
-    },
-    {
-      name: "Innistrad Creeps",
-      href: "/teams/creeps",
-      emoji: "🧟",
-      motto: "Graveyard, Gatekeep, Girlboss",
-    },
-    {
-      name: "Kamigawa Ninja",
-      href: "/teams/ninja",
-      emoji: "⛩",
-      motto: "Omae wa mou shindeiru.",
-    },
-    {
-      name: "Lorwyn Changelings",
-      href: "/teams/changelings",
-      emoji: "👽",
-      motto: "Expect the unexpected",
-    },
-    {
-      name: "Rabiah Nomads",
-      href: "/teams/nomads",
-      emoji: "🐫",
-      motto: "....",
-      hidden: true,
-    },
-    {
-      name: "Ravnica Guildpact",
-      href: "/teams/guildpact",
-      emoji: "🔗",
-      motto:
-        "A Championship is won and lost before ever entering the battlefield",
-    },
-    {
-      name: "Tarkir Dragons",
-      href: "/teams/dragons",
-      emoji: "🐲",
-      motto: "No cost too great",
-    },
-    {
-      name: "Theros Demigods",
-      href: "/teams/demigods",
-      emoji: "🌞",
-      motto: "The Fates will decide",
-    },
-    {
-      name: "Zendikar Hedrons",
-      href: "/teams/hedrons",
-      emoji: "💠",
-      motto: "Good Vibes, No Escape",
-    },
-  ];
-
-  const handleTeamClick = (href: string, teamName: string) => {
-    // possible antalytics
-    console.log(`Navigating to ${teamName}`);
-    router.push(href);
-  };
-
-  const handleKeyDown = (
-    event: React.KeyboardEvent,
-    href: string,
-    teamName: string,
-  ) => {
-    // Handle Enter and Space key presses for accessibility
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      handleTeamClick(href, teamName);
-    }
-  };
-
+export default function TeamsPage() {
   return (
-    <Layout>
-      <div className="text-center">
-        <div className="py-8">
-          <h3 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-2">Teams</h3>
-          <p className="text-lg text-gray-700 dark:text-gray-300">Meet the Teams</p>
+    <div className="container max-w-7xl mx-auto px-4 py-8 space-y-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Teams</h1>
+          <p className="text-muted-foreground mt-1">Meet the teams of the Dynasty Cube League</p>
         </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 my-8">
-          {teams.filter((team) => !team.hidden).map((team, index) => (
-            <button
-              key={index}
-              className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-md hover:shadow-lg hover:-translate-y-1 transition-all text-center group"
-              onClick={() => handleTeamClick(team.href, team.name)}
-              onKeyDown={(e) => handleKeyDown(e, team.href, team.name)}
-              aria-label={`View ${team.name} team page - ${team.motto}`}
-              type="button"
-            >
-              <span className="text-5xl mb-3 block group-hover:scale-110 transition-transform" aria-hidden="true">
-                {team.emoji}
-              </span>
-              <span className="text-lg font-bold text-gray-900 dark:text-gray-100 block mb-2">{team.name}</span>
-              <span className="text-sm text-gray-600 dark:text-gray-400 italic block">&quot;{team.motto}&quot;</span>
-            </button>
-          ))}
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Users className="size-5" />
+          <span className="text-sm font-medium">{teams.length} Teams</span>
         </div>
-
-        <div className="mt-12 border-t border-gray-300 dark:border-gray-700"></div>
       </div>
-    </Layout>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {teams.map((team) => (
+          <Link key={team.name} href={team.href}>
+            <Card className="hover:shadow-lg transition-all hover:-translate-y-0.5 cursor-pointer h-full">
+              <CardHeader className="flex flex-row items-start gap-4">
+                <div className={`size-16 rounded-full flex items-center justify-center flex-shrink-0 ${team.color}`}>
+                  <span className="text-3xl">{team.emoji}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <CardTitle className="text-xl">{team.name}</CardTitle>
+                  <p className="text-sm text-muted-foreground italic mt-1 line-clamp-2">
+                    &ldquo;{team.motto}&rdquo;
+                  </p>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Button variant="outline" className="w-full" tabIndex={-1}>
+                  View Team Profile
+                  <ArrowRight className="ml-2 size-4" />
+                </Button>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+    </div>
   );
 }

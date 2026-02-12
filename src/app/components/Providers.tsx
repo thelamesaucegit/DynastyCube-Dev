@@ -14,9 +14,9 @@ export default function Providers({ children }: ProvidersProps) {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <div className="flex flex-col min-h-screen">
+        <div className="min-h-screen bg-background flex flex-col">
           <Navigation />
-          <main className="flex-1">
+          <main className="flex-1 pb-16">
             {children}
           </main>
           <Footer />

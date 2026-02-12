@@ -3,10 +3,12 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Layout from "@/components/Layout";
 import { AdminRoleManager } from "@/components/admin/AdminRoleManager";
 import { checkIsAdmin } from "@/app/actions/adminRoleActions";
 import { useAuth } from "@/contexts/AuthContext";
+import { Card, CardContent } from "@/app/components/ui/card";
+import { Button } from "@/app/components/ui/button";
+import { Loader2, ShieldAlert, AlertTriangle, ArrowLeft } from "lucide-react";
 
 export default function AdminRolesPage() {
   const router = useRouter();
@@ -54,80 +56,70 @@ export default function AdminRolesPage() {
 
   if (authLoading || loading) {
     return (
-      <Layout>
-        <div className="py-8 text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">
-            Verifying permissions...
-          </p>
+      <div className="container max-w-7xl mx-auto px-4 py-8">
+        <div className="flex flex-col items-center justify-center py-20">
+          <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
+          <p className="text-muted-foreground">Verifying permissions...</p>
         </div>
-      </Layout>
+      </div>
     );
   }
 
   if (error || !isAdmin) {
     return (
-      <Layout>
-        <div className="py-8">
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg p-6 text-center">
-            <h2 className="text-2xl font-bold text-red-900 dark:text-red-100 mb-2">
-              Access Denied
-            </h2>
-            <p className="text-red-800 dark:text-red-200 mb-4">
+      <div className="container max-w-7xl mx-auto px-4 py-8">
+        <Card className="border-destructive">
+          <CardContent className="pt-6 text-center">
+            <ShieldAlert className="h-10 w-10 text-destructive mx-auto mb-3" />
+            <h2 className="text-2xl font-bold mb-2">Access Denied</h2>
+            <p className="text-muted-foreground mb-4">
               {error || "You do not have permission to access this page."}
             </p>
-            <button
-              onClick={() => router.push("/")}
-              className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
-            >
+            <Button variant="destructive" onClick={() => router.push("/")}>
               Return to Home
-            </button>
-          </div>
-        </div>
-      </Layout>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   return (
-    <Layout>
-      <div className="py-8">
-        {/* Page Header */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-4">
-            <button
-              onClick={() => router.push("/admin")}
-              className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
-            >
-              ← Back to Admin
-            </button>
-          </div>
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-            Team Role Management
-          </h1>
-          <p className="text-lg text-gray-600 dark:text-gray-400">
-            Manage team member roles across all teams
-          </p>
-        </div>
-
-        {/* Admin Info Banner */}
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg p-4 mb-6">
-          <div className="flex items-start gap-3">
-            <span className="text-2xl">⚠️</span>
-            <div>
-              <h3 className="font-bold text-yellow-900 dark:text-yellow-100 mb-1">
-                Admin Mode
-              </h3>
-              <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                You are managing roles as an administrator. All changes are logged and
-                will be visible to team captains. Use this power responsibly.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Role Manager Component */}
-        <AdminRoleManager />
+    <div className="container max-w-7xl mx-auto px-4 py-8">
+      {/* Page Header */}
+      <div className="mb-8">
+        <Button
+          variant="ghost"
+          className="mb-4 gap-2"
+          onClick={() => router.push("/admin")}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Admin
+        </Button>
+        <h1 className="text-4xl font-bold tracking-tight mb-2">
+          Team Role Management
+        </h1>
+        <p className="text-lg text-muted-foreground">
+          Manage team member roles across all teams
+        </p>
       </div>
-    </Layout>
+
+      {/* Admin Info Banner */}
+      <Card className="border-yellow-500/50 mb-6">
+        <CardContent className="pt-6 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-yellow-500 shrink-0 mt-0.5" />
+          <div>
+            <h3 className="font-bold mb-1">Admin Mode</h3>
+            <p className="text-sm text-muted-foreground">
+              You are managing roles as an administrator. All changes are logged and
+              will be visible to team captains. Use this power responsibly.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Role Manager Component */}
+      <AdminRoleManager />
+    </div>
   );
 }
