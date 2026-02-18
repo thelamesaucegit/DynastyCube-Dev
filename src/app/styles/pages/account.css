@@ -1,0 +1,949 @@
+/* =================================
+   ACCOUNT PAGE STYLES
+   Design System Implementation
+   ================================= */
+
+/* =================================
+   1. CONSISTENT COLOR SCHEME
+   Using Tailwind-inspired color palette
+   ================================= */
+
+:root {
+  /* Primary Colors */
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+
+  /* Gray Scale */
+  --color-gray-50: #f9fafb;
+  --color-gray-100: #f3f4f6;
+  --color-gray-200: #e5e7eb;
+  --color-gray-300: #d1d5db;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #4b5563;
+  --color-gray-700: #374151;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #111827;
+
+  /* Semantic Colors */
+  --color-success-500: #10b981;
+  --color-success-600: #059669;
+  --color-success-700: #047857;
+
+  --color-danger-500: #ef4444;
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
+
+  /* Discord Brand */
+  --color-discord: #5865f2;
+  --color-discord-dark: #4752c4;
+
+  /* Spacing Scale */
+  --spacing-xs: 0.5rem;
+  --spacing-sm: 0.75rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+  --spacing-2xl: 3rem;
+
+  /* Border Radius */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  /* Shadows - for depth */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+  /* Transitions - for smooth animations */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* =================================
+   MAIN ACCOUNT PAGE CONTAINER
+   ================================= */
+
+.account-page {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: var(--spacing-xl) var(--spacing-md);
+  animation: fadeIn var(--transition-slow) ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.account-page h1 {
+  text-align: center;
+  margin-bottom: var(--spacing-xl);
+  color: var(--color-gray-800);
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+/* =================================
+   2. USER PROFILE SECTION
+   Better visual hierarchy with spacing
+   ================================= */
+
+.user-profile {
+  background: #ffffff;
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl);
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--color-gray-200);
+  transition: box-shadow var(--transition-base);
+}
+
+.user-profile:hover {
+  box-shadow: var(--shadow-xl);
+}
+
+/* Profile Header */
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-xl);
+  padding-bottom: var(--spacing-lg);
+  border-bottom: 2px solid var(--color-gray-200);
+}
+
+/* =================================
+   3. SMOOTH TRANSITIONS & HOVER EFFECTS
+   ================================= */
+
+.discord-avatar {
+  border-radius: var(--radius-full);
+  border: 3px solid var(--color-discord);
+  box-shadow: 0 4px 12px rgba(88, 101, 242, 0.3);
+  object-fit: cover;
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+
+.discord-avatar:hover {
+  transform: scale(1.05);
+  box-shadow: 0 8px 20px rgba(88, 101, 242, 0.4);
+}
+
+.profile-info h2 {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--color-gray-800);
+  transition: color var(--transition-fast);
+}
+
+.discord-tag {
+  color: var(--color-gray-500);
+  font-size: 0.95rem;
+  margin: 0.25rem 0 0 0;
+  font-weight: 500;
+}
+
+/* =================================
+   USER DETAILS CARDS
+   Visual hierarchy with proper spacing
+   ================================= */
+
+.user-details {
+  margin-bottom: var(--spacing-lg);
+}
+
+.detail-card {
+  background: var(--color-gray-50);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+  transition: all var(--transition-base);
+}
+
+.detail-card:hover {
+  background: #ffffff;
+  border-color: var(--color-gray-300);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.detail-card h3 {
+  margin: 0 0 var(--spacing-md) 0;
+  color: var(--color-gray-800);
+  font-size: 1.25rem;
+  font-weight: 600;
+  border-bottom: 2px solid var(--color-gray-200);
+  padding-bottom: var(--spacing-sm);
+}
+
+.detail-card p {
+  margin: var(--spacing-sm) 0;
+  color: var(--color-gray-600);
+  line-height: 1.6;
+}
+
+.detail-card strong {
+  color: var(--color-gray-800);
+  font-weight: 600;
+}
+
+/* =================================
+   ACCOUNT LINKING SECTION
+   ================================= */
+
+/* Toggle Button with gradient */
+.link-toggle-btn {
+  background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600));
+  color: white;
+  border: none;
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border-radius: var(--radius-md);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+  margin-top: var(--spacing-md);
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Gradient button shine effect */
+.link-toggle-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left var(--transition-slow);
+}
+
+.link-toggle-btn:hover::before {
+  left: 100%;
+}
+
+.link-toggle-btn:hover {
+  background: linear-gradient(135deg, var(--color-primary-600), var(--color-primary-700));
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(59, 130, 246, 0.4);
+}
+
+.link-toggle-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+}
+
+/* Account Linking Wrapper */
+.account-linking-wrapper {
+  margin-top: var(--spacing-lg);
+  animation: slideDown var(--transition-base) ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    max-height: 1000px;
+    transform: translateY(0);
+  }
+}
+
+/* =================================
+   4. ACCOUNT LINKING CARD
+   Proper shadows and borders for depth
+   ================================= */
+
+.account-linking-card {
+  background: #ffffff;
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.account-linking-card h3 {
+  margin: 0 0 var(--spacing-xs) 0;
+  color: var(--color-gray-800);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.account-linking-card > p {
+  color: var(--color-gray-500);
+  margin: 0 0 var(--spacing-lg) 0;
+  line-height: 1.5;
+}
+
+/* Account Linking Sections */
+.account-linking-section {
+  margin-bottom: var(--spacing-lg);
+}
+
+.account-linking-section:last-child {
+  margin-bottom: 0;
+}
+
+.account-linking-section h4 {
+  margin: 0 0 var(--spacing-md) 0;
+  color: var(--color-gray-700);
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+/* =================================
+   5. IDENTITY ITEMS
+   Enhanced hover effects and transitions
+   ================================= */
+
+.account-identity-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--color-gray-50);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
+  transition: all var(--transition-base);
+  position: relative;
+  overflow: hidden;
+}
+
+.account-identity-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 3px;
+  background: var(--color-primary-500);
+  transform: scaleY(0);
+  transition: transform var(--transition-base);
+}
+
+.account-identity-item:hover {
+  background: #ffffff;
+  border-color: var(--color-primary-300);
+  box-shadow: var(--shadow-md);
+  transform: translateX(4px);
+}
+
+.account-identity-item:hover::before {
+  transform: scaleY(1);
+}
+
+.account-identity-item:last-child {
+  margin-bottom: 0;
+}
+
+.account-identity-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex: 1;
+}
+
+.account-identity-info span {
+  font-size: 1.5rem;
+  transition: transform var(--transition-fast);
+}
+
+.account-identity-item:hover .account-identity-info span {
+  transform: scale(1.1);
+}
+
+.account-identity-info strong {
+  display: block;
+  color: var(--color-gray-800);
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.account-identity-info small {
+  color: var(--color-gray-500);
+  font-size: 0.875rem;
+}
+
+/* =================================
+   6. GRADIENT BUTTONS
+   Clean, polished button styles
+   ================================= */
+
+.account-identity-item button {
+  padding: var(--spacing-xs) var(--spacing-md);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  white-space: nowrap;
+  position: relative;
+  overflow: hidden;
+}
+
+.account-identity-item button::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transform: translate(-50%, -50%);
+  transition: width var(--transition-slow), height var(--transition-slow);
+}
+
+.account-identity-item button:active::after {
+  width: 300px;
+  height: 300px;
+}
+
+.account-identity-item button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* Link buttons (Discord, Google, etc.) */
+.account-linking-section button:not(.link-toggle-btn) {
+  background: linear-gradient(135deg, var(--color-success-500), var(--color-success-600));
+  color: white;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+}
+
+.account-linking-section button:not(.link-toggle-btn):hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--color-success-600), var(--color-success-700));
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(16, 185, 129, 0.4);
+}
+
+/* Unlink buttons */
+.account-identity-item button {
+  background: linear-gradient(135deg, var(--color-danger-500), var(--color-danger-600));
+  color: white;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
+}
+
+.account-identity-item button:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--color-danger-600), var(--color-danger-700));
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(239, 68, 68, 0.4);
+}
+
+/* =================================
+   ACCOUNT ACTIONS
+   ================================= */
+
+.account-actions {
+  margin-top: var(--spacing-xl);
+  padding-top: var(--spacing-lg);
+  border-top: 2px solid var(--color-gray-200);
+  text-align: center;
+}
+
+.sign-out-btn {
+  background: linear-gradient(135deg, var(--color-danger-500), var(--color-danger-600));
+  color: white;
+  border: none;
+  padding: var(--spacing-sm) var(--spacing-xl);
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.sign-out-btn:hover {
+  background: linear-gradient(135deg, var(--color-danger-600), var(--color-danger-700));
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(239, 68, 68, 0.4);
+}
+
+.sign-out-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
+}
+
+/* =================================
+   7. MOBILE RESPONSIVE LAYOUT
+   Multiple breakpoints for all devices
+   ================================= */
+
+/* Tablets */
+@media (max-width: 1024px) {
+  .account-page {
+    max-width: 800px;
+  }
+}
+
+/* Mobile landscape */
+@media (max-width: 768px) {
+  .account-page {
+    padding: var(--spacing-md) var(--spacing-xs);
+  }
+
+  .user-profile {
+    padding: var(--spacing-lg);
+  }
+
+  .profile-header {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .profile-info h2 {
+    font-size: 1.5rem;
+  }
+
+  .detail-card {
+    padding: var(--spacing-md);
+  }
+
+  .account-identity-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+  }
+
+  .account-identity-item button {
+    width: 100%;
+  }
+
+  .link-toggle-btn {
+    padding: var(--spacing-md);
+  }
+}
+
+/* Mobile portrait */
+@media (max-width: 480px) {
+  .account-page h1 {
+    font-size: 1.5rem;
+  }
+
+  .profile-info h2 {
+    font-size: 1.25rem;
+  }
+
+  .detail-card h3 {
+    font-size: 1.1rem;
+  }
+}
+
+/* =================================
+   8. THEME-SPECIFIC STYLES
+   Full dark and light mode support
+   ================================= */
+
+/* Dark Mode (System Preference) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-gray-50: #111827;
+    --color-gray-100: #1f2937;
+    --color-gray-200: #374151;
+    --color-gray-300: #4b5563;
+  }
+
+  .account-page h1 {
+    color: var(--color-gray-50);
+  }
+
+  .user-profile {
+    background: var(--color-gray-800);
+    border-color: var(--color-gray-700);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  }
+
+  .profile-header {
+    border-bottom-color: var(--color-gray-700);
+  }
+
+  .profile-info h2 {
+    color: var(--color-gray-50);
+  }
+
+  .discord-tag {
+    color: var(--color-gray-400);
+  }
+
+  .detail-card {
+    background: var(--color-gray-900);
+    border-color: var(--color-gray-700);
+  }
+
+  .detail-card:hover {
+    background: var(--color-gray-800);
+    border-color: var(--color-gray-600);
+  }
+
+  .detail-card h3 {
+    color: var(--color-gray-50);
+    border-bottom-color: var(--color-gray-700);
+  }
+
+  .detail-card p {
+    color: var(--color-gray-300);
+  }
+
+  .detail-card strong {
+    color: var(--color-gray-100);
+  }
+
+  .account-linking-card {
+    background: var(--color-gray-900);
+    border-color: var(--color-gray-700);
+  }
+
+  .account-linking-card h3 {
+    color: var(--color-gray-50);
+  }
+
+  .account-linking-card > p {
+    color: var(--color-gray-400);
+  }
+
+  .account-linking-section h4 {
+    color: var(--color-gray-200);
+  }
+
+  .account-identity-item {
+    background: var(--color-gray-800);
+    border-color: var(--color-gray-700);
+  }
+
+  .account-identity-item:hover {
+    background: var(--color-gray-900);
+    border-color: var(--color-gray-600);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  .account-identity-info strong {
+    color: var(--color-gray-50);
+  }
+
+  .account-identity-info small {
+    color: var(--color-gray-400);
+  }
+
+  .account-actions {
+    border-top-color: var(--color-gray-700);
+  }
+}
+
+/* Manual Dark Mode Toggle */
+html[data-theme="dark"] .account-page h1 {
+  color: var(--color-gray-50);
+}
+
+html[data-theme="dark"] .user-profile {
+  background: var(--color-gray-800);
+  border-color: var(--color-gray-700);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+html[data-theme="dark"] .profile-header {
+  border-bottom-color: var(--color-gray-700);
+}
+
+html[data-theme="dark"] .profile-info h2 {
+  color: var(--color-gray-50);
+}
+
+html[data-theme="dark"] .discord-tag {
+  color: var(--color-gray-400);
+}
+
+html[data-theme="dark"] .detail-card {
+  background: var(--color-gray-900);
+  border-color: var(--color-gray-700);
+}
+
+html[data-theme="dark"] .detail-card:hover {
+  background: var(--color-gray-800);
+  border-color: var(--color-gray-600);
+}
+
+html[data-theme="dark"] .detail-card h3 {
+  color: var(--color-gray-50);
+  border-bottom-color: var(--color-gray-700);
+}
+
+html[data-theme="dark"] .detail-card p {
+  color: var(--color-gray-300);
+}
+
+html[data-theme="dark"] .detail-card strong {
+  color: var(--color-gray-100);
+}
+
+html[data-theme="dark"] .account-linking-card {
+  background: var(--color-gray-900);
+  border-color: var(--color-gray-700);
+}
+
+html[data-theme="dark"] .account-linking-card h3 {
+  color: var(--color-gray-50);
+}
+
+html[data-theme="dark"] .account-linking-card > p {
+  color: var(--color-gray-400);
+}
+
+html[data-theme="dark"] .account-linking-section h4 {
+  color: var(--color-gray-200);
+}
+
+html[data-theme="dark"] .account-identity-item {
+  background: var(--color-gray-800);
+  border-color: var(--color-gray-700);
+}
+
+html[data-theme="dark"] .account-identity-item:hover {
+  background: var(--color-gray-900);
+  border-color: var(--color-gray-600);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+html[data-theme="dark"] .account-identity-info strong {
+  color: var(--color-gray-50);
+}
+
+html[data-theme="dark"] .account-identity-info small {
+  color: var(--color-gray-400);
+}
+
+html[data-theme="dark"] .account-actions {
+  border-top-color: var(--color-gray-700);
+}
+
+/* Manual Light Mode Toggle - Override system dark mode */
+@media (prefers-color-scheme: dark) {
+  html[data-theme="light"] .account-page {
+    background-color: transparent !important;
+  }
+
+  html[data-theme="light"] .account-page h1 {
+    color: var(--color-gray-800) !important;
+  }
+
+  html[data-theme="light"] .user-profile {
+    background: #ffffff !important;
+    border-color: var(--color-gray-200) !important;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+  }
+
+  html[data-theme="light"] .profile-header {
+    border-bottom-color: var(--color-gray-200) !important;
+  }
+
+  html[data-theme="light"] .profile-info h2 {
+    color: var(--color-gray-800) !important;
+  }
+
+  html[data-theme="light"] .discord-tag {
+    color: var(--color-gray-600) !important;
+  }
+
+  html[data-theme="light"] .detail-card {
+    background: #ffffff !important;
+    border-color: var(--color-gray-200) !important;
+  }
+
+  html[data-theme="light"] .detail-card:hover {
+    background: var(--color-gray-50) !important;
+    border-color: var(--color-gray-300) !important;
+  }
+
+  html[data-theme="light"] .detail-card h3 {
+    color: var(--color-gray-800) !important;
+    border-bottom-color: var(--color-gray-200) !important;
+  }
+
+  html[data-theme="light"] .detail-card p {
+    color: var(--color-gray-600) !important;
+  }
+
+  html[data-theme="light"] .detail-card strong {
+    color: var(--color-gray-800) !important;
+  }
+
+  html[data-theme="light"] .account-linking-card {
+    background: #ffffff !important;
+    border-color: var(--color-gray-200) !important;
+  }
+
+  html[data-theme="light"] .account-linking-card h3 {
+    color: var(--color-gray-800) !important;
+  }
+
+  html[data-theme="light"] .account-linking-card > p {
+    color: var(--color-gray-600) !important;
+  }
+
+  html[data-theme="light"] .account-linking-section h4 {
+    color: var(--color-gray-700) !important;
+  }
+
+  html[data-theme="light"] .account-identity-item {
+    background: #ffffff !important;
+    border-color: var(--color-gray-200) !important;
+  }
+
+  html[data-theme="light"] .account-identity-item:hover {
+    background: var(--color-gray-50) !important;
+    border-color: var(--color-gray-300) !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+  }
+
+  html[data-theme="light"] .account-identity-info strong {
+    color: var(--color-gray-800) !important;
+  }
+
+  html[data-theme="light"] .account-identity-info small {
+    color: var(--color-gray-500) !important;
+  }
+
+  html[data-theme="light"] .account-actions {
+    border-top-color: var(--color-gray-200) !important;
+  }
+}
+
+/* Also apply outside media query */
+html[data-theme="light"] .account-page {
+  background-color: transparent !important;
+}
+
+html[data-theme="light"] .account-page h1 {
+  color: var(--color-gray-800) !important;
+}
+
+html[data-theme="light"] .user-profile {
+  background: #ffffff !important;
+  border-color: var(--color-gray-200) !important;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+}
+
+html[data-theme="light"] .profile-header {
+  border-bottom-color: var(--color-gray-200) !important;
+}
+
+html[data-theme="light"] .profile-info h2 {
+  color: var(--color-gray-800) !important;
+}
+
+html[data-theme="light"] .discord-tag {
+  color: var(--color-gray-600) !important;
+}
+
+html[data-theme="light"] .detail-card {
+  background: #ffffff !important;
+  border-color: var(--color-gray-200) !important;
+}
+
+html[data-theme="light"] .detail-card:hover {
+  background: var(--color-gray-50) !important;
+  border-color: var(--color-gray-300) !important;
+}
+
+html[data-theme="light"] .detail-card h3 {
+  color: var(--color-gray-800) !important;
+  border-bottom-color: var(--color-gray-200) !important;
+}
+
+html[data-theme="light"] .detail-card p {
+  color: var(--color-gray-600) !important;
+}
+
+html[data-theme="light"] .detail-card strong {
+  color: var(--color-gray-800) !important;
+}
+
+html[data-theme="light"] .account-linking-card {
+  background: #ffffff !important;
+  border-color: var(--color-gray-200) !important;
+}
+
+html[data-theme="light"] .account-linking-card h3 {
+  color: var(--color-gray-800) !important;
+}
+
+html[data-theme="light"] .account-linking-card > p {
+  color: var(--color-gray-600) !important;
+}
+
+html[data-theme="light"] .account-linking-section h4 {
+  color: var(--color-gray-700) !important;
+}
+
+html[data-theme="light"] .account-identity-item {
+  background: #ffffff !important;
+  border-color: var(--color-gray-200) !important;
+}
+
+html[data-theme="light"] .account-identity-item:hover {
+  background: var(--color-gray-50) !important;
+  border-color: var(--color-gray-300) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+html[data-theme="light"] .account-identity-info strong {
+  color: var(--color-gray-800) !important;
+}
+
+html[data-theme="light"] .account-identity-info small {
+  color: var(--color-gray-500) !important;
+}
+
+html[data-theme="light"] .account-actions {
+  border-top-color: var(--color-gray-200) !important;
+}
+
+/* =================================
+   ACCESSIBILITY ENHANCEMENTS
+   ================================= */
+
+/* Focus visible for keyboard navigation */
+.link-toggle-btn:focus-visible,
+.account-identity-item button:focus-visible,
+.sign-out-btn:focus-visible {
+  outline: 2px solid var(--color-primary-500);
+  outline-offset: 2px;
+}
+
+/* Reduced motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

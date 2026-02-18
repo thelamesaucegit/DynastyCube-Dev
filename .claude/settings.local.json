@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(rsync:*)",
+      "Bash(for f in Navigation.tsx Navigation.module.css Footer.tsx Providers.tsx)",
+      "Bash(do cp \"Z:\\\\home\\\\itstoxicqt\\\\Documents\\\\Projects\\\\UireworkCube\\\\src\\\\app\\\\components\\\\$f\" \"Z:\\\\home\\\\itstoxicqt\\\\Documents\\\\Projects\\\\DynastyCube-Dev\\\\src\\\\app\\\\components/\")",
+      "Bash(done)",
+      "Bash(U=/z/home/itstoxicqt/Documents/Projects/UireworkCube/src/app/components/admin D=/z/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/src/app/components/admin for f in AdminRoleManager.tsx AdminRoute.tsx CardManagement.tsx CardRatingSync.tsx CMCDataManagement.tsx CountdownTimerManagement.tsx CubucksManagement.tsx GlossaryManagement.tsx HistoryRequestManagement.tsx MatchExtensionManager.tsx MatchManagement.tsx)",
+      "Bash(do if diff -q \"$U/$f\" \"$D/$f\")",
+      "Bash(then echo \"IDENTICAL: $f\" else echo \"DIFFERENT: $f\" diff --unified=0 \"$U/$f\" \"$D/$f\")",
+      "Bash(fi)",
+      "Bash(U=/z/home/itstoxicqt/Documents/Projects/UireworkCube/src/app/components/admin D=/z/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/src/app/components/admin for f in MatchScheduler.tsx NewsManagement.tsx ReportManagement.tsx ScheduleOverview.tsx SeasonManagement.tsx SeasonPhaseManager.tsx TeamManagement.tsx TradeSettings.tsx UserManagement.tsx VoteManagement.tsx WeekCreator.tsx)",
+      "Bash(U=/z/home/itstoxicqt/Documents/Projects/UireworkCube/src/app/components/auth D=/z/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/src/app/components/auth for f in DiscordLogin.tsx ProtectedRoute.tsx)",
+      "Bash(})",
+      "Bash(U=/z/home/itstoxicqt/Documents/Projects/UireworkCube/src/app/components/history D=/z/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/src/app/components/history for f in HistoryContent.tsx HistoryEntryForm.tsx HistoryEntryRenderer.tsx HistoryRequestForm.tsx HistoryRequestStatus.tsx HistorySectionForm.tsx HistoryTabBar.tsx MarkdownEditor.tsx)",
+      "Bash(U=/z/home/itstoxicqt/Documents/Projects/UireworkCube/src/app/components/vote D=/z/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/src/app/components/vote for f in LeagueResults.tsx TeamResults.tsx)",
+      "Bash(npm install:*)",
+      "Bash(cmd.exe /c \"npm --version\")",
+      "Bash(cmd.exe /c \"where npm\")",
+      "Bash(powershell.exe -Command \"npm --version\")",
+      "Bash(powershell.exe -Command:*)",
+      "Bash(echo:*)"
+    ]
+  }
+}

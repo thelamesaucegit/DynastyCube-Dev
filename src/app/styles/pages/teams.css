@@ -1,0 +1,419 @@
+/* =================================
+   TEAMS PAGE STYLES
+   Using Design System Variables
+   ================================= */
+
+/* Teams Grid Container */
+.teams-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  grid-template-rows: repeat(2, auto) !important;
+  gap: var(--spacing-6) !important;
+  max-width: var(--container-lg);
+  margin: var(--spacing-8) auto !important;
+  padding: 0 var(--spacing-4);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Override any text-center conflicts */
+.text-center .teams-grid {
+  display: grid !important;
+  text-align: initial;
+}
+
+.text-center .teams-grid .team-card {
+  text-align: center !important;
+}
+
+/* Team Card Styles - Clickable buttons */
+.team-card {
+  /* Reset button styles */
+  background: none;
+  border: none;
+  font-family: var(--font-sans);
+  font-size: inherit;
+  color: inherit;
+
+  /* Card styling */
+  padding: var(--spacing-6) !important;
+  border-radius: var(--radius-xl);
+  background: var(--color-gray-50);
+  border: 1px solid var(--color-gray-200);
+  transition: all var(--transition-base);
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center;
+  min-height: 180px;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  margin: 0 !important;
+  width: 100%;
+  height: auto;
+  grid-column: auto !important;
+  grid-row: auto !important;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Gradient overlay effect */
+.team-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(59, 130, 246, 0.05) 0%,
+    rgba(147, 51, 234, 0.05) 100%
+  );
+  opacity: 0;
+  transition: opacity var(--transition-base);
+  pointer-events: none;
+}
+
+/* Hover and focus states */
+.team-card:hover,
+.team-card:focus {
+  background: #ffffff;
+  border-color: var(--color-primary-300);
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: var(--shadow-xl);
+  outline: none;
+}
+
+.team-card:hover::before,
+.team-card:focus::before {
+  opacity: 1;
+}
+
+/* Focus visible for keyboard navigation */
+.team-card:focus-visible {
+  outline: 2px solid var(--color-primary-500);
+  outline-offset: 2px;
+}
+
+/* Active state */
+.team-card:active {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Team card content styling */
+.team-emoji {
+  font-size: var(--text-5xl);
+  margin-bottom: var(--spacing-3);
+  display: block;
+  position: relative;
+  z-index: var(--z-10);
+  transition: transform var(--transition-base);
+}
+
+.team-card:hover .team-emoji,
+.team-card:focus .team-emoji {
+  transform: scale(1.15) rotate(5deg);
+}
+
+.team-name {
+  display: block;
+  margin: var(--spacing-2) 0;
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+  position: relative;
+  z-index: var(--z-10);
+  color: var(--color-primary-600);
+  transition: all var(--transition-fast);
+}
+
+.team-card:hover .team-name,
+.team-card:focus .team-name {
+  color: var(--color-primary-700);
+  transform: scale(1.05);
+}
+
+.team-motto {
+  font-style: italic;
+  color: var(--color-gray-500);
+  margin-top: var(--spacing-3);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  position: relative;
+  z-index: var(--z-10);
+  opacity: 0.9;
+  display: block;
+}
+
+/* Ensure proper text selection behavior */
+.team-card * {
+  user-select: none;
+  pointer-events: none;
+}
+
+/* =================================
+   RESPONSIVE DESIGN
+   ================================= */
+
+/* Large tablets and small desktops */
+@media (max-width: 1024px) {
+  .teams-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    grid-template-rows: repeat(3, auto) !important;
+    gap: var(--spacing-5) !important;
+    max-width: 900px;
+  }
+
+  .team-card {
+    min-height: 160px;
+    padding: var(--spacing-5) !important;
+  }
+}
+
+/* Tablets */
+@media (max-width: 768px) {
+  .teams-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    grid-template-rows: repeat(4, auto) !important;
+    gap: var(--spacing-4) !important;
+    max-width: 600px;
+    padding: 0 var(--spacing-2);
+  }
+
+  .team-card {
+    min-height: 140px;
+    padding: var(--spacing-4) !important;
+  }
+
+  .team-emoji {
+    font-size: var(--text-4xl);
+    margin-bottom: var(--spacing-2);
+  }
+
+  .team-name {
+    font-size: var(--text-lg);
+    margin: var(--spacing-1) 0;
+  }
+
+  .team-motto {
+    font-size: var(--text-xs);
+    margin-top: var(--spacing-2);
+  }
+}
+
+/* Mobile phones */
+@media (max-width: 480px) {
+  .teams-grid {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: repeat(8, auto) !important;
+    gap: var(--spacing-4) !important;
+    margin: var(--spacing-4) auto !important;
+  }
+
+  .team-card {
+    min-height: 120px;
+    padding: var(--spacing-4) !important;
+  }
+
+  .team-emoji {
+    font-size: var(--text-3xl);
+  }
+
+  .team-name {
+    font-size: var(--text-base);
+  }
+
+  .team-motto {
+    font-size: 0.75rem;
+  }
+}
+
+/* =================================
+   THEME-SPECIFIC STYLES
+   ================================= */
+
+/* Dark Mode (System Preference) */
+@media (prefers-color-scheme: dark) {
+  .team-card {
+    background: var(--color-gray-800);
+    border-color: var(--color-gray-700);
+  }
+
+  .team-card:hover,
+  .team-card:focus {
+    background: var(--color-gray-900);
+    border-color: var(--color-primary-500);
+    box-shadow: var(--shadow-xl);
+  }
+
+  .team-card::before {
+    background: linear-gradient(
+      135deg,
+      rgba(59, 130, 246, 0.1) 0%,
+      rgba(147, 51, 234, 0.1) 100%
+    );
+  }
+
+  .team-motto {
+    color: var(--color-gray-400);
+  }
+
+  .team-name {
+    color: var(--color-primary-400);
+  }
+
+  .team-card:hover .team-name,
+  .team-card:focus .team-name {
+    color: var(--color-primary-300);
+  }
+}
+
+/* Manual Dark Mode Toggle */
+html[data-theme="dark"] .team-card {
+  background: var(--color-gray-800);
+  border-color: var(--color-gray-700);
+}
+
+html[data-theme="dark"] .team-card:hover,
+html[data-theme="dark"] .team-card:focus {
+  background: var(--color-gray-900);
+  border-color: var(--color-primary-500);
+  box-shadow: var(--shadow-xl);
+}
+
+html[data-theme="dark"] .team-card::before {
+  background: linear-gradient(
+    135deg,
+    rgba(59, 130, 246, 0.1) 0%,
+    rgba(147, 51, 234, 0.1) 100%
+  );
+}
+
+html[data-theme="dark"] .team-motto {
+  color: var(--color-gray-400);
+}
+
+html[data-theme="dark"] .team-name {
+  color: var(--color-primary-400);
+}
+
+html[data-theme="dark"] .team-card:hover .team-name,
+html[data-theme="dark"] .team-card:focus .team-name {
+  color: var(--color-primary-300);
+}
+
+/* Manual Light Mode Toggle - Override system dark mode */
+@media (prefers-color-scheme: dark) {
+  html[data-theme="light"] .team-card {
+    background: #ffffff !important;
+    border-color: var(--color-gray-200) !important;
+  }
+
+  html[data-theme="light"] .team-card:hover,
+  html[data-theme="light"] .team-card:focus {
+    background: var(--color-gray-50) !important;
+    border-color: var(--color-primary-300) !important;
+    box-shadow: var(--shadow-xl) !important;
+  }
+
+  html[data-theme="light"] .team-card::before {
+    background: linear-gradient(
+      135deg,
+      rgba(59, 130, 246, 0.05) 0%,
+      rgba(147, 51, 234, 0.05) 100%
+    ) !important;
+  }
+
+  html[data-theme="light"] .team-motto {
+    color: var(--color-gray-500) !important;
+  }
+
+  html[data-theme="light"] .team-name {
+    color: var(--color-primary-600) !important;
+  }
+
+  html[data-theme="light"] .team-card:hover .team-name,
+  html[data-theme="light"] .team-card:focus .team-name {
+    color: var(--color-primary-700) !important;
+  }
+}
+
+/* Also apply outside media query */
+html[data-theme="light"] .team-card {
+  background: #ffffff !important;
+  border-color: var(--color-gray-200) !important;
+}
+
+html[data-theme="light"] .team-card:hover,
+html[data-theme="light"] .team-card:focus {
+  background: var(--color-gray-50) !important;
+  border-color: var(--color-primary-300) !important;
+  box-shadow: var(--shadow-xl) !important;
+}
+
+html[data-theme="light"] .team-card::before {
+  background: linear-gradient(
+    135deg,
+    rgba(59, 130, 246, 0.05) 0%,
+    rgba(147, 51, 234, 0.05) 100%
+  ) !important;
+}
+
+html[data-theme="light"] .team-motto {
+  color: var(--color-gray-500) !important;
+}
+
+html[data-theme="light"] .team-name {
+  color: var(--color-primary-600) !important;
+}
+
+html[data-theme="light"] .team-card:hover .team-name,
+html[data-theme="light"] .team-card:focus .team-name {
+  color: var(--color-primary-700) !important;
+}
+
+/* =================================
+   ACCESSIBILITY
+   ================================= */
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .team-card {
+    border: 2px solid currentColor;
+  }
+
+  .team-card:focus-visible {
+    outline: 3px solid var(--color-primary-500);
+    outline-offset: 3px;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .team-card,
+  .team-emoji,
+  .team-name {
+    transition: none;
+  }
+
+  .team-card:hover .team-emoji,
+  .team-card:focus .team-emoji {
+    transform: none;
+  }
+
+  .team-card:hover,
+  .team-card:focus {
+    transform: none;
+  }
+}
+
+/* Legacy styles - hidden */
+.teams-container {
+  display: none !important;
+}
+
+.team-item {
+  display: none !important;
+}

@@ -1,8 +1,7 @@
 // src/app/components/Layout.tsx
-'use client';
+"use client";
 
-import React from 'react';
-import Navigation from '@/components/Navigation';
+import React from "react";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -10,12 +9,7 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   return (
-    <>
-      <Navigation />
-      <div className="container">
-        {children}
-      </div>
-    </>
+    <div className="container">{children}</div>
   );
 };
 
