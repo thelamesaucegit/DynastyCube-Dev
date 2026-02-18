@@ -3,11 +3,6 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
-  // Skip middleware for auth callback to avoid interfering with OAuth flow
-  if (request.nextUrl.pathname.startsWith("/auth/callback")) {
-    return NextResponse.next();
-  }
-
   let supabaseResponse = NextResponse.next({
     request,
   });
@@ -51,6 +46,6 @@ export const config = {
      * - public files (images, etc.)
      * - auth routes (handled separately)
      */
-    "/((?!_next/static|_next/image|favicon.ico|auth/callback|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

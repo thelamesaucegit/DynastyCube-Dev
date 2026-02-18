@@ -12,11 +12,12 @@ import { TeamSelection } from "../components/TeamSelection";
 import { DisplayNameEditor } from "../components/DisplayNameEditor";
 import { TimezoneSelector } from "../components/TimezoneSelector";
 import { getUserTeam } from "../actions/teamActions";
+import { getUserEssenceBalance, type EssenceBalance } from "../actions/essenceActions";
 import { useUserTimezone } from "../hooks/useUserTimezone";
 import { formatDate } from "../utils/timezoneUtils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
-import { Loader2, LogOut, Link2, ChevronRight, Users } from "lucide-react";
+import { Loader2, LogOut, Link2, ChevronRight, Users, Sparkles } from "lucide-react";
 
 interface Team {
     id: string;
@@ -30,11 +31,13 @@ export default function AccountPage() {
     const [showLinking, setShowLinking] = useState(false);
     const [userTeam, setUserTeam] = useState<Team | null>(null);
     const [loadingTeam, setLoadingTeam] = useState(true);
+    const [essenceBalance, setEssenceBalance] = useState<EssenceBalance | null>(null);
     const { timezone } = useUserTimezone();
 
     useEffect(() => {
         if (user?.email) {
             loadUserTeam();
+            loadEssenceBalance();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user?.email]);
@@ -50,6 +53,15 @@ export default function AccountPage() {
             console.error("Error loading user team:", error);
         } finally {
             setLoadingTeam(false);
+        }
+    };
+
+    const loadEssenceBalance = async () => {
+        try {
+            const { balance } = await getUserEssenceBalance();
+            setEssenceBalance(balance);
+        } catch (error) {
+            console.error("Error loading essence balance:", error);
         }
     };
 
@@ -120,6 +132,42 @@ export default function AccountPage() {
                             </span>
                         </div>
                     </div>
+                </CardContent>
+            </Card>
+
+            {/* Essence Balance */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Sparkles className="h-5 w-5 text-teal-500" />
+                        Essence Balance
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {essenceBalance ? (
+                        <div className="space-y-4">
+                            <div className="bg-gradient-to-r from-teal-50 to-cyan-50 dark:from-teal-900/20 dark:to-cyan-900/20 rounded-lg p-6 text-center">
+                                <div className="text-4xl font-bold text-teal-600 dark:text-teal-400">
+                                    {essenceBalance.essence_balance} <span className="text-2xl">✨</span>
+                                </div>
+                                <p className="text-sm text-teal-700 dark:text-teal-300 mt-1">
+                                    Available Essence
+                                </p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                                <div className="text-center p-3 bg-accent rounded-lg">
+                                    <div className="font-semibold text-lg">{essenceBalance.essence_total_earned}</div>
+                                    <div className="text-muted-foreground">Total Earned</div>
+                                </div>
+                                <div className="text-center p-3 bg-accent rounded-lg">
+                                    <div className="font-semibold text-lg">{essenceBalance.essence_total_spent}</div>
+                                    <div className="text-muted-foreground">Total Spent</div>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <p className="text-muted-foreground text-sm">Loading balance...</p>
+                    )}
                 </CardContent>
             </Card>
 

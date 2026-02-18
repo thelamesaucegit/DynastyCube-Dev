@@ -46,48 +46,29 @@ CREATE POLICY "Anyone can view active countdown timers"
     USING (is_active = true);
 
 -- Policy: Admins can view all timers
+-- Uses public.is_admin() which checks the is_admin column on the users table
 CREATE POLICY "Admins can view all countdown timers"
     ON public.countdown_timers
     FOR SELECT
-    USING (
-        auth.jwt() ->> 'email' IN (
-            'admin@dynastycube.com',
-            'amonteallen@gmail.com'
-        )
-    );
+    USING (public.is_admin());
 
 -- Policy: Admins can create timers
 CREATE POLICY "Admins can create countdown timers"
     ON public.countdown_timers
     FOR INSERT
-    WITH CHECK (
-        auth.jwt() ->> 'email' IN (
-            'admin@dynastycube.com',
-            'amonteallen@gmail.com'
-        )
-    );
+    WITH CHECK (public.is_admin());
 
 -- Policy: Admins can update timers
 CREATE POLICY "Admins can update countdown timers"
     ON public.countdown_timers
     FOR UPDATE
-    USING (
-        auth.jwt() ->> 'email' IN (
-            'admin@dynastycube.com',
-            'amonteallen@gmail.com'
-        )
-    );
+    USING (public.is_admin());
 
 -- Policy: Admins can delete timers
 CREATE POLICY "Admins can delete countdown timers"
     ON public.countdown_timers
     FOR DELETE
-    USING (
-        auth.jwt() ->> 'email' IN (
-            'admin@dynastycube.com',
-            'amonteallen@gmail.com'
-        )
-    );
+    USING (public.is_admin());
 
 -- =====================================================
 -- Notes

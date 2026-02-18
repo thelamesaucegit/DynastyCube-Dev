@@ -24,17 +24,23 @@ export function useIsAdmin() {
 
       try {
         const supabase = getSupabaseClient();
+
+        // Use maybeSingle() instead of single() to avoid error when no row found
         const { data, error } = await supabase
           .from("users")
           .select("is_admin")
           .eq("id", user.id)
-          .single();
+          .maybeSingle();
 
         if (error) {
-          console.error("Error checking admin status:", error);
+          console.error("Error checking admin status:", error.message, error.code, error.details, error.hint);
           setIsAdmin(false);
+        } else if (data) {
+          setIsAdmin(data.is_admin || false);
         } else {
-          setIsAdmin(data?.is_admin || false);
+          // No row found for this user - not an admin
+          console.warn("No user row found for id:", user.id);
+          setIsAdmin(false);
         }
       } catch (error) {
         console.error("Error checking admin status:", error);

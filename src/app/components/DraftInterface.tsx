@@ -5,6 +5,11 @@ import React, { useState, useEffect } from "react";
 import { getAvailableCardsForDraft } from "@/app/actions/cardActions";
 import { getTeamDraftPicks, addDraftPick } from "@/app/actions/draftActions";
 import { getTeamBalance, spendCubucksOnDraft } from "@/app/actions/cubucksActions";
+import {
+  getActiveDraftOrder,
+  type DraftOrderEntry,
+} from "@/app/actions/draftOrderActions";
+import { cleanupDraftQueues } from "@/app/actions/autoDraftActions";
 import type { CardData } from "@/app/actions/cardActions";
 import type { DraftPick } from "@/app/actions/draftActions";
 
@@ -33,6 +38,8 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [cubucksBalance, setCubucksBalance] = useState<number>(0);
+  const [draftOrderEntries, setDraftOrderEntries] = useState<DraftOrderEntry[]>([]);
+  const [draftOrderExpanded, setDraftOrderExpanded] = useState(false);
 
   useEffect(() => {
     loadDraftData();
@@ -56,6 +63,10 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       if (team) {
         setCubucksBalance(team.cubucks_balance);
       }
+
+      // Load draft order for the active season
+      const { order } = await getActiveDraftOrder();
+      setDraftOrderEntries(order);
     } catch (err) {
       console.error("Error loading draft data:", err);
       setError("Failed to load cards");
@@ -123,6 +134,8 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
 
     if (result.success) {
       setSuccess(`Drafted ${card.card_name} for ${cardCost} Cubucks!`);
+      // Remove this card from all teams' draft queues
+      await cleanupDraftQueues(card.card_id);
       await loadDraftData(); // Reload to update balance
       onDraftComplete?.();
       setTimeout(() => setSuccess(null), 3000);
@@ -261,6 +274,115 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Draft Order Panel */}
+      {draftOrderEntries.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+          <button
+            onClick={() => setDraftOrderExpanded(!draftOrderExpanded)}
+            className="w-full p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🎯</span>
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                Draft Pick Order
+              </h3>
+              {(() => {
+                const myPick = draftOrderEntries.find(
+                  (e) => e.team_id === teamId
+                );
+                return myPick ? (
+                  <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded text-xs font-bold">
+                    {isUserTeamMember ? "Your" : teamName + "'s"} pick: #{myPick.pick_position}
+                  </span>
+                ) : null;
+              })()}
+            </div>
+            <span className="text-gray-400 text-sm">
+              {draftOrderExpanded ? "▲ Collapse" : "▼ Expand"}
+            </span>
+          </button>
+
+          {draftOrderExpanded && (
+            <div className="border-t border-gray-200 dark:border-gray-700">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 dark:bg-gray-900">
+                  <tr>
+                    <th className="px-3 py-2 text-center font-semibold w-12">
+                      Pick
+                    </th>
+                    <th className="px-3 py-2 text-left font-semibold">Team</th>
+                    <th className="px-3 py-2 text-center font-semibold">
+                      Prev Record
+                    </th>
+                    <th className="px-3 py-2 text-center font-semibold">
+                      Lottery #
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {draftOrderEntries.map((entry) => {
+                    const isMyTeam = entry.team_id === teamId;
+                    return (
+                      <tr
+                        key={entry.id}
+                        className={
+                          isMyTeam
+                            ? "bg-blue-50 dark:bg-blue-900/20 font-semibold"
+                            : "hover:bg-gray-50 dark:hover:bg-gray-900/50"
+                        }
+                      >
+                        <td className="px-3 py-2 text-center">
+                          <span
+                            className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
+                              entry.pick_position === 1
+                                ? "bg-yellow-500 text-white"
+                                : entry.pick_position === 2
+                                ? "bg-gray-400 text-white"
+                                : entry.pick_position === 3
+                                ? "bg-amber-600 text-white"
+                                : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                            }`}
+                          >
+                            {entry.pick_position}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-gray-900 dark:text-gray-100">
+                          {entry.team?.emoji} {entry.team?.name}
+                          {isMyTeam && (
+                            <span className="ml-1 text-blue-600 dark:text-blue-400 text-xs">
+                              ◄
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <span className="text-green-600 dark:text-green-400">
+                            {entry.previous_season_wins}
+                          </span>
+                          <span className="text-gray-400 mx-0.5">-</span>
+                          <span className="text-red-600 dark:text-red-400">
+                            {entry.previous_season_losses}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-bold text-xs">
+                            {entry.lottery_number}
+                          </span>
+                          {entry.is_lottery_winner && (
+                            <span className="ml-1 text-xs" title="Tiebreaker used">
+                              🎲
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Read-only notice for non-members */}
       {!isUserTeamMember && (
@@ -437,6 +559,11 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
                     <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
                       {card.card_set}
                     </p>
+                    {card.cubecobra_elo != null && (
+                      <p className="text-xs text-purple-600 dark:text-purple-400 font-medium mt-0.5">
+                        ELO: {card.cubecobra_elo.toLocaleString()}
+                      </p>
+                    )}
                   </div>
 
                   {/* Cubucks Cost Badge */}

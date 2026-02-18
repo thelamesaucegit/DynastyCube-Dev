@@ -16,6 +16,10 @@ import { HistoryEntryRenderer } from "./HistoryEntryRenderer";
 import { HistoryEntryForm } from "./HistoryEntryForm";
 import { HistorySectionForm } from "./HistorySectionForm";
 import { MarkdownEditor } from "./MarkdownEditor";
+import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
+import { Button } from "@/app/components/ui/button";
+import { Input } from "@/app/components/ui/input";
+import { AlertCircle, CheckCircle2, Plus, Pencil, Trash2, ArrowUp, ArrowDown, ScrollText } from "lucide-react";
 
 interface HistoryContentProps {
   sections: HistorySection[];
@@ -88,7 +92,6 @@ export const HistoryContent: React.FC<HistoryContentProps> = ({
     try {
       const result = await createHistorySection(ownerType, ownerId, title);
       if (result.success) {
-        // If content provided, add it as first entry
         if (content && result.sectionId) {
           await appendHistoryEntry(result.sectionId, content);
         }
@@ -178,198 +181,211 @@ export const HistoryContent: React.FC<HistoryContentProps> = ({
   };
 
   return (
-    <div>
+    <div className="space-y-4">
       {/* Messages */}
       {success && (
-        <div className="bg-green-50 dark:bg-green-900/20 border border-green-300 dark:border-green-700 rounded-lg p-3 mb-4 text-green-800 dark:text-green-200 text-sm">
-          {success}
-        </div>
+        <Card className="border-emerald-500/50">
+          <CardContent className="pt-4 flex items-center gap-3">
+            <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
+            <p className="text-sm">{success}</p>
+          </CardContent>
+        </Card>
       )}
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg p-3 mb-4 text-red-800 dark:text-red-200 text-sm">
-          {error}
-        </div>
+        <Card className="border-destructive">
+          <CardContent className="pt-4 flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
+            <p className="text-sm text-muted-foreground">{error}</p>
+          </CardContent>
+        </Card>
       )}
 
       {/* Sections */}
       {sections.length === 0 ? (
-        <div className="history-empty">
-          <div className="history-empty-icon">📜</div>
-          <div className="history-empty-text">No history recorded yet</div>
-          <div className="history-empty-sub">
+        <div className="text-center py-16 text-muted-foreground">
+          <ScrollText className="size-12 mx-auto mb-4 opacity-40" />
+          <p className="text-lg font-medium">No history recorded yet</p>
+          <p className="text-sm mt-1">
             {canEdit
               ? "Start recording history by creating a section below."
               : "Check back later for updates."}
-          </div>
+          </p>
         </div>
       ) : (
         sections.map((section) => (
-          <div key={section.id} className="history-section">
-            <div className="history-section-header">
+          <Card key={section.id}>
+            <CardHeader className="pb-3">
               {editingSectionTitle === section.id ? (
-                <div style={{ display: "flex", gap: "0.5rem", flex: 1 }}>
-                  <input
-                    className="history-input"
+                <div className="flex gap-2 items-center">
+                  <Input
                     value={editTitleValue}
                     onChange={(e) => setEditTitleValue(e.target.value)}
-                    style={{ flex: 1 }}
+                    className="flex-1"
                   />
-                  <button
-                    className="history-btn history-btn-primary history-btn-sm"
+                  <Button
+                    size="sm"
                     onClick={() => handleAdminUpdateTitle(section.id)}
                     disabled={loading}
                   >
                     Save
-                  </button>
-                  <button
-                    className="history-btn history-btn-secondary history-btn-sm"
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => setEditingSectionTitle(null)}
                   >
                     Cancel
-                  </button>
+                  </Button>
                 </div>
               ) : (
-                <>
-                  <h2 className="history-section-title">{section.title}</h2>
-                  <div className="history-section-actions">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-xl">{section.title}</CardTitle>
+                  <div className="flex gap-1 items-center">
                     {canEdit && (
-                      <button
-                        className="history-btn-icon"
-                        title="Add entry"
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => setAddingEntryToSection(section.id)}
                       >
-                        + Entry
-                      </button>
+                        <Plus className="size-4 mr-1" />
+                        Entry
+                      </Button>
                     )}
                     {isAdmin && (
                       <>
-                        <button
-                          className="history-btn-icon"
-                          title="Edit title"
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => {
                             setEditingSectionTitle(section.id);
                             setEditTitleValue(section.title);
                           }}
                         >
-                          Edit
-                        </button>
-                        <button
-                          className="history-btn-icon"
-                          title="Delete section"
+                          <Pencil className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
                           onClick={() => handleAdminDeleteSection(section.id)}
-                          style={{ color: "#ef4444" }}
                         >
-                          Delete
-                        </button>
+                          <Trash2 className="size-4" />
+                        </Button>
                       </>
                     )}
                   </div>
-                </>
-              )}
-            </div>
-
-            {/* Entries */}
-            {section.entries && section.entries.length > 0 ? (
-              section.entries.map((entry, idx) => (
-                <div key={entry.id} className="history-entry">
-                  {editingEntryId === entry.id ? (
-                    <div>
-                      <MarkdownEditor
-                        value={editContentValue}
-                        onChange={setEditContentValue}
-                        placeholder="Edit entry content..."
-                        disabled={loading}
-                      />
-                      <div className="history-form-actions" style={{ marginTop: "0.5rem" }}>
-                        <button
-                          className="history-btn history-btn-secondary history-btn-sm"
-                          onClick={() => setEditingEntryId(null)}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          className="history-btn history-btn-primary history-btn-sm"
-                          onClick={() => handleAdminUpdateContent(entry.id)}
-                          disabled={loading}
-                        >
-                          Save
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <HistoryEntryRenderer content={entry.content} />
-                      {(canEdit || isAdmin) && (
-                        <div className="history-entry-actions">
-                          {canEdit && section.entries && section.entries.length > 1 && (
-                            <>
-                              <button
-                                className="history-btn-icon"
-                                onClick={() => handleReorder(entry.id, "up")}
-                                disabled={idx === 0}
-                                title="Move up"
-                              >
-                                &uarr;
-                              </button>
-                              <button
-                                className="history-btn-icon"
-                                onClick={() => handleReorder(entry.id, "down")}
-                                disabled={idx === (section.entries?.length || 0) - 1}
-                                title="Move down"
-                              >
-                                &darr;
-                              </button>
-                            </>
-                          )}
-                          {isAdmin && (
-                            <>
-                              <button
-                                className="history-btn-icon"
-                                title="Edit entry"
-                                onClick={() => {
-                                  setEditingEntryId(entry.id);
-                                  setEditContentValue(entry.content);
-                                }}
-                              >
-                                Edit
-                              </button>
-                              <button
-                                className="history-btn-icon"
-                                title="Delete entry"
-                                onClick={() => handleAdminDeleteEntry(entry.id)}
-                                style={{ color: "#ef4444" }}
-                              >
-                                Delete
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </>
-                  )}
                 </div>
-              ))
-            ) : (
-              <p style={{ color: "#9ca3af", fontStyle: "italic", fontSize: "0.875rem" }}>
-                No entries in this section yet.
-              </p>
-            )}
+              )}
+            </CardHeader>
+            <CardContent>
+              {/* Entries */}
+              {section.entries && section.entries.length > 0 ? (
+                <div className="divide-y divide-border">
+                  {section.entries.map((entry, idx) => (
+                    <div key={entry.id} className="py-4 first:pt-0 last:pb-0">
+                      {editingEntryId === entry.id ? (
+                        <div>
+                          <MarkdownEditor
+                            value={editContentValue}
+                            onChange={setEditContentValue}
+                            placeholder="Edit entry content..."
+                            disabled={loading}
+                          />
+                          <div className="flex gap-2 mt-2 justify-end">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setEditingEntryId(null)}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => handleAdminUpdateContent(entry.id)}
+                              disabled={loading}
+                            >
+                              Save
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <HistoryEntryRenderer content={entry.content} />
+                          {(canEdit || isAdmin) && (
+                            <div className="flex gap-1 mt-2">
+                              {canEdit && section.entries && section.entries.length > 1 && (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleReorder(entry.id, "up")}
+                                    disabled={idx === 0}
+                                  >
+                                    <ArrowUp className="size-3" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleReorder(entry.id, "down")}
+                                    disabled={idx === (section.entries?.length || 0) - 1}
+                                  >
+                                    <ArrowDown className="size-3" />
+                                  </Button>
+                                </>
+                              )}
+                              {isAdmin && (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setEditingEntryId(entry.id);
+                                      setEditContentValue(entry.content);
+                                    }}
+                                  >
+                                    <Pencil className="size-3 mr-1" />
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-destructive hover:text-destructive"
+                                    onClick={() => handleAdminDeleteEntry(entry.id)}
+                                  >
+                                    <Trash2 className="size-3 mr-1" />
+                                    Delete
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted-foreground italic text-sm">
+                  No entries in this section yet.
+                </p>
+              )}
 
-            {/* Add entry form */}
-            {addingEntryToSection === section.id && (
-              <HistoryEntryForm
-                onSubmit={(content) => handleAppendEntry(section.id, content)}
-                onCancel={() => setAddingEntryToSection(null)}
-                loading={loading}
-              />
-            )}
-          </div>
+              {/* Add entry form */}
+              {addingEntryToSection === section.id && (
+                <HistoryEntryForm
+                  onSubmit={(content) => handleAppendEntry(section.id, content)}
+                  onCancel={() => setAddingEntryToSection(null)}
+                  loading={loading}
+                />
+              )}
+            </CardContent>
+          </Card>
         ))
       )}
 
       {/* New section form */}
       {canEdit && (
-        <div style={{ marginTop: "1rem" }}>
+        <div className="mt-4">
           {showNewSection ? (
             <HistorySectionForm
               onSubmit={handleCreateSection}
@@ -377,12 +393,10 @@ export const HistoryContent: React.FC<HistoryContentProps> = ({
               loading={loading}
             />
           ) : (
-            <button
-              className="history-btn history-btn-primary"
-              onClick={() => setShowNewSection(true)}
-            >
-              + New Section
-            </button>
+            <Button onClick={() => setShowNewSection(true)}>
+              <Plus className="size-4 mr-2" />
+              New Section
+            </Button>
           )}
         </div>
       )}

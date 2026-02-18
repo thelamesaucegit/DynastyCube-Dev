@@ -139,7 +139,7 @@ export async function updateCountdownTimer(
   const supabase = await createClient();
 
   try {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("countdown_timers")
       .update({
         title: updates.title,
@@ -149,11 +149,17 @@ export async function updateCountdownTimer(
         is_active: updates.is_active,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", timerId);
+      .eq("id", timerId)
+      .select();
 
     if (error) {
       console.error("Error updating countdown timer:", error);
       return { success: false, error: error.message };
+    }
+
+    // Check if any rows were actually updated (RLS may silently block the update)
+    if (!data || data.length === 0) {
+      return { success: false, error: "Failed to update timer. You may not have permission to edit this timer." };
     }
 
     return { success: true };

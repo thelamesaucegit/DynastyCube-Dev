@@ -15,6 +15,9 @@ import { TeamRoles } from "@/app/components/TeamRoles";
 import { TeamCubucksDisplay } from "@/app/components/TeamCubucksDisplay";
 import { MatchRecording } from "@/app/components/MatchRecording";
 import { MatchSchedulingWidget } from "@/app/components/team/MatchSchedulingWidget";
+import { TeamVoting } from "@/app/components/team/TeamVoting";
+import { DraftStatusWidget } from "@/app/components/DraftStatusWidget";
+import { DraftQueueManager } from "@/app/components/DraftQueueManager";
 import { getCurrentUserRolesForTeam, getTeamMembersWithRoles, type TeamMemberWithRoles } from "@/app/actions/roleActions";
 import { getRoleEmoji, getRoleDisplayName } from "@/app/utils/roleUtils";
 import type { DraftPick, Deck } from "@/app/actions/draftActions";
@@ -38,6 +41,7 @@ import {
   CalendarDays,
   CheckCircle2,
   XCircle,
+  Vote,
 } from "lucide-react";
 
 interface TeamMember {
@@ -59,7 +63,7 @@ interface TeamPageProps {
   params: Promise<{ teamId: string }>;
 }
 
-type TabType = "picks" | "decks" | "members" | "draft" | "stats" | "roles" | "trades" | "matches";
+type TabType = "picks" | "decks" | "members" | "draft" | "stats" | "roles" | "trades" | "matches" | "votes";
 
 export default function TeamPage({ params }: TeamPageProps) {
   const { teamId } = use(params);
@@ -201,6 +205,8 @@ export default function TeamPage({ params }: TeamPageProps) {
     { id: "decks" as TabType, label: "Decks", icon: <BookOpen className="size-4" />, count: decks.length },
     { id: "trades" as TabType, label: "Trades", icon: <ArrowLeftRight className="size-4" />, count: undefined },
     { id: "matches" as TabType, label: "Matches", icon: <Swords className="size-4" />, count: undefined },
+    // Only show Votes tab to team members
+    ...(isUserTeamMember ? [{ id: "votes" as TabType, label: "Votes", icon: <Vote className="size-4" />, count: undefined }] : []),
     { id: "stats" as TabType, label: "Statistics", icon: <BarChart3 className="size-4" />, count: undefined },
     // Only show roles tab to team members
     ...(isUserTeamMember ? [{ id: "roles" as TabType, label: "Team Roles", icon: <Crown className="size-4" />, count: undefined }] : []),
@@ -249,6 +255,9 @@ export default function TeamPage({ params }: TeamPageProps) {
         </CardContent>
       </Card>
 
+      {/* Draft Status */}
+      <DraftStatusWidget variant="team" teamId={teamId} />
+
       {/* Team Cubucks Balance */}
       <div className="mb-6">
         <TeamCubucksDisplay teamId={teamId} showTransactions={true} refreshKey={cubucksRefreshKey} isUserTeamMember={isUserTeamMember} />
@@ -288,6 +297,12 @@ export default function TeamPage({ params }: TeamPageProps) {
                       Select cards from the available pool to add to your team&apos;s collection
                     </p>
                   </div>
+
+                  {/* Auto-Draft Queue Manager */}
+                  <div className="mb-6">
+                    <DraftQueueManager teamId={teamId} isUserTeamMember={isUserTeamMember} />
+                  </div>
+
                   <DraftInterface teamId={teamId} teamName={team.name} isUserTeamMember={isUserTeamMember} onDraftComplete={handleDraftComplete} />
                 </div>
               )}
@@ -359,6 +374,11 @@ export default function TeamPage({ params }: TeamPageProps) {
                                 <p className="text-xs text-muted-foreground truncate">
                                   {pick.card_set}
                                 </p>
+                                {pick.cubecobra_elo != null && (
+                                  <p className="text-xs text-purple-600 dark:text-purple-400 font-medium mt-0.5">
+                                    ELO: {pick.cubecobra_elo.toLocaleString()}
+                                  </p>
+                                )}
                               </div>
 
                               {/* Undraft Button Overlay - Only show to team members */}
@@ -460,6 +480,23 @@ export default function TeamPage({ params }: TeamPageProps) {
                     </h3>
                     <MatchRecording teamId={teamId} />
                   </div>
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="votes">
+              {activeTab === "votes" && isUserTeamMember && (
+                <div>
+                  <div className="mb-6">
+                    <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
+                      <Vote className="size-5" />
+                      Team Votes
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Vote on team decisions and view results
+                    </p>
+                  </div>
+                  <TeamVoting teamId={teamId} userRoles={userRoles} />
                 </div>
               )}
             </TabsContent>

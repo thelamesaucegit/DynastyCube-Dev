@@ -86,6 +86,7 @@ export interface PollWithOptions extends Poll {
   hasVoted?: boolean;
   userVoteWeight?: number; // For league polls
   userTeamId?: string; // For team/league polls
+  team_id?: string | null; // For team-scoped polls
 }
 
 // =================================================================================================
@@ -101,6 +102,7 @@ export async function getActivePolls(userId?: string) {
     const { data, error } = await supabase
       .from("active_polls_view")
       .select("*")
+      .is("team_id", null)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
@@ -694,5 +696,284 @@ export async function recalculatePollResults(pollId: string, teamId?: string) {
   } catch (error) {
     console.error("Error recalculating results:", error);
     return { success: false, error: "Failed to recalculate results" };
+  }
+}
+
+// =================================================================================================
+// TEAM POLL ACTIONS
+// =================================================================================================
+
+/**
+ * Get polls scoped to a specific team
+ * Returns active + recently ended polls (last 7 days)
+ */
+export async function getTeamPolls(teamId: string, userId?: string) {
+  try {
+    const supabase = await createServerClient();
+
+    // Get team polls that are active or ended within the last 7 days
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const { data: polls, error } = await supabase
+      .from("polls")
+      .select("*")
+      .eq("team_id", teamId)
+      .eq("is_active", true)
+      .gte("ends_at", sevenDaysAgo.toISOString())
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    // Get options for each poll
+    const pollIds = (polls || []).map((p) => p.id);
+    let allOptions: PollOption[] = [];
+
+    if (pollIds.length > 0) {
+      const { data: options, error: optionsError } = await supabase
+        .from("poll_options")
+        .select("*")
+        .in("poll_id", pollIds)
+        .order("option_order", { ascending: true });
+
+      if (optionsError) throw optionsError;
+      allOptions = options || [];
+    }
+
+    // Build polls with options
+    let pollsWithOptions: PollWithOptions[] = (polls || []).map((poll) => {
+      const now = new Date();
+      const startsAt = new Date(poll.starts_at);
+      const endsAt = new Date(poll.ends_at);
+      let status: "active" | "ended" | "upcoming" = "active";
+      if (endsAt < now) status = "ended";
+      else if (startsAt > now) status = "upcoming";
+
+      return {
+        ...poll,
+        options: allOptions.filter((o) => o.poll_id === poll.id),
+        status,
+        team_id: poll.team_id,
+      };
+    });
+
+    // If userId provided, get user's votes for each poll
+    if (userId && pollIds.length > 0) {
+      const { data: userVotes } = await supabase
+        .from("poll_votes")
+        .select("poll_id, option_id")
+        .in("poll_id", pollIds)
+        .eq("user_id", userId);
+
+      pollsWithOptions = pollsWithOptions.map((poll) => {
+        const votes = (userVotes || [])
+          .filter((v) => v.poll_id === poll.id)
+          .map((v) => v.option_id);
+
+        return {
+          ...poll,
+          userVotes: votes,
+          hasVoted: votes.length > 0,
+        };
+      });
+    }
+
+    return { polls: pollsWithOptions, success: true };
+  } catch (error) {
+    console.error("Error fetching team polls:", error);
+    return { polls: [], success: false, error: "Failed to fetch team polls" };
+  }
+}
+
+/**
+ * Create a new team-scoped poll (captain only)
+ * Team polls always use vote_type = 'individual'
+ */
+export async function createTeamPoll(
+  teamId: string,
+  title: string,
+  description: string | null,
+  endsAt: string,
+  allowMultipleVotes: boolean,
+  showResultsBeforeEnd: boolean,
+  options: string[],
+  userId: string
+) {
+  try {
+    const supabase = await createServerClient();
+
+    // Validate inputs
+    if (!title || title.trim().length === 0) {
+      return { success: false, error: "Title is required" };
+    }
+
+    if (!options || options.length < 2) {
+      return { success: false, error: "At least 2 options are required" };
+    }
+
+    if (new Date(endsAt) <= new Date()) {
+      return { success: false, error: "End date must be in the future" };
+    }
+
+    // Verify user is a captain of the team (server-side authorization)
+    // Use user_has_team_role with explicit userId (proven pattern, doesn't rely on auth.uid() in RPC)
+    const { data: isCaptain } = await supabase.rpc("user_has_team_role", {
+      p_user_id: userId,
+      p_team_id: teamId,
+      p_role: "captain",
+    });
+
+    if (!isCaptain) {
+      return { success: false, error: "Only team captains can create polls" };
+    }
+
+    // Create the poll with team_id and vote_type = 'individual'
+    const { data: poll, error: pollError } = await supabase
+      .from("polls")
+      .insert({
+        title,
+        description,
+        ends_at: endsAt,
+        allow_multiple_votes: allowMultipleVotes,
+        show_results_before_end: showResultsBeforeEnd,
+        vote_type: "individual" as VoteType,
+        created_by: userId,
+        is_active: true,
+        team_id: teamId,
+      })
+      .select()
+      .single();
+
+    if (pollError) throw pollError;
+    if (!poll) return { success: false, error: "Failed to create poll" };
+
+    // Create options
+    const pollOptions = options.map((text, index) => ({
+      poll_id: poll.id,
+      option_text: text,
+      option_order: index + 1,
+    }));
+
+    const { error: optionsError } = await supabase
+      .from("poll_options")
+      .insert(pollOptions);
+
+    if (optionsError) {
+      // Rollback poll creation
+      await supabase.from("polls").delete().eq("id", poll.id);
+      throw optionsError;
+    }
+
+    return {
+      success: true,
+      message: "Team poll created successfully!",
+      pollId: poll.id,
+    };
+  } catch (error) {
+    console.error("Error creating team poll:", error);
+    return { success: false, error: "Failed to create team poll" };
+  }
+}
+
+/**
+ * Delete a team-scoped poll (captain only)
+ */
+export async function deleteTeamPoll(
+  pollId: string,
+  teamId: string,
+  userId: string
+) {
+  try {
+    const supabase = await createServerClient();
+
+    // Verify user is a captain
+    const { data: isCaptain } = await supabase.rpc("user_has_team_role", {
+      p_user_id: userId,
+      p_team_id: teamId,
+      p_role: "captain",
+    });
+
+    if (!isCaptain) {
+      return { success: false, error: "Only team captains can delete polls" };
+    }
+
+    // Verify the poll belongs to this team
+    const { data: poll, error: pollError } = await supabase
+      .from("polls")
+      .select("team_id")
+      .eq("id", pollId)
+      .single();
+
+    if (pollError) throw pollError;
+    if (!poll || poll.team_id !== teamId) {
+      return { success: false, error: "Poll not found for this team" };
+    }
+
+    // Delete the poll (cascades to options and votes)
+    const { error } = await supabase.from("polls").delete().eq("id", pollId);
+
+    if (error) throw error;
+
+    return { success: true, message: "Poll deleted successfully!" };
+  } catch (error) {
+    console.error("Error deleting team poll:", error);
+    return { success: false, error: "Failed to delete poll" };
+  }
+}
+
+/**
+ * Toggle a team poll's active status (captain only)
+ */
+export async function toggleTeamPollActive(
+  pollId: string,
+  teamId: string,
+  isActive: boolean
+) {
+  try {
+    const supabase = await createServerClient();
+
+    // Get current user for captain check
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return { success: false, error: "Not authenticated" };
+    }
+
+    // Verify user is a captain
+    const { data: isCaptain } = await supabase.rpc("user_has_team_role", {
+      p_user_id: user.id,
+      p_team_id: teamId,
+      p_role: "captain",
+    });
+
+    if (!isCaptain) {
+      return { success: false, error: "Only team captains can manage polls" };
+    }
+
+    // Verify the poll belongs to this team
+    const { data: poll, error: pollError } = await supabase
+      .from("polls")
+      .select("team_id")
+      .eq("id", pollId)
+      .single();
+
+    if (pollError) throw pollError;
+    if (!poll || poll.team_id !== teamId) {
+      return { success: false, error: "Poll not found for this team" };
+    }
+
+    const { error } = await supabase
+      .from("polls")
+      .update({ is_active: isActive })
+      .eq("id", pollId);
+
+    if (error) throw error;
+
+    return {
+      success: true,
+      message: isActive ? "Poll activated!" : "Poll deactivated!",
+    };
+  } catch (error) {
+    console.error("Error toggling team poll:", error);
+    return { success: false, error: "Failed to toggle poll status" };
   }
 }

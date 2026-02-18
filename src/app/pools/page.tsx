@@ -420,6 +420,13 @@ export default function PoolsPage() {
                   {card.card_set && (
                     <p className="text-xs opacity-75 mt-1">{card.card_set}</p>
                   )}
+                  {card.cubecobra_elo != null && (
+                    <p className="text-xs mt-1">
+                      <span className="bg-purple-500/80 px-1.5 py-0.5 rounded text-white font-medium">
+                        ELO: {card.cubecobra_elo.toLocaleString()}
+                      </span>
+                    </p>
+                  )}
                   {card.is_drafted && card.drafted_by_team && (
                     <div className="mt-2 pt-2 border-t border-white/20">
                       <p className="text-xs">

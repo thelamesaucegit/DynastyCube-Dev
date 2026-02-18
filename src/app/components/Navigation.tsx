@@ -1,7 +1,7 @@
 // src/app/components/Navigation.tsx
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
@@ -49,10 +49,15 @@ const authNavItems = [
 
 const Navigation: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
   const { user, loading, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { isAdmin } = useIsAdmin();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleSignOut = async () => {
     await signOut();
@@ -148,12 +153,15 @@ const Navigation: React.FC = () => {
             size="icon"
             onClick={toggleTheme}
             className="size-9"
-            suppressHydrationWarning
           >
-            {theme === "light" ? (
-              <Moon className="size-4" />
+            {mounted ? (
+              theme === "light" ? (
+                <Moon className="size-4" />
+              ) : (
+                <Sun className="size-4" />
+              )
             ) : (
-              <Sun className="size-4" />
+              <span className="size-4" />
             )}
           </Button>
 

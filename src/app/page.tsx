@@ -8,6 +8,7 @@ import { Button } from "@/app/components/ui/button";
 import { Badge } from "@/app/components/ui/badge";
 import { Sparkles, Users, Trophy, Calendar, ArrowRight } from "lucide-react";
 import CountdownTimer from "@/app/components/CountdownTimer";
+import { DraftStatusWidget } from "@/app/components/DraftStatusWidget";
 import {
   getRecentDraftPicks,
   getCurrentSeason,
@@ -132,6 +133,9 @@ export default function HomePage() {
           linkText={countdownTimer.link_text}
         />
       )}
+
+      {/* Draft Status */}
+      <DraftStatusWidget variant="full" />
 
       {/* Stats Overview */}
       <section className="grid grid-cols-1 md:grid-cols-4 gap-4">

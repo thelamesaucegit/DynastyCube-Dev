@@ -3,6 +3,8 @@
 
 import React, { useState } from "react";
 import { MarkdownEditor } from "./MarkdownEditor";
+import { Card, CardContent } from "@/app/components/ui/card";
+import { Button } from "@/app/components/ui/button";
 
 interface HistoryEntryFormProps {
   onSubmit: (content: string) => Promise<void>;
@@ -25,31 +27,36 @@ export const HistoryEntryForm: React.FC<HistoryEntryFormProps> = ({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="history-form">
-      <div className="history-form-title">Add Entry</div>
-      <MarkdownEditor
-        value={content}
-        onChange={setContent}
-        placeholder="Write your entry in markdown..."
-        disabled={loading}
-      />
-      <div className="history-form-actions">
-        <button
-          type="button"
-          className="history-btn history-btn-secondary"
-          onClick={onCancel}
-          disabled={loading}
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          className="history-btn history-btn-primary"
-          disabled={loading || !content.trim()}
-        >
-          {loading ? "Adding..." : "Add Entry"}
-        </button>
-      </div>
-    </form>
+    <Card className="mt-4">
+      <CardContent className="pt-5">
+        <form onSubmit={handleSubmit}>
+          <p className="text-sm font-semibold mb-3">Add Entry</p>
+          <MarkdownEditor
+            value={content}
+            onChange={setContent}
+            placeholder="Write your entry in markdown..."
+            disabled={loading}
+          />
+          <div className="flex gap-2 mt-3 justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onCancel}
+              disabled={loading}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={loading || !content.trim()}
+            >
+              {loading ? "Adding..." : "Add Entry"}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
   );
 };

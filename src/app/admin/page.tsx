@@ -18,6 +18,8 @@ import { MatchManagement } from "../components/admin/MatchManagement";
 import { CountdownTimerManagement } from "../components/admin/CountdownTimerManagement";
 import { HistoryRequestManagement } from "../components/admin/HistoryRequestManagement";
 import { GlossaryManagement } from "../components/admin/GlossaryManagement";
+import { DraftOrderManagement } from "../components/admin/DraftOrderManagement";
+import { EssenceManagement } from "../components/admin/EssenceManagement";
 import { getTeamsWithMembers } from "../actions/teamActions";
 import { getCardPool } from "../actions/cardActions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/app/components/ui/card";
@@ -44,9 +46,11 @@ import {
   Plug,
   Lightbulb,
   ArrowRight,
+  ListOrdered,
+  Sparkles,
 } from "lucide-react";
 
-type TabType = "users" | "teams" | "cards" | "cubucks" | "seasons" | "ratings" | "news" | "timers" | "reports" | "votes" | "matches" | "settings" | "history" | "glossary";
+type TabType = "users" | "teams" | "cards" | "cubucks" | "essence" | "seasons" | "matches" | "draft-order" | "ratings" | "news" | "timers" | "reports" | "votes" | "settings" | "history" | "glossary";
 
 interface Stats {
   totalUsers: number;
@@ -97,8 +101,10 @@ export default function AdminPage() {
     { id: "teams", label: "Teams", icon: <Trophy className="size-4" /> },
     { id: "cards", label: "Cards", icon: <Layers className="size-4" /> },
     { id: "cubucks", label: "Cubucks", icon: <Coins className="size-4" /> },
+    { id: "essence", label: "Essence", icon: <Sparkles className="size-4" /> },
     { id: "seasons", label: "Seasons", icon: <CalendarDays className="size-4" /> },
     { id: "matches", label: "Matches", icon: <Swords className="size-4" /> },
+    { id: "draft-order", label: "Draft Order", icon: <ListOrdered className="size-4" /> },
     { id: "ratings", label: "Ratings", icon: <BarChart3 className="size-4" /> },
     { id: "news", label: "News", icon: <Megaphone className="size-4" /> },
     { id: "votes", label: "Voting", icon: <Vote className="size-4" /> },
@@ -126,6 +132,8 @@ export default function AdminPage() {
         return <CardManagement onUpdate={loadStats} />;
       case "cubucks":
         return <CubucksManagement />;
+      case "essence":
+        return <EssenceManagement />;
       case "seasons":
         return <SeasonManagement />;
       case "ratings":
@@ -149,6 +157,8 @@ export default function AdminPage() {
             <MatchManagement />
           </div>
         );
+      case "draft-order":
+        return <DraftOrderManagement />;
       case "timers":
         return <CountdownTimerManagement />;
       case "reports":

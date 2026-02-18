@@ -3,10 +3,10 @@
 
 import React, { useState } from "react";
 import {
-  updateAllCardRatings,
-  updatePoolCardRatings,
-  updateDraftPickRatings,
-  getCardRating,
+  updateAllCubecobraElo,
+  updatePoolCubecobraElo,
+  updateDraftPickCubecobraElo,
+  testCubecobraElo,
 } from "@/app/actions/cardRatingActions";
 
 export const CardRatingSync: React.FC = () => {
@@ -22,10 +22,10 @@ export const CardRatingSync: React.FC = () => {
     setResult(null);
 
     try {
-      const res = await updateAllCardRatings();
+      const res = await updateAllCubecobraElo();
 
       if (!res.success) {
-        setError(res.message || "Failed to sync ratings");
+        setError(res.message || "Failed to sync CubeCobra ELO");
         return;
       }
 
@@ -33,18 +33,17 @@ export const CardRatingSync: React.FC = () => {
       const draftMsg = res.draftResult?.message || "";
 
       setResult(
-        `✅ Sync Complete!\n\nCard Pools: ${poolMsg}\n\nDraft Picks: ${draftMsg}\n\nOverall: ${res.message}`
+        `✅ CubeCobra ELO Sync Complete!\n\nCard Pools: ${poolMsg}\n\nDraft Picks: ${draftMsg}\n\nOverall: ${res.message}`
       );
 
-      // Log any errors
       if (res.poolResult?.errors && res.poolResult.errors.length > 0) {
-        console.error("Pool sync errors:", res.poolResult.errors);
+        console.error("CubeCobra pool sync errors:", res.poolResult.errors);
       }
       if (res.draftResult?.errors && res.draftResult.errors.length > 0) {
-        console.error("Draft pick sync errors:", res.draftResult.errors);
+        console.error("CubeCobra draft pick sync errors:", res.draftResult.errors);
       }
     } catch (err) {
-      console.error("Unexpected error during sync:", err);
+      console.error("Unexpected error during CubeCobra sync:", err);
       setError(`Unexpected error: ${err}`);
     } finally {
       setSyncing(false);
@@ -57,20 +56,20 @@ export const CardRatingSync: React.FC = () => {
     setResult(null);
 
     try {
-      const res = await updatePoolCardRatings();
+      const res = await updatePoolCubecobraElo();
 
       if (!res.success) {
-        setError(res.message || "Failed to sync pool ratings");
+        setError(res.message || "Failed to sync CubeCobra pool ELO");
         return;
       }
 
-      setResult(`✅ Pool Sync Complete!\n\n${res.message}`);
+      setResult(`✅ CubeCobra Pool ELO Sync Complete!\n\n${res.message}`);
 
       if (res.errors && res.errors.length > 0) {
-        console.error("Pool sync errors:", res.errors);
+        console.error("CubeCobra pool sync errors:", res.errors);
       }
     } catch (err) {
-      console.error("Unexpected error during pool sync:", err);
+      console.error("Unexpected error during CubeCobra pool sync:", err);
       setError(`Unexpected error: ${err}`);
     } finally {
       setSyncing(false);
@@ -83,20 +82,20 @@ export const CardRatingSync: React.FC = () => {
     setResult(null);
 
     try {
-      const res = await updateDraftPickRatings();
+      const res = await updateDraftPickCubecobraElo();
 
       if (!res.success) {
-        setError(res.message || "Failed to sync draft pick ratings");
+        setError(res.message || "Failed to sync CubeCobra draft pick ELO");
         return;
       }
 
-      setResult(`✅ Draft Pick Sync Complete!\n\n${res.message}`);
+      setResult(`✅ CubeCobra Draft Pick ELO Sync Complete!\n\n${res.message}`);
 
       if (res.errors && res.errors.length > 0) {
-        console.error("Draft pick sync errors:", res.errors);
+        console.error("CubeCobra draft pick sync errors:", res.errors);
       }
     } catch (err) {
-      console.error("Unexpected error during draft pick sync:", err);
+      console.error("Unexpected error during CubeCobra draft pick sync:", err);
       setError(`Unexpected error: ${err}`);
     } finally {
       setSyncing(false);
@@ -109,23 +108,19 @@ export const CardRatingSync: React.FC = () => {
       return;
     }
 
-    setTestResult("Searching...");
+    setTestResult("Searching CubeCobra...");
 
     try {
-      const res = await getCardRating(testCardName.trim());
+      const res = await testCubecobraElo(testCardName.trim());
 
       if (!res.success) {
         setTestResult(`❌ ${res.message}`);
         return;
       }
 
-      if (res.card) {
-        const edhrecInfo = res.card.edhrec_rank
-          ? `EDHREC Rank: ${res.card.edhrec_rank.toLocaleString()}`
-          : "EDHREC Rank: N/A";
-
-        setTestResult(`✅ Found: ${res.card.name}\n${edhrecInfo}\nSet: ${res.card.set_name} (${res.card.set})\nScryfall ID: ${res.card.id}`);
-      }
+      setTestResult(
+        `✅ Found: ${testCardName.trim()}\nCubeCobra ELO: ${res.elo?.toLocaleString()}\nCube: ${res.cubeName}`
+      );
     } catch (err) {
       setTestResult(`Error: ${err}`);
     }
@@ -134,39 +129,39 @@ export const CardRatingSync: React.FC = () => {
   return (
     <div className="admin-section">
       <div className="admin-section-header">
-        <h2 className="admin-section-title">📊 Card Rating Sync</h2>
+        <h2 className="admin-section-title">🎲 CubeCobra ELO Sync</h2>
         <p className="admin-section-description">
-          Sync card power ratings from Scryfall (EDHREC Rank)
+          Sync card ELO ratings from CubeCobra (The Dynasty Cube)
         </p>
       </div>
 
       {/* Info Box */}
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-300 dark:border-blue-700 rounded-lg p-4 mb-6">
-        <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
-          ℹ️ About Card Ratings
+      <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-300 dark:border-purple-700 rounded-lg p-4 mb-6">
+        <h4 className="font-semibold text-purple-900 dark:text-purple-100 mb-2">
+          ℹ️ About CubeCobra ELO
         </h4>
-        <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1 ml-4 list-disc">
+        <ul className="text-sm text-purple-800 dark:text-purple-200 space-y-1 ml-4 list-disc">
           <li>
-            <strong>EDHREC Rank:</strong> Lower numbers = more popular cards
+            <strong>CubeCobra ELO:</strong> Higher numbers = stronger cards
           </li>
-          <li>Based on real deck usage data from EDHREC</li>
-          <li>Syncs data from Scryfall API (rate-limited to 10 req/sec)</li>
-          <li>Updates take ~1 minute per 750 cards</li>
-          <li>Not all cards have ratings (new/obscure cards may be missing)</li>
+          <li>Based on draft pick data from CubeCobra users</li>
+          <li>Fetches from CubeCobra API (entire cube in one request)</li>
+          <li>Only cards currently in the cube will have ELO ratings</li>
+          <li>Cards not in the cube are gracefully skipped</li>
         </ul>
       </div>
 
       {/* Test Single Card */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 mb-6">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-          🔍 Test Single Card
+          🔍 Test CubeCobra ELO Lookup
         </h3>
         <div className="flex gap-3 mb-4">
           <input
             type="text"
             value={testCardName}
             onChange={(e) => setTestCardName(e.target.value)}
-            placeholder="Enter card name (e.g., Lightning Bolt)"
+            placeholder="Enter card name (e.g., Sol Ring)"
             className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
             onKeyDown={(e) => e.key === "Enter" && handleTestCard()}
           />
@@ -192,9 +187,9 @@ export const CardRatingSync: React.FC = () => {
           className="admin-btn admin-btn-primary flex flex-col items-center gap-2 py-6"
         >
           <span className="text-2xl">🎴</span>
-          <span className="font-semibold">Sync Card Pools</span>
+          <span className="font-semibold">Sync Pool ELO</span>
           <span className="text-sm opacity-80">
-            Update ratings for pool cards
+            Update CubeCobra ELO for pool cards
           </span>
         </button>
 
@@ -204,21 +199,21 @@ export const CardRatingSync: React.FC = () => {
           className="admin-btn admin-btn-primary flex flex-col items-center gap-2 py-6"
         >
           <span className="text-2xl">📑</span>
-          <span className="font-semibold">Sync Draft Picks</span>
+          <span className="font-semibold">Sync Draft ELO</span>
           <span className="text-sm opacity-80">
-            Update ratings for drafted cards
+            Update CubeCobra ELO for drafted cards
           </span>
         </button>
 
         <button
           onClick={handleSyncAll}
           disabled={syncing}
-          className="admin-btn admin-btn-primary flex flex-col items-center gap-2 py-6 bg-gradient-to-br from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+          className="admin-btn admin-btn-primary flex flex-col items-center gap-2 py-6 bg-gradient-to-br from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
         >
           <span className="text-2xl">🔄</span>
-          <span className="font-semibold">Sync Everything</span>
+          <span className="font-semibold">Sync All ELO</span>
           <span className="text-sm opacity-80">
-            Update all cards at once
+            Update all CubeCobra ELO at once
           </span>
         </button>
       </div>
@@ -230,11 +225,11 @@ export const CardRatingSync: React.FC = () => {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-600"></div>
             <div>
               <p className="font-semibold text-yellow-900 dark:text-yellow-100">
-                Syncing ratings...
+                Syncing CubeCobra ELO...
               </p>
               <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                This may take a few minutes depending on the number of cards.
-                Please don&apos;t close this page.
+                Fetching cube data and updating ratings. Please don&apos;t close
+                this page.
               </p>
             </div>
           </div>
@@ -256,22 +251,6 @@ export const CardRatingSync: React.FC = () => {
           </pre>
         </div>
       )}
-
-      {/* CubeCobra Info */}
-      <div className="mt-6 p-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-300 dark:border-purple-700 rounded-lg">
-        <h4 className="font-semibold text-purple-900 dark:text-purple-100 mb-2">
-          🎲 Future: CubeCobra ELO
-        </h4>
-        <p className="text-sm text-purple-800 dark:text-purple-200">
-          CubeCobra ELO ratings are not yet available via public API. If
-          CubeCobra releases a public API in the future, we can add that as an
-          additional rating source. The database is already prepared with a{" "}
-          <code className="bg-purple-100 dark:bg-purple-900 px-1 rounded">
-            cubecobra_elo
-          </code>{" "}
-          column.
-        </p>
-      </div>
     </div>
   );
 };

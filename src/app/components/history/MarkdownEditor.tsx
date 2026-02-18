@@ -3,6 +3,7 @@
 
 import React, { useRef, useState } from "react";
 import { HistoryEntryRenderer } from "./HistoryEntryRenderer";
+import { Textarea } from "@/app/components/ui/textarea";
 
 interface MarkdownEditorProps {
   value: string;
@@ -61,7 +62,6 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     let cursorOffset: number;
 
     if (action.block) {
-      // Block-level: ensure we're on a new line
       const needsNewline = before.length > 0 && !before.endsWith("\n");
       const prefix = (needsNewline ? "\n" : "") + action.prefix;
       const text = selected || action.placeholder;
@@ -76,16 +76,13 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     const newValue = before + insertion + after;
     onChange(newValue);
 
-    // Restore cursor position after React re-render
     requestAnimationFrame(() => {
       if (textarea) {
         textarea.focus();
         if (selected) {
-          // If text was selected, place cursor after the insertion
           const pos = start + cursorOffset;
           textarea.setSelectionRange(pos, pos);
         } else {
-          // If no selection, select the placeholder text
           const selectStart = start + (action.block ? ((before.length > 0 && !before.endsWith("\n")) ? 1 : 0) + action.prefix.length : action.prefix.length);
           const selectEnd = selectStart + action.placeholder.length;
           textarea.setSelectionRange(selectStart, selectEnd);
@@ -112,29 +109,36 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     requestAnimationFrame(() => {
       if (textarea) {
         textarea.focus();
-        // Select "url" for easy replacement
-        const urlStart = start + text.length + 3; // [text](
-        const urlEnd = urlStart + 3; // url
+        const urlStart = start + text.length + 3;
+        const urlEnd = urlStart + 3;
         textarea.setSelectionRange(urlStart, urlEnd);
       }
     });
   };
 
   return (
-    <div className="md-editor">
+    <div className="flex flex-col gap-0">
       {/* Mode toggle + toolbar */}
-      <div className="md-editor-header">
-        <div className="history-preview-toggle">
+      <div className="flex flex-col gap-2 mb-2">
+        <div className="flex border border-border rounded-md overflow-hidden">
           <button
             type="button"
-            className={!showPreview ? "active" : ""}
+            className={`flex-1 px-3 py-1.5 text-xs font-semibold transition-colors ${
+              !showPreview
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:text-foreground"
+            }`}
             onClick={() => setShowPreview(false)}
           >
             Write
           </button>
           <button
             type="button"
-            className={showPreview ? "active" : ""}
+            className={`flex-1 px-3 py-1.5 text-xs font-semibold transition-colors ${
+              showPreview
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:text-foreground"
+            }`}
             onClick={() => setShowPreview(true)}
           >
             Preview
@@ -142,12 +146,12 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         </div>
 
         {!showPreview && (
-          <div className="md-editor-toolbar">
+          <div className="flex flex-wrap gap-1 p-1.5 bg-muted border border-border rounded-md">
             {TOOLBAR_ACTIONS.map((action) => (
               <button
                 key={action.title}
                 type="button"
-                className="md-toolbar-btn"
+                className="px-2 py-1 bg-background border border-border rounded text-xs font-bold font-mono text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors min-w-7 text-center"
                 title={action.title}
                 onClick={() => insertMarkdown(action)}
                 disabled={disabled}
@@ -157,7 +161,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             ))}
             <button
               type="button"
-              className="md-toolbar-btn"
+              className="px-2 py-1 bg-background border border-border rounded text-xs font-bold font-mono text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               title={LINK_ACTION.title}
               onClick={insertLink}
               disabled={disabled}
@@ -170,24 +174,24 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
       {/* Content area */}
       {showPreview ? (
-        <div className="history-preview-box" style={{ minHeight }}>
+        <div className="border border-border rounded-md p-3 bg-background" style={{ minHeight }}>
           {value.trim() ? (
             <HistoryEntryRenderer content={value} />
           ) : (
-            <span style={{ color: "#9ca3af", fontStyle: "italic" }}>
+            <span className="text-muted-foreground italic text-sm">
               Nothing to preview
             </span>
           )}
         </div>
       ) : (
-        <textarea
+        <Textarea
           ref={textareaRef}
-          className="history-textarea"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           disabled={disabled}
           style={{ minHeight }}
+          className="resize-y"
         />
       )}
     </div>

@@ -16,9 +16,13 @@ export const HistoryTabBar: React.FC<HistoryTabBarProps> = ({
   onTabChange,
 }) => {
   return (
-    <div className="history-tabs">
+    <div className="flex gap-1 border-b border-border overflow-x-auto mb-6 pb-0">
       <button
-        className={`history-tab ${activeTab === "league" ? "active" : ""}`}
+        className={`px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ${
+          activeTab === "league"
+            ? "text-primary border-primary"
+            : "text-muted-foreground border-transparent hover:text-foreground hover:bg-accent/50"
+        } -mb-px`}
         onClick={() => onTabChange("league")}
       >
         The League
@@ -26,7 +30,11 @@ export const HistoryTabBar: React.FC<HistoryTabBarProps> = ({
       {teams.map((team) => (
         <button
           key={team.id}
-          className={`history-tab ${activeTab === team.id ? "active" : ""}`}
+          className={`px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ${
+            activeTab === team.id
+              ? "text-primary border-primary"
+              : "text-muted-foreground border-transparent hover:text-foreground hover:bg-accent/50"
+          } -mb-px`}
           onClick={() => onTabChange(team.id)}
         >
           {team.emoji} {team.name}
