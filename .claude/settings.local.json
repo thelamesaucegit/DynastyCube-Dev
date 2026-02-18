@@ -20,7 +20,29 @@
       "Bash(cmd.exe /c \"where npm\")",
       "Bash(powershell.exe -Command \"npm --version\")",
       "Bash(powershell.exe -Command:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(git status:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)",
+      "Bash(npm run build:*)",
+      "Bash(cmd.exe /c \"where node\")",
+      "Bash(cmd.exe /c \"npx next build\")",
+      "WebFetch(domain:cubecobra.com)",
+      "Bash(export PATH=\"$HOME/.nvm/versions/node/*/bin:$HOME/.local/bin:/usr/local/bin:$PATH\")",
+      "Bash(\"Z:\\\\home\\\\itstoxicqt\\\\Documents\\\\Projects\\\\DynastyCube-Dev\\\\node_modules\\\\.bin\\\\next\" build --dir \"Z:\\\\home\\\\itstoxicqt\\\\Documents\\\\Projects\\\\DynastyCube-Dev\")",
+      "Bash(\"Z:\\\\home\\\\itstoxicqt\\\\Documents\\\\Projects\\\\DynastyCube-Dev\\\\node_modules\\\\.bin\\\\tsc\" --noEmit --project \"Z:\\\\home\\\\itstoxicqt\\\\Documents\\\\Projects\\\\DynastyCube-Dev\\\\tsconfig.json\")",
+      "Bash(./node_modules/.bin/tsc --noEmit)",
+      "Bash(node:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(npx tsc:*)",
+      "Bash(where:*)",
+      "Bash(where.exe npm)",
+      "Bash(cmd.exe /c \"npm run build\")",
+      "Bash(cmd.exe /c \"npm run build 2>&1\")",
+      "Bash(git add:*)",
+      "Bash(git push:*)",
+      "Bash(gh pr create:*)"
     ]
   }
 }

@@ -8,6 +8,8 @@ import {
   allocateCubucksToAllTeams,
   getActiveSeason,
   getAllTransactions,
+  updateSeasonAllocation,
+  resetTeamBalancesToCap,
   type TeamBalance,
   type Season,
   type CubucksTransaction,
@@ -26,6 +28,11 @@ export const CubucksManagement: React.FC = () => {
   const [allocatingTeamId, setAllocatingTeamId] = useState<string | null>(null);
   const [allocationAmount, setAllocationAmount] = useState("");
   const [bulkAmount, setBulkAmount] = useState("");
+
+  // Cap management state
+  const [editingCap, setEditingCap] = useState(false);
+  const [capAmount, setCapAmount] = useState("");
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -79,16 +86,17 @@ export const CubucksManagement: React.FC = () => {
       return;
     }
 
-    if (!confirm(`Allocate ${amount} Cubucks to ALL ${teams.length} teams?`)) {
+    if (!confirm(`Allocate ${amount} Cubucks to ALL ${teams.length} teams? (Capped at season allocation)`) ) {
       return;
     }
 
     try {
       const result = await allocateCubucksToAllTeams(amount);
       if (result.success) {
+        const skippedNote = result.skippedCount ? ` (${result.skippedCount} teams already at cap)` : "";
         setMessage({
           type: "success",
-          text: `Successfully allocated ${amount} Cubucks to ${result.allocatedCount} teams`,
+          text: `Successfully allocated Cubucks to ${result.allocatedCount} teams${skippedNote}`,
         });
         setBulkAmount("");
         loadData();
@@ -97,6 +105,60 @@ export const CubucksManagement: React.FC = () => {
       }
     } catch (error) {
       setMessage({ type: "error", text: String(error) });
+    }
+  };
+
+  const handleUpdateCap = async () => {
+    const newCap = parseInt(capAmount);
+    if (isNaN(newCap) || newCap < 0) {
+      setMessage({ type: "error", text: "Please enter a valid cap amount" });
+      return;
+    }
+
+    if (!activeSeason) {
+      setMessage({ type: "error", text: "No active season found" });
+      return;
+    }
+
+    try {
+      const result = await updateSeasonAllocation(activeSeason.id, newCap);
+      if (result.success) {
+        setMessage({ type: "success", text: `Season cap updated to ${newCap} Cubucks` });
+        setEditingCap(false);
+        setCapAmount("");
+        loadData();
+      } else {
+        setMessage({ type: "error", text: result.error || "Failed to update cap" });
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: String(error) });
+    }
+  };
+
+  const handleResetToCap = async (resetAll: boolean) => {
+    const cap = activeSeason?.cubucks_allocation ?? 0;
+    const label = resetAll
+      ? `Reset ALL teams to exactly ${cap} Cubucks?`
+      : `Reset teams above ${cap} Cubucks down to ${cap}?`;
+
+    if (!confirm(label)) return;
+
+    setResetting(true);
+    try {
+      const result = await resetTeamBalancesToCap(resetAll);
+      if (result.success) {
+        setMessage({
+          type: "success",
+          text: `Reset ${result.resetCount} team(s) to the cap of ${cap} Cubucks`,
+        });
+        loadData();
+      } else {
+        setMessage({ type: "error", text: result.error || "Failed to reset balances" });
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: String(error) });
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -164,21 +226,71 @@ export const CubucksManagement: React.FC = () => {
         </div>
       )}
 
-      {/* Active Season */}
+      {/* Active Season & Cap Management */}
       {activeSeason && (
         <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-300 dark:border-blue-700 rounded-lg">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-3">
             <div>
               <h3 className="font-semibold text-blue-900 dark:text-blue-100">
                 {activeSeason.season_name}
               </h3>
               <p className="text-sm text-blue-800 dark:text-blue-200">
-                Allocation: {activeSeason.cubucks_allocation} Cubucks per team
+                Season Cap: {activeSeason.cubucks_allocation} Cubucks per team
               </p>
             </div>
             <span className="px-3 py-1 bg-blue-600 text-white rounded-full text-sm font-medium">
               Active
             </span>
+          </div>
+
+          {/* Cap Edit Controls */}
+          <div className="flex flex-wrap gap-2 items-center mt-3 pt-3 border-t border-blue-200 dark:border-blue-600">
+            {editingCap ? (
+              <div className="flex gap-2 items-center">
+                <input
+                  type="number"
+                  value={capAmount}
+                  onChange={(e) => setCapAmount(e.target.value)}
+                  placeholder={String(activeSeason.cubucks_allocation)}
+                  className="w-24 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
+                  autoFocus
+                />
+                <button onClick={handleUpdateCap} className="admin-btn admin-btn-primary text-sm">
+                  Save Cap
+                </button>
+                <button
+                  onClick={() => { setEditingCap(false); setCapAmount(""); }}
+                  className="admin-btn admin-btn-secondary text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setEditingCap(true); setCapAmount(String(activeSeason.cubucks_allocation)); }}
+                className="admin-btn admin-btn-secondary text-sm"
+              >
+                Edit Cap
+              </button>
+            )}
+
+            <button
+              onClick={() => handleResetToCap(false)}
+              disabled={resetting}
+              className="admin-btn admin-btn-secondary text-sm"
+              title="Set any team above the cap back down to the cap"
+            >
+              {resetting ? "Resetting..." : "Cap Overages"}
+            </button>
+
+            <button
+              onClick={() => handleResetToCap(true)}
+              disabled={resetting}
+              className="admin-btn admin-btn-danger text-sm"
+              title="Set ALL teams to exactly the cap value"
+            >
+              {resetting ? "Resetting..." : "Reset All to Cap"}
+            </button>
           </div>
         </div>
       )}
@@ -215,7 +327,8 @@ export const CubucksManagement: React.FC = () => {
           🎁 Bulk Allocation
         </h3>
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-          Give Cubucks to all teams at once (season starts, bonuses, etc.)
+          Give Cubucks to all teams at once (season starts, bonuses, etc.).
+          {activeSeason && ` Allocations are capped at ${activeSeason.cubucks_allocation} Cubucks per team.`}
         </p>
         <div className="flex gap-3">
           <input
@@ -237,10 +350,19 @@ export const CubucksManagement: React.FC = () => {
           Team Balances
         </h3>
         <div className="space-y-3">
-          {teams.map((team) => (
+          {teams.map((team) => {
+            const cap = activeSeason?.cubucks_allocation ?? null;
+            const isOverCap = cap !== null && team.cubucks_balance > cap;
+            const isAtCap = cap !== null && team.cubucks_balance === cap;
+
+            return (
             <div
               key={team.id}
-              className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4"
+              className={`bg-white dark:bg-gray-800 border rounded-lg p-4 ${
+                isOverCap
+                  ? "border-red-400 dark:border-red-600"
+                  : "border-gray-200 dark:border-gray-700"
+              }`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex-1">
@@ -249,12 +371,26 @@ export const CubucksManagement: React.FC = () => {
                     <h4 className="font-semibold text-gray-900 dark:text-gray-100">
                       {team.name}
                     </h4>
+                    {isOverCap && (
+                      <span className="px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-xs rounded-full font-medium">
+                        Over Cap
+                      </span>
+                    )}
+                    {isAtCap && (
+                      <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs rounded-full font-medium">
+                        At Cap
+                      </span>
+                    )}
                   </div>
                   <div className="grid grid-cols-3 gap-4 text-sm">
                     <div>
                       <span className="text-gray-600 dark:text-gray-400">Balance:</span>
-                      <span className="ml-2 font-semibold text-green-600 dark:text-green-400">
-                        {team.cubucks_balance} 💰
+                      <span className={`ml-2 font-semibold ${
+                        isOverCap
+                          ? "text-red-600 dark:text-red-400"
+                          : "text-green-600 dark:text-green-400"
+                      }`}>
+                        {team.cubucks_balance}{cap !== null ? `/${cap}` : ""} 💰
                       </span>
                     </div>
                     <div>
@@ -310,7 +446,8 @@ export const CubucksManagement: React.FC = () => {
                 </div>
               </div>
             </div>
-          ))}
+          );
+          })}
         </div>
       </div>
 
