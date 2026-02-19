@@ -10,6 +10,7 @@ import {
   type DraftOrderEntry,
 } from "@/app/actions/draftOrderActions";
 import { cleanupDraftQueues } from "@/app/actions/autoDraftActions";
+import { advanceDraft } from "@/app/actions/draftSessionActions";
 import type { CardData } from "@/app/actions/cardActions";
 import type { DraftPick } from "@/app/actions/draftActions";
 
@@ -136,6 +137,8 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       setSuccess(`Drafted ${card.card_name} for ${cardCost} Cubucks!`);
       // Remove this card from all teams' draft queues
       await cleanupDraftQueues(card.card_id);
+      // Advance the draft session (reset timer, notify next team)
+      await advanceDraft();
       await loadDraftData(); // Reload to update balance
       onDraftComplete?.();
       setTimeout(() => setSuccess(null), 3000);

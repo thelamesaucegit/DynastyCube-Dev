@@ -19,6 +19,7 @@ import { CountdownTimerManagement } from "../components/admin/CountdownTimerMana
 import { HistoryRequestManagement } from "../components/admin/HistoryRequestManagement";
 import { GlossaryManagement } from "../components/admin/GlossaryManagement";
 import { DraftOrderManagement } from "../components/admin/DraftOrderManagement";
+import { DraftSessionManagement } from "../components/admin/DraftSessionManagement";
 import { EssenceManagement } from "../components/admin/EssenceManagement";
 import { getTeamsWithMembers } from "../actions/teamActions";
 import { getCardPool } from "../actions/cardActions";
@@ -48,9 +49,10 @@ import {
   ArrowRight,
   ListOrdered,
   Sparkles,
+  Play,
 } from "lucide-react";
 
-type TabType = "users" | "teams" | "cards" | "cubucks" | "essence" | "seasons" | "matches" | "draft-order" | "ratings" | "news" | "timers" | "reports" | "votes" | "settings" | "history" | "glossary";
+type TabType = "users" | "teams" | "cards" | "cubucks" | "essence" | "seasons" | "matches" | "draft-order" | "draft-session" | "ratings" | "news" | "timers" | "reports" | "votes" | "settings" | "history" | "glossary";
 
 interface Stats {
   totalUsers: number;
@@ -105,6 +107,7 @@ export default function AdminPage() {
     { id: "seasons", label: "Seasons", icon: <CalendarDays className="size-4" /> },
     { id: "matches", label: "Matches", icon: <Swords className="size-4" /> },
     { id: "draft-order", label: "Draft Order", icon: <ListOrdered className="size-4" /> },
+    { id: "draft-session", label: "Draft Session", icon: <Play className="size-4" /> },
     { id: "ratings", label: "Ratings", icon: <BarChart3 className="size-4" /> },
     { id: "news", label: "News", icon: <Megaphone className="size-4" /> },
     { id: "votes", label: "Voting", icon: <Vote className="size-4" /> },
@@ -159,6 +162,8 @@ export default function AdminPage() {
         );
       case "draft-order":
         return <DraftOrderManagement />;
+      case "draft-session":
+        return <DraftSessionManagement />;
       case "timers":
         return <CountdownTimerManagement />;
       case "reports":

@@ -3,9 +3,14 @@
 
 import React, { useState, useEffect } from "react";
 import { getDraftStatus, type DraftStatus } from "@/app/actions/draftOrderActions";
+import {
+  getActiveDraftSession,
+  checkDraftTimer,
+  type DraftSession,
+} from "@/app/actions/draftSessionActions";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
-import { Clock, ChevronRight } from "lucide-react";
+import { Clock, ChevronRight, Timer, CalendarClock } from "lucide-react";
 
 interface DraftStatusWidgetProps {
   variant: "full" | "compact" | "team";
@@ -14,16 +19,29 @@ interface DraftStatusWidgetProps {
 
 export function DraftStatusWidget({ variant, teamId }: DraftStatusWidgetProps) {
   const [status, setStatus] = useState<DraftStatus | null>(null);
+  const [session, setSession] = useState<DraftSession | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadStatus();
+    // Poll every 60 seconds to catch auto-draft timers and session changes
+    const interval = setInterval(loadStatus, 60000);
+    return () => clearInterval(interval);
   }, []);
 
   const loadStatus = async () => {
     try {
-      const result = await getDraftStatus();
-      setStatus(result.status);
+      const [statusResult, sessionResult] = await Promise.all([
+        getDraftStatus(),
+        getActiveDraftSession(),
+      ]);
+      setStatus(statusResult.status);
+      setSession(sessionResult.session);
+
+      // Check if any timer action needs to happen
+      if (sessionResult.session) {
+        await checkDraftTimer();
+      }
     } catch (error) {
       console.error("Error loading draft status:", error);
     } finally {
@@ -31,18 +49,165 @@ export function DraftStatusWidget({ variant, teamId }: DraftStatusWidgetProps) {
     }
   };
 
-  if (loading || !status) return null;
+  if (loading) return null;
 
-  if (variant === "full") return <FullWidget status={status} />;
-  if (variant === "compact") return <CompactWidget status={status} />;
-  return <TeamWidget status={status} teamId={teamId || ""} />;
+  // No draft order = no widget
+  if (!status) {
+    // Show scheduled session info if one exists
+    if (session && session.status === "scheduled") {
+      return <ScheduledWidget session={session} />;
+    }
+    return null;
+  }
+
+  // If session is completed, show completed state
+  if (session?.status === "completed") {
+    return <CompletedWidget />;
+  }
+
+  if (variant === "full") return <FullWidget status={status} session={session} />;
+  if (variant === "compact") return <CompactWidget status={status} session={session} />;
+  return <TeamWidget status={status} session={session} teamId={teamId || ""} />;
+}
+
+// ============================================================================
+// COUNTDOWN HOOK
+// ============================================================================
+
+function useCountdown(deadline: string | null | undefined): string {
+  const [display, setDisplay] = useState("");
+
+  useEffect(() => {
+    if (!deadline) {
+      setDisplay("");
+      return;
+    }
+
+    const update = () => {
+      const diff = new Date(deadline).getTime() - Date.now();
+      if (diff <= 0) {
+        setDisplay("Auto-drafting...");
+        return;
+      }
+      const h = Math.floor(diff / (1000 * 60 * 60));
+      const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const s = Math.floor((diff % (1000 * 60)) / 1000);
+      setDisplay(`${h}h ${m}m ${s}s`);
+    };
+
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [deadline]);
+
+  return display;
+}
+
+function useStartCountdown(startTime: string | null | undefined): string {
+  const [display, setDisplay] = useState("");
+
+  useEffect(() => {
+    if (!startTime) {
+      setDisplay("");
+      return;
+    }
+
+    const update = () => {
+      const diff = new Date(startTime).getTime() - Date.now();
+      if (diff <= 0) {
+        setDisplay("Starting...");
+        return;
+      }
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      if (days > 0) {
+        setDisplay(`${days}d ${h}h ${m}m`);
+      } else {
+        const s = Math.floor((diff % (1000 * 60)) / 1000);
+        setDisplay(`${h}h ${m}m ${s}s`);
+      }
+    };
+
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [startTime]);
+
+  return display;
+}
+
+// ============================================================================
+// SCHEDULED WIDGET (no draft order yet, but session is scheduled)
+// ============================================================================
+
+function ScheduledWidget({ session }: { session: DraftSession }) {
+  const startCountdown = useStartCountdown(session.start_time);
+
+  return (
+    <section>
+      <Card className="border-2 border-blue-500/30 bg-gradient-to-r from-blue-500/5 via-indigo-500/5 to-purple-500/5">
+        <CardContent className="p-6">
+          <div className="flex items-center gap-2 mb-3">
+            <CalendarClock className="size-5 text-blue-500" />
+            <h2 className="text-lg font-bold">Draft Scheduled</h2>
+          </div>
+          <div className="flex items-center justify-between">
+            <p className="text-muted-foreground">
+              The draft starts on {new Date(session.start_time).toLocaleDateString()} at{" "}
+              {new Date(session.start_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            </p>
+            {startCountdown && (
+              <div className="text-right">
+                <div className="text-xs text-blue-500 uppercase tracking-wide">Starts in</div>
+                <div className="text-xl font-mono font-bold text-blue-600 dark:text-blue-400">
+                  {startCountdown}
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+// ============================================================================
+// COMPLETED WIDGET
+// ============================================================================
+
+function CompletedWidget() {
+  return (
+    <section>
+      <Card className="border border-muted bg-muted/20">
+        <CardContent className="py-3 px-5">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Clock className="size-4" />
+            <span className="font-medium">The draft has been completed.</span>
+          </div>
+        </CardContent>
+      </Card>
+    </section>
+  );
 }
 
 // ============================================================================
 // FULL VARIANT (Homepage)
 // ============================================================================
 
-function FullWidget({ status }: { status: DraftStatus }) {
+function FullWidget({ status, session }: { status: DraftStatus; session: DraftSession | null }) {
+  const pickCountdown = useCountdown(
+    session?.status === "active" ? session.current_pick_deadline : null
+  );
+  const startCountdown = useStartCountdown(
+    session?.status === "scheduled" ? session.start_time : null
+  );
+
+  // Draft is scheduled but not yet active
+  const isScheduled = session?.status === "scheduled";
+  const isActive = session?.status === "active";
+  const isPaused = session?.status === "paused";
+
   return (
     <section>
       <Card className="border-2 border-amber-500/30 bg-gradient-to-r from-amber-500/5 via-orange-500/5 to-red-500/5">
@@ -50,6 +215,16 @@ function FullWidget({ status }: { status: DraftStatus }) {
           <div className="flex items-center gap-2 mb-4">
             <Clock className="size-5 text-amber-500" />
             <h2 className="text-lg font-bold">Draft Status</h2>
+            {isPaused && (
+              <Badge variant="secondary" className="text-xs bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300">
+                Paused
+              </Badge>
+            )}
+            {isScheduled && (
+              <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                Starts {startCountdown || "soon"}
+              </Badge>
+            )}
             <Badge variant="secondary" className="text-xs ml-auto">
               {status.seasonName}
             </Badge>
@@ -64,12 +239,25 @@ function FullWidget({ status }: { status: DraftStatus }) {
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-4xl">{status.onTheClock.teamEmoji}</span>
-                <div>
+                <div className="flex-1">
                   <div className="text-xl font-bold">{status.onTheClock.teamName}</div>
                   <div className="text-sm text-muted-foreground">
                     Pick #{status.onTheClock.pickPosition} &middot; Round {status.currentRound}
+                    {session?.total_rounds ? ` of ${session.total_rounds}` : ""}
                   </div>
                 </div>
+                {/* Countdown timer */}
+                {isActive && pickCountdown && (
+                  <div className="text-right">
+                    <div className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+                      <Timer className="size-3" />
+                      <span>Auto-draft</span>
+                    </div>
+                    <div className="text-lg font-mono font-bold text-amber-600 dark:text-amber-400">
+                      {pickCountdown}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -93,7 +281,10 @@ function FullWidget({ status }: { status: DraftStatus }) {
           {/* Progress */}
           <div className="mb-4">
             <div className="flex justify-between text-sm text-muted-foreground mb-1">
-              <span>Round {status.currentRound} Progress</span>
+              <span>
+                Round {status.currentRound}
+                {session?.total_rounds ? ` of ${session.total_rounds}` : ""} Progress
+              </span>
               <span>{status.totalPicks} total picks</span>
             </div>
             <div className="w-full bg-muted rounded-full h-2">
@@ -144,7 +335,11 @@ function FullWidget({ status }: { status: DraftStatus }) {
 // COMPACT VARIANT (Teams Listing)
 // ============================================================================
 
-function CompactWidget({ status }: { status: DraftStatus }) {
+function CompactWidget({ status, session }: { status: DraftStatus; session: DraftSession | null }) {
+  const pickCountdown = useCountdown(
+    session?.status === "active" ? session.current_pick_deadline : null
+  );
+
   return (
     <Card className="border-amber-500/30 bg-gradient-to-r from-amber-500/5 to-orange-500/5 mb-6">
       <CardContent className="py-3 px-4">
@@ -167,9 +362,18 @@ function CompactWidget({ status }: { status: DraftStatus }) {
             <span className="font-medium">{status.onDeck.teamEmoji} {status.onDeck.teamName}</span>
           </div>
 
-          <Badge variant="outline" className="text-xs ml-auto">
-            Round {status.currentRound}
-          </Badge>
+          <div className="flex items-center gap-2 ml-auto">
+            {pickCountdown && (
+              <Badge variant="outline" className="text-xs font-mono">
+                <Timer className="size-3 mr-1" />
+                {pickCountdown}
+              </Badge>
+            )}
+            <Badge variant="outline" className="text-xs">
+              Round {status.currentRound}
+              {session?.total_rounds ? `/${session.total_rounds}` : ""}
+            </Badge>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -180,10 +384,14 @@ function CompactWidget({ status }: { status: DraftStatus }) {
 // TEAM VARIANT (Team Detail Page)
 // ============================================================================
 
-function TeamWidget({ status, teamId }: { status: DraftStatus; teamId: string }) {
+function TeamWidget({ status, session, teamId }: { status: DraftStatus; session: DraftSession | null; teamId: string }) {
   const isOnClock = status.onTheClock.teamId === teamId;
   const isOnDeck = status.onDeck.teamId === teamId;
   const teamEntry = status.draftOrder.find((t) => t.teamId === teamId);
+
+  const pickCountdown = useCountdown(
+    session?.status === "active" ? session.current_pick_deadline : null
+  );
 
   if (!teamEntry) return null;
 
@@ -214,11 +422,23 @@ function TeamWidget({ status, teamId }: { status: DraftStatus; teamId: string })
             )}
           </div>
 
+          {/* Countdown for on-clock team */}
+          {isOnClock && pickCountdown && (
+            <div className="flex items-center gap-1.5 text-sm">
+              <Timer className="size-3.5 text-amber-500" />
+              <span className="font-mono font-bold text-amber-600 dark:text-amber-400">{pickCountdown}</span>
+              <span className="text-xs text-muted-foreground">until auto-draft</span>
+            </div>
+          )}
+
           {/* Stats */}
           <div className="flex items-center gap-3 text-sm text-muted-foreground ml-auto">
             <span>Pick #{teamEntry.pickPosition}</span>
             <span className="text-muted-foreground/40">|</span>
-            <span>Round {status.currentRound}</span>
+            <span>
+              Round {status.currentRound}
+              {session?.total_rounds ? ` of ${session.total_rounds}` : ""}
+            </span>
             <span className="text-muted-foreground/40">|</span>
             <span>{teamEntry.picksMade} picks made</span>
           </div>
@@ -228,6 +448,9 @@ function TeamWidget({ status, teamId }: { status: DraftStatus; teamId: string })
             <div className="w-full flex items-center gap-2 text-sm pt-1 border-t border-border/50 mt-1">
               <span className="text-muted-foreground">On the clock:</span>
               <span className="font-medium">{status.onTheClock.teamEmoji} {status.onTheClock.teamName}</span>
+              {pickCountdown && (
+                <span className="text-xs text-muted-foreground font-mono">({pickCountdown})</span>
+              )}
               {!isOnDeck && (
                 <>
                   <ChevronRight className="size-3 text-muted-foreground" />

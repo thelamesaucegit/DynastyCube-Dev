@@ -19,6 +19,12 @@ import {
   Clock,
   ExternalLink,
   Eye,
+  Flag,
+  Timer,
+  Megaphone,
+  Trophy,
+  AlertTriangle,
+  CalendarDays,
 } from "lucide-react";
 
 interface Notification {
@@ -99,6 +105,18 @@ export default function NotificationsPage() {
         return <MessageSquare className="h-6 w-6 text-blue-500" />;
       case "trade_expired":
         return <Clock className="h-6 w-6 text-yellow-500" />;
+      case "report_submitted":
+        return <AlertTriangle className="h-6 w-6 text-orange-500" />;
+      case "season_phase_change":
+        return <CalendarDays className="h-6 w-6 text-purple-500" />;
+      case "draft_started":
+        return <Flag className="h-6 w-6 text-green-500" />;
+      case "draft_on_clock":
+        return <Timer className="h-6 w-6 text-red-500" />;
+      case "draft_on_deck":
+        return <Megaphone className="h-6 w-6 text-amber-500" />;
+      case "draft_completed":
+        return <Trophy className="h-6 w-6 text-yellow-500" />;
       default:
         return <Bell className="h-6 w-6 text-muted-foreground" />;
     }
@@ -116,6 +134,18 @@ export default function NotificationsPage() {
         return "Trade Message";
       case "trade_expired":
         return "Trade Expired";
+      case "report_submitted":
+        return "Report Submitted";
+      case "season_phase_change":
+        return "Season Update";
+      case "draft_started":
+        return "Draft Started";
+      case "draft_on_clock":
+        return "On the Clock";
+      case "draft_on_deck":
+        return "On Deck";
+      case "draft_completed":
+        return "Draft Completed";
       default:
         return "Notification";
     }

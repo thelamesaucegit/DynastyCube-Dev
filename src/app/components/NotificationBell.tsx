@@ -163,6 +163,14 @@ export const NotificationBell: React.FC = () => {
         return "💬";
       case "season_phase_change":
         return "📅";
+      case "draft_started":
+        return "🏁";
+      case "draft_on_clock":
+        return "⏱️";
+      case "draft_on_deck":
+        return "📣";
+      case "draft_completed":
+        return "🏆";
       default:
         return "🔔";
     }
