@@ -46,6 +46,8 @@ export interface CardData {
   pool_name?: string;
   cubucks_cost?: number;
   created_at?: string;
+  cubecobra_elo?: number;
+  rating_updated_at?: string;
 }
 
 /**
@@ -232,6 +234,160 @@ export async function addCardsToPool(
 }
 
 /**
+ * Bulk import cards by name with cubucks cost.
+ * Each line can be "Card Name" or "Card Name, cost" to override the default cost.
+ * Looks up each card via Scryfall fuzzy search.
+ */
+export async function bulkImportCards(
+  lines: string[],
+  defaultCubucksCost: number = 1,
+  poolName: string = "default"
+): Promise<{
+  success: boolean;
+  added: number;
+  skipped: number;
+  failed: string[];
+  error?: string;
+}> {
+  const supabase = await createClient();
+
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    // Get existing cards in pool to check for duplicates
+    const { data: existingCards } = await supabase
+      .from("card_pools")
+      .select("card_id")
+      .eq("pool_name", poolName);
+
+    const existingCardIds = new Set(
+      (existingCards || []).map((c) => c.card_id)
+    );
+
+    const failed: string[] = [];
+    const cardsToInsert: Array<{
+      card_id: string;
+      card_name: string;
+      card_set?: string;
+      card_type?: string;
+      rarity?: string;
+      colors: string[];
+      image_url?: string;
+      mana_cost?: string;
+      cmc: number;
+      cubucks_cost: number;
+      pool_name: string;
+      created_by: string | null;
+    }> = [];
+    let skipped = 0;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      // Parse line: "Card Name" or "Card Name, cost"
+      let cardName = trimmed;
+      let cubucksCost = defaultCubucksCost;
+
+      const lastCommaIndex = trimmed.lastIndexOf(",");
+      if (lastCommaIndex !== -1) {
+        const possibleCost = trimmed.substring(lastCommaIndex + 1).trim();
+        const parsedCost = parseInt(possibleCost);
+        if (!isNaN(parsedCost) && parsedCost >= 0) {
+          cardName = trimmed.substring(0, lastCommaIndex).trim();
+          cubucksCost = parsedCost;
+        }
+      }
+
+      if (!cardName) continue;
+
+      // Look up card via Scryfall fuzzy search
+      try {
+        const response = await fetch(
+          `https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(cardName)}`
+        );
+
+        if (!response.ok) {
+          failed.push(cardName);
+          // Respect Scryfall rate limit
+          await new Promise((r) => setTimeout(r, 75));
+          continue;
+        }
+
+        const card = await response.json();
+
+        // Skip if already in pool
+        if (existingCardIds.has(card.id)) {
+          skipped++;
+          await new Promise((r) => setTimeout(r, 75));
+          continue;
+        }
+
+        // Mark as existing to avoid duplicates within the same import
+        existingCardIds.add(card.id);
+
+        cardsToInsert.push({
+          card_id: card.id,
+          card_name: card.name,
+          card_set: card.set_name,
+          card_type: card.type_line,
+          rarity: card.rarity,
+          colors: card.colors || [],
+          image_url: card.image_uris?.normal || card.image_uris?.small || null,
+          mana_cost: card.mana_cost,
+          cmc: card.cmc || 0,
+          cubucks_cost: cubucksCost,
+          pool_name: poolName,
+          created_by: user?.id || null,
+        });
+
+        // Respect Scryfall rate limit (50-100ms between requests)
+        await new Promise((r) => setTimeout(r, 75));
+      } catch {
+        failed.push(cardName);
+        await new Promise((r) => setTimeout(r, 75));
+      }
+    }
+
+    // Batch insert all found cards
+    if (cardsToInsert.length > 0) {
+      const { error: insertError } = await supabase
+        .from("card_pools")
+        .insert(cardsToInsert);
+
+      if (insertError) {
+        console.error("Error bulk inserting cards:", insertError);
+        return {
+          success: false,
+          added: 0,
+          skipped,
+          failed: failed,
+          error: insertError.message,
+        };
+      }
+    }
+
+    return {
+      success: true,
+      added: cardsToInsert.length,
+      skipped,
+      failed,
+    };
+  } catch (error) {
+    console.error("Unexpected error in bulk import:", error);
+    return {
+      success: false,
+      added: 0,
+      skipped: 0,
+      failed: [],
+      error: String(error),
+    };
+  }
+}
+
+/**
  * Remove a card from the pool
  */
 export async function removeCardFromPool(
@@ -282,6 +438,98 @@ export async function clearCardPool(
   } catch (error) {
     console.error("Unexpected error clearing pool:", error);
     return { success: false, error: "An unexpected error occurred" };
+  }
+}
+
+/**
+ * Remove cards from pool by filter: all, undrafted only, or drafted only
+ */
+export async function removeFilteredCards(
+  filter: "all" | "undrafted" | "drafted",
+  poolName: string = "default"
+): Promise<{ success: boolean; removedCount?: number; error?: string }> {
+  const supabase = await createClient();
+
+  try {
+    if (filter === "all") {
+      // Count before deleting
+      const { count } = await supabase
+        .from("card_pools")
+        .select("*", { count: "exact", head: true })
+        .eq("pool_name", poolName);
+
+      const { error } = await supabase
+        .from("card_pools")
+        .delete()
+        .eq("pool_name", poolName);
+
+      if (error) {
+        console.error("Error clearing card pool:", error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true, removedCount: count || 0 };
+    }
+
+    // Get all cards in the pool
+    const { data: poolCards, error: poolError } = await supabase
+      .from("card_pools")
+      .select("id, card_id")
+      .eq("pool_name", poolName);
+
+    if (poolError) {
+      return { success: false, error: poolError.message };
+    }
+
+    if (!poolCards || poolCards.length === 0) {
+      return { success: true, removedCount: 0 };
+    }
+
+    // Get all drafted card_ids
+    const { data: draftPicks, error: draftError } = await supabase
+      .from("team_draft_picks")
+      .select("card_id");
+
+    if (draftError) {
+      return { success: false, error: draftError.message };
+    }
+
+    const draftedCardIds = new Set(
+      (draftPicks || []).map((p) => p.card_id)
+    );
+
+    // Determine which pool card IDs to delete based on filter
+    let idsToDelete: string[];
+
+    if (filter === "undrafted") {
+      idsToDelete = poolCards
+        .filter((c) => !draftedCardIds.has(c.card_id))
+        .map((c) => c.id);
+    } else {
+      // drafted
+      idsToDelete = poolCards
+        .filter((c) => draftedCardIds.has(c.card_id))
+        .map((c) => c.id);
+    }
+
+    if (idsToDelete.length === 0) {
+      return { success: true, removedCount: 0 };
+    }
+
+    const { error: deleteError } = await supabase
+      .from("card_pools")
+      .delete()
+      .in("id", idsToDelete);
+
+    if (deleteError) {
+      console.error("Error removing filtered cards:", deleteError);
+      return { success: false, error: deleteError.message };
+    }
+
+    return { success: true, removedCount: idsToDelete.length };
+  } catch (error) {
+    console.error("Unexpected error removing filtered cards:", error);
+    return { success: false, error: String(error) };
   }
 }
 

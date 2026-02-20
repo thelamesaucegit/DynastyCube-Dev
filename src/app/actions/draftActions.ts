@@ -44,6 +44,8 @@ export interface DraftPick {
   cmc?: number;
   drafted_at?: string;
   pick_number?: number;
+  cubecobra_elo?: number;
+  rating_updated_at?: string;
 }
 
 export interface Deck {

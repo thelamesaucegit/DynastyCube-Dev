@@ -275,7 +275,7 @@ export async function getTeamBalance(
 // ============================================
 
 /**
- * Allocate Cubucks to a team
+ * Allocate Cubucks to a team (respects season cap)
  */
 export async function allocateCubucks(
   teamId: string,
@@ -291,6 +291,41 @@ export async function allocateCubucks(
     } = await supabase.auth.getUser();
     if (!user) {
       return { success: false, error: "Not authenticated" };
+    }
+
+    // Get active season cap
+    const { data: activeSeason } = await supabase
+      .from("seasons")
+      .select("cubucks_allocation")
+      .eq("is_active", true)
+      .single();
+
+    const cap = activeSeason?.cubucks_allocation ?? null;
+
+    // Get current team balance to check cap
+    if (cap !== null) {
+      const { data: team } = await supabase
+        .from("teams")
+        .select("cubucks_balance")
+        .eq("id", teamId)
+        .single();
+
+      if (team) {
+        const newBalance = team.cubucks_balance + amount;
+        if (newBalance > cap) {
+          const maxAllowable = cap - team.cubucks_balance;
+          if (maxAllowable <= 0) {
+            return {
+              success: false,
+              error: `Team is already at or above the season cap of ${cap} Cubucks (current balance: ${team.cubucks_balance})`,
+            };
+          }
+          return {
+            success: false,
+            error: `Allocation would exceed the season cap of ${cap} Cubucks. Current balance: ${team.cubucks_balance}, max you can add: ${maxAllowable}`,
+          };
+        }
+      }
     }
 
     // Call the stored procedure
@@ -315,11 +350,11 @@ export async function allocateCubucks(
 }
 
 /**
- * Allocate Cubucks to all teams (season start)
+ * Allocate Cubucks to all teams (season start) — respects season cap
  */
 export async function allocateCubucksToAllTeams(
   amount: number
-): Promise<{ success: boolean; allocatedCount?: number; error?: string }> {
+): Promise<{ success: boolean; allocatedCount?: number; skippedCount?: number; error?: string }> {
   try {
     const supabase = await createServerClient();
 
@@ -331,21 +366,42 @@ export async function allocateCubucksToAllTeams(
       return { success: false, error: "Not authenticated" };
     }
 
-    // Get all teams
+    // Get active season cap
+    const { data: activeSeason } = await supabase
+      .from("seasons")
+      .select("cubucks_allocation")
+      .eq("is_active", true)
+      .single();
+
+    const cap = activeSeason?.cubucks_allocation ?? null;
+
+    // Get all teams with current balance
     const { data: teams, error: teamsError } = await supabase
       .from("teams")
-      .select("id, name");
+      .select("id, name, cubucks_balance");
 
     if (teamsError) {
       return { success: false, error: teamsError.message };
     }
 
-    // Allocate to each team
+    // Allocate to each team (clamped to cap)
     let allocatedCount = 0;
+    let skippedCount = 0;
     for (const team of teams || []) {
+      // Calculate how much we can actually give this team
+      let effectiveAmount = amount;
+      if (cap !== null) {
+        const headroom = cap - team.cubucks_balance;
+        if (headroom <= 0) {
+          skippedCount++;
+          continue; // Already at or above cap
+        }
+        effectiveAmount = Math.min(amount, headroom);
+      }
+
       const { error } = await supabase.rpc("allocate_cubucks_to_team", {
         p_team_id: team.id,
-        p_amount: amount,
+        p_amount: effectiveAmount,
         p_season_id: null,
         p_description: "Season allocation",
         p_created_by: user.id,
@@ -358,7 +414,7 @@ export async function allocateCubucksToAllTeams(
       }
     }
 
-    return { success: true, allocatedCount };
+    return { success: true, allocatedCount, skippedCount };
   } catch (error) {
     console.error("Unexpected error allocating Cubucks to all teams:", error);
     return { success: false, error: String(error) };
@@ -680,6 +736,136 @@ export async function spendCubucksOnDraft(
     return { success: true };
   } catch (error) {
     console.error("Unexpected error spending Cubucks:", error);
+    return { success: false, error: String(error) };
+  }
+}
+
+// ============================================
+// SEASON ALLOCATION & CAP MANAGEMENT
+// ============================================
+
+/**
+ * Update the cubucks_allocation for a season
+ */
+export async function updateSeasonAllocation(
+  seasonId: string,
+  newAllocation: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createServerClient();
+
+    // Check authentication
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return { success: false, error: "Not authenticated" };
+    }
+
+    if (newAllocation < 0) {
+      return { success: false, error: "Allocation must be a positive number" };
+    }
+
+    const { error } = await supabase
+      .from("seasons")
+      .update({ cubucks_allocation: newAllocation, updated_at: new Date().toISOString() })
+      .eq("id", seasonId);
+
+    if (error) {
+      console.error("Error updating season allocation:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Unexpected error updating season allocation:", error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Reset all team cubucks balances to the season cap.
+ * Any team above the cap gets set to the cap.
+ * Any team below the cap stays unchanged (they spent cubucks legitimately).
+ * Pass resetAll=true to set ALL teams to exactly the cap value.
+ */
+export async function resetTeamBalancesToCap(
+  resetAll: boolean = false
+): Promise<{ success: boolean; resetCount?: number; error?: string }> {
+  try {
+    const supabase = await createServerClient();
+
+    // Check authentication
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return { success: false, error: "Not authenticated" };
+    }
+
+    // Get active season cap
+    const { data: activeSeason } = await supabase
+      .from("seasons")
+      .select("id, cubucks_allocation")
+      .eq("is_active", true)
+      .single();
+
+    if (!activeSeason) {
+      return { success: false, error: "No active season found" };
+    }
+
+    const cap = activeSeason.cubucks_allocation;
+
+    // Get all teams
+    const { data: teams, error: teamsError } = await supabase
+      .from("teams")
+      .select("id, name, cubucks_balance, cubucks_total_earned, cubucks_total_spent");
+
+    if (teamsError || !teams) {
+      return { success: false, error: teamsError?.message || "Failed to fetch teams" };
+    }
+
+    let resetCount = 0;
+    for (const team of teams) {
+      const shouldReset = resetAll || team.cubucks_balance > cap;
+      if (!shouldReset) continue;
+
+      const oldBalance = team.cubucks_balance;
+      const newBalance = cap;
+      const adjustment = newBalance - oldBalance;
+
+      // Update the team's balance
+      const { error: updateError } = await supabase
+        .from("teams")
+        .update({
+          cubucks_balance: newBalance,
+          // Also reset total_earned to match so the math stays consistent
+          cubucks_total_earned: newBalance + team.cubucks_total_spent,
+        })
+        .eq("id", team.id);
+
+      if (updateError) {
+        console.error(`Error resetting team ${team.name}:`, updateError);
+        continue;
+      }
+
+      // Log the adjustment as a transaction
+      await supabase.from("cubucks_transactions").insert({
+        team_id: team.id,
+        season_id: activeSeason.id,
+        transaction_type: "adjustment",
+        amount: adjustment,
+        balance_after: newBalance,
+        description: `Balance reset to season cap (${cap}). Was ${oldBalance}.`,
+        created_by: user.id,
+      });
+
+      resetCount++;
+    }
+
+    return { success: true, resetCount };
+  } catch (error) {
+    console.error("Unexpected error resetting team balances:", error);
     return { success: false, error: String(error) };
   }
 }

@@ -764,6 +764,28 @@ CREATE INDEX IF NOT EXISTS idx_admin_news_created_at ON public.admin_news(create
 
 COMMENT ON TABLE public.admin_news IS 'Admin news posts for the home page';
 
+-- -------------------------------------------------------------------------------------------------
+-- 10.2 COUNTDOWN TIMERS TABLE
+-- Store countdown timers displayed on the home page
+-- -------------------------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.countdown_timers (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  title text NOT NULL,
+  end_time timestamp with time zone NOT NULL,
+  link_url text NOT NULL,
+  link_text text NOT NULL,
+  is_active boolean DEFAULT false,
+  created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_countdown_timers_is_active ON public.countdown_timers(is_active);
+CREATE INDEX IF NOT EXISTS idx_countdown_timers_end_time ON public.countdown_timers(end_time);
+CREATE INDEX IF NOT EXISTS idx_countdown_timers_created_at ON public.countdown_timers(created_at DESC);
+
+COMMENT ON TABLE public.countdown_timers IS 'Countdown timers for the home page with link reveal on expiry';
+
 -- =================================================================================================
 -- SECTION 11: HELPER FUNCTIONS
 -- =================================================================================================
@@ -1275,6 +1297,11 @@ CREATE TRIGGER on_match_updated
 DROP TRIGGER IF EXISTS on_admin_news_updated ON public.admin_news;
 CREATE TRIGGER on_admin_news_updated
   BEFORE UPDATE ON public.admin_news
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+DROP TRIGGER IF EXISTS on_countdown_timers_updated ON public.countdown_timers;
+CREATE TRIGGER on_countdown_timers_updated
+  BEFORE UPDATE ON public.countdown_timers
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
 -- -------------------------------------------------------------------------------------------------
@@ -2093,6 +2120,21 @@ CREATE POLICY "Published news is viewable by everyone"
 DROP POLICY IF EXISTS "Admins can manage news" ON public.admin_news;
 CREATE POLICY "Admins can manage news"
   ON public.admin_news FOR ALL
+  USING (public.is_admin());
+
+-- -------------------------------------------------------------------------------------------------
+-- 14.29 COUNTDOWN TIMERS TABLE POLICIES
+-- -------------------------------------------------------------------------------------------------
+ALTER TABLE public.countdown_timers ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Active timers are viewable by everyone" ON public.countdown_timers;
+CREATE POLICY "Active timers are viewable by everyone"
+  ON public.countdown_timers FOR SELECT
+  USING (is_active = true OR public.is_admin());
+
+DROP POLICY IF EXISTS "Admins can manage countdown timers" ON public.countdown_timers;
+CREATE POLICY "Admins can manage countdown timers"
+  ON public.countdown_timers FOR ALL
   USING (public.is_admin());
 
 -- =================================================================================================

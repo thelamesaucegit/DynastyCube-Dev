@@ -44,6 +44,8 @@ export interface PoolCard {
   cubucks_cost?: number;
   pool_name: string;
   created_at: string;
+  cubecobra_elo?: number;
+  rating_updated_at?: string;
   // Draft status
   is_drafted: boolean;
   drafted_by_team?: {
@@ -121,6 +123,8 @@ export async function getPoolCardsWithStatus(
         cubucks_cost: card.cubucks_cost,
         pool_name: card.pool_name,
         created_at: card.created_at,
+        cubecobra_elo: card.cubecobra_elo,
+        rating_updated_at: card.rating_updated_at,
         is_drafted: !!draftInfo,
         drafted_by_team: draftInfo?.team,
         drafted_at: draftInfo?.drafted_at,

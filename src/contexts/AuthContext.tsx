@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import type { User, Session, AuthError } from "@supabase/supabase-js";
+import type { User, Session, AuthError, AuthChangeEvent } from "@supabase/supabase-js";
 import { getSupabaseClient } from "@/lib/supabase-browser";
 
 interface AuthContextType {
@@ -37,7 +37,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
@@ -47,12 +47,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [supabase]);
 
   const signInWithDiscord = async (): Promise<{ error: AuthError | null }> => {
-    const { error } = await supabase.auth.signInWithOAuth({
+    console.log("[Auth] Starting Discord login...");
+    console.log("[Auth] Redirect URL:", `${window.location.origin}/auth/callback`);
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "discord",
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
+        skipBrowserRedirect: false,
       },
     });
+
+    console.log("[Auth] signInWithOAuth result:", { data, error });
+
     return { error };
   };
 

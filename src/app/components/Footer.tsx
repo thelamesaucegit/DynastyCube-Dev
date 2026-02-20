@@ -2,79 +2,106 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 
 export default function Footer() {
   return (
-    <footer className="bg-gray-100 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 mt-auto">
-      <div className="container mx-auto px-4 py-6">
-        <div className="flex flex-col items-center gap-4">
-          {/* Acknowledgements */}
-          <div className="text-center text-sm text-gray-600 dark:text-gray-400">
-            <p className="mb-2">
-              <strong>Acknowledgements</strong>
+    <footer className="border-t py-8 mt-16">
+      <div className="container max-w-7xl mx-auto px-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+          <div className="md:col-span-2">
+            <h3 className="font-bold text-lg mb-2">Dynasty Cube</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              A collaborative, living draft league where the multiverse itself shapes destiny.
             </p>
-            <p className="mb-1">
-              Magic: The Gathering and all associated card names, mana symbols, and images are property of{" "}
-              <a
-                href="https://company.wizards.com/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 dark:text-blue-400 hover:underline"
-              >
-                Wizards of the Coast LLC
-              </a>
-              .
+            <p className="text-xs text-muted-foreground">
+              Not affiliated with Wizards of the Coast. Magic: The Gathering is a trademark of Wizards of the Coast LLC.
             </p>
-            <p className="mb-1">
-              Card data and images provided by{" "}
+            <p className="text-xs text-muted-foreground mt-1">
+              Card data provided by{" "}
               <a
                 href="https://scryfall.com/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-600 dark:text-blue-400 hover:underline"
+                className="hover:text-foreground transition-colors underline"
               >
                 Scryfall
               </a>
-              .
-            </p>
-            <p className="mb-1">
-              Additional card data is sourced from{" "}
+              . Cube data from{" "}
               <a
                 href="https://cubecobra.com/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-600 dark:text-blue-400 hover:underline"
+                className="hover:text-foreground transition-colors underline"
               >
                 Cube Cobra
               </a>
               .
             </p>
-            <p>
-              Inspired by{" "}
-              <a
-                href="https://en.wikipedia.org/wiki/Blaseball"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 dark:text-blue-400 hover:underline"
-              >
-                Blaseball
-              </a>
-              .
-            </p>
           </div>
-
-          {/* Disclaimer */}
-          <div className="text-center text-xs text-gray-500 dark:text-gray-500 max-w-2xl">
-            <p>
-              This website is not affiliated with, endorsed, sponsored, or specifically approved by Wizards of the Coast LLC.
-              Dynasty Cube is a fan-made project and is not intended for commercial use.
-            </p>
+          <div>
+            <h4 className="font-semibold mb-3">Quick Links</h4>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>
+                <Link href="/pools" className="hover:text-foreground transition-colors">
+                  Browse Cube
+                </Link>
+              </li>
+              <li>
+                <Link href="/schedule" className="hover:text-foreground transition-colors">
+                  Match Schedule
+                </Link>
+              </li>
+              <li>
+                <Link href="/teams" className="hover:text-foreground transition-colors">
+                  Teams
+                </Link>
+              </li>
+              <li>
+                <Link href="/history" className="hover:text-foreground transition-colors">
+                  League History
+                </Link>
+              </li>
+            </ul>
           </div>
-
-          {/* Copyright */}
-          <div className="text-center text-xs text-gray-500 dark:text-gray-500">
-            <p>&copy; {new Date().getFullYear()} Dynasty Cube. All rights reserved.</p>
+          <div>
+            <h4 className="font-semibold mb-3">Community</h4>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>
+                <a
+                  href="https://discord.gg/8qyEHDeJqg"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-foreground transition-colors"
+                >
+                  Discord Server
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://cubecobra.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-foreground transition-colors"
+                >
+                  Cube Cobra
+                </a>
+              </li>
+              <li>
+                <Link href="/glossary" className="hover:text-foreground transition-colors">
+                  Glossary & FAQ
+                </Link>
+              </li>
+              <li>
+                <Link href="/vote" className="hover:text-foreground transition-colors">
+                  Community Votes
+                </Link>
+              </li>
+            </ul>
           </div>
+        </div>
+        <div className="mt-8 pt-8 border-t text-center text-sm text-muted-foreground">
+          <p>&copy; {new Date().getFullYear()} Dynasty Cube League. Inspired by Blaseball and powered by the community.</p>
         </div>
       </div>
     </footer>

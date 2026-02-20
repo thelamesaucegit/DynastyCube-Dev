@@ -4,7 +4,7 @@
 import React from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
-import { DiscordLogin } from "../auth/DiscordLogin";
+import DiscordLogin from "../auth/DiscordLogin";
 
 interface AdminRouteProps {
   children: React.ReactNode;

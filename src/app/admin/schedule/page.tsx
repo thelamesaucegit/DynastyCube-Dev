@@ -2,7 +2,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Layout from "@/components/Layout";
 import { ProtectedRoute } from "@/app/components/auth/ProtectedRoute";
 import { useAuth } from "@/contexts/AuthContext";
 import { checkIsAdmin } from "@/utils/adminUtils";
@@ -10,11 +9,13 @@ import { WeekCreator } from "@/app/components/admin/WeekCreator";
 import { MatchScheduler } from "@/app/components/admin/MatchScheduler";
 import { ScheduleOverview } from "@/app/components/admin/ScheduleOverview";
 import { getCurrentSeason } from "@/app/actions/seasonActions";
+import { Card, CardContent } from "@/app/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
+import { Loader2, ShieldAlert, AlertTriangle, CalendarDays, Plus, Gamepad2 } from "lucide-react";
 
 export default function AdminSchedulePage() {
   const { user } = useAuth();
   const [currentSeasonId, setCurrentSeasonId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"overview" | "create-week" | "schedule-matches">("overview");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -37,113 +38,88 @@ export default function AdminSchedulePage() {
 
   if (!user || !checkIsAdmin(user)) {
     return (
-      <Layout>
-        <div className="py-8">
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg p-6 text-center">
-            <h2 className="text-2xl font-bold text-red-900 dark:text-red-100 mb-2">
-              Access Denied
-            </h2>
-            <p className="text-red-800 dark:text-red-200">
+      <div className="container max-w-7xl mx-auto px-4 py-8">
+        <Card className="border-destructive">
+          <CardContent className="pt-6 text-center">
+            <ShieldAlert className="h-10 w-10 text-destructive mx-auto mb-3" />
+            <h2 className="text-2xl font-bold mb-2">Access Denied</h2>
+            <p className="text-muted-foreground">
               You must be an administrator to access this page.
             </p>
-          </div>
-        </div>
-      </Layout>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   if (loading) {
     return (
-      <Layout>
-        <div className="py-8 text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Loading schedule management...</p>
+      <div className="container max-w-7xl mx-auto px-4 py-8">
+        <div className="flex flex-col items-center justify-center py-20">
+          <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
+          <p className="text-muted-foreground">Loading schedule management...</p>
         </div>
-      </Layout>
+      </div>
     );
   }
 
   if (!currentSeasonId) {
     return (
-      <Layout>
-        <div className="py-8">
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg p-6 text-center">
-            <h2 className="text-2xl font-bold text-yellow-900 dark:text-yellow-100 mb-2">
-              No Active Season
-            </h2>
-            <p className="text-yellow-800 dark:text-yellow-200">
+      <div className="container max-w-7xl mx-auto px-4 py-8">
+        <Card className="border-yellow-500/50">
+          <CardContent className="pt-6 text-center">
+            <AlertTriangle className="h-10 w-10 text-yellow-500 mx-auto mb-3" />
+            <h2 className="text-2xl font-bold mb-2">No Active Season</h2>
+            <p className="text-muted-foreground">
               Please create a season first before managing the schedule.
             </p>
-          </div>
-        </div>
-      </Layout>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   return (
-    <Layout>
-      <ProtectedRoute>
-        <div className="py-8">
-          {/* Header */}
-          <div className="mb-6">
-            <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-              🗓️ Schedule Management
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Create weekly schedules, schedule matches, and manage deadlines
-            </p>
-          </div>
-
-          {/* Tab Navigation */}
-          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg mb-6">
-            <div className="flex border-b border-gray-200 dark:border-gray-700">
-              <button
-                onClick={() => setActiveTab("overview")}
-                className={`flex-1 px-6 py-3 text-sm font-medium transition-colors ${
-                  activeTab === "overview"
-                    ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-b-2 border-blue-600"
-                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
-                }`}
-              >
-                📋 Schedule Overview
-              </button>
-              <button
-                onClick={() => setActiveTab("create-week")}
-                className={`flex-1 px-6 py-3 text-sm font-medium transition-colors ${
-                  activeTab === "create-week"
-                    ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-b-2 border-blue-600"
-                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
-                }`}
-              >
-                ➕ Create Week
-              </button>
-              <button
-                onClick={() => setActiveTab("schedule-matches")}
-                className={`flex-1 px-6 py-3 text-sm font-medium transition-colors ${
-                  activeTab === "schedule-matches"
-                    ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-b-2 border-blue-600"
-                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
-                }`}
-              >
-                🎮 Schedule Matches
-              </button>
-            </div>
-
-            {/* Tab Content */}
-            <div className="p-6">
-              {activeTab === "overview" && (
-                <ScheduleOverview seasonId={currentSeasonId} />
-              )}
-              {activeTab === "create-week" && (
-                <WeekCreator seasonId={currentSeasonId} />
-              )}
-              {activeTab === "schedule-matches" && (
-                <MatchScheduler seasonId={currentSeasonId} />
-              )}
-            </div>
-          </div>
+    <ProtectedRoute>
+      <div className="container max-w-7xl mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold tracking-tight mb-2">
+            Schedule Management
+          </h1>
+          <p className="text-lg text-muted-foreground">
+            Create weekly schedules, schedule matches, and manage deadlines
+          </p>
         </div>
-      </ProtectedRoute>
-    </Layout>
+
+        {/* Tabs */}
+        <Tabs defaultValue="overview">
+          <TabsList className="mb-6">
+            <TabsTrigger value="overview" className="gap-2">
+              <CalendarDays className="h-4 w-4" />
+              Schedule Overview
+            </TabsTrigger>
+            <TabsTrigger value="create-week" className="gap-2">
+              <Plus className="h-4 w-4" />
+              Create Week
+            </TabsTrigger>
+            <TabsTrigger value="schedule-matches" className="gap-2">
+              <Gamepad2 className="h-4 w-4" />
+              Schedule Matches
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview">
+            <ScheduleOverview seasonId={currentSeasonId} />
+          </TabsContent>
+          <TabsContent value="create-week">
+            <WeekCreator seasonId={currentSeasonId} />
+          </TabsContent>
+          <TabsContent value="schedule-matches">
+            <MatchScheduler seasonId={currentSeasonId} />
+          </TabsContent>
+        </Tabs>
+      </div>
+    </ProtectedRoute>
   );
 }

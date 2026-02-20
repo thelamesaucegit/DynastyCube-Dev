@@ -3,7 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
-import Layout from "@/components/Layout";
+import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
+import { Button } from "@/app/components/ui/button";
+import { Sparkles, ArrowLeft, AlertCircle } from "lucide-react";
 
 export default function Login() {
   const [loading, setLoading] = useState(false);
@@ -31,29 +33,33 @@ export default function Login() {
   };
 
   return (
-    <Layout>
-      <div className="min-h-[calc(100vh-200px)] flex items-center justify-center py-12 px-4">
-        <div className="max-w-md w-full">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-              Welcome to Dynasty Cube
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Sign in to manage your teams and draft cards
-            </p>
+    <div className="min-h-[calc(100vh-200px)] flex items-center justify-center py-12 px-4">
+      <div className="max-w-md w-full">
+        {/* Header with gradient branding */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-primary/60 mb-4">
+            <Sparkles className="h-8 w-8 text-primary-foreground" />
           </div>
+          <h1 className="text-4xl font-bold tracking-tight mb-2">
+            Welcome to Dynasty Cube
+          </h1>
+          <p className="text-muted-foreground">
+            Sign in to manage your teams and draft cards
+          </p>
+        </div>
 
-          {/* Sign In Card */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-8">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-6 text-center">
-              Choose your sign in method
-            </h2>
+        {/* Sign In Card */}
+        <Card>
+          <CardHeader className="text-center">
+            <CardTitle>Choose your sign in method</CardTitle>
+          </CardHeader>
 
+          <CardContent>
             {/* Error Message */}
             {message && (
-              <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg">
-                <p className="text-sm text-red-800 dark:text-red-200">{message}</p>
+              <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg flex items-center gap-3">
+                <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
+                <p className="text-sm">{message}</p>
               </div>
             )}
 
@@ -75,7 +81,7 @@ export default function Login() {
               <button
                 onClick={handleGoogleLogin}
                 disabled={loading}
-                className="w-full bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 font-semibold py-4 px-6 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 border border-gray-300 dark:border-gray-600"
+                className="w-full bg-background hover:bg-accent text-foreground font-semibold py-4 px-6 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 border border-border"
               >
                 <svg className="w-6 h-6" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -88,25 +94,25 @@ export default function Login() {
             </div>
 
             {/* Info Text */}
-            <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-              <p className="text-sm text-gray-600 dark:text-gray-400 text-center">
+            <div className="mt-6 pt-6 border-t border-border">
+              <p className="text-sm text-muted-foreground text-center">
                 By signing in, you agree to participate in the Dynasty Cube draft format.
                 Link multiple accounts on your profile page after signing in.
               </p>
             </div>
-          </div>
+          </CardContent>
+        </Card>
 
-          {/* Back to Home */}
-          <div className="text-center mt-6">
-            <Link
-              href="/"
-              className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
-            >
-              ← Back to Home
+        {/* Back to Home */}
+        <div className="text-center mt-6">
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/" className="gap-1.5">
+              <ArrowLeft className="h-4 w-4" />
+              Back to Home
             </Link>
-          </div>
+          </Button>
         </div>
       </div>
-    </Layout>
+    </div>
   );
 }

@@ -2,13 +2,22 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Layout from "@/components/Layout";
 import {
   getActiveSeasonSchedule,
   getAllSeasons,
   getScheduleWeeks,
   type ScheduleWeek,
 } from "@/app/actions/scheduleActions";
+import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
+import { Badge } from "@/app/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/app/components/ui/select";
+import { Calendar, Clock, Loader2, AlertCircle } from "lucide-react";
 
 interface Match {
   id: string;
@@ -133,202 +142,209 @@ export default function SchedulePage() {
 
   if (loading) {
     return (
-      <Layout>
-        <div className="py-8">
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600 dark:text-gray-400">Loading schedule...</p>
-          </div>
+      <div className="container max-w-7xl mx-auto px-4 py-8">
+        <div className="flex flex-col items-center justify-center py-20">
+          <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
+          <p className="text-muted-foreground">Loading schedule...</p>
         </div>
-      </Layout>
+      </div>
     );
   }
 
   return (
-    <Layout>
-      <div className="py-8">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border border-blue-200 dark:border-blue-700 rounded-xl p-8 mb-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-                📅 Season Schedule
-              </h1>
-              <p className="text-lg text-gray-700 dark:text-gray-300">
-                {selectedSeason
-                  ? `${selectedSeason.name} - ${selectedSeason.status.charAt(0).toUpperCase() + selectedSeason.status.slice(1)}`
-                  : "View match schedules and deadlines"}
-              </p>
-            </div>
-            {seasons.length > 0 && (
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Select Season:
-                </label>
-                <select
-                  value={selectedSeason?.id || ""}
-                  onChange={(e) => handleSeasonChange(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 min-w-[200px]"
-                >
-                  {seasons.map((season) => (
-                    <option key={season.id} value={season.id}>
-                      {season.name} ({season.status})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
+    <div className="container max-w-7xl mx-auto px-4 py-8">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
+        <div>
+          <h1 className="text-4xl font-bold tracking-tight mb-2">
+            Season Schedule
+          </h1>
+          <p className="text-lg text-muted-foreground">
+            {selectedSeason
+              ? `${selectedSeason.name} \u2014 ${selectedSeason.status.charAt(0).toUpperCase() + selectedSeason.status.slice(1)}`
+              : "View match schedules and deadlines"}
+          </p>
         </div>
-
-        {/* Error State */}
-        {error && (
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg p-6 mb-6">
-            <p className="text-yellow-800 dark:text-yellow-200">{error}</p>
+        {seasons.length > 0 && (
+          <div className="w-full md:w-64">
+            <label className="block text-sm font-medium text-muted-foreground mb-2">
+              Select Season
+            </label>
+            <Select value={selectedSeason?.id || ""} onValueChange={handleSeasonChange}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose season..." />
+              </SelectTrigger>
+              <SelectContent>
+                {seasons.map((season) => (
+                  <SelectItem key={season.id} value={season.id}>
+                    {season.name} ({season.status})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         )}
+      </div>
 
-        {/* Schedule Weeks */}
-        {weeks.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-12 text-center">
-            <div className="text-6xl mb-4">📅</div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+      {/* Error State */}
+      {error && (
+        <Card className="mb-6 border-yellow-500/50">
+          <CardContent className="pt-6 flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-yellow-500 shrink-0" />
+            <p className="text-muted-foreground">{error}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Schedule Weeks */}
+      {weeks.length === 0 ? (
+        <Card>
+          <CardContent className="py-16 text-center">
+            <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h2 className="text-2xl font-bold mb-2">
               No Schedule Available
             </h2>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-muted-foreground">
               The schedule for this season hasn&apos;t been set up yet.
             </p>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {weeks.map((week) => {
-              const status = getWeekStatus(week);
-              const deckDeadlinePassed = new Date(week.deck_submission_deadline) < new Date();
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-6">
+          {weeks.map((week) => {
+            const status = getWeekStatus(week);
+            const deckDeadlinePassed = new Date(week.deck_submission_deadline) < new Date();
 
-              return (
-                <div
-                  key={week.id}
-                  className={`bg-white dark:bg-gray-800 border-2 rounded-xl p-6 transition-all ${
-                    status === "current"
-                      ? "border-green-500 dark:border-green-400 shadow-lg"
-                      : status === "upcoming"
-                      ? "border-blue-300 dark:border-blue-700"
-                      : "border-gray-200 dark:border-gray-700 opacity-75"
-                  }`}
-                >
-                  {/* Week Header */}
-                  <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+            return (
+              <Card
+                key={week.id}
+                className={`transition-all ${
+                  status === "current"
+                    ? "border-primary shadow-lg ring-1 ring-primary/20"
+                    : status === "upcoming"
+                    ? "border-border"
+                    : "border-border opacity-75"
+                }`}
+              >
+                <CardHeader>
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
-                      <div className="flex items-center gap-3 mb-2">
-                        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                      <div className="flex items-center gap-3 mb-1">
+                        <CardTitle className="text-2xl">
                           Week {week.week_number}
-                        </h2>
+                        </CardTitle>
                         {status === "current" && (
-                          <span className="text-xs bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 px-3 py-1 rounded-full font-semibold">
-                            CURRENT WEEK
-                          </span>
+                          <Badge className="bg-primary">CURRENT WEEK</Badge>
                         )}
                         {status === "upcoming" && (
-                          <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-3 py-1 rounded-full font-semibold">
-                            UPCOMING
-                          </span>
+                          <Badge variant="secondary">UPCOMING</Badge>
                         )}
                       </div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5" />
                         {formatDate(week.start_date)} - {formatDate(week.end_date)}
                       </p>
                     </div>
-                    <div className="mt-4 md:mt-0 text-right">
-                      <p className={`text-sm font-medium ${deckDeadlinePassed ? "text-red-600 dark:text-red-400" : "text-blue-600 dark:text-blue-400"}`}>
-                        Deck Submission Deadline:
+                    <div className="text-right">
+                      <p className={`text-sm font-medium flex items-center gap-1.5 justify-end ${deckDeadlinePassed ? "text-destructive" : "text-muted-foreground"}`}>
+                        <Clock className="h-3.5 w-3.5" />
+                        Deck Submission Deadline
                       </p>
-                      <p className={`text-lg font-bold ${deckDeadlinePassed ? "text-red-600 dark:text-red-400" : "text-gray-900 dark:text-gray-100"}`}>
+                      <p className={`text-lg font-bold ${deckDeadlinePassed ? "text-destructive" : ""}`}>
                         {formatDeadline(week.deck_submission_deadline)}
                         {deckDeadlinePassed && " (Passed)"}
                       </p>
                     </div>
                   </div>
+                </CardHeader>
 
+                <CardContent>
                   {/* Week Notes */}
                   {week.notes && (
-                    <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
-                      <p className="text-sm text-blue-900 dark:text-blue-100">{week.notes}</p>
+                    <div className="mb-4 p-3 bg-accent rounded-lg">
+                      <p className="text-sm">{week.notes}</p>
                     </div>
                   )}
 
                   {/* Matches */}
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
                       Scheduled Matches
                     </h3>
                     {week.matches.length === 0 ? (
-                      <p className="text-sm text-gray-500 dark:text-gray-400 italic">
+                      <p className="text-sm text-muted-foreground italic">
                         No matches scheduled for this week
                       </p>
                     ) : (
                       <div className="space-y-3">
                         {week.matches.map((match) => (
-                          <div
-                            key={match.id}
-                            className="flex flex-col md:flex-row md:items-center justify-between bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700"
-                          >
-                            <div className="flex items-center gap-4 flex-1">
-                              {/* Home Team */}
-                              <div className="flex items-center gap-2 flex-1">
-                                <span className="text-2xl">{match.home_team.emoji}</span>
-                                <span className="font-semibold text-gray-900 dark:text-gray-100">
-                                  {match.home_team.name}
-                                </span>
-                              </div>
+                          <Card key={match.id} className="bg-muted/50">
+                            <CardContent className="py-4">
+                              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                                <div className="flex items-center gap-4 flex-1">
+                                  {/* Home Team */}
+                                  <div className="flex items-center gap-2 flex-1">
+                                    <span className="text-2xl">{match.home_team.emoji}</span>
+                                    <span className="font-semibold">
+                                      {match.home_team.name}
+                                    </span>
+                                  </div>
 
-                              {/* Score */}
-                              <div className="flex items-center gap-2 text-center">
-                                <span className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                                  {match.home_team_wins}
-                                </span>
-                                <span className="text-gray-500 dark:text-gray-400">-</span>
-                                <span className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                                  {match.away_team_wins}
-                                </span>
-                              </div>
+                                  {/* Score / VS */}
+                                  <div className="flex items-center gap-3 text-center px-4">
+                                    <span className="text-xl font-bold">
+                                      {match.home_team_wins}
+                                    </span>
+                                    <span className="text-muted-foreground text-sm font-medium">VS</span>
+                                    <span className="text-xl font-bold">
+                                      {match.away_team_wins}
+                                    </span>
+                                  </div>
 
-                              {/* Away Team */}
-                              <div className="flex items-center gap-2 flex-1 justify-end">
-                                <span className="font-semibold text-gray-900 dark:text-gray-100">
-                                  {match.away_team.name}
-                                </span>
-                                <span className="text-2xl">{match.away_team.emoji}</span>
-                              </div>
-                            </div>
+                                  {/* Away Team */}
+                                  <div className="flex items-center gap-2 flex-1 justify-end">
+                                    <span className="font-semibold">
+                                      {match.away_team.name}
+                                    </span>
+                                    <span className="text-2xl">{match.away_team.emoji}</span>
+                                  </div>
+                                </div>
 
-                            {/* Match Status */}
-                            <div className="mt-3 md:mt-0 md:ml-4">
-                              <span
-                                className={`text-xs px-3 py-1 rounded-full font-semibold ${
-                                  match.status === "completed"
-                                    ? "bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200"
-                                    : match.status === "in_progress"
-                                    ? "bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200"
-                                    : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
-                                }`}
-                              >
-                                {match.status.replace("_", " ").toUpperCase()}
-                              </span>
-                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 text-center">
-                                Best of {match.best_of}
-                              </p>
-                            </div>
-                          </div>
+                                {/* Match Status */}
+                                <div className="flex flex-col items-center gap-1 md:ml-4">
+                                  <Badge
+                                    variant={
+                                      match.status === "completed"
+                                        ? "default"
+                                        : match.status === "in_progress"
+                                        ? "secondary"
+                                        : "outline"
+                                    }
+                                    className={
+                                      match.status === "completed"
+                                        ? "bg-emerald-600"
+                                        : ""
+                                    }
+                                  >
+                                    {match.status.replace("_", " ").toUpperCase()}
+                                  </Badge>
+                                  <p className="text-xs text-muted-foreground">
+                                    Best of {match.best_of}
+                                  </p>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
                         ))}
                       </div>
                     )}
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </Layout>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

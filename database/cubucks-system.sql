@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS seasons (
   season_name text NOT NULL,
   start_date timestamp with time zone NOT NULL,
   end_date timestamp with time zone,
-  cubucks_allocation integer DEFAULT 1000, -- Default Cubucks per team
+  cubucks_allocation integer DEFAULT 45, -- Default Cubucks per team (season cap)
   is_active boolean DEFAULT false,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now()
@@ -161,7 +161,7 @@ BEGIN
 END;
 $$;
 
--- Function to allocate Cubucks to a team
+-- Function to allocate Cubucks to a team (with season cap enforcement)
 CREATE OR REPLACE FUNCTION allocate_cubucks_to_team(
   p_team_id text,
   p_amount integer,
@@ -173,18 +173,42 @@ RETURNS uuid
 LANGUAGE plpgsql
 AS $$
 DECLARE
+  v_current_balance integer;
   v_new_balance integer;
+  v_cap integer;
+  v_effective_amount integer;
   v_transaction_id uuid;
   v_season_id uuid;
 BEGIN
   -- Use provided season or get active season
   v_season_id := COALESCE(p_season_id, get_active_season());
 
+  -- Get the season cap
+  SELECT cubucks_allocation INTO v_cap
+  FROM seasons
+  WHERE id = v_season_id;
+
+  -- Get current balance
+  SELECT cubucks_balance INTO v_current_balance
+  FROM teams
+  WHERE id = p_team_id;
+
+  -- Enforce cap: clamp the allocation so balance doesn't exceed the cap
+  v_effective_amount := p_amount;
+  IF v_cap IS NOT NULL AND v_current_balance + p_amount > v_cap THEN
+    v_effective_amount := GREATEST(0, v_cap - v_current_balance);
+  END IF;
+
+  -- If nothing to allocate, skip
+  IF v_effective_amount <= 0 THEN
+    RAISE EXCEPTION 'Team is already at or above the season cap of % Cubucks', v_cap;
+  END IF;
+
   -- Update team balance
   UPDATE teams
   SET
-    cubucks_balance = cubucks_balance + p_amount,
-    cubucks_total_earned = cubucks_total_earned + p_amount
+    cubucks_balance = cubucks_balance + v_effective_amount,
+    cubucks_total_earned = cubucks_total_earned + v_effective_amount
   WHERE id = p_team_id
   RETURNING cubucks_balance INTO v_new_balance;
 
@@ -201,7 +225,7 @@ BEGIN
     p_team_id,
     v_season_id,
     'allocation',
-    p_amount,
+    v_effective_amount,
     v_new_balance,
     COALESCE(p_description, 'Cubucks allocation'),
     p_created_by
@@ -282,7 +306,7 @@ $$;
 
 -- Create Season 1 if no seasons exist
 INSERT INTO seasons (season_number, season_name, start_date, cubucks_allocation, is_active)
-SELECT 1, 'Season 1', NOW(), 1000, true
+SELECT 1, 'Season 1', NOW(), 45, true
 WHERE NOT EXISTS (SELECT 1 FROM seasons LIMIT 1);
 
 -- Give all existing teams their starting Cubucks
@@ -299,12 +323,12 @@ BEGIN
     FOR team_record IN SELECT id, name FROM teams WHERE cubucks_balance = 0 LOOP
       PERFORM allocate_cubucks_to_team(
         team_record.id,
-        1000, -- Starting allocation
+        45, -- Starting allocation (season cap)
         season_id,
         'Initial Season 1 allocation',
         NULL
       );
-      RAISE NOTICE 'Allocated 1000 Cubucks to team: %', team_record.name;
+      RAISE NOTICE 'Allocated 45 Cubucks to team: %', team_record.name;
     END LOOP;
   END IF;
 END $$;

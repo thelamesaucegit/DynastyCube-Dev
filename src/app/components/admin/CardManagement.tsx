@@ -6,8 +6,21 @@ import {
   getCardPool,
   addCardToPool,
   removeCardFromPool,
+  bulkImportCards,
+  removeFilteredCards,
 } from "@/app/actions/cardActions";
 import type { CardData } from "@/app/actions/cardActions";
+import { getPoolCardsWithStatus } from "@/app/actions/poolActions";
+import type { PoolCard } from "@/app/actions/poolActions";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+} from "@/app/components/ui/alert-dialog";
 
 interface MTGCard {
   id: string;
@@ -35,6 +48,24 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
   const [success, setSuccess] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
+  // Bulk import state
+  const [bulkText, setBulkText] = useState("");
+  const [bulkCost, setBulkCost] = useState("1");
+  const [bulkImporting, setBulkImporting] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{
+    added: number;
+    skipped: number;
+    failed: string[];
+  } | null>(null);
+  const [showBulkImport, setShowBulkImport] = useState(false);
+
+  // Pool actions state
+  const [poolCards, setPoolCards] = useState<PoolCard[]>([]);
+  const [clearFilter, setClearFilter] = useState<"all" | "undrafted" | "drafted" | null>(null);
+  const [clearStep, setClearStep] = useState<1 | 2>(1);
+  const [confirmText, setConfirmText] = useState("");
+  const [clearing, setClearing] = useState(false);
+
   // Load cards from database on mount
   useEffect(() => {
     loadCards();
@@ -44,12 +75,16 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await getCardPool();
-      if (result.error) {
-        setError(result.error);
+      const [poolResult, statusResult] = await Promise.all([
+        getCardPool(),
+        getPoolCardsWithStatus(),
+      ]);
+      if (poolResult.error) {
+        setError(poolResult.error);
       } else {
-        setCards(result.cards);
+        setCards(poolResult.cards);
       }
+      setPoolCards(statusResult.cards || []);
     } catch (err) {
       console.error("Error loading cards:", err);
       setError("Failed to load cards");
@@ -158,6 +193,115 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
     }
 
     setActionLoading(false);
+  };
+
+  // Pool clear helpers
+  const draftedCount = poolCards.filter((c) => c.is_drafted).length;
+  const undraftedCount = poolCards.filter((c) => !c.is_drafted).length;
+  const totalCount = poolCards.length;
+
+  const getAffectedCount = (filter: "all" | "undrafted" | "drafted") => {
+    if (filter === "all") return totalCount;
+    if (filter === "undrafted") return undraftedCount;
+    return draftedCount;
+  };
+
+  const getFilterLabel = (filter: "all" | "undrafted" | "drafted") => {
+    if (filter === "all") return "ALL cards";
+    if (filter === "undrafted") return "all UNDRAFTED cards";
+    return "all DRAFTED cards";
+  };
+
+  const openClearDialog = (filter: "all" | "undrafted" | "drafted") => {
+    setClearFilter(filter);
+    setClearStep(1);
+    setConfirmText("");
+  };
+
+  const closeClearDialog = () => {
+    setClearFilter(null);
+    setClearStep(1);
+    setConfirmText("");
+  };
+
+  const handleClearPool = async () => {
+    if (!clearFilter || confirmText !== "CONFIRM") return;
+
+    setClearing(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const result = await removeFilteredCards(clearFilter);
+      if (result.success) {
+        setSuccess(
+          `Removed ${result.removedCount} card(s) from the pool`
+        );
+        closeClearDialog();
+        await loadCards();
+        onUpdate?.();
+      } else {
+        setError(result.error || "Failed to remove cards");
+        closeClearDialog();
+      }
+    } catch (err) {
+      console.error("Error clearing pool:", err);
+      setError("An unexpected error occurred");
+      closeClearDialog();
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  const handleBulkImport = async () => {
+    const lines = bulkText.split("\n").filter((l) => l.trim());
+    if (lines.length === 0) return;
+
+    const cost = parseInt(bulkCost);
+    if (isNaN(cost) || cost < 0) {
+      setError("Please enter a valid cubucks cost (0 or higher)");
+      return;
+    }
+
+    if (
+      !confirm(
+        `Import ${lines.length} card(s) with default cubucks cost of ${cost}?`
+      )
+    ) {
+      return;
+    }
+
+    setBulkImporting(true);
+    setBulkResult(null);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const result = await bulkImportCards(lines, cost);
+      if (result.success) {
+        setBulkResult({
+          added: result.added,
+          skipped: result.skipped,
+          failed: result.failed,
+        });
+        if (result.added > 0) {
+          setSuccess(`Imported ${result.added} card(s) into the pool`);
+          await loadCards();
+          onUpdate?.();
+        }
+        if (result.added === 0 && result.failed.length === 0) {
+          setSuccess("All cards were already in the pool");
+        }
+        setBulkText("");
+      } else {
+        setError(result.error || "Failed to import cards");
+      }
+    } catch (err) {
+      console.error("Error during bulk import:", err);
+      setError("An unexpected error occurred during import");
+    } finally {
+      setBulkImporting(false);
+    }
   };
 
   if (loading) {
@@ -278,6 +422,208 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
         )}
       </div>
 
+      {/* Bulk Import */}
+      <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-300 dark:border-amber-700 rounded-lg p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-semibold text-lg text-gray-900 dark:text-gray-100">
+              Bulk Import
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Paste card names to import many cards at once
+            </p>
+          </div>
+          <button
+            onClick={() => setShowBulkImport(!showBulkImport)}
+            className="admin-btn admin-btn-secondary text-sm"
+          >
+            {showBulkImport ? "Hide" : "Show"}
+          </button>
+        </div>
+
+        {showBulkImport && (
+          <div>
+            <textarea
+              value={bulkText}
+              onChange={(e) => setBulkText(e.target.value)}
+              placeholder={`One card per line. Optionally add cubucks cost after a comma:\n\nLightning Bolt\nCounterspell, 5\nBrainstorm\nSol Ring, 10`}
+              rows={8}
+              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono text-sm mb-3 resize-y"
+            />
+
+            <div className="flex gap-3 items-end">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Default Cubucks Cost
+                </label>
+                <input
+                  type="number"
+                  value={bulkCost}
+                  onChange={(e) => setBulkCost(e.target.value)}
+                  min={0}
+                  className="w-32 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                />
+              </div>
+              <button
+                onClick={handleBulkImport}
+                disabled={!bulkText.trim() || bulkImporting}
+                className="admin-btn admin-btn-primary"
+              >
+                {bulkImporting ? "Importing..." : "Import Cards"}
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              Cards without a cost after a comma will use the default cost.
+              Cards already in the pool will be skipped.
+            </p>
+
+            {bulkImporting && (
+              <div className="mt-4 flex items-center gap-3">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-amber-600"></div>
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  Looking up cards via Scryfall (this may take a moment)...
+                </span>
+              </div>
+            )}
+
+            {bulkResult && (
+              <div className="mt-4 p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+                <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                  Import Results
+                </h4>
+                <div className="space-y-1 text-sm">
+                  <p className="text-green-700 dark:text-green-400">
+                    Added: {bulkResult.added} card(s)
+                  </p>
+                  {bulkResult.skipped > 0 && (
+                    <p className="text-yellow-700 dark:text-yellow-400">
+                      Skipped (already in pool): {bulkResult.skipped}
+                    </p>
+                  )}
+                  {bulkResult.failed.length > 0 && (
+                    <div>
+                      <p className="text-red-700 dark:text-red-400">
+                        Not found ({bulkResult.failed.length}):
+                      </p>
+                      <ul className="ml-4 list-disc text-red-600 dark:text-red-400">
+                        {bulkResult.failed.map((name, i) => (
+                          <li key={i}>{name}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Pool Actions */}
+      {cards.length > 0 && (
+        <div className="bg-gradient-to-br from-red-50 to-rose-50 dark:from-red-900/20 dark:to-rose-900/20 border border-red-300 dark:border-red-700 rounded-lg p-6 mb-6">
+          <h3 className="font-semibold text-lg text-gray-900 dark:text-gray-100 mb-2">
+            Pool Actions
+          </h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Remove cards from the pool by filter. These actions require confirmation.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => openClearDialog("undrafted")}
+              disabled={undraftedCount === 0}
+              className="admin-btn admin-btn-danger"
+            >
+              Clear Undrafted ({undraftedCount})
+            </button>
+            <button
+              onClick={() => openClearDialog("drafted")}
+              disabled={draftedCount === 0}
+              className="admin-btn admin-btn-danger"
+            >
+              Clear Drafted ({draftedCount})
+            </button>
+            <button
+              onClick={() => openClearDialog("all")}
+              className="admin-btn admin-btn-danger"
+            >
+              Clear All Cards ({totalCount})
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Clear Pool Confirmation Dialog */}
+      <AlertDialog open={clearFilter !== null} onOpenChange={(open) => { if (!open) closeClearDialog(); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            {clearStep === 1 ? (
+              <>
+                <AlertDialogTitle className="text-red-600">
+                  Warning: Remove Cards
+                </AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-3">
+                    <p>
+                      You are about to remove <strong>{clearFilter ? getAffectedCount(clearFilter) : 0}</strong> card(s)
+                      from the pool.
+                    </p>
+                    <p>
+                      Filter: <strong>{clearFilter ? getFilterLabel(clearFilter) : ""}</strong>
+                    </p>
+                    <p className="text-red-600 dark:text-red-400 font-medium">
+                      This action cannot be undone. Removed cards will need to be re-imported.
+                    </p>
+                  </div>
+                </AlertDialogDescription>
+              </>
+            ) : (
+              <>
+                <AlertDialogTitle className="text-red-600">
+                  Final Confirmation
+                </AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-3">
+                    <p>
+                      Type <strong>CONFIRM</strong> below to permanently remove{" "}
+                      <strong>{clearFilter ? getAffectedCount(clearFilter) : 0}</strong> card(s).
+                    </p>
+                    <input
+                      type="text"
+                      value={confirmText}
+                      onChange={(e) => setConfirmText(e.target.value)}
+                      placeholder='Type "CONFIRM" to proceed'
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono"
+                      autoFocus
+                    />
+                  </div>
+                </AlertDialogDescription>
+              </>
+            )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={closeClearDialog}>Cancel</AlertDialogCancel>
+            {clearStep === 1 ? (
+              <button
+                onClick={() => setClearStep(2)}
+                className="admin-btn admin-btn-danger"
+              >
+                Continue
+              </button>
+            ) : (
+              <button
+                onClick={handleClearPool}
+                disabled={confirmText !== "CONFIRM" || clearing}
+                className="admin-btn admin-btn-danger disabled:opacity-50"
+              >
+                {clearing ? "Removing..." : "Remove Cards"}
+              </button>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Current Pool */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
         <div className="flex items-center justify-between mb-4">
@@ -313,6 +659,11 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
                   <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
                     {card.card_set}
                   </p>
+                  {card.cubecobra_elo != null && (
+                    <p className="text-xs text-purple-600 dark:text-purple-400 font-medium mt-0.5">
+                      ELO: {card.cubecobra_elo.toLocaleString()}
+                    </p>
+                  )}
                 </div>
                 <button
                   onClick={() => handleRemoveCard(card.card_id)}

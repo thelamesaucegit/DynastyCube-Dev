@@ -1,111 +1,93 @@
-// src/app/page.tsx
+// src/app/teams/page.tsx
 "use client";
-import React from "react";
-import { useRouter } from "next/navigation";
-import Layout from "@/components/Layout";
 
-export default function Page() {
-  const router = useRouter();
+import React, { useState, useEffect } from "react";
+import Link from "next/link";
+import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
+import { Button } from "@/app/components/ui/button";
+import { Badge } from "@/app/components/ui/badge";
+import { Users, ArrowRight } from "lucide-react";
+import { DraftStatusWidget, getTeamDraftBadge } from "@/app/components/DraftStatusWidget";
+import { getDraftStatus, type DraftStatus } from "@/app/actions/draftOrderActions";
 
-  const teams = [
-    {
-      name: "Alara Shards",
-      href: "/teams/shards",
-      emoji: "🌟",
-      motto: "Why not both?",
-    },
-    {
-      name: "Kamigawa Ninja",
-      href: "/teams/ninja",
-      emoji: "⛩",
-      motto: "Omae wa mou shindeiru.",
-    },
-    {
-      name: "Innistrad Creeps",
-      href: "/teams/creeps",
-      emoji: "🧟",
-      motto: "Graveyard, Gatekeep, Girlboss",
-    },
-    {
-      name: "Theros Demigods",
-      href: "/teams/demigods",
-      emoji: "🌞",
-      motto: "The Fates will decide",
-    },
-    {
-      name: "Ravnica Guildpact",
-      href: "/teams/guildpact",
-      emoji: "🔗",
-      motto:
-        "A Championship is won and lost before ever entering the battlefield",
-    },
-    {
-      name: "Lorwyn Changelings",
-      href: "/teams/changelings",
-      emoji: "👽",
-      motto: "Expect the unexpected",
-    },
-    {
-      name: "Zendikar Hedrons",
-      href: "/teams/hedrons",
-      emoji: "💠",
-      motto: "Good Vibes, No Escape",
-    },
-    {
-      name: "Tarkir Dragons",
-      href: "/teams/dragons",
-      emoji: "🐲",
-      motto: "No cost too great",
-    },
-  ];
+const teams = [
+  { id: "shards", name: "Alara Shards", href: "/teams/shards", emoji: "🌟", motto: "Why not both?", color: "bg-purple-500" },
+  { id: "creeps", name: "Innistrad Creeps", href: "/teams/creeps", emoji: "🧟", motto: "Graveyard, Gatekeep, Girlboss", color: "bg-indigo-500" },
+  { id: "ninja", name: "Kamigawa Ninja", href: "/teams/ninja", emoji: "⛩", motto: "Omae wa mou shindeiru.", color: "bg-red-500" },
+  { id: "changelings", name: "Lorwyn Changelings", href: "/teams/changelings", emoji: "👽", motto: "Expect the unexpected", color: "bg-cyan-500" },
+  { id: "guildpact", name: "Ravnica Guildpact", href: "/teams/guildpact", emoji: "🔗", motto: "A Championship is won and lost before ever entering the battlefield", color: "bg-blue-500" },
+  { id: "dragons", name: "Tarkir Dragons", href: "/teams/dragons", emoji: "🐲", motto: "No cost too great", color: "bg-pink-500" },
+  { id: "demigods", name: "Theros Demigods", href: "/teams/demigods", emoji: "🌞", motto: "The Fates will decide", color: "bg-yellow-500" },
+  { id: "hedrons", name: "Zendikar Hedrons", href: "/teams/hedrons", emoji: "💠", motto: "Good Vibes, No Escape", color: "bg-green-500" },
+];
 
-  const handleTeamClick = (href: string, teamName: string) => {
-    // possible antalytics
-    console.log(`Navigating to ${teamName}`);
-    router.push(href);
-  };
+export default function TeamsPage() {
+  const [draftStatus, setDraftStatus] = useState<DraftStatus | null>(null);
 
-  const handleKeyDown = (
-    event: React.KeyboardEvent,
-    href: string,
-    teamName: string,
-  ) => {
-    // Handle Enter and Space key presses for accessibility
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      handleTeamClick(href, teamName);
-    }
-  };
+  useEffect(() => {
+    getDraftStatus().then((result) => setDraftStatus(result.status));
+  }, []);
 
   return (
-    <Layout>
-      <div className="text-center">
-        <div className="py-8">
-          <h3 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-2">Teams</h3>
-          <p className="text-lg text-gray-700 dark:text-gray-300">Meet the Teams</p>
+    <div className="container max-w-7xl mx-auto px-4 py-8 space-y-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Teams</h1>
+          <p className="text-muted-foreground mt-1">Meet the teams of the Dynasty Cube League</p>
         </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 my-8">
-          {teams.map((team, index) => (
-            <button
-              key={index}
-              className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-md hover:shadow-lg hover:-translate-y-1 transition-all text-center group"
-              onClick={() => handleTeamClick(team.href, team.name)}
-              onKeyDown={(e) => handleKeyDown(e, team.href, team.name)}
-              aria-label={`View ${team.name} team page - ${team.motto}`}
-              type="button"
-            >
-              <span className="text-5xl mb-3 block group-hover:scale-110 transition-transform" aria-hidden="true">
-                {team.emoji}
-              </span>
-              <span className="text-lg font-bold text-gray-900 dark:text-gray-100 block mb-2">{team.name}</span>
-              <span className="text-sm text-gray-600 dark:text-gray-400 italic block">&quot;{team.motto}&quot;</span>
-            </button>
-          ))}
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Users className="size-5" />
+          <span className="text-sm font-medium">{teams.length} Teams</span>
         </div>
-
-        <div className="mt-12 border-t border-gray-300 dark:border-gray-700"></div>
       </div>
-    </Layout>
+
+      {/* Draft Status Banner */}
+      <DraftStatusWidget variant="compact" />
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {teams.map((team) => {
+          const badge = getTeamDraftBadge(draftStatus, team.id);
+
+          return (
+            <Link key={team.name} href={team.href}>
+              <Card className={`hover:shadow-lg transition-all hover:-translate-y-0.5 cursor-pointer h-full ${
+                badge === "clock" ? "ring-2 ring-green-500/40" : badge === "deck" ? "ring-2 ring-yellow-500/40" : ""
+              }`}>
+                <CardHeader className="flex flex-row items-start gap-4">
+                  <div className={`size-16 rounded-full flex items-center justify-center flex-shrink-0 ${team.color}`}>
+                    <span className="text-3xl">{team.emoji}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-xl">{team.name}</CardTitle>
+                      {badge === "clock" && (
+                        <Badge className="bg-green-500/15 text-green-600 dark:text-green-400 border-green-500/30 text-xs gap-1">
+                          <span className="size-1.5 rounded-full bg-green-500 animate-pulse" />
+                          On the Clock
+                        </Badge>
+                      )}
+                      {badge === "deck" && (
+                        <Badge className="bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 border-yellow-500/30 text-xs">
+                          On Deck
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground italic mt-1 line-clamp-2">
+                      &ldquo;{team.motto}&rdquo;
+                    </p>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Button variant="outline" className="w-full" tabIndex={-1}>
+                    View Team Profile
+                    <ArrowRight className="ml-2 size-4" />
+                  </Button>
+                </CardContent>
+              </Card>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
   );
 }

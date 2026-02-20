@@ -3,11 +3,9 @@
 
 import { createServerClient } from "@/lib/supabase";
 import {
-  searchCardByName,
-  fetchAllCards,
-  extractRatingData,
-  type ScryfallCard,
-} from "@/lib/scryfall-client";
+  fetchCubeData,
+  extractEloMap,
+} from "@/lib/cubecobra-client";
 
 interface CardRatingResult {
   success: boolean;
@@ -18,10 +16,15 @@ interface CardRatingResult {
   errors?: string[];
 }
 
+const DEFAULT_CUBE_ID = process.env.NEXT_PUBLIC_CUBECOBRA_CUBE_ID || "TheDynastyCube";
+
 /**
- * Update ratings for cards in card_pools table
+ * Helper: Update a table's cubecobra_elo using a pre-fetched ELO map
  */
-export async function updatePoolCardRatings(): Promise<CardRatingResult> {
+async function updateTableCubecobraElo(
+  tableName: "card_pools" | "team_draft_picks",
+  eloMap: Map<string, number>
+): Promise<CardRatingResult> {
   try {
     const supabase = await createServerClient();
 
@@ -33,13 +36,13 @@ export async function updatePoolCardRatings(): Promise<CardRatingResult> {
       return { success: false, message: "Not authenticated" };
     }
 
-    // Fetch all cards from pool
+    // Fetch all cards from table
     const { data: cards, error: fetchError } = await supabase
-      .from("card_pools")
-      .select("id, card_name, card_id");
+      .from(tableName)
+      .select("id, card_name");
 
     if (fetchError) {
-      console.error("Error fetching cards from pool:", fetchError);
+      console.error(`Error fetching cards from ${tableName}:`, fetchError);
       return {
         success: false,
         message: `Database error: ${fetchError.message}`,
@@ -50,42 +53,35 @@ export async function updatePoolCardRatings(): Promise<CardRatingResult> {
       return {
         success: true,
         updatedCount: 0,
-        message: "No cards found in pool",
+        message: `No cards found in ${tableName}`,
       };
     }
 
-    console.log(`Fetching ratings for ${cards.length} cards from Scryfall...`);
+    console.log(`Matching ${cards.length} cards from ${tableName} against CubeCobra ELO data...`);
 
-    // Fetch card data from Scryfall
-    const cardNames = cards.map(c => c.card_name);
-    const { cards: scryfallCards, notFound, errors } = await fetchAllCards(cardNames);
-
-    console.log(
-      `Scryfall results: ${scryfallCards.length} found, ${notFound.length} not found, ${errors.length} errors`
-    );
-
-    // Update cards with rating data
     let updatedCount = 0;
-    const updateErrors: string[] = [...errors];
+    let notFoundCount = 0;
+    const updateErrors: string[] = [];
 
-    for (const scryfallCard of scryfallCards) {
-      const poolCard = cards.find(c => c.card_name === scryfallCard.name);
-      if (!poolCard) continue;
+    for (const card of cards) {
+      const elo = eloMap.get(card.card_name.toLowerCase());
 
-      const ratingData = extractRatingData(scryfallCard);
+      if (elo == null) {
+        notFoundCount++;
+        continue;
+      }
 
       const { error: updateError } = await supabase
-        .from("card_pools")
+        .from(tableName)
         .update({
-          edhrec_rank: ratingData.edhrecRank,
-          scryfall_id: ratingData.scryfallId,
-          rating_updated_at: ratingData.updatedAt,
+          cubecobra_elo: elo,
+          rating_updated_at: new Date().toISOString(),
         })
-        .eq("id", poolCard.id);
+        .eq("id", card.id);
 
       if (updateError) {
-        updateErrors.push(`Failed to update ${scryfallCard.name}: ${updateError.message}`);
-        console.error(`Error updating card ${scryfallCard.name}:`, updateError);
+        updateErrors.push(`Failed to update ${card.card_name}: ${updateError.message}`);
+        console.error(`Error updating ${card.card_name} in ${tableName}:`, updateError);
       } else {
         updatedCount++;
       }
@@ -94,13 +90,13 @@ export async function updatePoolCardRatings(): Promise<CardRatingResult> {
     return {
       success: true,
       updatedCount,
-      notFoundCount: notFound.length,
+      notFoundCount,
       errorCount: updateErrors.length,
-      message: `Updated ${updatedCount} cards. Not found: ${notFound.length}. Errors: ${updateErrors.length}`,
+      message: `Updated ${updatedCount} cards in ${tableName}. Not in cube: ${notFoundCount}. Errors: ${updateErrors.length}`,
       errors: updateErrors.length > 0 ? updateErrors : undefined,
     };
   } catch (error) {
-    console.error("Unexpected error updating pool card ratings:", error);
+    console.error(`Unexpected error updating ${tableName} CubeCobra ELO:`, error);
     return {
       success: false,
       message: `Unexpected error: ${error}`,
@@ -109,99 +105,56 @@ export async function updatePoolCardRatings(): Promise<CardRatingResult> {
 }
 
 /**
- * Update ratings for cards in team_draft_picks table
+ * Update CubeCobra ELO for cards in card_pools table
  */
-export async function updateDraftPickRatings(): Promise<CardRatingResult> {
-  try {
-    const supabase = await createServerClient();
+export async function updatePoolCubecobraElo(
+  cubeId?: string
+): Promise<CardRatingResult> {
+  const id = cubeId || DEFAULT_CUBE_ID;
+  console.log(`Fetching CubeCobra ELO for cube: ${id}`);
 
-    // Check admin access
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return { success: false, message: "Not authenticated" };
-    }
-
-    // Fetch all draft picks
-    const { data: picks, error: fetchError } = await supabase
-      .from("team_draft_picks")
-      .select("id, card_name, card_id");
-
-    if (fetchError) {
-      console.error("Error fetching draft picks:", fetchError);
-      return {
-        success: false,
-        message: `Database error: ${fetchError.message}`,
-      };
-    }
-
-    if (!picks || picks.length === 0) {
-      return {
-        success: true,
-        updatedCount: 0,
-        message: "No draft picks found",
-      };
-    }
-
-    console.log(`Fetching ratings for ${picks.length} draft picks from Scryfall...`);
-
-    // Fetch card data from Scryfall
-    const cardNames = picks.map(p => p.card_name);
-    const { cards: scryfallCards, notFound, errors } = await fetchAllCards(cardNames);
-
-    console.log(
-      `Scryfall results: ${scryfallCards.length} found, ${notFound.length} not found, ${errors.length} errors`
-    );
-
-    // Update cards with rating data
-    let updatedCount = 0;
-    const updateErrors: string[] = [...errors];
-
-    for (const scryfallCard of scryfallCards) {
-      const pick = picks.find(p => p.card_name === scryfallCard.name);
-      if (!pick) continue;
-
-      const ratingData = extractRatingData(scryfallCard);
-
-      const { error: updateError } = await supabase
-        .from("team_draft_picks")
-        .update({
-          edhrec_rank: ratingData.edhrecRank,
-          scryfall_id: ratingData.scryfallId,
-          rating_updated_at: ratingData.updatedAt,
-        })
-        .eq("id", pick.id);
-
-      if (updateError) {
-        updateErrors.push(`Failed to update ${scryfallCard.name}: ${updateError.message}`);
-        console.error(`Error updating pick ${scryfallCard.name}:`, updateError);
-      } else {
-        updatedCount++;
-      }
-    }
-
-    return {
-      success: true,
-      updatedCount,
-      notFoundCount: notFound.length,
-      errorCount: updateErrors.length,
-      message: `Updated ${updatedCount} draft picks. Not found: ${notFound.length}. Errors: ${updateErrors.length}`,
-      errors: updateErrors.length > 0 ? updateErrors : undefined,
-    };
-  } catch (error) {
-    console.error("Unexpected error updating draft pick ratings:", error);
-    return {
-      success: false,
-      message: `Unexpected error: ${error}`,
-    };
+  const cubeData = await fetchCubeData(id);
+  if (!cubeData) {
+    return { success: false, message: `Failed to fetch cube "${id}" from CubeCobra` };
   }
+
+  const eloMap = extractEloMap(cubeData);
+  if (eloMap.size === 0) {
+    return { success: false, message: "No ELO data found in CubeCobra response" };
+  }
+
+  return updateTableCubecobraElo("card_pools", eloMap);
 }
 
 /**
- * Update ratings for all cards (both pools and draft picks)
+ * Update CubeCobra ELO for cards in team_draft_picks table
  */
-export async function updateAllCardRatings(): Promise<{
+export async function updateDraftPickCubecobraElo(
+  cubeId?: string
+): Promise<CardRatingResult> {
+  const id = cubeId || DEFAULT_CUBE_ID;
+  console.log(`Fetching CubeCobra ELO for cube: ${id}`);
+
+  const cubeData = await fetchCubeData(id);
+  if (!cubeData) {
+    return { success: false, message: `Failed to fetch cube "${id}" from CubeCobra` };
+  }
+
+  const eloMap = extractEloMap(cubeData);
+  if (eloMap.size === 0) {
+    return { success: false, message: "No ELO data found in CubeCobra response" };
+  }
+
+  return updateTableCubecobraElo("team_draft_picks", eloMap);
+}
+
+/**
+ * Update CubeCobra ELO for all cards (both pools and draft picks)
+ * Fetches cube data once and reuses the ELO map for both tables
+ */
+export async function updateAllCubecobraElo(
+  cubeId?: string
+): Promise<{
   success: boolean;
   poolResult?: CardRatingResult;
   draftResult?: CardRatingResult;
@@ -218,10 +171,23 @@ export async function updateAllCardRatings(): Promise<{
       return { success: false, message: "Not authenticated" };
     }
 
-    console.log("Starting full card rating update...");
+    const id = cubeId || DEFAULT_CUBE_ID;
+    console.log(`Starting full CubeCobra ELO update for cube: ${id}`);
 
-    const poolResult = await updatePoolCardRatings();
-    const draftResult = await updateDraftPickRatings();
+    // Fetch cube data once
+    const cubeData = await fetchCubeData(id);
+    if (!cubeData) {
+      return { success: false, message: `Failed to fetch cube "${id}" from CubeCobra` };
+    }
+
+    const eloMap = extractEloMap(cubeData);
+    if (eloMap.size === 0) {
+      return { success: false, message: "No ELO data found in CubeCobra response" };
+    }
+
+    // Update both tables using the same ELO map
+    const poolResult = await updateTableCubecobraElo("card_pools", eloMap);
+    const draftResult = await updateTableCubecobraElo("team_draft_picks", eloMap);
 
     const totalUpdated = (poolResult.updatedCount || 0) + (draftResult.updatedCount || 0);
     const totalNotFound = (poolResult.notFoundCount || 0) + (draftResult.notFoundCount || 0);
@@ -231,10 +197,10 @@ export async function updateAllCardRatings(): Promise<{
       success: poolResult.success && draftResult.success,
       poolResult,
       draftResult,
-      message: `Total: ${totalUpdated} updated, ${totalNotFound} not found, ${totalErrors} errors`,
+      message: `CubeCobra ELO: ${totalUpdated} updated, ${totalNotFound} not in cube, ${totalErrors} errors`,
     };
   } catch (error) {
-    console.error("Unexpected error in updateAllCardRatings:", error);
+    console.error("Unexpected error in updateAllCubecobraElo:", error);
     return {
       success: false,
       message: `Unexpected error: ${error}`,
@@ -243,32 +209,46 @@ export async function updateAllCardRatings(): Promise<{
 }
 
 /**
- * Get single card rating by name (for testing)
+ * Test CubeCobra ELO lookup for a single card (for testing)
  */
-export async function getCardRating(
-  cardName: string
+export async function testCubecobraElo(
+  cardName: string,
+  cubeId?: string
 ): Promise<{
   success: boolean;
-  card?: ScryfallCard;
+  elo?: number;
+  cubeName?: string;
   message?: string;
 }> {
   try {
-    const card = await searchCardByName(cardName);
+    const id = cubeId || DEFAULT_CUBE_ID;
+    const cubeData = await fetchCubeData(id);
 
-    if (!card) {
+    if (!cubeData) {
       return {
         success: false,
-        message: `Card "${cardName}" not found on Scryfall`,
+        message: `Failed to fetch cube "${id}" from CubeCobra`,
+      };
+    }
+
+    const eloMap = extractEloMap(cubeData);
+    const elo = eloMap.get(cardName.toLowerCase());
+
+    if (elo == null) {
+      return {
+        success: false,
+        message: `Card "${cardName}" not found in cube "${cubeData.name}" (${eloMap.size} cards loaded)`,
       };
     }
 
     return {
       success: true,
-      card,
-      message: `Found ${card.name} with EDHREC rank: ${card.edhrec_rank || "N/A"}`,
+      elo,
+      cubeName: cubeData.name,
+      message: `Found ${cardName} in "${cubeData.name}" with ELO: ${elo}`,
     };
   } catch (error) {
-    console.error("Error getting card rating:", error);
+    console.error("Error testing CubeCobra ELO:", error);
     return {
       success: false,
       message: `Error: ${error}`,
