@@ -25,7 +25,6 @@ import {
   pinCardToQueue,
   removeFromQueue,
   clearTeamDraftQueue,
-  getAutoDraftPreview,
   type QueueEntry,
 } from "@/app/actions/autoDraftActions";
 import { getAvailableCardsForDraft, type CardData } from "@/app/actions/cardActions";
@@ -245,11 +244,9 @@ function DragOverlayItem({ entry }: { entry: QueueEntry }) {
 // ============================================================================
 
 function AddToQueueDialog({
-  teamId,
   existingCardIds,
   onAdd,
 }: {
-  teamId: string;
   existingCardIds: Set<string>;
   onAdd: (card: CardData) => void;
 }) {
@@ -603,7 +600,6 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
             {isUserTeamMember && (
               <div className="flex flex-wrap gap-2 mb-4">
                 <AddToQueueDialog
-                  teamId={teamId}
                   existingCardIds={existingCardIds}
                   onAdd={handleAddToQueue}
                 />
