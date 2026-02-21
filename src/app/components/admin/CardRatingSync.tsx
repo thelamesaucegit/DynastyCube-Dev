@@ -19,14 +19,12 @@ export const CardRatingSync: React.FC = () => {
         return;
       }
 
-      // Construct a detailed success message from the results
       const poolMsg = res.poolResult?.message || "Pools: No action taken.";
       const draftMsg = res.draftResult?.message || "Drafts: No action taken.";
       setResult(
         `✅ CubeCobra ELO Sync Complete!\n\n${poolMsg}\n${draftMsg}\n\nOverall: ${res.message}`
       );
 
-      // Log any specific errors to the browser console for debugging
       if (res.poolResult?.errors && res.poolResult.errors.length > 0) {
         console.error("CubeCobra pool sync errors:", res.poolResult.errors);
       }
@@ -51,14 +49,13 @@ export const CardRatingSync: React.FC = () => {
         </p>
       </div>
 
-      {/* Info Box */}
       <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-300 dark:border-purple-700 rounded-lg p-4 mb-6">
         <h4 className="font-semibold text-purple-900 dark:text-purple-100 mb-2">
           ℹ️ About the ELO Sync
         </h4>
         <ul className="text-sm text-purple-800 dark:text-purple-200 space-y-1 ml-4 list-disc">
           <li>
-            <strong>Source:</strong> Fetches data directly from CubeCobra's public S3 bucket, ensuring the most comprehensive and up-to-date ELO ratings.
+            <strong>Source:</strong> Fetches data directly from CubeCobra&apos;s public S3 bucket, ensuring the most comprehensive and up-to-date ELO ratings.
           </li>
           <li>
             <strong>Process:</strong> This will update the ELO for all cards in both the main Card Pools and all drafted Team Picks in a single operation.
@@ -67,7 +64,6 @@ export const CardRatingSync: React.FC = () => {
         </ul>
       </div>
 
-      {/* Sync Action */}
       <div className="mb-6">
         <button
           onClick={handleSyncAll}
@@ -84,7 +80,6 @@ export const CardRatingSync: React.FC = () => {
         </button>
       </div>
 
-      {/* Loading State */}
       {syncing && (
         <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg p-4 mb-6">
           <div className="flex items-center gap-3">
@@ -94,14 +89,13 @@ export const CardRatingSync: React.FC = () => {
                 Syncing CubeCobra ELO...
               </p>
               <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                Fetching data from the S3 bucket and updating your database. Please don't close this page.
+                Fetching data from the S3 bucket and updating your database. Please don&apos;t close this page.
               </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Error Message */}
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg p-4 mb-6">
           <h4 className="font-bold text-red-900 dark:text-red-100">Sync Failed</h4>
@@ -109,7 +103,6 @@ export const CardRatingSync: React.FC = () => {
         </div>
       )}
 
-      {/* Success Message */}
       {result && (
         <div className="bg-green-50 dark:bg-green-900/20 border border-green-300 dark:border-green-700 rounded-lg p-4">
           <pre className="text-sm text-green-800 dark:text-green-200 whitespace-pre-wrap font-mono">
