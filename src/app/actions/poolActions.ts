@@ -88,17 +88,29 @@ export async function getPoolCardsWithStatus(
 
     if (picksError) return { cards: [], error: picksError.message };
 
-    // FIX: Map drafted cards as an array of picks so we can "consume" them one by one
-    const draftedCardsMap = new Map<string, any[]>();
+        // Define the shape of the draft info
+    interface DraftInfo {
+      team: {
+        id: string;
+        name: string;
+        emoji: string;
+      };
+      drafted_at: string;
+    }
+
+    // FIX: Map drafted cards as an array of picks using the explicit interface
+    const draftedCardsMap = new Map<string, DraftInfo[]>();
     (draftPicks || []).forEach((pick) => {
       if (!draftedCardsMap.has(pick.card_id)) {
         draftedCardsMap.set(pick.card_id, []);
       }
+      // TypeScript now knows 'pick.teams' is exactly what 'team' needs to be
       draftedCardsMap.get(pick.card_id)!.push({
-        team: pick.teams,
+        team: pick.teams as unknown as DraftInfo["team"], // Type assertion if needed based on Supabase return type
         drafted_at: pick.drafted_at,
       });
     });
+
 
     const cardsWithStatus: PoolCard[] = (poolCards || []).map((card) => {
       // FIX: Get the array of picks for this Scryfall ID
