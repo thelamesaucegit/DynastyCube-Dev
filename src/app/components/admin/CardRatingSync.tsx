@@ -12,6 +12,15 @@ export const CardRatingSync: React.FC = () => {
   const [syncing, setSyncing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+// ... inside the CardRatingSync component
+const [debugResult, setDebugResult] = useState<string | null>(null);
+
+const handleDebug = async () => {
+  setDebugResult("Running debug check...");
+  const res = await debugEloSync();
+  setDebugResult(JSON.stringify(res, null, 2)); // Pretty-print the JSON response
+  console.log("Debug Result:", res);
+};
 
   const handleSyncAll = async () => {
     setSyncing(true);
@@ -68,6 +77,20 @@ export const CardRatingSync: React.FC = () => {
           <li>This may take a few moments to complete as it processes the entire card database.</li>
         </ul>
       </div>
+{/* --- DEBUG TOOL --- */}
+<div className="mb-6 border-2 border-dashed border-red-500 p-4 rounded-lg">
+    <h3 className="font-bold text-red-600">Debug Tool</h3>
+    <p className="text-sm mb-3">If sync isn&apos;t working, click this to inspect the data matching.</p>
+    <button onClick={handleDebug} className="admin-btn admin-btn-danger">
+        Run Debug Check
+    </button>
+    {debugResult && (
+        <pre className="mt-4 bg-gray-100 dark:bg-gray-900 p-4 rounded-lg text-xs whitespace-pre-wrap font-mono">
+            {debugResult}
+        </pre>
+    )}
+</div>
+{/* --- END DEBUG TOOL --- */}
 
       <div className="mb-6">
         <button
