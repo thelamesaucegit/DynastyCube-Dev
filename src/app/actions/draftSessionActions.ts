@@ -258,6 +258,7 @@ export async function updateDraftSession(
     hoursPerPick?: number;
     startTime?: string;
     endTime?: string | null;
+    resetDeadline?: boolean; // if true, reset current_pick_deadline based on new hoursPerPick
   }
 ): Promise<{ success: boolean; error?: string }> {
   try {
@@ -273,6 +274,12 @@ export async function updateDraftSession(
     if (updates.hoursPerPick !== undefined) updateData.hours_per_pick = updates.hoursPerPick;
     if (updates.startTime !== undefined) updateData.start_time = updates.startTime;
     if (updates.endTime !== undefined) updateData.end_time = updates.endTime;
+
+    // Immediately recalculate the current pick deadline from now using the new hours value
+    if (updates.resetDeadline && updates.hoursPerPick !== undefined) {
+      const newDeadline = new Date(Date.now() + updates.hoursPerPick * 60 * 60 * 1000);
+      updateData.current_pick_deadline = newDeadline.toISOString();
+    }
 
     const { error } = await supabase
       .from("draft_sessions")
