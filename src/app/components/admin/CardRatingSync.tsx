@@ -6,7 +6,7 @@ import {
 
 
 import React, { useState } from "react";
-import { updateAllCubecobraElo } from "@/app/actions/cardRatingActions";
+
 
 export const CardRatingSync: React.FC = () => {
   const [syncing, setSyncing] = useState(false);
