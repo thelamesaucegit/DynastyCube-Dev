@@ -658,14 +658,15 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
                     </p>
                   )}
                 </div>
-                <button
-                  onClick={() => handleRemoveCard(card.card_id)}
+                              <button
+                  onClick={() => handleRemoveCard(card.id!)} // <--- CRITICAL FIX here
                   disabled={actionLoading}
                   className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
                   title="Remove card"
                 >
                   ✕
                 </button>
+
               </div>
             ))}
           </div>
