@@ -247,9 +247,30 @@ export async function bulkImportCards(
   try {
     const { data: { user } } = await supabase.auth.getUser();
 
-    const failed: string[] = [];
-    const cardsToInsert: any[] = [];
-    const scryfallCache = new Map<string, any>(); // FIX: Cache to avoid hitting API for duplicates
+        const failed: string[] = [];
+
+    // Define the exact shape of what we are inserting
+    interface CardInsertData {
+      card_id: string;
+      card_name: string;
+      card_set?: string;
+      card_type?: string;
+      rarity?: string;
+      colors: string[];
+      image_url: string | null;
+      mana_cost?: string;
+      cmc: number;
+      cubucks_cost: number;
+      pool_name: string;
+      created_by: string | null;
+    }
+
+    const cardsToInsert: CardInsertData[] = [];
+    
+    // We don't need a full explicit type for the raw Scryfall response, 
+    // just enough to satisfy the linter for what we pull out of it.
+    const scryfallCache = new Map<string, Record<string, unknown>>(); 
+
 
     for (const line of lines) {
       const trimmed = line.trim();
