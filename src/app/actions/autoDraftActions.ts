@@ -3,8 +3,8 @@
 
 import { createServerClient } from "@/lib/supabase";
 import { getAvailableCardsForDraft, type CardData } from "@/app/actions/cardActions";
-import { getTeamDraftPicks, addDraftPick } from "@/app/actions/draftActions";
-import { spendCubucksOnDraft, getTeamBalance } from "@/app/actions/cubucksActions";
+import { getTeamDraftPicks, addDraftPickInternal } from "@/app/actions/draftActions";
+import { spendCubucksOnDraftInternal, getTeamBalance } from "@/app/actions/cubucksActions";
 import { getDraftStatus } from "@/app/actions/draftOrderActions";
 
 // ============================================================================
@@ -713,8 +713,8 @@ export async function executeAutoDraft(
       return { success: false, error: `Insufficient Cubucks. Need ${cost}, have ${teamBalance?.cubucks_balance || 0}` };
     }
 
-    // Execute the draft: spend cubucks
-    const cubucksResult = await spendCubucksOnDraft(
+    // Execute the draft: spend cubucks (internal — no user session required)
+    const cubucksResult = await spendCubucksOnDraftInternal(
       teamId,
       card.card_id,
       card.card_name,
@@ -730,8 +730,8 @@ export async function executeAutoDraft(
     // Get current pick count for this team
     const { picks: existingPicks } = await getTeamDraftPicks(teamId);
 
-    // Add the draft pick
-    const pickResult = await addDraftPick({
+    // Add the draft pick (internal — no user session required)
+    const pickResult = await addDraftPickInternal({
       team_id: teamId,
       card_id: card.card_id,
       card_name: card.card_name,

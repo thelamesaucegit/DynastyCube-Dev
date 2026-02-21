@@ -37,6 +37,9 @@ export const DraftSessionManagement: React.FC = () => {
   // Edit state
   const [editingHours, setEditingHours] = useState(false);
   const [editHoursValue, setEditHoursValue] = useState("");
+  const [testModeLoading, setTestModeLoading] = useState(false);
+
+  const TEST_MODE_HOURS = 1 / 60; // 1 minute expressed as a fraction of an hour
 
   // UI state
   const [actionLoading, setActionLoading] = useState(false);
@@ -232,8 +235,8 @@ export const DraftSessionManagement: React.FC = () => {
 
   const handleUpdateHours = async (sessionId: string) => {
     const newHours = parseFloat(editHoursValue);
-    if (isNaN(newHours) || newHours < 0.5 || newHours > 168) {
-      setMessage({ type: "error", text: "Hours must be between 0.5 and 168" });
+    if (isNaN(newHours) || newHours <= 0 || newHours > 168) {
+      setMessage({ type: "error", text: "Hours must be between 0 and 168" });
       return;
     }
     setActionLoading(true);
@@ -250,6 +253,27 @@ export const DraftSessionManagement: React.FC = () => {
       setMessage({ type: "error", text: String(error) });
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleToggleTestMode = async (sessionId: string, currentHours: number) => {
+    const isTestMode = currentHours <= TEST_MODE_HOURS + 0.001;
+    const newHours = isTestMode ? 24 : TEST_MODE_HOURS;
+    const label = isTestMode ? "24h (normal)" : "1 minute (test)";
+    if (!confirm(`Switch pick timer to ${label}?`)) return;
+    setTestModeLoading(true);
+    try {
+      const result = await updateDraftSession(sessionId, { hoursPerPick: newHours });
+      if (result.success) {
+        setMessage({ type: "success", text: `Pick timer set to ${label}` });
+        loadData();
+      } else {
+        setMessage({ type: "error", text: result.error || "Failed to update pick timer" });
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: String(error) });
+    } finally {
+      setTestModeLoading(false);
     }
   };
 
@@ -394,14 +418,20 @@ export const DraftSessionManagement: React.FC = () => {
                 </div>
               ) : (
                 <div
-                  className="text-sm font-medium text-gray-900 dark:text-gray-100 cursor-pointer hover:text-blue-600"
+                  className={`text-sm font-medium cursor-pointer hover:text-blue-600 ${
+                    activeSession.hours_per_pick <= TEST_MODE_HOURS + 0.001
+                      ? "text-orange-600 dark:text-orange-400"
+                      : "text-gray-900 dark:text-gray-100"
+                  }`}
                   onClick={() => {
                     setEditHoursValue(String(activeSession.hours_per_pick));
                     setEditingHours(true);
                   }}
                   title="Click to edit"
                 >
-                  {activeSession.hours_per_pick}h
+                  {activeSession.hours_per_pick <= TEST_MODE_HOURS + 0.001
+                    ? "1m (TEST)"
+                    : `${activeSession.hours_per_pick}h`}
                 </div>
               )}
             </div>
@@ -493,6 +523,22 @@ export const DraftSessionManagement: React.FC = () => {
                   className="admin-btn admin-btn-secondary"
                 >
                   {actionLoading ? "Pausing..." : "Pause Draft"}
+                </button>
+                <button
+                  onClick={() => handleToggleTestMode(activeSession.id, activeSession.hours_per_pick)}
+                  disabled={testModeLoading}
+                  title="Sets pick timer to 1 minute for rapid auto-draft testing"
+                  className={`admin-btn ${
+                    activeSession.hours_per_pick <= TEST_MODE_HOURS + 0.001
+                      ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border border-orange-300 dark:border-orange-600 hover:bg-orange-200 dark:hover:bg-orange-900/50"
+                      : "admin-btn-secondary"
+                  }`}
+                >
+                  {testModeLoading
+                    ? "Updating..."
+                    : activeSession.hours_per_pick <= TEST_MODE_HOURS + 0.001
+                    ? "Disable Test Mode"
+                    : "Test Mode (1 min)"}
                 </button>
                 <button
                   onClick={() => handleComplete(activeSession.id)}
@@ -636,12 +682,39 @@ export const DraftSessionManagement: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Hours Per Pick (auto-draft timer)
                   </label>
+                  <div className="flex gap-2 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => setHoursPerPick(String(TEST_MODE_HOURS))}
+                      className={`px-2 py-1 text-xs rounded border ${
+                        parseFloat(hoursPerPick) <= TEST_MODE_HOURS + 0.001
+                          ? "bg-orange-100 dark:bg-orange-900/30 border-orange-400 text-orange-700 dark:text-orange-300 font-semibold"
+                          : "bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600"
+                      }`}
+                    >
+                      1 min (test)
+                    </button>
+                    {[1, 4, 8, 24, 48].map((h) => (
+                      <button
+                        key={h}
+                        type="button"
+                        onClick={() => setHoursPerPick(String(h))}
+                        className={`px-2 py-1 text-xs rounded border ${
+                          parseFloat(hoursPerPick) === h
+                            ? "bg-blue-100 dark:bg-blue-900/30 border-blue-400 text-blue-700 dark:text-blue-300 font-semibold"
+                            : "bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600"
+                        }`}
+                      >
+                        {h}h
+                      </button>
+                    ))}
+                  </div>
                   <input
                     type="number"
                     step="0.5"
                     value={hoursPerPick}
                     onChange={(e) => setHoursPerPick(e.target.value)}
-                    min="0.5"
+                    min="0.01"
                     max="168"
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                   />

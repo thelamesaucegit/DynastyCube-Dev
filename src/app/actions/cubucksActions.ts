@@ -740,6 +740,44 @@ export async function spendCubucksOnDraft(
   }
 }
 
+/**
+ * Internal: Spend Cubucks on an auto-draft pick without user session check.
+ * Only for use by server-side auto-draft logic.
+ */
+export async function spendCubucksOnDraftInternal(
+  teamId: string,
+  cardId: string,
+  cardName: string,
+  cost: number,
+  cardPoolId?: string,
+  draftPickId?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createServerClient();
+
+    // Call the stored procedure directly — no user session required
+    const { error } = await supabase.rpc("spend_cubucks_on_draft", {
+      p_team_id: teamId,
+      p_amount: cost,
+      p_card_id: cardId,
+      p_card_name: cardName,
+      p_draft_pick_id: draftPickId || null,
+      p_season_id: null,
+      p_card_pool_id: cardPoolId || null,
+    });
+
+    if (error) {
+      console.error("Error spending Cubucks (auto-draft):", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Unexpected error spending Cubucks (auto-draft):", error);
+    return { success: false, error: String(error) };
+  }
+}
+
 // ============================================
 // SEASON ALLOCATION & CAP MANAGEMENT
 // ============================================
