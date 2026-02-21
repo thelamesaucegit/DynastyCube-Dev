@@ -383,7 +383,7 @@ export async function getTeamDraftQueue(
 
     // Add valid manual entries first
     for (const entry of manualEntries || []) {
-      const cardData = availableMap.get(entry.card_id);
+      const cardData = availableMap.get(entry.cardPoolId);
       if (cardData) {
         queue.push({
           id: entry.id,
@@ -403,7 +403,7 @@ export async function getTeamDraftQueue(
           cubucksCost: cardData.cubucks_cost,
           cubecobraElo: cardData.cubecobra_elo,
         });
-        usedCardIds.add(entry.card_id);
+        usedCardIds.add(entry.cardPoolId);
       }
     }
 
@@ -415,7 +415,7 @@ export async function getTeamDraftQueue(
 
       // Sort remaining available cards by ELO (with affinity) descending
       const remainingCards = availableCards
-        .filter((c) => !usedCardIds.has(c.card_id) && c.cubecobra_elo != null)
+        .filter((c) => !usedCardIds.has(c.id) && c.cubecobra_elo != null)
         .map((card) => {
           // Apply color affinity modifier for sorting
           let modifier = 1;
