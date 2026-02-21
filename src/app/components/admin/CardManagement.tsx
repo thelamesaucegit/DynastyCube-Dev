@@ -552,25 +552,32 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
         <AlertDialogContent>
           <AlertDialogHeader>
             {clearStep === 1 ? (
-              <>
-                <AlertDialogTitle className="text-red-600">
-                  Warning: Remove Cards
+                            <>
+                <AlertDialogTitle className={clearFilter === "drafted" ? "text-orange-600" : "text-red-600"}>
+                  {clearFilter === "drafted" ? "Warning: Undraft Cards" : "Warning: Remove Cards"}
                 </AlertDialogTitle>
                 <AlertDialogDescription asChild>
                   <div className="space-y-3">
                     <p>
-                      You are about to remove <strong>{clearFilter ? getAffectedCount(clearFilter) : 0}</strong> card(s)
-                      from the pool.
+                      You are about to {clearFilter === "drafted" ? "undraft" : "remove"}{" "}
+                      <strong>{clearFilter ? getAffectedCount(clearFilter) : 0}</strong> card(s).
                     </p>
                     <p>
                       Filter: <strong>{clearFilter ? getFilterLabel(clearFilter) : ""}</strong>
                     </p>
-                    <p className="text-red-600 dark:text-red-400 font-medium">
-                      This action cannot be undone. Removed cards will need to be re-imported.
-                    </p>
+                    {clearFilter === "drafted" ? (
+                      <p className="text-orange-600 dark:text-orange-400 font-medium">
+                        These cards will be removed from team rosters and returned to the main, undrafted pool.
+                      </p>
+                    ) : (
+                      <p className="text-red-600 dark:text-red-400 font-medium">
+                        This action cannot be undone. Removed cards will be permanently deleted from the database and will need to be re-imported.
+                      </p>
+                    )}
                   </div>
                 </AlertDialogDescription>
               </>
+
             ) : (
               <>
                 <AlertDialogTitle className="text-red-600">
