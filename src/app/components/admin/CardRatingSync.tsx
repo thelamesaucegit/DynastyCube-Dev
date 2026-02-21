@@ -1,4 +1,9 @@
 "use client";
+import { 
+  updateAllCubecobraElo,
+  debugEloSync // <-- ADD THIS
+} from "@/app/actions/cardRatingActions";
+
 
 import React, { useState } from "react";
 import { updateAllCubecobraElo } from "@/app/actions/cardRatingActions";
