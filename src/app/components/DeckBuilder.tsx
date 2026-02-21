@@ -924,7 +924,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                     {(() => {
                       const cmcValues: number[] = [];
                       mainboardCards.forEach((card) => {
-                        const pick = draftPicks.find((p) => p.card_id === card.card_id);
+                        const pick = draftPicks.find((p) => p.id === card.draft_pick_id);
                         if (pick && pick.cmc !== null && pick.cmc !== undefined) {
                           for (let i = 0; i < (card.quantity || 1); i++) {
                             cmcValues.push(pick.cmc);
@@ -944,7 +944,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                     {(() => {
                       const colors = new Set<string>();
                       [...mainboardCards, ...sideboardCards].forEach((card) => {
-                        const pick = draftPicks.find((p) => p.card_id === card.card_id);
+                        const pick = draftPicks.find((p) => p.id === card.draft_pick_id);
                         if (pick && pick.colors && Array.isArray(pick.colors)) {
                           pick.colors.forEach((c: string) => colors.add(c));
                         }
