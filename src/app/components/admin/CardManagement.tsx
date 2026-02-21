@@ -135,11 +135,7 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
   };
 
   const handleAddCard = async (card: MTGCard) => {
-    // Check if already in pool
-    if (cards.find(c => c.card_id === card.id)) {
-      setError("Card already in pool");
-      return;
-    }
+
 
     setActionLoading(true);
     setError(null);
