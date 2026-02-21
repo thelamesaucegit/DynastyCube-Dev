@@ -769,8 +769,21 @@ export async function executeAutoDraft(
       pick: { cardId: card.card_id, cardName: card.card_name, cost },
       source: preview.source,
     };
-  } catch (error) {
+ } catch (error) {
     console.error("Error executing auto-draft:", error);
+    
+    // Check if the error is the specific "Failed to find Server Action" error
+    // This is a bit of a hack, but it's a common pattern for this issue.
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes("Failed to find Server Action")) {
+      return { 
+        success: false, 
+        error: "Deployment has changed. Please refresh the page.",
+        // Add a specific flag the UI can check for
+        staleDeployment: true 
+      };
+    }
+
     return { success: false, error: "Failed to execute auto-draft" };
   }
 }
