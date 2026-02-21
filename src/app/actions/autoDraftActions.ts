@@ -369,11 +369,14 @@ export async function getTeamDraftQueue(
     }
 
     // Get available cards for full card data
-    const { cards: availableCards } = await getAvailableCardsForDraft();
+    // FIX: Use the unique card.id as the key to support duplicates
     const availableMap = new Map<string, CardData>();
     for (const card of availableCards) {
-      availableMap.set(card.card_id, card);
+      if (card.id) { // Ensure card.id exists
+          availableMap.set(card.id, card);
+      }
     }
+
 
     const queue: QueueEntry[] = [];
     const usedCardIds = new Set<string>();
