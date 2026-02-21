@@ -12,6 +12,7 @@ import {
   getActiveDraftSession,
   type DraftSessionWithStatus,
 } from "@/app/actions/draftSessionActions";
+import { getActiveDraftOrder } from "@/app/actions/draftOrderActions";
 import {
   getPhaseDisplayName,
   getPhaseIcon,
@@ -29,6 +30,7 @@ export const SeasonPhaseManager: React.FC = () => {
   // Draft modal state
   const [showDraftModal, setShowDraftModal] = useState(false);
   const [activeSession, setActiveSession] = useState<DraftSessionWithStatus | null>(null);
+  const [draftOrderCount, setDraftOrderCount] = useState<number | null>(null);
   const [totalRounds, setTotalRounds] = useState("45");
   const [hoursPerPick, setHoursPerPick] = useState("24");
   const [startDate, setStartDate] = useState("");
@@ -67,10 +69,14 @@ export const SeasonPhaseManager: React.FC = () => {
     if (newPhase === "draft") {
       setDraftLoading(true);
       try {
-        const sessionRes = await getActiveDraftSession();
+        const [sessionRes, orderRes] = await Promise.all([
+          getActiveDraftSession(),
+          getActiveDraftOrder(),
+        ]);
         setActiveSession(sessionRes.session);
+        setDraftOrderCount(orderRes.order.length);
       } catch (err) {
-        console.error("Error loading draft session:", err);
+        console.error("Error loading draft data:", err);
       } finally {
         setDraftLoading(false);
       }
@@ -173,6 +179,8 @@ export const SeasonPhaseManager: React.FC = () => {
     setStartTime("");
     setEndDate("");
     setEndTime("");
+    setDraftOrderCount(null);
+    setActiveSession(null);
   };
 
   const handleCancelModal = () => {
@@ -345,6 +353,33 @@ export const SeasonPhaseManager: React.FC = () => {
 
             {/* Body */}
             <div className="p-6 space-y-6">
+              {/* No draft order — hard blocker */}
+              {draftOrderCount === 0 && (
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <span className="text-xl">🚫</span>
+                    <div>
+                      <p className="font-semibold text-red-900 dark:text-red-100 text-sm">
+                        No draft order found for the active season
+                      </p>
+                      <p className="text-red-700 dark:text-red-300 text-xs mt-1">
+                        Please generate a draft order in the <strong>Draft Order</strong> admin tab before scheduling a draft.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Draft order OK — show count */}
+              {draftOrderCount !== null && draftOrderCount > 0 && (
+                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                  <div className="flex items-center gap-2 text-blue-800 dark:text-blue-200 text-sm">
+                    <span>✓</span>
+                    <span>Draft order found: <strong>{draftOrderCount} teams</strong> in queue</span>
+                  </div>
+                </div>
+              )}
+
               {/* Existing session warning */}
               {activeSession && (
                 <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg">
@@ -352,10 +387,10 @@ export const SeasonPhaseManager: React.FC = () => {
                     <span className="text-xl">⚠️</span>
                     <div>
                       <p className="font-semibold text-yellow-900 dark:text-yellow-100 text-sm">
-                        An existing draft session is active (status: {activeSession.status})
+                        An existing draft session is already {activeSession.status}
                       </p>
                       <p className="text-yellow-700 dark:text-yellow-300 text-xs mt-1">
-                        You can still transition to Draft phase. Manage the active session from the Draft Session tab.
+                        Complete or delete it from the <strong>Draft Session</strong> admin tab before creating a new one.
                       </p>
                     </div>
                   </div>
@@ -502,8 +537,8 @@ export const SeasonPhaseManager: React.FC = () => {
               </button>
               <button
                 onClick={handleScheduleDraft}
-                disabled={draftLoading || !startDate || !startTime}
-                className="px-5 py-2.5 rounded-lg bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-semibold text-sm transition-colors flex items-center gap-2"
+                disabled={draftLoading || !startDate || !startTime || draftOrderCount === 0 || !!activeSession}
+                className="px-5 py-2.5 rounded-lg bg-green-600 hover:bg-green-700 disabled:bg-green-400 disabled:cursor-not-allowed text-white font-semibold text-sm transition-colors flex items-center gap-2"
               >
                 {draftLoading ? (
                   <>
