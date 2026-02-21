@@ -121,8 +121,8 @@ export async function createDraftSession(config: {
     if (config.totalRounds < 1 || config.totalRounds > 999) {
       return { success: false, error: "Total rounds must be between 1 and 999" };
     }
-    if (config.hoursPerPick < 0.5 || config.hoursPerPick > 168) {
-      return { success: false, error: "Hours per pick must be between 0.5 and 168 (1 week)" };
+    if (config.hoursPerPick <= 0 || config.hoursPerPick > 168) {
+      return { success: false, error: "Hours per pick must be greater than 0 and at most 168 (1 week)" };
     }
 
     // Create the session
