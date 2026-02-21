@@ -263,7 +263,7 @@ export const DraftSessionManagement: React.FC = () => {
     if (!confirm(`Switch pick timer to ${label}?`)) return;
     setTestModeLoading(true);
     try {
-      const result = await updateDraftSession(sessionId, { hoursPerPick: newHours });
+      const result = await updateDraftSession(sessionId, { hoursPerPick: newHours, resetDeadline: true });
       if (result.success) {
         setMessage({ type: "success", text: `Pick timer set to ${label}` });
         loadData();
