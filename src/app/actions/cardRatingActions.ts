@@ -198,3 +198,55 @@ export async function updateAllCubecobraElo(): Promise<{
 // as they rely on the old cube-specific fetch. You can either remove them
 // or leave them if they are used elsewhere for testing specific cubes.
 // For simplicity, I'm leaving them out of this final version.
+
+/**
+ * TEMPORARY DEBUGGING TOOL
+ * Fetches data and compares a sample card from your DB against the generated ELO map.
+ */
+export async function debugEloSync(): Promise<object> {
+  try {
+    const supabase = await createServerClient();
+    
+    // 1. Get one sample card from your database
+    const { data: dbCard, error: dbError } = await supabase
+      .from("card_pools")
+      .select("card_name")
+      .limit(1)
+      .single();
+      
+    if (dbError || !dbCard) {
+      return { error: "Could not fetch a sample card from your card_pools table.", details: dbError };
+    }
+    
+    const dbCardName = dbCard.card_name;
+    const dbCardNameLower = dbCardName.toLowerCase();
+
+    // 2. Run the same S3 fetching logic
+    const s3EloMap = await fetchEloMapFromS3();
+
+    // 3. Perform the lookup and inspection
+    const lookupResult = s3EloMap.get(dbCardNameLower);
+    const keyExists = s3EloMap.has(dbCardNameLower);
+    
+    // 4. Get a sample of the keys from the S3 ELO map
+    const sampleEloMapKeys = Array.from(s3EloMap.keys()).slice(0, 10);
+    
+    // 5. Return a detailed report
+    return {
+      dbCardName,
+      dbCardNameLower,
+      eloMapSize: s3EloMap.size,
+      sampleEloMapKeys,
+      keyExists,
+      lookupResult: lookupResult === undefined ? "Not Found" : lookupResult,
+      message: `Checked for '${dbCardNameLower}'. Found in map: ${keyExists}.`,
+    };
+    
+  } catch (error) {
+    return {
+      error: "A critical error occurred during the debug sync.",
+      message: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
