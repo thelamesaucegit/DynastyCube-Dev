@@ -687,6 +687,7 @@ export async function executeAutoDraft(
   pick?: { cardId: string; cardName: string; cost: number };
   source?: "manual_queue" | "algorithm";
   error?: string;
+  staleDeployment?: boolean;
 }> {
   try {
     // Verify the team is on the clock
