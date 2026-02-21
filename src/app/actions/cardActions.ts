@@ -498,35 +498,52 @@ export async function removeFilteredCards(
       (draftPicks || []).map((p) => p.card_id)
     );
 
-    // Determine which pool card IDs to delete based on filter
-    let idsToDelete: string[];
-
+    // Determine which action to take based on the filter
     if (filter === "undrafted") {
-      idsToDelete = poolCards
+      // PERMANENT DELETE: Remove completely from the main card_pools table
+      const idsToDelete = poolCards
         .filter((c) => !draftedCardIds.has(c.card_id))
         .map((c) => c.id);
-    } else {
-      // drafted
-      idsToDelete = poolCards
-        .filter((c) => draftedCardIds.has(c.card_id))
-        .map((c) => c.id);
+
+      if (idsToDelete.length === 0) {
+        return { success: true, removedCount: 0 };
+      }
+
+      const { error: deleteError } = await supabase
+        .from("card_pools")
+        .delete()
+        .in("id", idsToDelete);
+
+      if (deleteError) {
+        console.error("Error removing undrafted cards:", deleteError);
+        return { success: false, error: deleteError.message };
+      }
+
+      return { success: true, removedCount: idsToDelete.length };
+
+    } else if (filter === "drafted") {
+      // MOVE BACK TO MAIN POOL: Delete from team_draft_picks instead of card_pools!
+      const draftedPoolCards = poolCards.filter((c) => draftedCardIds.has(c.card_id));
+      const draftedCardIdsInPool = draftedPoolCards.map((c) => c.card_id);
+
+      if (draftedCardIdsInPool.length === 0) {
+        return { success: true, removedCount: 0 };
+      }
+
+      const { error: undraftError } = await supabase
+        .from("team_draft_picks")
+        .delete()
+        .in("card_id", draftedCardIdsInPool);
+
+      if (undraftError) {
+        console.error("Error undrafting cards:", undraftError);
+        return { success: false, error: undraftError.message };
+      }
+
+      return { success: true, removedCount: draftedPoolCards.length };
     }
 
-    if (idsToDelete.length === 0) {
-      return { success: true, removedCount: 0 };
-    }
-
-    const { error: deleteError } = await supabase
-      .from("card_pools")
-      .delete()
-      .in("id", idsToDelete);
-
-    if (deleteError) {
-      console.error("Error removing filtered cards:", deleteError);
-      return { success: false, error: deleteError.message };
-    }
-
-    return { success: true, removedCount: idsToDelete.length };
+    return { success: false, error: "Invalid filter" };
   } catch (error) {
     console.error("Unexpected error removing filtered cards:", error);
     return { success: false, error: String(error) };
