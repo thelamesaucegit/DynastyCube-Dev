@@ -65,19 +65,14 @@ export async function getPoolCardsWithStatus(
   const supabase = await createClient();
 
   try {
-    // Get all cards from the pool
     const { data: poolCards, error: poolError } = await supabase
       .from("card_pools")
       .select("*")
       .eq("pool_name", poolName)
       .order("card_name");
 
-    if (poolError) {
-      console.error("Error fetching pool cards:", poolError);
-      return { cards: [], error: poolError.message };
-    }
+    if (poolError) return { cards: [], error: poolError.message };
 
-    // Get all draft picks
     const { data: draftPicks, error: picksError } = await supabase
       .from("team_draft_picks")
       .select(`
@@ -91,23 +86,28 @@ export async function getPoolCardsWithStatus(
         )
       `);
 
-    if (picksError) {
-      console.error("Error fetching draft picks:", picksError);
-      return { cards: [], error: picksError.message };
-    }
+    if (picksError) return { cards: [], error: picksError.message };
 
-    // Create a map of drafted cards
-    const draftedCardsMap = new Map();
+    // FIX: Map drafted cards as an array of picks so we can "consume" them one by one
+    const draftedCardsMap = new Map<string, any[]>();
     (draftPicks || []).forEach((pick) => {
-      draftedCardsMap.set(pick.card_id, {
+      if (!draftedCardsMap.has(pick.card_id)) {
+        draftedCardsMap.set(pick.card_id, []);
+      }
+      draftedCardsMap.get(pick.card_id)!.push({
         team: pick.teams,
         drafted_at: pick.drafted_at,
       });
     });
 
-    // Combine pool cards with draft status
     const cardsWithStatus: PoolCard[] = (poolCards || []).map((card) => {
-      const draftInfo = draftedCardsMap.get(card.card_id);
+      // FIX: Get the array of picks for this Scryfall ID
+      const picksForThisCard = draftedCardsMap.get(card.card_id);
+      
+      // Pull exactly ONE pick off the array to apply to this specific instance
+      const draftInfo = picksForThisCard && picksForThisCard.length > 0 
+        ? picksForThisCard.shift() 
+        : null;
 
       return {
         id: card.id,
