@@ -135,11 +135,7 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
   };
 
   const handleAddCard = async (card: MTGCard) => {
-    // Check if already in pool
-    if (cards.find(c => c.card_id === card.id)) {
-      setError("Card already in pool");
-      return;
-    }
+
 
     setActionLoading(true);
     setError(null);
@@ -405,17 +401,14 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
                     </div>
                   )}
                 </div>
-                <button
+                                <button
                   onClick={() => handleAddCard(card)}
-                  disabled={cards.some(c => c.card_id === card.id) || actionLoading}
-                  className={`admin-btn ${
-                    cards.some(c => c.card_id === card.id)
-                      ? "admin-btn-secondary opacity-50 cursor-not-allowed"
-                      : "admin-btn-primary"
-                  }`}
+                  disabled={actionLoading}
+                  className="admin-btn admin-btn-primary"
                 >
-                  {cards.some(c => c.card_id === card.id) ? "Added" : "Add to Pool"}
+                  Add to Pool
                 </button>
+
               </div>
             ))}
           </div>
@@ -559,25 +552,32 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
         <AlertDialogContent>
           <AlertDialogHeader>
             {clearStep === 1 ? (
-              <>
-                <AlertDialogTitle className="text-red-600">
-                  Warning: Remove Cards
+                            <>
+                <AlertDialogTitle className={clearFilter === "drafted" ? "text-orange-600" : "text-red-600"}>
+                  {clearFilter === "drafted" ? "Warning: Undraft Cards" : "Warning: Remove Cards"}
                 </AlertDialogTitle>
                 <AlertDialogDescription asChild>
                   <div className="space-y-3">
                     <p>
-                      You are about to remove <strong>{clearFilter ? getAffectedCount(clearFilter) : 0}</strong> card(s)
-                      from the pool.
+                      You are about to {clearFilter === "drafted" ? "undraft" : "remove"}{" "}
+                      <strong>{clearFilter ? getAffectedCount(clearFilter) : 0}</strong> card(s).
                     </p>
                     <p>
                       Filter: <strong>{clearFilter ? getFilterLabel(clearFilter) : ""}</strong>
                     </p>
-                    <p className="text-red-600 dark:text-red-400 font-medium">
-                      This action cannot be undone. Removed cards will need to be re-imported.
-                    </p>
+                    {clearFilter === "drafted" ? (
+                      <p className="text-orange-600 dark:text-orange-400 font-medium">
+                        These cards will be removed from team rosters and returned to the main, undrafted pool.
+                      </p>
+                    ) : (
+                      <p className="text-red-600 dark:text-red-400 font-medium">
+                        This action cannot be undone. Removed cards will be permanently deleted from the database and will need to be re-imported.
+                      </p>
+                    )}
                   </div>
                 </AlertDialogDescription>
               </>
+
             ) : (
               <>
                 <AlertDialogTitle className="text-red-600">
@@ -665,14 +665,15 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
                     </p>
                   )}
                 </div>
-                <button
-                  onClick={() => handleRemoveCard(card.card_id)}
+                              <button
+                  onClick={() => handleRemoveCard(card.id!)} // <--- CRITICAL FIX here
                   disabled={actionLoading}
                   className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
                   title="Remove card"
                 >
                   ✕
                 </button>
+
               </div>
             ))}
           </div>
