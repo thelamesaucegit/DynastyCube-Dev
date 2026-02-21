@@ -142,7 +142,10 @@ export async function createDraftSession(config: {
 
     if (error) {
       console.error("Error creating draft session:", error);
-      return { success: false, error: error.message };
+      return {
+        success: false,
+        error: `DB error: ${error.message} (code: ${error.code}, hint: ${error.hint ?? "none"})`,
+      };
     }
 
     return { success: true, sessionId: data.id };
