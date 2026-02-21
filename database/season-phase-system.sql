@@ -15,7 +15,7 @@ BEGIN
   ) THEN
     ALTER TABLE seasons
     ADD COLUMN phase text DEFAULT 'preseason'
-    CHECK (phase IN ('preseason', 'season', 'playoffs', 'postseason'));
+    CHECK (phase IN ('preseason', 'draft', 'season', 'playoffs', 'postseason'));
   END IF;
 
   IF NOT EXISTS (
@@ -69,10 +69,11 @@ BEGIN
   -- Build notification message
   v_message := 'The season has moved to ' ||
     CASE p_new_phase
-      WHEN 'preseason' THEN 'Preseason'
+      WHEN 'preseason' THEN 'Pre-Season'
+      WHEN 'draft' THEN 'Draft'
       WHEN 'season' THEN 'Regular Season'
       WHEN 'playoffs' THEN 'Playoffs'
-      WHEN 'postseason' THEN 'Post Season'
+      WHEN 'postseason' THEN 'Post-Season'
       ELSE p_new_phase
     END || '!';
 
