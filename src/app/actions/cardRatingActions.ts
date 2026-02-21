@@ -76,7 +76,6 @@ async function updateTableCubecobraElo(
   tableName: "card_pools" | "team_draft_picks",
   eloMap: Map<string, number>
 ): Promise<CardRatingResult> {
-  // This function remains unchanged as it's already doing its job perfectly!
   try {
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -96,36 +95,38 @@ async function updateTableCubecobraElo(
     }
 
     console.log(`Matching ${cards.length} cards from ${tableName} against CubeCobra ELO data...`);
+    
     let updatedCount = 0;
     let notFoundCount = 0;
     const updateErrors: string[] = [];
 
-    // Use a transaction for bulk updates for better performance
-    const updates = cards
-      .map(card => {
-        const elo = eloMap.get(card.card_name.toLowerCase());
-        if (elo != null) {
-          return {
-            id: card.id,
-            cubecobra_elo: elo,
-            rating_updated_at: new Date().toISOString(),
-          };
-        } else {
-          notFoundCount++;
-          return null;
-        }
-      })
-      .filter(Boolean) as { id: string; cubecobra_elo: number; rating_updated_at: string }[];
+    // --- REVERTING TO THE FOR...OF LOOP FOR RELIABILITY ---
+    for (const card of cards) {
+      const elo = eloMap.get(card.card_name.toLowerCase());
+      
+      if (elo == null) {
+        notFoundCount++;
+        continue; // Skip this card
+      }
 
-    if (updates.length > 0) {
-      const { error: updateError } = await supabase.from(tableName).upsert(updates);
+      // Perform a single update for this card
+      const { error: updateError } = await supabase
+        .from(tableName)
+        .update({
+          cubecobra_elo: Math.round(elo), // Keep the rounding fix
+          rating_updated_at: new Date().toISOString(),
+        })
+        .eq("id", card.id);
+
       if (updateError) {
-        updateErrors.push(`Bulk update failed: ${updateError.message}`);
-        console.error(`Error bulk updating ${tableName}:`, updateError);
+        const errorMsg = `Failed to update ${card.card_name}: ${updateError.message}`;
+        updateErrors.push(errorMsg);
+        console.error(errorMsg);
       } else {
-        updatedCount = updates.length;
+        updatedCount++;
       }
     }
+    // --- END OF LOOP ---
 
     return {
       success: updateErrors.length === 0,
@@ -140,6 +141,7 @@ async function updateTableCubecobraElo(
     return { success: false, message: `Unexpected error: ${error instanceof Error ? error.message : String(error)}` };
   }
 }
+
 
 /**
  * REPLACED: This now uses the S3 data source instead of a specific cube
