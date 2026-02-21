@@ -401,17 +401,14 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
                     </div>
                   )}
                 </div>
-                <button
+                                <button
                   onClick={() => handleAddCard(card)}
-                  disabled={cards.some(c => c.card_id === card.id) || actionLoading}
-                  className={`admin-btn ${
-                    cards.some(c => c.card_id === card.id)
-                      ? "admin-btn-secondary opacity-50 cursor-not-allowed"
-                      : "admin-btn-primary"
-                  }`}
+                  disabled={actionLoading}
+                  className="admin-btn admin-btn-primary"
                 >
-                  {cards.some(c => c.card_id === card.id) ? "Added" : "Add to Pool"}
+                  Add to Pool
                 </button>
+
               </div>
             ))}
           </div>
