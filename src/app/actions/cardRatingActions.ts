@@ -29,40 +29,31 @@ interface CardRatingResult {
 const S3_BUCKET_URL = "https://cubecobra-public.s3.amazonaws.com/";
 
 /**
- * NEW: Fetches the required JSON files from CubeCobra's public S3 bucket
- * and builds the ELO map.
+ * NEW (Corrected): Fetches the required JSON files from CubeCobra's public S3 bucket
+ * and builds the ELO map directly from the simpleCardDict.
  */
 async function fetchEloMapFromS3(): Promise<Map<string, number>> {
   try {
     console.log("Fetching ELO data from CubeCobra S3 bucket...");
 
-    // 1. Fetch the name-to-oracle-ID mapping
-    const nameToIdResponse = await fetch(`${S3_BUCKET_URL}cards/nameToId.json`);
-    if (!nameToIdResponse.ok) {
-      throw new Error("Failed to fetch nameToId.json");
-    }
-    const nameToId: NameToId = await nameToIdResponse.json();
-
-    // 2. Fetch the card dictionary with ELO scores
+    // 1. Fetch the card dictionary with ELO scores (this is all we need)
     const simpleCardDictResponse = await fetch(`${S3_BUCKET_URL}export/simpleCardDict.json`);
     if (!simpleCardDictResponse.ok) {
-      throw new Error("Failed to fetch simpleCardDict.json");
+      throw new Error("Failed to fetch simpleCardDict.json from S3");
     }
     const simpleCardDict: SimpleCardDict = await simpleCardDictResponse.json();
 
     console.log("Successfully fetched S3 data. Building ELO map...");
 
-    // 3. Create the final ELO map (lowercase name -> elo)
+    // 2. Create the final ELO map (lowercase name -> elo)
     const eloMap = new Map<string, number>();
 
-    for (const name in nameToId) {
-      const oracleIds = nameToId[name];
-      if (oracleIds && oracleIds.length > 0) {
-        // Use the first Oracle ID to look up the card data
-        const cardData = simpleCardDict[oracleIds[0]];
-        if (cardData && typeof cardData.elo === 'number') {
-          eloMap.set(name.toLowerCase(), cardData.elo);
-        }
+    // Iterate directly through the card dictionary
+    for (const oracleId in simpleCardDict) {
+      const cardData = simpleCardDict[oracleId];
+      // Check if the card has a name and a numeric ELO score
+      if (cardData && cardData.name && typeof cardData.elo === 'number') {
+        eloMap.set(cardData.name.toLowerCase(), cardData.elo);
       }
     }
     
@@ -75,6 +66,7 @@ async function fetchEloMapFromS3(): Promise<Map<string, number>> {
     return new Map<string, number>();
   }
 }
+
 
 
 /**
