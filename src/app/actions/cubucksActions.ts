@@ -706,8 +706,7 @@ export async function spendCubucksOnDraft(
   cardName: string,
   cost: number,
   cardPoolId?: string,
-  draftPickId?: string,
-  isManualPick?: boolean
+  draftPickId?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = await createServerClient();
@@ -751,7 +750,8 @@ export async function spendCubucksOnDraftInternal(
   cardName: string,
   cost: number,
   cardPoolId?: string,
-  draftPickId?: string
+  draftPickId?: string,
+    isManualPick?: boolean
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = await createServerClient();
