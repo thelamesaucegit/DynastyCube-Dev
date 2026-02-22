@@ -241,18 +241,41 @@ export async function getTeamDraftPicks(
 }
 
 
+
+
 /**
  * Internal: Add a draft pick without user session check.
  * Only for use by server-side auto-draft logic.
  */
+// FIX: Added the second argument to match the function call.
+// FIX: Added a race condition check to prevent duplicate drafts.
 export async function addDraftPickInternal(
-  pick: DraftPick
+  pick: DraftPick,
+  isAutoDraft?: boolean // <-- This is the new optional second argument
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
-
   try {
+    // Prevent race conditions where two processes draft the same instance.
+    if (pick.card_pool_id) {
+        const { data: existingPick, error: checkError } = await supabase
+            .from("team_draft_picks")
+            .select("id")
+            .eq("card_pool_id", pick.card_pool_id)
+            .single();
+
+        if (checkError && checkError.code !== 'PGRST116') { // Ignore "not found" error
+            console.error("Error checking for existing auto-draft pick:", checkError);
+            return { success: false, error: "Database error checking card availability for auto-draft." };
+        }
+
+        if (existingPick) {
+            return { success: false, error: "This specific card has already been drafted by another process." };
+        }
+    }
+
     const { error } = await supabase.from("team_draft_picks").insert({
       team_id: pick.team_id,
+      card_pool_id: pick.card_pool_id, // Ensure card_pool_id is included
       card_id: pick.card_id,
       card_name: pick.card_name,
       card_set: pick.card_set,
@@ -277,6 +300,7 @@ export async function addDraftPickInternal(
     return { success: false, error: "An unexpected error occurred" };
   }
 }
+
 
 /**
  * Remove a card from team's draft picks
