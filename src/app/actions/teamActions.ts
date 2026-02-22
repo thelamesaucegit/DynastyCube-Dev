@@ -471,7 +471,7 @@ export async function getTeamsWithDetails(): Promise<{
       .rpc('get_latest_pick_for_each_team'); // Assumes an RPC function for efficiency
 
     // Fallback if RPC doesn't exist (less efficient but works)
-    let lastPickMap = new Map<string, { image_url: string | null; card_name: string }>();
+    const lastPickMap = new Map<string, { image_url: string | null; card_name: string }>();
     if (picksError || !latestPicks) {
         console.warn("Could not use RPC 'get_latest_pick_for_each_team'. Falling back to client-side logic. Error:", picksError?.message);
         const { data: allPicks } = await supabase.from("team_draft_picks").select("team_id, image_url, card_name, pick_number").order("pick_number", { ascending: false });
