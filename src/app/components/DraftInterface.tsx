@@ -513,7 +513,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
   
-  // INSIDE THE JSX for the Available Cards Grid:
   
             {filteredCards.map((card) => {
               // --- REPLACEMENT FOR isDrafted LOGIC ---
@@ -589,7 +588,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
                   )}
 
                   {/* Already Drafted Badge */}
-                  {isDrafted && (
+                  {isThisInstanceDrafted && (
                     <div className="absolute top-2 right-2 bg-green-600 text-white text-xs font-bold px-2 py-1 rounded shadow-lg">
                       ✓ DRAFTED
                     </div>
