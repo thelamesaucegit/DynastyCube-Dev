@@ -434,17 +434,18 @@ export async function activateDraft(
  * Advance the draft after a pick has been made.
  * Resets the pick deadline for the next team and sends notifications.
  * Checks if the draft is complete.
+/**
+ * Advance the draft after a pick has been made.
+ * Resets the pick deadline and the consecutive skip counter.
  */
 export async function advanceDraft(): Promise<{
   success: boolean;
   completed?: boolean;
-  autoDrafted?: boolean;
+   autoDrafted?: boolean;
   error?: string;
 }> {
   try {
     const supabase = await createServerClient();
-
-    // Get the active session
     const { data: session } = await supabase
       .from("draft_sessions")
       .select("*")
@@ -454,17 +455,21 @@ export async function advanceDraft(): Promise<{
       .single();
 
     if (!session) {
-      // No active session — drafting may be happening without a session (legacy)
-      return { success: true };
+      return { success: true }; // No active session, do nothing.
     }
 
-    // Get new draft status after the pick
+    // FIX: Reset the consecutive skip counter since a successful pick was just made.
+    // We do this before checking for completion.
+    await supabase
+      .from("draft_sessions")
+      .update({ consecutive_skipped_picks: 0 })
+      .eq("id", session.id);
+
     const { status: draftStatus } = await getDraftStatus();
     if (!draftStatus) {
       return { success: false, error: "Could not determine draft status" };
     }
 
-    // Check if draft is complete
     const allTeamsReachedRounds = draftStatus.draftOrder.every(
       (team) => team.picksMade >= session.total_rounds
     );
@@ -472,16 +477,22 @@ export async function advanceDraft(): Promise<{
 
     if (allTeamsReachedRounds || pastEndTime) {
       // Draft is complete
-      await supabase
-        .from("draft_sessions")
-        .update({
-          status: "completed",
-          current_pick_deadline: null,
-          current_on_clock_team_id: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", session.id);
+      await completeDraft(session.id);
+      return { success: true, completed: true };
+    }
 
+    // Draft continues, set new deadline and notify next team
+    const now = new Date();
+    const deadline = new Date(now.getTime() + session.hours_per_pick * 60 * 60 * 1000);
+    await supabase
+      .from("draft_sessions")
+      .update({
+        current_pick_deadline: deadline.toISOString(),
+        current_on_clock_team_id: draftStatus.onTheClock.teamId,
+        updated_at: now.toISOString(),
+      })
+      .eq("id", session.id);
+    
       // Notify everyone
       await supabase.rpc("notify_all_users_draft", {
         p_notification_type: "draft_completed",
@@ -656,21 +667,17 @@ export async function checkDraftTimer(): Promise<{
       .select("id")
       .eq("is_active", true)
       .single();
-    if (!activeSeason) {
-      return { action: "none" };
-    }
+    if (!activeSeason) return { action: "none" };
 
     const { data: session } = await supabase
       .from("draft_sessions")
-      .select("*")
+      .select("*") // This will now also fetch `consecutive_skipped_picks`
       .eq("season_id", activeSeason.id)
       .in("status", ["scheduled", "active"])
       .order("created_at", { ascending: false })
       .limit(1)
       .single();
-    if (!session) {
-      return { action: "none" };
-    }
+    if (!session) return { action: "none" };
 
     const now = new Date();
 
@@ -729,21 +736,34 @@ export async function checkDraftTimer(): Promise<{
             return { action: "error", error: "Could not get draft status to log skipped pick." };
         }
         
-        // Add a placeholder "skipped" pick to the database.
-        const skippedResult = await addSkippedPick(teamId, draftStatus.totalPicks + 1);
-        if (!skippedResult.success) {
-            return { action: "error", error: `Auto-draft failed and could not log skipped pick: ${skippedResult.error}` };
-        }
+         // FIX: Increment the skip counter
+        const newSkipCount = (session.consecutive_skipped_picks || 0) + 1;
         
-        // Now that a pick is logged, advance the draft.
-        const advanceResult = await advanceDraft();
-        if (!advanceResult.success) {
-            return { action: "error", error: `Auto-draft failed and draft could not be advanced: ${advanceResult.error}` };
+        // FIX: Check if the skip count has reached the total number of teams
+        if (newSkipCount >= draftStatus.totalTeams) {
+            console.log(`All ${draftStatus.totalTeams} teams have consecutively skipped. Ending draft.`);
+            await completeDraft(session.id);
+            return {
+                action: "completed",
+                message: `The draft has ended automatically after ${newSkipCount} consecutive skipped picks.`
+            };
         }
+
+        // If the draft is not over, update the counter and proceed with the skip
+        await supabase
+            .from("draft_sessions")
+            .update({ consecutive_skipped_picks: newSkipCount })
+            .eq("id", session.id);
+        
+        const skippedResult = await addSkippedPick(teamId, draftStatus.totalPicks + 1);
+        if (!skippedResult.success) return { action: "error", error: `Auto-draft failed and could not log skipped pick: ${skippedResult.error}` };
+        
+        const advanceResult = await advanceDraft();
+        if (!advanceResult.success) return { action: "error", error: `Auto-draft failed and draft could not be advanced: ${advanceResult.error}` };
         
         return {
           action: "auto_drafted",
-          message: `Team ${teamId} could not auto-draft (Reason: ${autoDraftResult.error}). Their pick was skipped.`,
+          message: `Team ${teamId} could not auto-draft. Their pick was skipped. Consecutive skips: ${newSkipCount}.`,
           error: `Auto-draft for ${teamId} failed and was skipped.`,
         };
       }
