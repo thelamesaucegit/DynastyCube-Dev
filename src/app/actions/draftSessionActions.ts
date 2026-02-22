@@ -434,17 +434,17 @@ export async function activateDraft(
  * Advance the draft after a pick has been made.
  * Resets the pick deadline for the next team and sends notifications.
  * Checks if the draft is complete.
+/**
+ * Advance the draft after a pick has been made.
+ * Resets the pick deadline and the consecutive skip counter.
  */
 export async function advanceDraft(): Promise<{
   success: boolean;
   completed?: boolean;
-  autoDrafted?: boolean;
   error?: string;
 }> {
   try {
     const supabase = await createServerClient();
-
-    // Get the active session
     const { data: session } = await supabase
       .from("draft_sessions")
       .select("*")
@@ -454,17 +454,21 @@ export async function advanceDraft(): Promise<{
       .single();
 
     if (!session) {
-      // No active session — drafting may be happening without a session (legacy)
-      return { success: true };
+      return { success: true }; // No active session, do nothing.
     }
 
-    // Get new draft status after the pick
+    // FIX: Reset the consecutive skip counter since a successful pick was just made.
+    // We do this before checking for completion.
+    await supabase
+      .from("draft_sessions")
+      .update({ consecutive_skipped_picks: 0 })
+      .eq("id", session.id);
+
     const { status: draftStatus } = await getDraftStatus();
     if (!draftStatus) {
       return { success: false, error: "Could not determine draft status" };
     }
 
-    // Check if draft is complete
     const allTeamsReachedRounds = draftStatus.draftOrder.every(
       (team) => team.picksMade >= session.total_rounds
     );
@@ -472,16 +476,22 @@ export async function advanceDraft(): Promise<{
 
     if (allTeamsReachedRounds || pastEndTime) {
       // Draft is complete
-      await supabase
-        .from("draft_sessions")
-        .update({
-          status: "completed",
-          current_pick_deadline: null,
-          current_on_clock_team_id: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", session.id);
+      await completeDraft(session.id);
+      return { success: true, completed: true };
+    }
 
+    // Draft continues, set new deadline and notify next team
+    const now = new Date();
+    const deadline = new Date(now.getTime() + session.hours_per_pick * 60 * 60 * 1000);
+    await supabase
+      .from("draft_sessions")
+      .update({
+        current_pick_deadline: deadline.toISOString(),
+        current_on_clock_team_id: draftStatus.onTheClock.teamId,
+        updated_at: now.toISOString(),
+      })
+      .eq("id", session.id);
+    
       // Notify everyone
       await supabase.rpc("notify_all_users_draft", {
         p_notification_type: "draft_completed",
