@@ -5,7 +5,7 @@ import { getAvailableCardsForDraft } from "@/app/actions/cardActions";
 import { getTeamDraftPicks, addDraftPick } from "@/app/actions/draftActions";
 import { getTeamBalance, spendCubucksOnDraft } from "@/app/actions/cubucksActions";
 import { getActiveDraftOrder, type DraftOrderEntry } from "@/app/actions/draftOrderActions";
-import { cleanupDraftQueues } from "@/app/actions/autoDraftActions";
+import { conditionallyCleanupDraftQueues } from "@/app/actions/autoDraftActions";
 import { advanceDraft } from "@/app/actions/draftSessionActions";
 import type { CardData } from "@/app/actions/cardActions";
 import type { DraftPick } from "@/app/actions/draftActions";
@@ -123,7 +123,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
     if (result.success) {
       setSuccess(`Drafted ${card.card_name} for ${cardCost} Cubucks!`);
       // Cleanup can still use the general card_id if it's meant to remove all copies from queues
-      await cleanupDraftQueues(card.card_id);
+await conditionallyCleanupDraftQueues(card.card_id);
       await advanceDraft();
       await loadDraftData();
       onDraftComplete?.();
