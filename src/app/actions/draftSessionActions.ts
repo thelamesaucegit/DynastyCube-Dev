@@ -4,6 +4,8 @@
 import { createServerClient } from "@/lib/supabase";
 import { getDraftStatus, type DraftStatus } from "@/app/actions/draftOrderActions";
 import { executeAutoDraft } from "@/app/actions/autoDraftActions";
+import { addSkippedPick } from "@/app/actions/draftActions"; 
+
 
 // ============================================================================
 // TYPES
@@ -645,7 +647,7 @@ export async function checkDraftTimer(): Promise<{
   action: "none" | "activated" | "auto_drafted" | "completed" | "error";
   message?: string;
   error?: string;
-  needsReload?: boolean; // For handling stale deployments
+  needsReload?: boolean;
 }> {
   try {
     const supabase = await createServerClient();
@@ -654,7 +656,6 @@ export async function checkDraftTimer(): Promise<{
       .select("id")
       .eq("is_active", true)
       .single();
-
     if (!activeSeason) {
       return { action: "none" };
     }
@@ -667,7 +668,6 @@ export async function checkDraftTimer(): Promise<{
       .order("created_at", { ascending: false })
       .limit(1)
       .single();
-
     if (!session) {
       return { action: "none" };
     }
@@ -708,7 +708,7 @@ export async function checkDraftTimer(): Promise<{
           message: `Auto-drafted ${autoDraftResult.pick?.cardName || "a card"} for team ${teamId}. ${advanceResult.completed ? "Draft is now complete!" : ""}`,
         };
       }
-      
+
       // Case 3b: The autodraft failed due to a stale deployment.
       if (autoDraftResult.staleDeployment) {
         return {
@@ -718,13 +718,25 @@ export async function checkDraftTimer(): Promise<{
         };
       }
       
-      // Case 3c: The autodraft failed for any other reason (e.g., no funds, no legal picks).
-      // The team's pick is SKIPPED, and the draft moves to the next person.
+      // Case 3c: The autodraft failed (no funds, no legal picks).
+      // The pick is SKIPPED by creating a placeholder and then advancing.
       else {
         console.error(`Auto-draft failed for ${teamId}: ${autoDraftResult.error}. The pick will be skipped.`);
         
+        // Get the current draft status to know the pick number
+        const { status: draftStatus } = await getDraftStatus();
+        if (!draftStatus) {
+            return { action: "error", error: "Could not get draft status to log skipped pick." };
+        }
+        
+        // Add a placeholder "skipped" pick to the database.
+        const skippedResult = await addSkippedPick(teamId, draftStatus.totalPicks + 1);
+        if (!skippedResult.success) {
+            return { action: "error", error: `Auto-draft failed and could not log skipped pick: ${skippedResult.error}` };
+        }
+        
+        // Now that a pick is logged, advance the draft.
         const advanceResult = await advanceDraft();
-
         if (!advanceResult.success) {
             return { action: "error", error: `Auto-draft failed and draft could not be advanced: ${advanceResult.error}` };
         }

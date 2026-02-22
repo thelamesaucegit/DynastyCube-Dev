@@ -72,6 +72,38 @@ export interface DeckCard {
   is_commander?: boolean;
   category?: string;
 }
+
+/**
+ * Internal: Adds a "skipped" pick to the draft history.
+ * This is used when a team fails to auto-draft, allowing the draft to advance.
+ */
+export async function addSkippedPick(
+  teamId: string,
+  pickNumber: number
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  try {
+    const { error } = await supabase.from("team_draft_picks").insert({
+      team_id: teamId,
+      card_id: "skipped-pick", // Special identifier for skipped picks
+      card_name: "SKIPPED",
+      pick_number: pickNumber,
+      drafted_by: null, // auto-drafted
+    });
+
+    if (error) {
+      console.error("Error adding skipped pick:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Unexpected error adding skipped pick:", error);
+    return { success: false, error: "An unexpected error occurred" };
+  }
+}
+
+
 /**
  * Add a card to team's draft picks
  */
