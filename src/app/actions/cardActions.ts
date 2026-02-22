@@ -38,6 +38,7 @@ export interface CardData {
   card_type?: string;
   rarity?: string;
   colors?: string[];
+  color_identity?: string[];
   image_url?: string;
   mana_cost?: string;
   cmc?: number;
@@ -91,16 +92,18 @@ export async function getAvailableCardsForDraft(
       return { cards: [], error: poolError.message };
     }
 
-    // Get all drafted card IDs (from all teams)
+     // Get the unique INSTANCE IDs of cards that have already been picked.
     const { data: draftedPicks, error: draftError } = await supabase
       .from("team_draft_picks")
-      .select("card_id");
+      .select("card_pool_id")
+      .not("card_pool_id", "is", null);
 
     if (draftError) {
-      console.error("Error fetching drafted cards:", draftError);
+      console.error("Error fetching drafted picks:", draftError);
       return { cards: [], error: draftError.message };
     }
 
+    
     // Create a map to count how many times each card_id has been drafted
     const draftedCounts = new Map<string, number>();
     (draftedPicks || []).forEach((pick) => {
@@ -108,37 +111,16 @@ export async function getAvailableCardsForDraft(
       draftedCounts.set(pick.card_id, currentCount + 1);
     });
 
-    // Create a map to count available copies of each card_id in the pool
-    const poolCounts = new Map<string, { count: number; cards: CardData[] }>();
-    (allCards || []).forEach((card) => {
-      const existing = poolCounts.get(card.card_id);
-      if (existing) {
-        existing.count++;
-        existing.cards.push(card);
-      } else {
-        poolCounts.set(card.card_id, { count: 1, cards: [card] });
-      }
-    });
-
-    // Filter to only include cards that still have available copies
-    const availableCards: CardData[] = [];
-    poolCounts.forEach((poolData, cardId) => {
-      const draftedCount = draftedCounts.get(cardId) || 0;
-      const availableCopies = poolData.count - draftedCount;
-
-      // Add one card entry for each available copy
-      for (let i = 0; i < availableCopies && i < poolData.cards.length; i++) {
-        availableCards.push(poolData.cards[i]);
-      }
-    });
-
+ const draftedInstanceIds = new Set((draftedPicks || []).map(p => p.card_pool_id));
+    
+    const availableCards = (allCardsInPool || []).filter(card => !draftedInstanceIds.has(card.id));
+    
     return { cards: availableCards };
   } catch (error) {
     console.error("Unexpected error fetching available cards:", error);
     return { cards: [], error: "An unexpected error occurred" };
   }
 }
-
 /**
  * Add a card to the pool
  */
@@ -156,11 +138,13 @@ export async function addCardToPool(
 
     const { error } = await supabase.from("card_pools").insert({
       card_id: card.card_id,
+      card_pool_id: card.id,
       card_name: card.card_name,
       card_set: card.card_set,
       card_type: card.card_type,
       rarity: card.rarity,
       colors: card.colors || [],
+      color_identity: card.color_identity || [],
       image_url: card.image_url,
       mana_cost: card.mana_cost,
       cmc: card.cmc || 0,
@@ -172,7 +156,7 @@ export async function addCardToPool(
       console.error("Error adding card to pool:", error);
       return { success: false, error: error.message };
     }
-
+ invalidateDraftCache();
     return { success: true };
   } catch (error) {
     console.error("Unexpected error adding card:", error);
@@ -197,11 +181,13 @@ export async function addCardsToPool(
 
     const cardsToInsert = cards.map((card) => ({
       card_id: card.card_id,
+      card_pool_id: card.id,
       card_name: card.card_name,
       card_set: card.card_set,
       card_type: card.card_type,
       rarity: card.rarity,
       colors: card.colors || [],
+      color_identity: card.color_identity || [],
       image_url: card.image_url,
       mana_cost: card.mana_cost,
       cmc: card.cmc || 0,
@@ -218,7 +204,7 @@ export async function addCardsToPool(
       console.error("Error adding cards to pool:", error);
       return { success: false, error: error.message };
     }
-
+invalidateDraftCache();
     return { success: true, count: data?.length || 0 };
   } catch (error) {
     console.error("Unexpected error adding cards:", error);
@@ -244,37 +230,11 @@ export async function bulkImportCards(
 }> {
   const supabase = await createClient();
 
-  try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    // Get existing cards in pool to check for duplicates
-    const { data: existingCards } = await supabase
-      .from("card_pools")
-      .select("card_id")
-      .eq("pool_name", poolName);
-
-    const existingCardIds = new Set(
-      (existingCards || []).map((c) => c.card_id)
-    );
-
+   try {
+    const { data: { user } } = await supabase.auth.getUser();
     const failed: string[] = [];
-    const cardsToInsert: Array<{
-      card_id: string;
-      card_name: string;
-      card_set?: string;
-      card_type?: string;
-      rarity?: string;
-      colors: string[];
-      image_url?: string;
-      mana_cost?: string;
-      cmc: number;
-      cubucks_cost: number;
-      pool_name: string;
-      created_by: string | null;
-    }> = [];
-    let skipped = 0;
+    const cardsToInsert: Omit<CardData, 'id' | 'created_at' | 'rating_updated_at'>[] = [];
+    const scryfallCache = new Map<string, any>();
 
     for (const line of lines) {
       const trimmed = line.trim();
@@ -345,43 +305,22 @@ export async function bulkImportCards(
     }
 
     // Batch insert all found cards
-    if (cardsToInsert.length > 0) {
-      const { error: insertError } = await supabase
-        .from("card_pools")
-        .insert(cardsToInsert);
-
+     if (cardsToInsert.length > 0) {
+      const { error: insertError } = await supabase.from("card_pools").insert(cardsToInsert);
       if (insertError) {
-        console.error("Error bulk inserting cards:", insertError);
-        return {
-          success: false,
-          added: 0,
-          skipped,
-          failed: failed,
-          error: insertError.message,
-        };
+        return { success: false, added: 0, skipped: 0, failed, error: insertError.message };
       }
+      invalidateDraftCache();
     }
-
-    return {
-      success: true,
-      added: cardsToInsert.length,
-      skipped,
-      failed,
-    };
+    
+    return { success: true, added: cardsToInsert.length, skipped: 0, failed };
   } catch (error) {
-    console.error("Unexpected error in bulk import:", error);
-    return {
-      success: false,
-      added: 0,
-      skipped: 0,
-      failed: [],
-      error: String(error),
-    };
+    return { success: false, added: 0, skipped: 0, failed: [], error: String(error) };
   }
 }
 
 /**
- * Remove a card from the pool
+ * Removes a SINGLE, SPECIFIC instance of a card from the pool using its unique DB ID.
  */
 export async function removeCardFromPool(
   cardId: string,
@@ -393,14 +332,14 @@ export async function removeCardFromPool(
     const { error } = await supabase
       .from("card_pools")
       .delete()
-      .eq("card_id", cardId)
+      .eq("id", dbId) // Target the specific row by its unique `id`
       .eq("pool_name", poolName);
 
     if (error) {
       console.error("Error removing card from pool:", error);
       return { success: false, error: error.message };
     }
-
+ invalidateDraftCache();
     return { success: true };
   } catch (error) {
     console.error("Unexpected error removing card:", error);
@@ -426,7 +365,7 @@ export async function clearCardPool(
       console.error("Error clearing card pool:", error);
       return { success: false, error: error.message };
     }
-
+ invalidateDraftCache();
     return { success: true };
   } catch (error) {
     console.error("Unexpected error clearing pool:", error);
