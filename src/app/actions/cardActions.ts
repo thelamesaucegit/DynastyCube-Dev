@@ -38,6 +38,7 @@ export interface CardData {
   card_type?: string;
   rarity?: string;
   colors?: string[];
+  color_identity?: string[];
   image_url?: string;
   mana_cost?: string;
   cmc?: number;
@@ -70,28 +71,428 @@ export async function getCardPool(
   }
 }
 
+/**
+ * Fetch available cards for drafting (excludes cards already drafted by any team)
+ */
 export async function getAvailableCardsForDraft(
   poolName: string = "default"
 ): Promise<{ cards: CardData[]; error?: string }> {
   const supabase = await createClient();
+
   try {
+    // First get all cards in the pool
     const { data: allCards, error: poolError } = await supabase
       .from("card_pools")
       .select("*")
-      .eq("pool_name", poolName);
+      .eq("pool_name", poolName)
+      .order("card_name", { ascending: true });
 
     if (poolError) {
-      console.error("Error fetching card pool for draft:", poolError);
+      console.error("Error fetching card pool:", poolError);
       return { cards: [], error: poolError.message };
     }
 
+     // Get the unique INSTANCE IDs of cards that have already been picked.
     const { data: draftedPicks, error: draftError } = await supabase
       .from("team_draft_picks")
-      .select("card_pool_id");
+      .select("card_pool_id")
+      .not("card_pool_id", "is", null);
 
     if (draftError) {
       console.error("Error fetching drafted picks:", draftError);
       return { cards: [], error: draftError.message };
     }
 
-    const draftedInsta
+    
+    // Create a map to count how many times each card_id has been drafted
+    const draftedCounts = new Map<string, number>();
+    (draftedPicks || []).forEach((pick) => {
+      const currentCount = draftedCounts.get(pick.card_id) || 0;
+      draftedCounts.set(pick.card_id, currentCount + 1);
+    });
+
+ const draftedInstanceIds = new Set((draftedPicks || []).map(p => p.card_pool_id));
+    
+    const availableCards = (allCardsInPool || []).filter(card => !draftedInstanceIds.has(card.id));
+    
+    return { cards: availableCards };
+  } catch (error) {
+    console.error("Unexpected error fetching available cards:", error);
+    return { cards: [], error: "An unexpected error occurred" };
+  }
+}
+/**
+ * Add a card to the pool
+ */
+export async function addCardToPool(
+  card: CardData,
+  poolName: string = "default"
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+
+  try {
+    // Get user for audit purposes (non-blocking)
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const { error } = await supabase.from("card_pools").insert({
+      card_id: card.card_id,
+      card_pool_id: card.id,
+      card_name: card.card_name,
+      card_set: card.card_set,
+      card_type: card.card_type,
+      rarity: card.rarity,
+      colors: card.colors || [],
+      color_identity: card.color_identity || [],
+      image_url: card.image_url,
+      mana_cost: card.mana_cost,
+      cmc: card.cmc || 0,
+      pool_name: poolName,
+      created_by: user?.id || null, // Optional: for audit trail
+    });
+
+    if (error) {
+      console.error("Error adding card to pool:", error);
+      return { success: false, error: error.message };
+    }
+ invalidateDraftCache();
+    return { success: true };
+  } catch (error) {
+    console.error("Unexpected error adding card:", error);
+    return { success: false, error: "An unexpected error occurred" };
+  }
+}
+
+/**
+ * Add multiple cards to the pool
+ */
+export async function addCardsToPool(
+  cards: CardData[],
+  poolName: string = "default"
+): Promise<{ success: boolean; error?: string; count?: number }> {
+  const supabase = await createClient();
+
+  try {
+    // Get user for audit purposes (non-blocking)
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const cardsToInsert = cards.map((card) => ({
+      card_id: card.card_id,
+      card_pool_id: card.id,
+      card_name: card.card_name,
+      card_set: card.card_set,
+      card_type: card.card_type,
+      rarity: card.rarity,
+      colors: card.colors || [],
+      color_identity: card.color_identity || [],
+      image_url: card.image_url,
+      mana_cost: card.mana_cost,
+      cmc: card.cmc || 0,
+      pool_name: poolName,
+      created_by: user?.id || null, // Optional: for audit trail
+    }));
+
+    const { data, error } = await supabase
+      .from("card_pools")
+      .insert(cardsToInsert)
+      .select();
+
+    if (error) {
+      console.error("Error adding cards to pool:", error);
+      return { success: false, error: error.message };
+    }
+invalidateDraftCache();
+    return { success: true, count: data?.length || 0 };
+  } catch (error) {
+    console.error("Unexpected error adding cards:", error);
+    return { success: false, error: "An unexpected error occurred" };
+  }
+}
+
+/**
+ * Bulk import cards by name with cubucks cost.
+ * Each line can be "Card Name" or "Card Name, cost" to override the default cost.
+ * Looks up each card via Scryfall fuzzy search.
+ */
+export async function bulkImportCards(
+  lines: string[],
+  defaultCubucksCost: number = 1,
+  poolName: string = "default"
+): Promise<{
+  success: boolean;
+  added: number;
+  skipped: number;
+  failed: string[];
+  error?: string;
+}> {
+  const supabase = await createClient();
+
+   try {
+    const { data: { user } } = await supabase.auth.getUser();
+    const failed: string[] = [];
+    const cardsToInsert: Omit<CardData, 'id' | 'created_at' | 'rating_updated_at'>[] = [];
+    const scryfallCache = new Map<string, any>();
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      // Parse line: "Card Name" or "Card Name, cost"
+      let cardName = trimmed;
+      let cubucksCost = defaultCubucksCost;
+
+      const lastCommaIndex = trimmed.lastIndexOf(",");
+      if (lastCommaIndex !== -1) {
+        const possibleCost = trimmed.substring(lastCommaIndex + 1).trim();
+        const parsedCost = parseInt(possibleCost);
+        if (!isNaN(parsedCost) && parsedCost >= 0) {
+          cardName = trimmed.substring(0, lastCommaIndex).trim();
+          cubucksCost = parsedCost;
+        }
+      }
+
+      if (!cardName) continue;
+
+      // Look up card via Scryfall fuzzy search
+      try {
+        const response = await fetch(
+          `https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(cardName)}`
+        );
+
+        if (!response.ok) {
+          failed.push(cardName);
+          // Respect Scryfall rate limit
+          await new Promise((r) => setTimeout(r, 75));
+          continue;
+        }
+
+        const card = await response.json();
+
+        // Skip if already in pool
+        if (existingCardIds.has(card.id)) {
+          skipped++;
+          await new Promise((r) => setTimeout(r, 75));
+          continue;
+        }
+
+        // Mark as existing to avoid duplicates within the same import
+        existingCardIds.add(card.id);
+
+        cardsToInsert.push({
+          card_id: card.id,
+          card_name: card.name,
+          card_set: card.set_name,
+          card_type: card.type_line,
+          rarity: card.rarity,
+          colors: card.colors || [],
+          image_url: card.image_uris?.normal || card.image_uris?.small || null,
+          mana_cost: card.mana_cost,
+          cmc: card.cmc || 0,
+          cubucks_cost: cubucksCost,
+          pool_name: poolName,
+          created_by: user?.id || null,
+        });
+
+        // Respect Scryfall rate limit (50-100ms between requests)
+        await new Promise((r) => setTimeout(r, 75));
+      } catch {
+        failed.push(cardName);
+        await new Promise((r) => setTimeout(r, 75));
+      }
+    }
+
+    // Batch insert all found cards
+     if (cardsToInsert.length > 0) {
+      const { error: insertError } = await supabase.from("card_pools").insert(cardsToInsert);
+      if (insertError) {
+        return { success: false, added: 0, skipped: 0, failed, error: insertError.message };
+      }
+      invalidateDraftCache();
+    }
+    
+    return { success: true, added: cardsToInsert.length, skipped: 0, failed };
+  } catch (error) {
+    return { success: false, added: 0, skipped: 0, failed: [], error: String(error) };
+  }
+}
+
+/**
+ * Removes a SINGLE, SPECIFIC instance of a card from the pool using its unique DB ID.
+ */
+export async function removeCardFromPool(
+  cardId: string,
+  poolName: string = "default"
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+
+  try {
+    const { error } = await supabase
+      .from("card_pools")
+      .delete()
+      .eq("id", dbId) // Target the specific row by its unique `id`
+      .eq("pool_name", poolName);
+
+    if (error) {
+      console.error("Error removing card from pool:", error);
+      return { success: false, error: error.message };
+    }
+ invalidateDraftCache();
+    return { success: true };
+  } catch (error) {
+    console.error("Unexpected error removing card:", error);
+    return { success: false, error: "An unexpected error occurred" };
+  }
+}
+
+/**
+ * Clear entire pool
+ */
+export async function clearCardPool(
+  poolName: string = "default"
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+
+  try {
+    const { error } = await supabase
+      .from("card_pools")
+      .delete()
+      .eq("pool_name", poolName);
+
+    if (error) {
+      console.error("Error clearing card pool:", error);
+      return { success: false, error: error.message };
+    }
+ invalidateDraftCache();
+    return { success: true };
+  } catch (error) {
+    console.error("Unexpected error clearing pool:", error);
+    return { success: false, error: "An unexpected error occurred" };
+  }
+}
+
+/**
+ * Remove cards from pool by filter: all, undrafted only, or drafted only
+ */
+export async function removeFilteredCards(
+  filter: "all" | "undrafted" | "drafted",
+  poolName: string = "default"
+): Promise<{ success: boolean; removedCount?: number; error?: string }> {
+  const supabase = await createClient();
+
+  try {
+    if (filter === "all") {
+      // Count before deleting
+      const { count } = await supabase
+        .from("card_pools")
+        .select("*", { count: "exact", head: true })
+        .eq("pool_name", poolName);
+
+      const { error } = await supabase
+        .from("card_pools")
+        .delete()
+        .eq("pool_name", poolName);
+
+      if (error) {
+        console.error("Error clearing card pool:", error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true, removedCount: count || 0 };
+    }
+
+    // Get all cards in the pool
+    const { data: poolCards, error: poolError } = await supabase
+      .from("card_pools")
+      .select("id, card_id")
+      .eq("pool_name", poolName);
+
+    if (poolError) {
+      return { success: false, error: poolError.message };
+    }
+
+    if (!poolCards || poolCards.length === 0) {
+      return { success: true, removedCount: 0 };
+    }
+
+    // Get all drafted card_ids
+    const { data: draftPicks, error: draftError } = await supabase
+      .from("team_draft_picks")
+      .select("card_id");
+
+    if (draftError) {
+      return { success: false, error: draftError.message };
+    }
+
+    const draftedCardIds = new Set(
+      (draftPicks || []).map((p) => p.card_id)
+    );
+
+    // Determine which pool card IDs to delete based on filter
+    let idsToDelete: string[];
+
+    if (filter === "undrafted") {
+      idsToDelete = poolCards
+        .filter((c) => !draftedCardIds.has(c.card_id))
+        .map((c) => c.id);
+    } else {
+      // drafted
+      idsToDelete = poolCards
+        .filter((c) => draftedCardIds.has(c.card_id))
+        .map((c) => c.id);
+    }
+
+    if (idsToDelete.length === 0) {
+      return { success: true, removedCount: 0 };
+    }
+
+    const { error: deleteError } = await supabase
+      .from("card_pools")
+      .delete()
+      .in("id", idsToDelete);
+
+    if (deleteError) {
+      console.error("Error removing filtered cards:", deleteError);
+      return { success: false, error: deleteError.message };
+    }
+
+    return { success: true, removedCount: idsToDelete.length };
+  } catch (error) {
+    console.error("Unexpected error removing filtered cards:", error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Get all available pool names
+ */
+export async function getPoolNames(): Promise<{
+  pools: string[];
+  error?: string;
+}> {
+  const supabase = await createClient();
+
+  try {
+    const { data, error } = await supabase
+      .from("card_pools")
+      .select("pool_name")
+      .order("pool_name");
+
+    if (error) {
+      console.error("Error fetching pool names:", error);
+      return { pools: [], error: error.message };
+    }
+
+    // Get unique pool names
+    const uniquePools = [
+      ...new Set((data || []).map((item) => item.pool_name)),
+    ];
+
+    return { pools: uniquePools };
+  } catch (error) {
+    console.error("Unexpected error fetching pool names:", error);
+    return { pools: [], error: "An unexpected error occurred" };
+  }
+}

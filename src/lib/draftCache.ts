@@ -53,7 +53,7 @@ export const getDuplicateCardIdSet = cache(async (): Promise<Set<string>> => {
  * Call this function whenever the card pool is modified (cards added or removed)
  * to ensure the cache is cleared and re-fetched on the next request.
  */
-export function invalidateDraftCache(): void {
-  console.log("Draft cache invalidated due to card pool modification.");
+export async function invalidateDraftCache(): Promise<void> {
+  console.log("Draft cache has been invalidated.");
   duplicateCardIdSet = null;
 }
