@@ -240,47 +240,6 @@ export async function getTeamDraftPicks(
   }
 }
 
-/**
- * Add a card to team's draft picks
- */
-export async function addDraftPick(
-  pick: DraftPick
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
-
-  try {
-    // Verify user is authenticated and is a member of the team
-    const authCheck = await verifyTeamMembership(pick.team_id);
-    if (!authCheck.authorized) {
-      return { success: false, error: authCheck.error };
-    }
-
-    const { error } = await supabase.from("team_draft_picks").insert({
-      team_id: pick.team_id,
-      card_id: pick.card_id,
-      card_name: pick.card_name,
-      card_set: pick.card_set,
-      card_type: pick.card_type,
-      rarity: pick.rarity,
-      colors: pick.colors || [],
-      image_url: pick.image_url,
-      mana_cost: pick.mana_cost,
-      cmc: pick.cmc,
-      pick_number: pick.pick_number,
-      drafted_by: authCheck.userId,
-    });
-
-    if (error) {
-      console.error("Error adding draft pick:", error);
-      return { success: false, error: error.message };
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error("Unexpected error adding draft pick:", error);
-    return { success: false, error: "An unexpected error occurred" };
-  }
-}
 
 /**
  * Internal: Add a draft pick without user session check.
