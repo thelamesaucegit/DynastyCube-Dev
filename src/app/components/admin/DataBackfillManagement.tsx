@@ -59,7 +59,7 @@ export const DataBackfillManagement: React.FC = () => {
         <div className="p-4 border rounded-lg bg-background">
           <h4 className="font-semibold mb-2">Backfill CMC Data</h4>
           <p className="text-sm text-muted-foreground mb-4">
-            Scans all cards in `card_pools` and `team_draft_picks` and fetches their Converted Mana Cost (CMC) from Scryfall if it's missing.
+            Scans all cards in `card_pools` and `team_draft_picks` and fetches their Converted Mana Cost (CMC) from Scryfall if it&apos;s missing.
           </p>
           <Button onClick={handleBackfillCMC} disabled={loading}>
             {loading ? "Running..." : "Run CMC Backfill"}

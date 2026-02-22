@@ -5,7 +5,7 @@ import { getAvailableCardsForDraft } from "@/app/actions/cardActions";
 import { getTeamDraftPicks, addDraftPick } from "@/app/actions/draftActions";
 import { getTeamBalance, spendCubucksOnDraft } from "@/app/actions/cubucksActions";
 import { getActiveDraftOrder, type DraftOrderEntry } from "@/app/actions/draftOrderActions";
-import { cleanupDraftQueues } from "@/app/actions/autoDraftActions";
+import { conditionallyCleanupDraftQueues } from "@/app/actions/autoDraftActions";
 import { advanceDraft } from "@/app/actions/draftSessionActions";
 import type { CardData } from "@/app/actions/cardActions";
 import type { DraftPick } from "@/app/actions/draftActions";
@@ -123,7 +123,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
     if (result.success) {
       setSuccess(`Drafted ${card.card_name} for ${cardCost} Cubucks!`);
       // Cleanup can still use the general card_id if it's meant to remove all copies from queues
-      await cleanupDraftQueues(card.card_id);
+await conditionallyCleanupDraftQueues(card.card_id);
       await advanceDraft();
       await loadDraftData();
       onDraftComplete?.();
@@ -513,7 +513,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
   
-  // INSIDE THE JSX for the Available Cards Grid:
   
             {filteredCards.map((card) => {
               // --- REPLACEMENT FOR isDrafted LOGIC ---
@@ -589,7 +588,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
                   )}
 
                   {/* Already Drafted Badge */}
-                  {isDrafted && (
+                  {isThisInstanceDrafted && (
                     <div className="absolute top-2 right-2 bg-green-600 text-white text-xs font-bold px-2 py-1 rounded shadow-lg">
                       ✓ DRAFTED
                     </div>
