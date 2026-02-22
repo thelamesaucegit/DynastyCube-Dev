@@ -734,10 +734,10 @@ export async function checkDraftTimer(): Promise<{
             return { action: "error", error: "Could not get draft status to log skipped pick." };
         }
         
-         // FIX: Increment the skip counter
+        // Increment the skip counter
         const newSkipCount = (session.consecutive_skipped_picks || 0) + 1;
         
-        // FIX: Check if the skip count has reached the total number of teams
+        // Check if the skip count has reached the total number of teams
         if (newSkipCount >= draftStatus.totalTeams) {
             console.log(`All ${draftStatus.totalTeams} teams have consecutively skipped. Ending draft.`);
             await completeDraft(session.id);
@@ -754,10 +754,14 @@ export async function checkDraftTimer(): Promise<{
             .eq("id", session.id);
         
         const skippedResult = await addSkippedPick(teamId, draftStatus.totalPicks + 1);
-        if (!skippedResult.success) return { action: "error", error: `Auto-draft failed and could not log skipped pick: ${skippedResult.error}` };
+        if (!skippedResult.success) {
+            return { action: "error", error: `Auto-draft failed and could not log skipped pick: ${skippedResult.error}` };
+        }
         
         const advanceResult = await advanceDraft();
-        if (!advanceResult.success) return { action: "error", error: `Auto-draft failed and draft could not be advanced: ${advanceResult.error}` };
+        if (!advanceResult.success) {
+            return { action: "error", error: `Auto-draft failed and draft could not be advanced: ${advanceResult.error}` };
+        }
         
         return {
           action: "auto_drafted",
