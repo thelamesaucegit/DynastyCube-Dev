@@ -41,6 +41,7 @@ export interface CardData {
   card_type?: string;
   rarity?: string;
   colors?: string[];
+  color_identity?: string[];
   image_url?: string;
   mana_cost?: string;
   cmc?: number;
@@ -168,6 +169,7 @@ export async function addCardToPool(
       card_type: card.card_type,
       rarity: card.rarity,
       colors: card.colors || [],
+       color_identity: card.color_identity || [],
       image_url: card.image_url,
       mana_cost: card.mana_cost,
       cmc: card.cmc || 0,
@@ -212,6 +214,7 @@ export async function addCardsToPool(
       card_type: card.card_type,
       rarity: card.rarity,
       colors: card.colors || [],
+       color_identity: card.color_identity || [],
       image_url: card.image_url,
       mana_cost: card.mana_cost,
       cmc: card.cmc || 0,
@@ -262,6 +265,7 @@ export async function bulkImportCards(
       card_type?: string;
       rarity?: string;
       colors: string[];
+       color_identity: string[];
       image_url: string | null;
       mana_cost?: string;
       cmc: number;
@@ -321,6 +325,7 @@ export async function bulkImportCards(
           card_type: card.type_line,
           rarity: card.rarity,
           colors: card.colors || [],
+          color_identity: card.color_identity || [],
           image_url: card.image_uris?.normal || card.image_uris?.small || null,
           mana_cost: card.mana_cost,
           cmc: card.cmc || 0,
