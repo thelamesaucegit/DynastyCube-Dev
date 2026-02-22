@@ -94,4 +94,12 @@ export async function getAvailableCardsForDraft(
       return { cards: [], error: draftError.message };
     }
 
-    const draftedInsta
+ const draftedInstanceIds = new Set((draftedPicks || []).map(p => p.card_pool_id).filter(Boolean));
+    const availableCards = (allCards || []).filter(card => !draftedInstanceIds.has(card.id));
+    
+    return { cards: availableCards };
+  } catch (error) {
+    console.error("Unexpected error fetching available cards:", error);
+    return { cards: [], error: "An unexpected error occurred" };
+  }
+}
