@@ -11,7 +11,6 @@ import { CubucksManagement } from "../components/admin/CubucksManagement";
 import { SeasonManagement } from "../components/admin/SeasonManagement";
 import { TradeSettings } from "../components/admin/TradeSettings";
 import { ReportManagement } from "../components/admin/ReportManagement";
-import { CMCDataManagement } from "../components/admin/CMCDataManagement";
 import { NewsManagement } from "../components/admin/NewsManagement";
 import { VoteManagement } from "../components/admin/VoteManagement";
 import { MatchManagement } from "../components/admin/MatchManagement";
@@ -199,8 +198,8 @@ export default function AdminPage() {
               </p>
             </div>
             <div className="space-y-6">
-              {/* CMC Data Management */}
-              <CMCDataManagement />
+              {/*  Data Backfill Management */}
+              <DataBackfillManagement />
 
               {/* Trade System Settings */}
               <TradeSettings />
