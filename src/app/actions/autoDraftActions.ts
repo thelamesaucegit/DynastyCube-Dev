@@ -3,8 +3,8 @@
 
 import { createServerClient } from "@/lib/supabase";
 import { getAvailableCardsForDraft, type CardData } from "@/app/actions/cardActions";
-import { getTeamDraftPicks, addDraftPick } from "@/app/actions/draftActions";
-import { spendCubucksOnDraft, getTeamBalance } from "@/app/actions/cubucksActions";
+import { getTeamDraftPicks, addDraftPickInternal } from "@/app/actions/draftActions";
+import { spendCubucksOnDraftInternal, getTeamBalance } from "@/app/actions/cubucksActions";
 import { getDraftStatus } from "@/app/actions/draftOrderActions";
 import { getDuplicateCardIdSet } from '@/lib/draftCache';
 
@@ -704,7 +704,7 @@ export async function executeAutoDraft(
   pick?: { cardId: string; cardName: string; cost: number };
   source?: "manual_queue" | "algorithm";
   error?: string;
-  staleDeployment?: boolean; 
+  staleDeployment?: boolean;
 }> {
   try {
     const { status: draftStatus } = await getDraftStatus();
@@ -734,7 +734,9 @@ export async function executeAutoDraft(
     }
 
     const { picks: existingPicks } = await getTeamDraftPicks(teamId);
-    const pickResult = await addDraftPick({
+
+    // Add the draft pick (internal — no user session required)
+    const pickResult = await addDraftPickInternal({
       team_id: teamId,
       card_pool_id: card.id,
       card_id: card.card_id,

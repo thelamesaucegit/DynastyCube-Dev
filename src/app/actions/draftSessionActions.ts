@@ -121,8 +121,8 @@ export async function createDraftSession(config: {
     if (config.totalRounds < 1 || config.totalRounds > 999) {
       return { success: false, error: "Total rounds must be between 1 and 999" };
     }
-    if (config.hoursPerPick < 0.5 || config.hoursPerPick > 168) {
-      return { success: false, error: "Hours per pick must be between 0.5 and 168 (1 week)" };
+    if (config.hoursPerPick <= 0 || config.hoursPerPick > 168) {
+      return { success: false, error: "Hours per pick must be greater than 0 and at most 168 (1 week)" };
     }
 
     // Create the session
@@ -258,6 +258,7 @@ export async function updateDraftSession(
     hoursPerPick?: number;
     startTime?: string;
     endTime?: string | null;
+    resetDeadline?: boolean; // if true, reset current_pick_deadline based on new hoursPerPick
   }
 ): Promise<{ success: boolean; error?: string }> {
   try {
@@ -273,6 +274,12 @@ export async function updateDraftSession(
     if (updates.hoursPerPick !== undefined) updateData.hours_per_pick = updates.hoursPerPick;
     if (updates.startTime !== undefined) updateData.start_time = updates.startTime;
     if (updates.endTime !== undefined) updateData.end_time = updates.endTime;
+
+    // Immediately recalculate the current pick deadline from now using the new hours value
+    if (updates.resetDeadline && updates.hoursPerPick !== undefined) {
+      const newDeadline = new Date(Date.now() + updates.hoursPerPick * 60 * 60 * 1000);
+      updateData.current_pick_deadline = newDeadline.toISOString();
+    }
 
     const { error } = await supabase
       .from("draft_sessions")
