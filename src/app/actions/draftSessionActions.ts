@@ -434,8 +434,6 @@ export async function activateDraft(
  * Advance the draft after a pick has been made.
  * Resets the pick deadline for the next team and sends notifications.
  * Checks if the draft is complete.
-/**
- * Advance the draft after a pick has been made.
  * Resets the pick deadline and the consecutive skip counter.
  */
 export async function advanceDraft(): Promise<{
