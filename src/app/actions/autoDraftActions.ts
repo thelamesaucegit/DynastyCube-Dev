@@ -728,7 +728,7 @@ export async function executeAutoDraft(
         return { success: false, error: `Insufficient Cubucks. Need ${cost}, have ${teamBalance?.cubucks_balance || 0}` };
     }
 
-    const cubucksResult = await spendCubucksOnDraft(teamId, card.card_id, card.card_name, cost, card.id, undefined, isManualPick);
+    const cubucksResult = await spendCubucksOnDraftInternal(teamId, card.card_id, card.card_name, cost, card.id, undefined, isManualPick);
     if (!cubucksResult.success) {
       return { success: false, error: cubucksResult.error || "Failed to spend Cubucks" };
     }
