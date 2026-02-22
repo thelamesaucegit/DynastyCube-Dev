@@ -21,6 +21,7 @@ import { GlossaryManagement } from "../components/admin/GlossaryManagement";
 import { DraftOrderManagement } from "../components/admin/DraftOrderManagement";
 import { DraftSessionManagement } from "../components/admin/DraftSessionManagement";
 import { EssenceManagement } from "../components/admin/EssenceManagement";
+import { backfillColorIdentity } from "@/app/actions/adminActions";
 import { getTeamsWithMembers } from "../actions/teamActions";
 import { getCardPool } from "../actions/cardActions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/app/components/ui/card";
