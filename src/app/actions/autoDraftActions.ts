@@ -107,18 +107,43 @@ function countDraftedColors(picks: Array<{ colors?: string[] }>): Record<string,
 // ============================================================================
 
 /**
- * Compute the auto-draft pick for a team using the ELO/color affinity algorithm.
+ * Compute the auto-draft pick for a team using an ELO/color affinity algorithm.
  *
  * Algorithm:
- * 1. Get available cards, filter to those with ELO, take top 50
- * 2. Count team's drafted cards per color
- * 3. Compute effective ELO per card (with color affinity modifier)
- * 4. Sum effective ELO per color to find dominant color
- * 5. Best colored pick = highest raw ELO card of dominant color
- * 6. Best colorless pick = highest raw ELO card with empty colors
- * 7. If colorless ELO > colored ELO, pick colorless; otherwise colored
- * 8. Check cubucks affordability; skip unaffordable cards
+ * 1.  **Modify Raw ELO**:
+ *     - Reduce the ELO of all 'Land' cards by a fixed multiplier (e.g., x0.8) to de-prioritize them.
+ *
+ * 2.  **Calculate Color Affinity**:
+ *     - For each of the team's previously drafted cards, apply a bonus to the modifiers of the colors
+ *       in that card (e.g., +0.1 per pick) and a penalty to the modifiers of colors not present (e.g., -0.05 per pick).
+ *
+ * 3.  **Determine Candidate Pool**:
+ *     - Filter all available cards to those with a modified ELO greater than zero.
+ *     - Sort these cards by their modified ELO in descending order.
+ *     - Take the top 50 cards as the primary candidate pool.
+ *
+ * 4.  **Find Dominant Color**:
+ *     - For each card in the top 50, calculate its "effective ELO" by multiplying its ELO by the team's
+ *       highest color affinity modifier that matches the card's colors.
+ *     - Sum the effective ELO for each of the five colors (W, U, B, R, G).
+ *     - The color with the highest total sum is the team's "dominant color" for this pick.
+ *
+ * 5.  **Select Best Cards**:
+ *     - **Best Colored Card**: The card from the top 50 matching the dominant color with the highest raw ELO.
+ *     - **Best Colorless Card**: The card from the top 50 with no colors and the highest raw ELO.
+ *
+ * 6.  **Make Initial Selection**:
+ *     - If the Best Colorless Card's ELO is strictly greater than the Best Colored Card's ELO, select the colorless card.
+ *     - Otherwise, select the colored card. Fall back to the colorless card if no colored card was found.
+ *
+ * 7.  **Check Affordability**:
+ *     - If the selected card costs more than the team's current Cubucks balance, discard the selection.
+ *     - Re-select the highest ELO card from the top 50 that the team *can* afford.
+ *     - If no cards in the top 50 are affordable, expand the search to all available cards and pick the
+ *       highest ELO card the team can afford from the entire pool.
+ *     - If no cards are affordable at all, return null.
  */
+
 export async function computeAutoDraftPick(
   teamId: string
 ): Promise<{
