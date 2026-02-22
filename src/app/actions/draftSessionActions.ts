@@ -1,11 +1,11 @@
 // src/app/actions/draftSessionActions.ts
+
 "use server";
 
 import { createServerClient } from "@/lib/supabase";
 import { getDraftStatus, type DraftStatus } from "@/app/actions/draftOrderActions";
 import { executeAutoDraft } from "@/app/actions/autoDraftActions";
 import { addSkippedPick } from "@/app/actions/draftActions"; 
-
 
 // ============================================================================
 // TYPES
@@ -24,6 +24,8 @@ export interface DraftSession {
   started_by: string | null;
   created_at: string;
   updated_at: string;
+  // This column should have been added via SQL
+  consecutive_skipped_picks?: number; 
 }
 
 export interface DraftSessionWithStatus extends DraftSession {
@@ -65,10 +67,6 @@ async function verifyAdmin(supabase: Awaited<ReturnType<typeof createServerClien
 // DRAFT SESSION CRUD
 // ============================================================================
 
-/**
- * Create a new draft session (admin only).
- * Validates that an active season exists, draft order is set, and no conflicting session exists.
- */
 export async function createDraftSession(config: {
   totalRounds: number;
   hoursPerPick: number;
@@ -82,36 +80,30 @@ export async function createDraftSession(config: {
       return { success: false, error: admin.error };
     }
 
-    // Get active season
     const { data: activeSeason } = await supabase
       .from("seasons")
       .select("id")
       .eq("is_active", true)
       .single();
-
     if (!activeSeason) {
       return { success: false, error: "No active season found. Please activate a season first." };
     }
 
-    // Verify draft order exists for this season
     const { data: draftOrder } = await supabase
       .from("draft_order")
       .select("id")
       .eq("season_id", activeSeason.id)
       .limit(1);
-
     if (!draftOrder || draftOrder.length === 0) {
       return { success: false, error: "No draft order found for the active season. Please generate a draft order first." };
     }
 
-    // Check for existing active/scheduled session for this season
     const { data: existingSession } = await supabase
       .from("draft_sessions")
       .select("id, status")
       .eq("season_id", activeSeason.id)
       .in("status", ["scheduled", "active", "paused"])
       .limit(1);
-
     if (existingSession && existingSession.length > 0) {
       return {
         success: false,
@@ -119,15 +111,14 @@ export async function createDraftSession(config: {
       };
     }
 
-    // Validate inputs
     if (config.totalRounds < 1 || config.totalRounds > 999) {
       return { success: false, error: "Total rounds must be between 1 and 999" };
     }
+
     if (config.hoursPerPick <= 0 || config.hoursPerPick > 168) {
       return { success: false, error: "Hours per pick must be greater than 0 and at most 168 (1 week)" };
     }
 
-    // Create the session
     const { data, error } = await supabase
       .from("draft_sessions")
       .insert({
@@ -157,28 +148,21 @@ export async function createDraftSession(config: {
   }
 }
 
-/**
- * Get the current draft session (scheduled, active, or paused) for the active season.
- */
 export async function getActiveDraftSession(): Promise<{
   session: DraftSessionWithStatus | null;
   error?: string;
 }> {
   try {
     const supabase = await createServerClient();
-
-    // Get active season
     const { data: activeSeason } = await supabase
       .from("seasons")
       .select("id")
       .eq("is_active", true)
       .single();
-
     if (!activeSeason) {
       return { session: null };
     }
 
-    // Get session (prefer active > paused > scheduled)
     const { data: session, error } = await supabase
       .from("draft_sessions")
       .select("*")
@@ -197,9 +181,7 @@ export async function getActiveDraftSession(): Promise<{
       return { session: null };
     }
 
-    // Also get draft status for context
     const { status: draftStatus } = await getDraftStatus();
-
     return {
       session: {
         ...session,
@@ -212,22 +194,17 @@ export async function getActiveDraftSession(): Promise<{
   }
 }
 
-/**
- * Get all draft sessions for the active season (including completed).
- */
 export async function getDraftSessions(): Promise<{
   sessions: DraftSession[];
   error?: string;
 }> {
   try {
     const supabase = await createServerClient();
-
     const { data: activeSeason } = await supabase
       .from("seasons")
       .select("id")
       .eq("is_active", true)
       .single();
-
     if (!activeSeason) {
       return { sessions: [] };
     }
@@ -250,9 +227,6 @@ export async function getDraftSessions(): Promise<{
   }
 }
 
-/**
- * Update a draft session's settings (admin only).
- */
 export async function updateDraftSession(
   sessionId: string,
   updates: {
@@ -260,7 +234,7 @@ export async function updateDraftSession(
     hoursPerPick?: number;
     startTime?: string;
     endTime?: string | null;
-    resetDeadline?: boolean; // if true, reset current_pick_deadline based on new hoursPerPick
+    resetDeadline?: boolean;
   }
 ): Promise<{ success: boolean; error?: string }> {
   try {
@@ -271,13 +245,11 @@ export async function updateDraftSession(
     }
 
     const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
-
     if (updates.totalRounds !== undefined) updateData.total_rounds = updates.totalRounds;
     if (updates.hoursPerPick !== undefined) updateData.hours_per_pick = updates.hoursPerPick;
     if (updates.startTime !== undefined) updateData.start_time = updates.startTime;
     if (updates.endTime !== undefined) updateData.end_time = updates.endTime;
 
-    // Immediately recalculate the current pick deadline from now using the new hours value
     if (updates.resetDeadline && updates.hoursPerPick !== undefined) {
       const newDeadline = new Date(Date.now() + updates.hoursPerPick * 60 * 60 * 1000);
       updateData.current_pick_deadline = newDeadline.toISOString();
@@ -300,9 +272,6 @@ export async function updateDraftSession(
   }
 }
 
-/**
- * Delete a draft session (admin only, only if scheduled).
- */
 export async function deleteDraftSession(
   sessionId: string
 ): Promise<{ success: boolean; error?: string }> {
@@ -313,13 +282,11 @@ export async function deleteDraftSession(
       return { success: false, error: admin.error };
     }
 
-    // Verify it's in scheduled status
     const { data: session } = await supabase
       .from("draft_sessions")
       .select("status")
       .eq("id", sessionId)
       .single();
-
     if (!session) {
       return { success: false, error: "Draft session not found" };
     }
@@ -349,24 +316,16 @@ export async function deleteDraftSession(
 // DRAFT LIFECYCLE
 // ============================================================================
 
-/**
- * Activate a scheduled draft session (admin, or called automatically when start_time arrives).
- * Sets the session to active, determines who's on the clock, sets the pick deadline,
- * and sends notifications to all players.
- */
 export async function activateDraft(
   sessionId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = await createServerClient();
-
-    // Get the session
     const { data: session, error: sessionError } = await supabase
       .from("draft_sessions")
       .select("*")
       .eq("id", sessionId)
       .single();
-
     if (sessionError || !session) {
       return { success: false, error: "Draft session not found" };
     }
@@ -375,7 +334,6 @@ export async function activateDraft(
       return { success: false, error: `Cannot activate a draft with status: ${session.status}` };
     }
 
-    // Get draft status to find who's on the clock
     const { status: draftStatus } = await getDraftStatus();
     if (!draftStatus) {
       return { success: false, error: "Could not determine draft status. Ensure draft order is set." };
@@ -384,7 +342,6 @@ export async function activateDraft(
     const now = new Date();
     const deadline = new Date(now.getTime() + session.hours_per_pick * 60 * 60 * 1000);
 
-    // Update session to active
     const { error: updateError } = await supabase
       .from("draft_sessions")
       .update({
@@ -400,21 +357,17 @@ export async function activateDraft(
       return { success: false, error: updateError.message };
     }
 
-    // Send notifications
-    // 1. Notify ALL users that the draft has started
     await supabase.rpc("notify_all_users_draft", {
       p_notification_type: "draft_started",
       p_message: `The draft has started! ${draftStatus.seasonName} draft is now live.`,
     });
 
-    // 2. Notify on-the-clock team captains/brokers
     await supabase.rpc("notify_draft_team_roles", {
       p_team_id: draftStatus.onTheClock.teamId,
       p_notification_type: "draft_on_clock",
       p_message: `${draftStatus.onTheClock.teamEmoji} ${draftStatus.onTheClock.teamName} is ON THE CLOCK! You have ${session.hours_per_pick} hours to make your pick.`,
     });
 
-    // 3. Notify on-deck team captains/brokers
     if (draftStatus.onDeck.teamId !== draftStatus.onTheClock.teamId) {
       await supabase.rpc("notify_draft_team_roles", {
         p_team_id: draftStatus.onDeck.teamId,
@@ -456,8 +409,7 @@ export async function advanceDraft(): Promise<{
       return { success: true }; // No active session, do nothing.
     }
 
-    // FIX: Reset the consecutive skip counter since a successful pick was just made.
-    // We do this before checking for completion.
+    // Reset the consecutive skip counter since a successful pick was just made.
     await supabase
       .from("draft_sessions")
       .update({ consecutive_skipped_picks: 0 })
@@ -476,27 +428,6 @@ export async function advanceDraft(): Promise<{
     if (allTeamsReachedRounds || pastEndTime) {
       // Draft is complete
       await completeDraft(session.id);
-      return { success: true, completed: true };
-    }
-
-    // Draft continues, set new deadline and notify next team
-    const now = new Date();
-    const deadline = new Date(now.getTime() + session.hours_per_pick * 60 * 60 * 1000);
-    await supabase
-      .from("draft_sessions")
-      .update({
-        current_pick_deadline: deadline.toISOString(),
-        current_on_clock_team_id: draftStatus.onTheClock.teamId,
-        updated_at: now.toISOString(),
-      })
-      .eq("id", session.id);
-    
-      // Notify everyone
-      await supabase.rpc("notify_all_users_draft", {
-        p_notification_type: "draft_completed",
-        p_message: `The draft is complete! ${draftStatus.totalPicks} total picks were made across ${session.total_rounds} rounds.`,
-      });
-
       return { success: true, completed: true };
     }
 
@@ -536,10 +467,6 @@ export async function advanceDraft(): Promise<{
   }
 }
 
-/**
- * Pause the draft (admin only).
- * Clears the pick deadline so no auto-drafts fire while paused.
- */
 export async function pauseDraft(
   sessionId: string
 ): Promise<{ success: boolean; error?: string }> {
@@ -565,7 +492,6 @@ export async function pauseDraft(
       return { success: false, error: error.message };
     }
 
-    // Notify all users
     await supabase.rpc("notify_all_users_draft", {
       p_notification_type: "draft_started",
       p_message: "The draft has been paused by an admin. Picks are on hold.",
@@ -578,9 +504,6 @@ export async function pauseDraft(
   }
 }
 
-/**
- * Resume a paused draft (admin only).
- */
 export async function resumeDraft(
   sessionId: string
 ): Promise<{ success: boolean; error?: string }> {
@@ -590,8 +513,7 @@ export async function resumeDraft(
     if (!admin.authorized) {
       return { success: false, error: admin.error };
     }
-
-    // Reuse activateDraft logic which handles deadline + notifications
+    
     return await activateDraft(sessionId);
   } catch (error) {
     console.error("Unexpected error resuming draft:", error);
@@ -599,9 +521,6 @@ export async function resumeDraft(
   }
 }
 
-/**
- * Complete a draft early (admin only).
- */
 export async function completeDraft(
   sessionId: string
 ): Promise<{ success: boolean; error?: string }> {
@@ -645,12 +564,6 @@ export async function completeDraft(
 
 /**
  * Check the draft timer state and take action if needed.
- * This should be called on page load or via polling.
- *
- * Actions:
- * 1. If session is 'scheduled' and start_time has passed → activate
- * 2. If session is 'active' and pick deadline has passed → auto-draft + advance
- * 3. If session is 'active' and end_time has passed → complete
  */
 export async function checkDraftTimer(): Promise<{
   action: "none" | "activated" | "auto_drafted" | "completed" | "error";
@@ -728,7 +641,6 @@ export async function checkDraftTimer(): Promise<{
       else {
         console.error(`Auto-draft failed for ${teamId}: ${autoDraftResult.error}. The pick will be skipped.`);
         
-        // Get the current draft status to know the pick number
         const { status: draftStatus } = await getDraftStatus();
         if (!draftStatus) {
             return { action: "error", error: "Could not get draft status to log skipped pick." };
