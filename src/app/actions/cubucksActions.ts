@@ -585,7 +585,7 @@ export async function refundDraftPick(
       .from("cubucks_transactions")
       .select("*")
       .eq("team_id", teamId)
-      .eq("card_id", cardId)
+      .eq("draft_pick_id", draftPickId)
       .eq("transaction_type", "draft_pick")
       .order("created_at", { ascending: false })
       .limit(1)

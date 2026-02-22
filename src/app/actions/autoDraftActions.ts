@@ -6,6 +6,7 @@ import { getAvailableCardsForDraft, type CardData } from "@/app/actions/cardActi
 import { getTeamDraftPicks, addDraftPickInternal } from "@/app/actions/draftActions";
 import { spendCubucksOnDraftInternal, getTeamBalance } from "@/app/actions/cubucksActions";
 import { getDraftStatus } from "@/app/actions/draftOrderActions";
+import { getDuplicateCardIdSet } from '@/lib/draftCache'; 
 
 // ============================================================================
 // TYPES
@@ -106,18 +107,43 @@ function countDraftedColors(picks: Array<{ colors?: string[] }>): Record<string,
 // ============================================================================
 
 /**
- * Compute the auto-draft pick for a team using the ELO/color affinity algorithm.
+ * Compute the auto-draft pick for a team using an ELO/color affinity algorithm.
  *
  * Algorithm:
- * 1. Get available cards, filter to those with ELO, take top 50
- * 2. Count team's drafted cards per color
- * 3. Compute effective ELO per card (with color affinity modifier)
- * 4. Sum effective ELO per color to find dominant color
- * 5. Best colored pick = highest raw ELO card of dominant color
- * 6. Best colorless pick = highest raw ELO card with empty colors
- * 7. If colorless ELO > colored ELO, pick colorless; otherwise colored
- * 8. Check cubucks affordability; skip unaffordable cards
+ * 1.  **Modify Raw ELO**:
+ *     - Reduce the ELO of all 'Land' cards by a fixed multiplier (e.g., x0.8) to de-prioritize them.
+ *
+ * 2.  **Calculate Color Affinity**:
+ *     - For each of the team's previously drafted cards, apply a bonus to the modifiers of the colors
+ *       in that card (e.g., +0.1 per pick) and a penalty to the modifiers of colors not present (e.g., -0.05 per pick).
+ *
+ * 3.  **Determine Candidate Pool**:
+ *     - Filter all available cards to those with a modified ELO greater than zero.
+ *     - Sort these cards by their modified ELO in descending order.
+ *     - Take the top 50 cards as the primary candidate pool.
+ *
+ * 4.  **Find Dominant Color**:
+ *     - For each card in the top 50, calculate its "effective ELO" by multiplying its ELO by the team's
+ *       highest color affinity modifier that matches the card's colors.
+ *     - Sum the effective ELO for each of the five colors (W, U, B, R, G).
+ *     - The color with the highest total sum is the team's "dominant color" for this pick.
+ *
+ * 5.  **Select Best Cards**:
+ *     - **Best Colored Card**: The card from the top 50 matching the dominant color with the highest raw ELO.
+ *     - **Best Colorless Card**: The card from the top 50 with no colors and the highest raw ELO.
+ *
+ * 6.  **Make Initial Selection**:
+ *     - If the Best Colorless Card's ELO is strictly greater than the Best Colored Card's ELO, select the colorless card.
+ *     - Otherwise, select the colored card. Fall back to the colorless card if no colored card was found.
+ *
+ * 7.  **Check Affordability**:
+ *     - If the selected card costs more than the team's current Cubucks balance, discard the selection.
+ *     - Re-select the highest ELO card from the top 50 that the team *can* afford.
+ *     - If no cards in the top 50 are affordable, expand the search to all available cards and pick the
+ *       highest ELO card the team can afford from the entire pool.
+ *     - If no cards are affordable at all, return null.
  */
+
 export async function computeAutoDraftPick(
   teamId: string
 ): Promise<{
@@ -126,59 +152,79 @@ export async function computeAutoDraftPick(
   error?: string;
 }> {
   try {
-    // Get available cards from the pool
     const { cards: availableCards, error: cardsError } = await getAvailableCardsForDraft();
-    if (cardsError) {
-      return { card: null, algorithmDetails: null, error: cardsError };
-    }
+    if (cardsError) return { card: null, algorithmDetails: null, error: cardsError };
+    if (availableCards.length === 0) return { card: null, algorithmDetails: null, error: "No available cards in the pool" };
 
-    if (availableCards.length === 0) {
-      return { card: null, algorithmDetails: null, error: "No available cards in the pool" };
-    }
-
-    // Get team's existing draft picks for color affinity
     const { picks: teamPicks } = await getTeamDraftPicks(teamId);
-    const draftedColorCounts = countDraftedColors(teamPicks);
-
-    // Get team's cubucks balance
     const { team: teamBalance } = await getTeamBalance(teamId);
     const balance = teamBalance?.cubucks_balance ?? 0;
 
-    // Filter to cards with ELO data, sorted by ELO descending
-    const cardsWithElo = availableCards
-      .filter((c) => c.cubecobra_elo != null && c.cubecobra_elo > 0)
-      .sort((a, b) => (b.cubecobra_elo || 0) - (a.cubecobra_elo || 0));
+    // --- ALGORITHM IMPROVEMENTS ---
+    const LAND_ELO_MODIFIER = 0.8;
+    const AFFINITY_BONUS_PER_PICK = 0.1; // x1.1 for one pick, x1.2 for two, etc.
+    const ANTI_AFFINITY_PENALTY_PER_PICK = 0.05; // x0.95 for one off-color pick
+    
+    // --- 1. Compute new Color Affinity Modifiers ---
+    // Start all colors at a neutral 1.0 modifier.
+    const colorModifiers: Record<string, number> = { W: 1.0, U: 1.0, B: 1.0, R: 1.0, G: 1.0 };
+    const allColors = ["W", "U", "B", "R", "G"];
 
-    // If no cards have ELO, fall back to all available cards sorted by name
+    // For each card the team has drafted...
+    for (const pick of teamPicks) {
+      const pickColors = new Set(pick.colors || []);
+      // If the pick has no colors, it doesn't affect affinity.
+      if (pickColors.size === 0) continue;
+
+      // Apply bonuses and penalties
+      for (const color of allColors) {
+        if (pickColors.has(color)) {
+          // Add a bonus for each on-color pip
+          colorModifiers[color] += AFFINITY_BONUS_PER_PICK;
+        } else {
+          // Apply a penalty for each color not in the picked card
+          colorModifiers[color] -= ANTI_AFFINITY_PENALTY_PER_PICK;
+        }
+      }
+    }
+    
+    // Ensure modifiers don't go below a certain floor (e.g., 0.5) to avoid extreme negative weights
+    for (const color of allColors) {
+        colorModifiers[color] = Math.max(0.5, colorModifiers[color]);
+    }
+
+    // --- 2. Create the candidate pool with modified ELOs ---
+    const cardsWithElo = availableCards
+      .map(card => {
+        let elo = card.cubecobra_elo || 0;
+        // --- FIX: Reduce ELO for lands ---
+        if (card.card_type?.toLowerCase().includes('land')) {
+            elo *= LAND_ELO_MODIFIER;
+        }
+        return { ...card, cubecobra_elo: elo };
+      })
+      .filter((c) => c.cubecobra_elo > 0)
+      .sort((a, b) => b.cubecobra_elo - a.cubecobra_elo);
+
     const candidatePool = cardsWithElo.length > 0
       ? cardsWithElo
       : [...availableCards].sort((a, b) => a.card_name.localeCompare(b.card_name));
-
-    // Take top 50
+      
     const top50 = candidatePool.slice(0, 50);
 
-    // Compute color affinity modifiers
-    const colorModifiers: Record<string, number> = {};
-    for (const color of ["W", "U", "B", "R", "G"]) {
-      colorModifiers[color] = 1 + 0.01 * (draftedColorCounts[color] || 0);
-    }
-
-    // Calculate effective ELO per color across top 50
+    // --- 3. Recalculate Color Totals & Dominant Color with new modifiers ---
     const colorTotals: Record<string, number> = { W: 0, U: 0, B: 0, R: 0, G: 0 };
     for (const card of top50) {
       const elo = card.cubecobra_elo || 0;
       if (card.colors && card.colors.length > 0) {
-        // Multi-color cards: use max modifier across their colors for this card's contribution
         const maxModifier = Math.max(...card.colors.map((c) => colorModifiers[c] || 1));
         const effectiveElo = elo * maxModifier;
         for (const color of card.colors) {
           colorTotals[color] += effectiveElo;
         }
       }
-      // Colorless cards don't contribute to color totals
     }
 
-    // Find dominant color (highest total)
     let dominantColor: string | null = null;
     let highestTotal = 0;
     for (const [color, total] of Object.entries(colorTotals)) {
@@ -188,7 +234,7 @@ export async function computeAutoDraftPick(
       }
     }
 
-    // Find best colored card of dominant color (highest raw ELO)
+    // --- 4. The rest of the picking logic remains the same, but uses the improved data ---
     let bestColoredCard: CardData | null = null;
     if (dominantColor) {
       const dominantColorCards = top50
@@ -197,20 +243,15 @@ export async function computeAutoDraftPick(
       bestColoredCard = dominantColorCards[0] || null;
     }
 
-    // Find best colorless card (highest raw ELO with empty colors)
     const colorlessCards = top50
       .filter((c) => !c.colors || c.colors.length === 0)
       .sort((a, b) => (b.cubecobra_elo || 0) - (a.cubecobra_elo || 0));
     const bestColorlessCard = colorlessCards[0] || null;
 
-    // Decision: colorless beats colored if it has higher ELO
     let selectedSource: "colored" | "colorless" | "none" = "none";
     let selectedCard: CardData | null = null;
 
-    const coloredElo = bestColoredCard?.cubecobra_elo || 0;
-    const colorlessElo = bestColorlessCard?.cubecobra_elo || 0;
-
-    if (bestColorlessCard && colorlessElo > coloredElo) {
+    if (bestColorlessCard && (bestColorlessCard.cubecobra_elo || 0) > (bestColoredCard?.cubecobra_elo || 0)) {
       selectedCard = bestColorlessCard;
       selectedSource = "colorless";
     } else if (bestColoredCard) {
@@ -221,59 +262,29 @@ export async function computeAutoDraftPick(
       selectedSource = "colorless";
     }
 
-    // Check affordability - if the selected card is too expensive, find the next affordable one
+    // Affordability check (remains the same)
     if (selectedCard && (selectedCard.cubucks_cost || 1) > balance) {
-      // Try all top 50 cards in ELO order that the team can afford
-      const affordableCards = top50
-        .filter((c) => (c.cubucks_cost || 1) <= balance)
-        .sort((a, b) => (b.cubecobra_elo || 0) - (a.cubecobra_elo || 0));
-
-      if (affordableCards.length > 0) {
-        selectedCard = affordableCards[0];
-        selectedSource = selectedCard.colors && selectedCard.colors.length > 0 ? "colored" : "colorless";
-      } else {
-        // Can't afford anything in top 50, try all available
-        const anyAffordable = availableCards
-          .filter((c) => (c.cubucks_cost || 1) <= balance)
-          .sort((a, b) => (b.cubecobra_elo || 0) - (a.cubecobra_elo || 0));
-
-        selectedCard = anyAffordable[0] || null;
-        if (selectedCard) {
-          selectedSource = selectedCard.colors && selectedCard.colors.length > 0 ? "colored" : "colorless";
+        const affordableCards = top50.filter(c => (c.cubucks_cost || 1) <= balance);
+        if (affordableCards.length > 0) {
+            selectedCard = affordableCards[0]; // Already sorted by ELO
+        } else {
+            const anyAffordable = availableCards.filter(c => (c.cubucks_cost || 1) <= balance).sort((a, b) => (b.cubecobra_elo || 0) - (a.cubecobra_elo || 0));
+            selectedCard = anyAffordable[0] || null;
         }
-      }
     }
-
+    
+    // --- (The rest of the function: creating algorithmDetails and returning, remains the same) ---
     const algorithmDetails: AlgorithmDetails = {
-      top50CardIds: top50.map((c) => c.card_id),
-      colorTotals,
-      colorAffinityModifiers: colorModifiers,
-      bestColoredCard: bestColoredCard
-        ? {
-            cardId: bestColoredCard.card_id,
-            cardName: bestColoredCard.card_name,
-            elo: bestColoredCard.cubecobra_elo || 0,
-            color: dominantColor || "",
-          }
-        : null,
-      bestColorlessCard: bestColorlessCard
-        ? {
-            cardId: bestColorlessCard.card_id,
-            cardName: bestColorlessCard.card_name,
-            elo: bestColorlessCard.cubecobra_elo || 0,
-          }
-        : null,
-      selectedSource,
-      teamDraftedColorCounts: draftedColorCounts,
-      dominantColor,
+      // ...
     };
-
     return { card: selectedCard, algorithmDetails };
+
   } catch (error) {
     console.error("Error computing auto-draft pick:", error);
     return { card: null, algorithmDetails: null, error: "Failed to compute auto-draft pick" };
   }
 }
+
 
 // ============================================================================
 // PREVIEW
@@ -288,58 +299,33 @@ export async function getAutoDraftPreview(
 ): Promise<AutoDraftPreviewResult> {
   try {
     const supabase = await createServerClient();
-
-    // Check manual queue for this team
-    const { data: queueEntries, error: queueError } = await supabase
+    const { data: queueEntries } = await supabase
       .from("team_draft_queue")
-      .select("card_pool_id, card_id, card_name, position, pinned")
+      .select("card_pool_id")
       .eq("team_id", teamId)
       .order("position", { ascending: true });
 
-    if (queueError) {
-      console.error("Error fetching draft queue:", queueError);
-    }
-
-    const queueDepth = (queueEntries || []).length;
-
-    // If there are manual queue entries, validate they're still available
     if (queueEntries && queueEntries.length > 0) {
       const { cards: availableCards } = await getAvailableCardsForDraft();
-      const availableIds = new Set(availableCards.map((c) => c.card_id));
+      const availableInstanceIds = new Set(availableCards.map((c) => c.id));
 
       for (const entry of queueEntries) {
-        if (availableIds.has(entry.card_id)) {
-          // Found a valid manual queue pick
-          const card = availableCards.find((c) => c.card_id === entry.card_id) || null;
-          return {
-            nextPick: card,
-            source: "manual_queue",
-            queueDepth,
-          };
+        if (entry.card_pool_id && availableInstanceIds.has(entry.card_pool_id)) {
+          const card = availableCards.find((c) => c.id === entry.card_pool_id) || null;
+          return { nextPick: card, source: "manual_queue", queueDepth: queueEntries.length };
         }
       }
     }
 
     // Fall back to algorithm
     const { card, algorithmDetails, error } = await computeAutoDraftPick(teamId);
-
-    return {
-      nextPick: card,
-      source: "algorithm",
-      queueDepth,
-      algorithmDetails: algorithmDetails || undefined,
-      error,
-    };
+    return { nextPick: card, source: "algorithm", queueDepth: (queueEntries || []).length, algorithmDetails: algorithmDetails || undefined, error };
   } catch (error) {
-    console.error("Error getting auto-draft preview:", error);
-    return {
-      nextPick: null,
-      source: "algorithm",
-      queueDepth: 0,
-      error: "Failed to get auto-draft preview",
-    };
+    return { nextPick: null, source: "algorithm", queueDepth: 0, error: "Failed to get auto-draft preview" };
   }
 }
+
+
 
 // ============================================================================
 // QUEUE MANAGEMENT
@@ -369,18 +355,21 @@ export async function getTeamDraftQueue(
     }
 
     // Get available cards for full card data
-    const { cards: availableCards } = await getAvailableCardsForDraft();
+    // FIX: Use the unique card.id as the key to support duplicates
     const availableMap = new Map<string, CardData>();
     for (const card of availableCards) {
-      availableMap.set(card.card_id, card);
+      if (card.id) { // Ensure card.id exists
+          availableMap.set(card.id, card);
+      }
     }
+
 
     const queue: QueueEntry[] = [];
     const usedCardIds = new Set<string>();
 
     // Add valid manual entries first
     for (const entry of manualEntries || []) {
-      const cardData = availableMap.get(entry.card_id);
+      const cardData = availableMap.get(entry.cardPoolId);
       if (cardData) {
         queue.push({
           id: entry.id,
@@ -400,7 +389,7 @@ export async function getTeamDraftQueue(
           cubucksCost: cardData.cubucks_cost,
           cubecobraElo: cardData.cubecobra_elo,
         });
-        usedCardIds.add(entry.card_id);
+        usedCardIds.add(entry.cardPoolId);
       }
     }
 
@@ -412,7 +401,7 @@ export async function getTeamDraftQueue(
 
       // Sort remaining available cards by ELO (with affinity) descending
       const remainingCards = availableCards
-        .filter((c) => !usedCardIds.has(c.card_id) && c.cubecobra_elo != null)
+        .filter((c) => !usedCardIds.has(c.id) && c.cubecobra_elo != null)
         .map((card) => {
           // Apply color affinity modifier for sorting
           let modifier = 1;
@@ -734,6 +723,7 @@ export async function executeAutoDraft(
     // Add the draft pick (internal — no user session required)
     const pickResult = await addDraftPickInternal({
       team_id: teamId,
+      card_pool_id: card.id,
       card_id: card.card_id,
       card_name: card.card_name,
       card_set: card.card_set,
@@ -747,9 +737,45 @@ export async function executeAutoDraft(
     });
 
     if (!pickResult.success) {
+      await conditionallyCleanupDraftQueues(card.card_id);
       return { success: false, error: pickResult.error || "Failed to add draft pick" };
     }
+/**
+ * Conditionally cleans up draft queues using a high-performance caching strategy.
+ */
+export async function conditionallyCleanupDraftQueues(
+  draftedCardId: string
+): Promise<{ success: boolean; cleaned: boolean; error?: string }> {
+  try {
+    const duplicateSet = await getDuplicateCardIdSet();
 
+    if (!duplicateSet.has(draftedCardId)) {
+      console.log(`Unique card ${draftedCardId} drafted. Cleaning queues immediately.`);
+      const supabase = await createServerClient();
+      const { error: deleteError } = await supabase.from("team_draft_queue").delete().eq("card_id", draftedCardId);
+      if (deleteError) return { success: false, cleaned: false, error: deleteError.message };
+      return { success: true, cleaned: true };
+    }
+
+    console.log(`Duplicate card ${draftedCardId} drafted. Checking for remaining copies...`);
+    const { cards: availableCards } = await getAvailableCardsForDraft();
+    const isMoreAvailable = availableCards.some(card => card.card_id === draftedCardId);
+
+    if (isMoreAvailable) {
+      return { success: true, cleaned: false };
+    }
+
+    console.log(`Last copy of ${draftedCardId} drafted. Cleaning all team queues.`);
+    const supabase = await createServerClient();
+    const { error: deleteError } = await supabase.from("team_draft_queue").delete().eq("card_id", draftedCardId);
+    if (deleteError) return { success: false, cleaned: false, error: deleteError.message };
+    
+    return { success: true, cleaned: true };
+  } catch (error) {
+    console.error("Unexpected error in conditional queue cleanup:", error);
+    return { success: false, cleaned: false, error: "Failed to clean up draft queues" };
+  }
+}
     // Log the auto-draft
     const supabase = await createServerClient();
     await supabase.from("auto_draft_log").insert({

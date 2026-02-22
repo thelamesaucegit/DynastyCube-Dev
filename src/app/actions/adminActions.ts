@@ -30,6 +30,87 @@ async function createClient() {
     }
   );
 }
+/**
+ * Backfill Color Identity data for all cards in card_pools that are missing it.
+ */
+export async function backfillColorIdentity(): Promise<{
+  success: boolean;
+  updated: number;
+  failed: number;
+  errors: string[];
+}> {
+  const supabase = await createClient();
+  let updatedCount = 0;
+  let failedCount = 0;
+  const errors: string[] = [];
+
+  try {
+    // 1. Fetch all card pool entries that have a null color_identity
+    const { data: cards, error: fetchError } = await supabase
+      .from("card_pools")
+      .select("id, card_name")
+      .is("color_identity", null);
+
+    if (fetchError) {
+      return { success: false, updated: 0, failed: 0, errors: [`Failed to fetch cards: ${fetchError.message}`] };
+    }
+    if (!cards || cards.length === 0) {
+      return { success: true, updated: 0, failed: 0, errors: ["No cards found missing color identity."] };
+    }
+
+    console.log(`Found ${cards.length} cards missing color identity.`);
+    
+    // 2. Get unique card names to fetch from Scryfall
+    const cardNames = [...new Set(cards.map((c) => c.card_name))];
+    console.log(`Fetching color identity data for ${cardNames.length} unique cards from Scryfall...`);
+
+    // 3. Fetch all cards from Scryfall in batches
+    const { cards: scryfallCards, notFound } = await fetchAllCards(cardNames);
+
+    // 4. Create a map of card name to its color_identity
+    const identityMap = new Map<string, string[]>();
+    scryfallCards.forEach((card) => {
+      // Scryfall provides the 'color_identity' field directly
+      if (card.color_identity) {
+        identityMap.set(card.name, card.color_identity);
+      }
+    });
+
+    console.log(`Successfully fetched ${scryfallCards.length} cards from Scryfall.`);
+    if (notFound.length > 0) {
+      errors.push(`Cards not found in Scryfall: ${notFound.join(", ")}`);
+    }
+
+    // 5. Update each card pool entry with its color_identity
+    for (const card of cards) {
+      const identity = identityMap.get(card.card_name);
+      if (identity !== undefined) {
+        const { error: updateError } = await supabase
+          .from("card_pools")
+          .update({ color_identity: identity })
+          .eq("id", card.id);
+
+        if (updateError) {
+          errors.push(`Failed to update ${card.card_name}: ${updateError.message}`);
+          failedCount++;
+        } else {
+          updatedCount++;
+        }
+      } else {
+        // This can happen if the card was not found in Scryfall
+        failedCount++;
+      }
+    }
+
+    console.log(`Color identity backfill complete: ${updatedCount} updated, ${failedCount} failed.`);
+    return { success: true, updated: updatedCount, failed: failedCount, errors };
+    
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("Unexpected error during color identity backfill:", error);
+    return { success: false, updated: updatedCount, failed: failedCount, errors: [`Unexpected error: ${errorMessage}`] };
+  }
+}
 
 /**
  * Backfill CMC data for all draft picks that are missing it

@@ -239,7 +239,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
     }
 
     // Check if card is already in deck
-    if (deckCards.some((dc) => dc.card_id === pick.card_id && dc.category === activeCategory)) {
+    if (deckCards.some((dc) => dc.draft_pick_id === pick.id)) {
       setError("Card is already in this section");
       setTimeout(() => setError(null), 3000);
       return;
@@ -458,7 +458,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
       if (!pick) return;
 
       // Check if card is already in this category
-      if (deckCards.some((dc) => dc.card_id === pick.card_id && dc.category === category)) {
+      if (deckCards.some((dc) => dc.draft_pick_id === pick.id)) {
         setError(`${pick.card_name} is already in ${category}`);
         setTimeout(() => setError(null), 3000);
         return;
@@ -495,8 +495,10 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
 
   // Get available picks (not in current deck yet)
   const availablePicks = draftPicks.filter(
-    (pick) => !deckCards.some((dc) => dc.card_id === pick.card_id && dc.category === activeCategory)
-  );
+  // A pick is available if its unique ID is not found in the list of cards already in the deck.
+  (pick) => !deckCards.some((dc) => dc.draft_pick_id === pick.id)
+);
+
 
   if (loading) {
     return (
@@ -922,7 +924,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                     {(() => {
                       const cmcValues: number[] = [];
                       mainboardCards.forEach((card) => {
-                        const pick = draftPicks.find((p) => p.card_id === card.card_id);
+                        const pick = draftPicks.find((p) => p.id === card.draft_pick_id);
                         if (pick && pick.cmc !== null && pick.cmc !== undefined) {
                           for (let i = 0; i < (card.quantity || 1); i++) {
                             cmcValues.push(pick.cmc);
@@ -942,7 +944,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                     {(() => {
                       const colors = new Set<string>();
                       [...mainboardCards, ...sideboardCards].forEach((card) => {
-                        const pick = draftPicks.find((p) => p.card_id === card.card_id);
+                        const pick = draftPicks.find((p) => p.id === card.draft_pick_id);
                         if (pick && pick.colors && Array.isArray(pick.colors)) {
                           pick.colors.forEach((c: string) => colors.add(c));
                         }

@@ -3,6 +3,7 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { invalidateDraftCache } from '@/lib/draftCache'; 
 
 // Create a Supabase client with cookies support
 async function createClient() {
@@ -40,6 +41,7 @@ export interface CardData {
   card_type?: string;
   rarity?: string;
   colors?: string[];
+  color_identity?: string[];
   image_url?: string;
   mana_cost?: string;
   cmc?: number;
@@ -154,7 +156,6 @@ export async function addCardToPool(
   poolName: string = "default"
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
-
   try {
     // Get user for audit purposes (non-blocking)
     const {
@@ -168,6 +169,7 @@ export async function addCardToPool(
       card_type: card.card_type,
       rarity: card.rarity,
       colors: card.colors || [],
+       color_identity: card.color_identity || [],
       image_url: card.image_url,
       mana_cost: card.mana_cost,
       cmc: card.cmc || 0,
@@ -175,12 +177,15 @@ export async function addCardToPool(
       created_by: user?.id || null, // Optional: for audit trail
     });
 
-    if (error) {
+     if (error) {
       console.error("Error adding card to pool:", error);
       return { success: false, error: error.message };
     }
-
+    
+    // On success, invalidate the cache
+    invalidateDraftCache();
     return { success: true };
+
   } catch (error) {
     console.error("Unexpected error adding card:", error);
     return { success: false, error: "An unexpected error occurred" };
@@ -209,6 +214,7 @@ export async function addCardsToPool(
       card_type: card.card_type,
       rarity: card.rarity,
       colors: card.colors || [],
+       color_identity: card.color_identity || [],
       image_url: card.image_url,
       mana_cost: card.mana_cost,
       cmc: card.cmc || 0,
@@ -226,6 +232,8 @@ export async function addCardsToPool(
       return { success: false, error: error.message };
     }
 
+    // On success, invalidate the cache
+    invalidateDraftCache();
     return { success: true, count: data?.length || 0 };
   } catch (error) {
     console.error("Unexpected error adding cards:", error);
@@ -257,6 +265,7 @@ export async function bulkImportCards(
       card_type?: string;
       rarity?: string;
       colors: string[];
+       color_identity: string[];
       image_url: string | null;
       mana_cost?: string;
       cmc: number;
@@ -316,6 +325,7 @@ export async function bulkImportCards(
           card_type: card.type_line,
           rarity: card.rarity,
           colors: card.colors || [],
+          color_identity: card.color_identity || [],
           image_url: card.image_uris?.normal || card.image_uris?.small || null,
           mana_cost: card.mana_cost,
           cmc: card.cmc || 0,
@@ -330,11 +340,18 @@ export async function bulkImportCards(
       }
     }
 
-    if (cardsToInsert.length > 0) {
+   if (cardsToInsert.length > 0) {
       const { error: insertError } = await supabase.from("card_pools").insert(cardsToInsert);
-      if (insertError) return { success: false, added: 0, skipped: 0, failed, error: insertError.message };
+      if (insertError) {
+        return { success: false, added: 0, skipped: 0, failed, error: insertError.message };
+      }
     }
-
+    
+    // On success (if we inserted anything), invalidate the cache
+    if (cardsToInsert.length > 0) {
+        invalidateDraftCache();
+    }
+    
     return { success: true, added: cardsToInsert.length, skipped: 0, failed };
   } catch (error) {
     return { success: false, added: 0, skipped: 0, failed: [], error: String(error) };
@@ -359,18 +376,25 @@ export async function removeCardFromPool(
         .eq("id", dbId) // FIX: Target the specific row
         .eq("pool_name", poolName);
 
-      if (error) return { success: false, error: error.message };
+      if (error) {
+        return { success: false, error: error.message };
+      }
     } else {
       const { error } = await supabase
         .from("card_pools")
         .delete()
-        .eq("id", dbId) // FIX: Target the specific row
+        .eq("id", dbId)
         .eq("pool_name", poolName);
 
-      if (error) return { success: false, error: error.message };
+      if (error) {
+        return { success: false, error: error.message };
+      }
     }
 
+    // On success for either path (update or delete), invalidate and return
+    invalidateDraftCache();
     return { success: true };
+    
   } catch (error) {
     console.error("Unexpected error removing card:", error);
     return { success: false, error: "An unexpected error occurred" };
@@ -391,11 +415,13 @@ export async function clearCardPool(
       .delete()
       .eq("pool_name", poolName);
 
-    if (error) {
+     if (error) {
       console.error("Error clearing card pool:", error);
       return { success: false, error: error.message };
     }
 
+    // On success, invalidate the cache
+    invalidateDraftCache();
     return { success: true };
   } catch (error) {
     console.error("Unexpected error clearing pool:", error);
@@ -404,17 +430,17 @@ export async function clearCardPool(
 }
 
 /**
- * Remove cards from pool by filter: all, undrafted only, or drafted only
+ * Remove cards from pool by filter: all, undrafted only, or drafted only.
+ * Now includes cache invalidation for operations that modify the card_pools table.
  */
 export async function removeFilteredCards(
   filter: "all" | "undrafted" | "drafted",
   poolName: string = "default"
 ): Promise<{ success: boolean; removedCount?: number; error?: string }> {
   const supabase = await createClient();
-
   try {
+    // This filter permanently deletes all cards in the pool.
     if (filter === "all") {
-      // Count before deleting
       const { count } = await supabase
         .from("card_pools")
         .select("*", { count: "exact", head: true })
@@ -430,10 +456,14 @@ export async function removeFilteredCards(
         return { success: false, error: error.message };
       }
 
+      // Since card_pools was modified, invalidate the cache.
+      invalidateDraftCache();
       return { success: true, removedCount: count || 0 };
     }
 
-    // Get all cards in the pool
+    // --- Logic for "undrafted" or "drafted" filters ---
+
+    // Get all cards in the pool to compare against
     const { data: poolCards, error: poolError } = await supabase
       .from("card_pools")
       .select("id, card_id")
@@ -442,12 +472,11 @@ export async function removeFilteredCards(
     if (poolError) {
       return { success: false, error: poolError.message };
     }
-
     if (!poolCards || poolCards.length === 0) {
       return { success: true, removedCount: 0 };
     }
 
-    // Get all drafted card_ids
+    // Get all drafted card_ids from the picks table
     const { data: draftPicks, error: draftError } = await supabase
       .from("team_draft_picks")
       .select("card_id");
@@ -456,13 +485,10 @@ export async function removeFilteredCards(
       return { success: false, error: draftError.message };
     }
 
-    const draftedCardIds = new Set(
-      (draftPicks || []).map((p) => p.card_id)
-    );
+    const draftedCardIds = new Set((draftPicks || []).map((p) => p.card_id));
 
-    // Determine which action to take based on the filter
+    // This filter permanently deletes only the undrafted cards.
     if (filter === "undrafted") {
-      // PERMANENT DELETE: Remove completely from the main card_pools table
       const idsToDelete = poolCards
         .filter((c) => !draftedCardIds.has(c.card_id))
         .map((c) => c.id);
@@ -481,10 +507,14 @@ export async function removeFilteredCards(
         return { success: false, error: deleteError.message };
       }
 
+      // Since card_pools was modified, invalidate the cache.
+      invalidateDraftCache();
       return { success: true, removedCount: idsToDelete.length };
-
-    } else if (filter === "drafted") {
-      // MOVE BACK TO MAIN POOL: Delete from team_draft_picks instead of card_pools!
+    }
+    
+    // This filter "undrafts" cards by removing them from the team_draft_picks table.
+    // It does NOT modify the card_pools table, so no cache invalidation is needed here.
+    if (filter === "drafted") {
       const draftedPoolCards = poolCards.filter((c) => draftedCardIds.has(c.card_id));
       const draftedCardIdsInPool = draftedPoolCards.map((c) => c.card_id);
 
@@ -502,15 +532,19 @@ export async function removeFilteredCards(
         return { success: false, error: undraftError.message };
       }
 
+      // No invalidation needed as card_pools table was not touched.
       return { success: true, removedCount: draftedPoolCards.length };
     }
 
-    return { success: false, error: "Invalid filter" };
+    // Fallback for an invalid filter string
+    return { success: false, error: "Invalid filter specified" };
+    
   } catch (error) {
     console.error("Unexpected error removing filtered cards:", error);
     return { success: false, error: String(error) };
   }
 }
+
 
 /**
  * Get all available pool names
