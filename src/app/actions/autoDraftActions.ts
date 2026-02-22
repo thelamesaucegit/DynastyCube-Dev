@@ -289,58 +289,33 @@ export async function getAutoDraftPreview(
 ): Promise<AutoDraftPreviewResult> {
   try {
     const supabase = await createServerClient();
-
-    // Check manual queue for this team
-    const { data: queueEntries, error: queueError } = await supabase
+    const { data: queueEntries } = await supabase
       .from("team_draft_queue")
-      .select("card_pool_id, card_id, card_name, position, pinned")
+      .select("card_pool_id")
       .eq("team_id", teamId)
       .order("position", { ascending: true });
 
-    if (queueError) {
-      console.error("Error fetching draft queue:", queueError);
-    }
-
-    const queueDepth = (queueEntries || []).length;
-
-    // If there are manual queue entries, validate they're still available
     if (queueEntries && queueEntries.length > 0) {
       const { cards: availableCards } = await getAvailableCardsForDraft();
-      const availableIds = new Set(availableCards.map((c) => c.card_id));
+      const availableInstanceIds = new Set(availableCards.map((c) => c.id));
 
       for (const entry of queueEntries) {
-        if (availableIds.has(entry.card_id)) {
-          // Found a valid manual queue pick
-          const card = availableCards.find((c) => c.card_id === entry.card_id) || null;
-          return {
-            nextPick: card,
-            source: "manual_queue",
-            queueDepth,
-          };
+        if (entry.card_pool_id && availableInstanceIds.has(entry.card_pool_id)) {
+          const card = availableCards.find((c) => c.id === entry.card_pool_id) || null;
+          return { nextPick: card, source: "manual_queue", queueDepth: queueEntries.length };
         }
       }
     }
 
     // Fall back to algorithm
     const { card, algorithmDetails, error } = await computeAutoDraftPick(teamId);
-
-    return {
-      nextPick: card,
-      source: "algorithm",
-      queueDepth,
-      algorithmDetails: algorithmDetails || undefined,
-      error,
-    };
+    return { nextPick: card, source: "algorithm", queueDepth: (queueEntries || []).length, algorithmDetails: algorithmDetails || undefined, error };
   } catch (error) {
-    console.error("Error getting auto-draft preview:", error);
-    return {
-      nextPick: null,
-      source: "algorithm",
-      queueDepth: 0,
-      error: "Failed to get auto-draft preview",
-    };
+    return { nextPick: null, source: "algorithm", queueDepth: 0, error: "Failed to get auto-draft preview" };
   }
 }
+
+
 
 // ============================================================================
 // QUEUE MANAGEMENT
@@ -737,6 +712,7 @@ export async function executeAutoDraft(
     // Add the draft pick
     const pickResult = await addDraftPick({
       team_id: teamId,
+      card_pool_id: card.id,
       card_id: card.card_id,
       card_name: card.card_name,
       card_set: card.card_set,
@@ -750,9 +726,45 @@ export async function executeAutoDraft(
     });
 
     if (!pickResult.success) {
+      await conditionallyCleanupDraftQueues(card.card_id);
       return { success: false, error: pickResult.error || "Failed to add draft pick" };
     }
+/**
+ * Conditionally cleans up draft queues using a high-performance caching strategy.
+ */
+export async function conditionallyCleanupDraftQueues(
+  draftedCardId: string
+): Promise<{ success: boolean; cleaned: boolean; error?: string }> {
+  try {
+    const duplicateSet = await getDuplicateCardIdSet();
 
+    if (!duplicateSet.has(draftedCardId)) {
+      console.log(`Unique card ${draftedCardId} drafted. Cleaning queues immediately.`);
+      const supabase = await createServerClient();
+      const { error: deleteError } = await supabase.from("team_draft_queue").delete().eq("card_id", draftedCardId);
+      if (deleteError) return { success: false, cleaned: false, error: deleteError.message };
+      return { success: true, cleaned: true };
+    }
+
+    console.log(`Duplicate card ${draftedCardId} drafted. Checking for remaining copies...`);
+    const { cards: availableCards } = await getAvailableCardsForDraft();
+    const isMoreAvailable = availableCards.some(card => card.card_id === draftedCardId);
+
+    if (isMoreAvailable) {
+      return { success: true, cleaned: false };
+    }
+
+    console.log(`Last copy of ${draftedCardId} drafted. Cleaning all team queues.`);
+    const supabase = await createServerClient();
+    const { error: deleteError } = await supabase.from("team_draft_queue").delete().eq("card_id", draftedCardId);
+    if (deleteError) return { success: false, cleaned: false, error: deleteError.message };
+    
+    return { success: true, cleaned: true };
+  } catch (error) {
+    console.error("Unexpected error in conditional queue cleanup:", error);
+    return { success: false, cleaned: false, error: "Failed to clean up draft queues" };
+  }
+}
     // Log the auto-draft
     const supabase = await createServerClient();
     await supabase.from("auto_draft_log").insert({
