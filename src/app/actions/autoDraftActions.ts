@@ -6,6 +6,7 @@ import { getAvailableCardsForDraft, type CardData } from "@/app/actions/cardActi
 import { getTeamDraftPicks, addDraftPick } from "@/app/actions/draftActions";
 import { spendCubucksOnDraft, getTeamBalance } from "@/app/actions/cubucksActions";
 import { getDraftStatus } from "@/app/actions/draftOrderActions";
+import { getDuplicateCardIdSet } from '@/lib/draftCache'; 
 
 // ============================================================================
 // TYPES
