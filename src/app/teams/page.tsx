@@ -1,4 +1,5 @@
 // src/app/teams/page.tsx
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -9,27 +10,46 @@ import { Badge } from "@/app/components/ui/badge";
 import { Users, ArrowRight, Swords, Star } from "lucide-react";
 import { DraftStatusWidget, getTeamDraftBadge } from "@/app/components/DraftStatusWidget";
 import { getDraftStatus, type DraftStatus } from "@/app/actions/draftOrderActions";
-import { getTeamsWithDetails, type TeamWithDetails } from "@/app/actions/teamActions"; // Import our new action and type
+import { getTeamsWithDetails, type TeamWithDetails } from "@/app/actions/teamActions";
 
 export default function TeamsPage() {
   const [teams, setTeams] = useState<TeamWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [draftStatus, setDraftStatus] = useState<DraftStatus | null>(null);
 
+  // FIX 2: Implement polling to keep draft status up-to-date
+  useEffect(() => {
+    const fetchDraftStatus = async () => {
+      try {
+        const draftStatusResult = await getDraftStatus();
+        if (draftStatusResult.status) {
+          setDraftStatus(draftStatusResult.status);
+        }
+      } catch (error) {
+        console.error("Failed to refresh draft status:", error);
+      }
+    };
+
+    // Fetch initial status
+    fetchDraftStatus();
+
+    // Set up an interval to fetch every 15 seconds
+    const intervalId = setInterval(fetchDraftStatus, 15000);
+
+    // Clean up the interval when the component unmounts
+    return () => clearInterval(intervalId);
+  }, []);
+
+
   useEffect(() => {
     async function loadData() {
       setLoading(true);
       try {
-        const [teamsResult, draftStatusResult] = await Promise.all([
-          getTeamsWithDetails(),
-          getDraftStatus(),
-        ]);
-
+        const teamsResult = await getTeamsWithDetails();
         if (teamsResult.teams) {
-          setTeams(teamsResult.teams);
-        }
-        if (draftStatusResult.status) {
-          setDraftStatus(draftStatusResult.status);
+          // FIX 1: Sort teams alphabetically by name to ensure a static order
+          const sortedTeams = teamsResult.teams.sort((a, b) => a.name.localeCompare(b.name));
+          setTeams(sortedTeams);
         }
       } catch (error) {
         console.error("Failed to load page data:", error);
@@ -61,6 +81,7 @@ export default function TeamsPage() {
         </div>
       </div>
 
+      {/* This widget will now update automatically due to the polling useEffect */}
       <DraftStatusWidget variant="compact" />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -75,7 +96,6 @@ export default function TeamsPage() {
                 badge === "clock" ? "ring-2 ring-green-500" : badge === "deck" ? "ring-2 ring-yellow-500" : ""
               }`}>
                 <CardHeader className="flex flex-row items-start gap-4">
-                  {/* --- UI IMPROVEMENT 1: DUAL COLOR CIRCLES --- */}
                   <div className="relative size-16 flex-shrink-0 flex items-center justify-center">
                     <div
                       className="absolute size-16 rounded-full"
@@ -87,11 +107,10 @@ export default function TeamsPage() {
                     />
                     <span className="relative text-3xl drop-shadow-lg">{team.emoji}</span>
                   </div>
-
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <CardTitle className="text-xl">{team.name}</CardTitle>
-                      {/* ... (Badge logic remains the same) ... */}
+                      {/* ... Badge logic will now use updated draftStatus ... */}
                     </div>
                     <p className="text-sm text-muted-foreground italic mt-1 line-clamp-2">
                       &ldquo;{team.motto}&rdquo;
@@ -99,7 +118,6 @@ export default function TeamsPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="flex-grow flex flex-col">
-                  {/* --- UI IMPROVEMENT 2 & 3: RECORD & LAST PICK --- */}
                   <div className="flex-grow flex items-center justify-between gap-4 mb-4 p-3 rounded-lg bg-muted/50">
                     <div className="text-center">
                       <p className="text-xs font-semibold text-muted-foreground">RECORD</p>
@@ -114,10 +132,11 @@ export default function TeamsPage() {
                             alt={team.last_pick.card_name}
                             className="size-10 rounded-sm object-cover shadow-md"
                           />
+                          {/* FIX 3: Pop-out card image on hover */}
                           <img
                             src={team.last_pick.image_url}
                             alt={team.last_pick.card_name}
-                            className="absolute bottom-0 left-0 w-48 h-auto rounded-lg object-contain shadow-2xl pointer-events-none opacity-0 group-hover/pick:opacity-100 transition-opacity transform-gpu origin-bottom-left"
+                            className="absolute bottom-0 left-0 h-64 w-auto z-10 rounded-lg object-contain shadow-2xl pointer-events-none opacity-0 group-hover/pick:opacity-100 transition-opacity transform-gpu origin-bottom-left"
                           />
                         </div>
                       ) : (
@@ -125,7 +144,6 @@ export default function TeamsPage() {
                       )}
                     </div>
                   </div>
-
                   <Button variant="outline" className="w-full mt-auto" tabIndex={-1}>
                     View Team Profile
                     <ArrowRight className="ml-2 size-4" />
