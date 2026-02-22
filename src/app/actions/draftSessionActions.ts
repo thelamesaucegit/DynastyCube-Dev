@@ -441,6 +441,7 @@ export async function activateDraft(
 export async function advanceDraft(): Promise<{
   success: boolean;
   completed?: boolean;
+   autoDrafted?: boolean;
   error?: string;
 }> {
   try {
