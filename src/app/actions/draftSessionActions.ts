@@ -638,11 +638,10 @@ export async function checkDraftTimer(): Promise<{
   action: "none" | "activated" | "auto_drafted" | "completed" | "error";
   message?: string;
   error?: string;
+  needsReload?: boolean; // For handling stale deployments
 }> {
   try {
     const supabase = await createServerClient();
-
-    // Get active season
     const { data: activeSeason } = await supabase
       .from("seasons")
       .select("id")
@@ -653,7 +652,6 @@ export async function checkDraftTimer(): Promise<{
       return { action: "none" };
     }
 
-    // Get current session
     const { data: session } = await supabase
       .from("draft_sessions")
       .select("*")
@@ -672,34 +670,20 @@ export async function checkDraftTimer(): Promise<{
     // Case 1: Scheduled session whose start time has arrived
     if (session.status === "scheduled" && new Date(session.start_time) <= now) {
       const result = await activateDraft(session.id);
-      if (result.success) {
-        return { action: "activated", message: "Draft has been activated!" };
-      }
-      return { action: "error", error: result.error };
+      return result.success
+        ? { action: "activated", message: "Draft has been activated!" }
+        : { action: "error", error: result.error };
     }
 
-    // Case 2: Active session past end time → complete
+    // Case 2: Active session past hard end time
     if (session.status === "active" && session.end_time && new Date(session.end_time) <= now) {
-      const { error } = await supabase
-        .from("draft_sessions")
-        .update({
-          status: "completed",
-          current_pick_deadline: null,
-          current_on_clock_team_id: null,
-          updated_at: now.toISOString(),
-        })
-        .eq("id", session.id);
-
-      if (!error) {
-        await supabase.rpc("notify_all_users_draft", {
-          p_notification_type: "draft_completed",
-          p_message: "The draft has ended! The draft deadline has been reached.",
-        });
-      }
-      return { action: "completed", message: "Draft has ended (deadline reached)." };
+      const { error } = await completeDraft(session.id);
+      return error
+        ? { action: "error", error }
+        : { action: "completed", message: "Draft has ended (deadline reached)." };
     }
 
-    // Case 3: Active session with expired pick deadline → auto-draft
+    // Case 3: Active session with an expired pick deadline
     if (
       session.status === "active" &&
       session.current_pick_deadline &&
@@ -707,36 +691,41 @@ export async function checkDraftTimer(): Promise<{
       new Date(session.current_pick_deadline) <= now
     ) {
       const teamId = session.current_on_clock_team_id;
-
-      // Execute auto-draft for the team on the clock
       const autoDraftResult = await executeAutoDraft(teamId);
 
+      // Case 3a: The autodraft was successful.
       if (autoDraftResult.success) {
-        // Advance the draft to the next team
         const advanceResult = await advanceDraft();
         return {
           action: "auto_drafted",
           message: `Auto-drafted ${autoDraftResult.pick?.cardName || "a card"} for team ${teamId}. ${advanceResult.completed ? "Draft is now complete!" : ""}`,
         };
-      } else {
-        // Auto-draft failed (maybe no affordable cards). Skip this team's pick and advance.
-        // Set the next team's deadline without making a pick
-        console.error(`Auto-draft failed for ${teamId}: ${autoDraftResult.error}`);
-
-        // Force advance by resetting the deadline for the same team
-        // This prevents infinite loops — if auto-draft fails, we just reset the timer
-        const deadline = new Date(now.getTime() + session.hours_per_pick * 60 * 60 * 1000);
-        await supabase
-          .from("draft_sessions")
-          .update({
-            current_pick_deadline: deadline.toISOString(),
-            updated_at: now.toISOString(),
-          })
-          .eq("id", session.id);
-
+      }
+      
+      // Case 3b: The autodraft failed due to a stale deployment.
+      if (autoDraftResult.staleDeployment) {
         return {
           action: "error",
-          error: `Auto-draft failed for team: ${autoDraftResult.error}. Timer has been reset.`,
+          error: autoDraftResult.error,
+          needsReload: true,
+        };
+      }
+      
+      // Case 3c: The autodraft failed for any other reason (e.g., no funds, no legal picks).
+      // The team's pick is SKIPPED, and the draft moves to the next person.
+      else {
+        console.error(`Auto-draft failed for ${teamId}: ${autoDraftResult.error}. The pick will be skipped.`);
+        
+        const advanceResult = await advanceDraft();
+
+        if (!advanceResult.success) {
+            return { action: "error", error: `Auto-draft failed and draft could not be advanced: ${advanceResult.error}` };
+        }
+        
+        return {
+          action: "auto_drafted",
+          message: `Team ${teamId} could not auto-draft (Reason: ${autoDraftResult.error}). Their pick was skipped.`,
+          error: `Auto-draft for ${teamId} failed and was skipped.`,
         };
       }
     }
