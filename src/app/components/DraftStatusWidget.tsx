@@ -43,6 +43,12 @@ export function DraftStatusWidget({ variant, teamId }: DraftStatusWidgetProps) {
         await checkDraftTimer();
       }
     } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes("Failed to find Server Action")) {
+        // Stale deployment — new server code was deployed, reload to get fresh action IDs
+        window.location.reload();
+        return;
+      }
       console.error("Error loading draft status:", error);
     } finally {
       setLoading(false);

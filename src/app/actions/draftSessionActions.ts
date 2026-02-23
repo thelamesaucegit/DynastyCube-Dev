@@ -425,7 +425,16 @@ export async function advanceDraft(): Promise<{
     );
     const pastEndTime = session.end_time && new Date() >= new Date(session.end_time);
 
-    if (allTeamsReachedRounds || pastEndTime) {
+    // Check if all teams have spent all their cubucks
+    const { data: teamBalances } = await supabase
+      .from("teams")
+      .select("id, cubucks_balance");
+    const allTeamsOutOfCubucks =
+      teamBalances != null &&
+      teamBalances.length > 0 &&
+      teamBalances.every((t: { id: string; cubucks_balance: number }) => t.cubucks_balance <= 0);
+
+    if (allTeamsReachedRounds || pastEndTime || allTeamsOutOfCubucks) {
       // Draft is complete
       await completeDraft(session.id);
       return { success: true, completed: true };
@@ -635,20 +644,20 @@ export async function checkDraftTimer(): Promise<{
           needsReload: true,
         };
       }
-      
+
       // Case 3c: The autodraft failed (no funds, no legal picks).
       // The pick is SKIPPED by creating a placeholder and then advancing.
       else {
         console.error(`Auto-draft failed for ${teamId}: ${autoDraftResult.error}. The pick will be skipped.`);
-        
+
         const { status: draftStatus } = await getDraftStatus();
         if (!draftStatus) {
             return { action: "error", error: "Could not get draft status to log skipped pick." };
         }
-        
+
         // Increment the skip counter
         const newSkipCount = (session.consecutive_skipped_picks || 0) + 1;
-        
+
         // Check if the skip count has reached the total number of teams
         if (newSkipCount >= draftStatus.totalTeams) {
             console.log(`All ${draftStatus.totalTeams} teams have consecutively skipped. Ending draft.`);
@@ -664,17 +673,17 @@ export async function checkDraftTimer(): Promise<{
             .from("draft_sessions")
             .update({ consecutive_skipped_picks: newSkipCount })
             .eq("id", session.id);
-        
+
         const skippedResult = await addSkippedPick(teamId, draftStatus.totalPicks + 1);
         if (!skippedResult.success) {
             return { action: "error", error: `Auto-draft failed and could not log skipped pick: ${skippedResult.error}` };
         }
-        
+
         const advanceResult = await advanceDraft();
         if (!advanceResult.success) {
             return { action: "error", error: `Auto-draft failed and draft could not be advanced: ${advanceResult.error}` };
         }
-        
+
         return {
           action: "auto_drafted",
           message: `Team ${teamId} could not auto-draft. Their pick was skipped. Consecutive skips: ${newSkipCount}.`,

@@ -67,7 +67,14 @@ export const DraftSessionManagement: React.FC = () => {
       if (diff <= 0) {
         setCountdown("Auto-draft imminent...");
         // Trigger a timer check
-        checkDraftTimer().then(() => loadData());
+        checkDraftTimer()
+          .then(() => loadData())
+          .catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            if (msg.includes("Failed to find Server Action")) {
+              window.location.reload();
+            }
+          });
         return;
       }
 
