@@ -1,15 +1,16 @@
 // src/app/api/draft-stream/[sessionId]/route.ts
 import { createServerClient } from '@/lib/supabase';
+// No need for NextRequest here, the standard Request type is correct
+// when using the signature below.
 
 export const dynamic = 'force-dynamic';
 
-// The function signature for GET is updated here
 export async function GET(
   request: Request,
-  // Correctly destructure `params` from the second argument
+  // This is the key: Destructure `params` directly from the second argument.
+  // The type annotation { params: { sessionId: string } } then describes the object being destructured.
   { params }: { params: { sessionId: string } }
 ) {
-  // We now get 'sessionId' directly from params
   const { sessionId } = params;
 
   if (!sessionId) {
@@ -39,7 +40,7 @@ export async function GET(
       };
     },
     cancel() {
-      console.log(`Readable stream cancelled for session ${sessionId}`);
+        console.log(`Readable stream cancelled for session ${sessionId}`);
     }
   });
 
