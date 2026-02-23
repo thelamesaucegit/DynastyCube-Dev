@@ -1,6 +1,31 @@
+//src/app/globals.css
+
 @import "tailwindcss";
 @import "../styles/theme.css";
 @import "tw-animate-css";
+
+@layer utilities {
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes fade-in-down {
+    from {
+      opacity: 0;
+      transform: translateY(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .animate-fade-in {
+    animation: fade-in 0.5s ease-out;
+  }
+  .animate-fade-in-down {
+    animation: fade-in-down 0.5s ease-out;
+  }
+}
 
 @custom-variant dark (&:where(.dark, .dark *));
 
