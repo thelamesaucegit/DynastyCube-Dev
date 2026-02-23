@@ -4,11 +4,11 @@
 
 import { useEffect, useState, useMemo, FC } from 'react';
 import { getDraftBoardData } from '@/app/actions/liveDraftActions';
-import type { DraftOrderEntry } from '@/app/actions/draftOrderActions';
+import type { DraftOrderTeam } from '@/app/actions/liveDraftActions'; // UPDATED: Import new type
 import type { DraftPick } from '@/app/draft/[sessionId]/live/page';
 import { Button } from '@/app/components/ui/button';
-import { List, Columns, CheckCircle } from 'lucide-react';
-import { cn } from '@/lib/utils'; // Assuming you have a utility for class names
+import { List, Columns } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 // Define a type for the view mode
 type ViewMode = 'list' | 'team';
@@ -16,8 +16,6 @@ type ViewMode = 'list' | 'team';
 // ============================================================================
 // DRAFT CARD SUB-COMPONENT
 // ============================================================================
-// A reusable component for displaying a single drafted card.
-// It accepts a 'size' prop to render differently in list vs. team view.
 const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small' }> = ({ pick, isNewest, size }) => {
   if (size === 'large') {
     return (
@@ -40,7 +38,6 @@ const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small
     );
   }
 
-  // Small card for team view
   return (
     <div className={cn(
       "bg-gray-800/80 border border-gray-700/50 rounded-md p-1.5 transition-all duration-500",
@@ -53,32 +50,19 @@ const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small
 };
 
 // ============================================================================
-// LIST VIEW SUB-COMPONENT
-// ============================================================================
-const ListView: FC<{ picks: DraftPick[], newestPickId: number | null }> = ({ picks, newestPickId }) => (
-  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-    {picks.map((pick) => (
-      <DraftCard key={pick.id} pick={pick} isNewest={pick.id === newestPickId} size="large" />
-    ))}
-  </div>
-);
-
-// ============================================================================
 // TEAM VIEW SUB-COMPONENT
 // ============================================================================
-const TeamView: FC<{ picks: DraftPick[], draftOrder: DraftOrderEntry[], newestPickId: number | null }> = ({ picks, draftOrder, newestPickId }) => {
-  // Memoize the picks grouped by team to avoid re-calculating on every render
+const TeamView: FC<{ picks: DraftPick[], draftOrder: DraftOrderTeam[], newestPickId: number | null }> = ({ picks, draftOrder, newestPickId }) => {
   const picksByTeam = useMemo(() => {
     const grouped: Record<string, DraftPick[]> = {};
     for (const team of draftOrder) {
-      grouped[team.team_id] = [];
+      if (team.team_id) grouped[team.team_id] = [];
     }
     for (const pick of picks) {
-      if (grouped[pick.team_id]) {
+      if (pick.team_id && grouped[pick.team_id]) {
         grouped[pick.team_id].push(pick);
       }
     }
-    // Sort picks within each team's group by pick number ascending
     for (const teamId in grouped) {
       grouped[teamId].sort((a, b) => a.pick_number - b.pick_number);
     }
@@ -87,22 +71,36 @@ const TeamView: FC<{ picks: DraftPick[], draftOrder: DraftOrderEntry[], newestPi
 
   return (
     <div className="flex gap-2 overflow-x-auto pb-4">
-      {draftOrder.map(team => (
-        <div key={team.team_id} className="w-40 sm:w-48 flex-shrink-0 bg-gray-900/50 rounded-lg p-2">
-          <div className="text-center pb-2 mb-2 border-b border-gray-700">
-            <p className="text-2xl">{team.team?.emoji || '❓'}</p>
-            <p className="text-xs font-bold truncate">{team.team?.name || 'Unknown'}</p>
+      {draftOrder.map(teamEntry => {
+        const team = teamEntry.team;
+        if (!team) return null;
+
+        // UPDATED: Using your exact logo rendering logic
+        const primaryColor = team.primary_color || "#71717a";
+        const secondaryColor = team.secondary_color || "#e4e4e7";
+
+        return (
+          <div key={team.id} className="w-40 sm:w-48 flex-shrink-0 bg-gray-900/50 rounded-lg p-2">
+            <div className="text-center pb-2 mb-2 border-b border-gray-700 flex flex-col items-center">
+              <div className="relative size-12 flex-shrink-0 flex items-center justify-center mb-1">
+                <div className="absolute size-12 rounded-full" style={{ backgroundColor: secondaryColor }} />
+                <div className="absolute size-10 rounded-full" style={{ backgroundColor: primaryColor }} />
+                <span className="relative text-2xl drop-shadow-md">{team.emoji}</span>
+              </div>
+              <p className="text-xs font-bold truncate w-full">{team.name}</p>
+            </div>
+            <div className="space-y-1.5">
+              {(picksByTeam[team.id] || []).map(pick => (
+                <DraftCard key={pick.id} pick={pick} isNewest={pick.id === newestPickId} size="small" />
+              ))}
+            </div>
           </div>
-          <div className="space-y-1.5">
-            {(picksByTeam[team.team_id] || []).map(pick => (
-              <DraftCard key={pick.id} pick={pick} isNewest={pick.id === newestPickId} size="small" />
-            ))}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
+
 
 // ============================================================================
 // MAIN LIVE DRAFT BOARD COMPONENT
@@ -114,11 +112,10 @@ interface LiveDraftBoardProps {
 
 export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoardProps) {
   const [picks, setPicks] = useState<DraftPick[]>(serverPicks);
-  const [draftOrder, setDraftOrder] = useState<DraftOrderEntry[]>([]);
+  const [draftOrder, setDraftOrder] = useState<DraftOrderTeam[]>([]); // UPDATED
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [newestPickId, setNewestPickId] = useState<number | null>(null);
 
-  // Effect to fetch the official draft order needed for the team view
   useEffect(() => {
     const fetchDraftOrder = async () => {
       const { draftOrder: fetchedOrder, error } = await getDraftBoardData();
@@ -131,87 +128,59 @@ export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoar
     fetchDraftOrder();
   }, []);
 
-  // Effect for real-time pick updates via Server-Sent Events (SSE)
   useEffect(() => {
     const eventSource = new EventSource(`/api/draft-stream/${sessionId}`);
-
     eventSource.onmessage = (event) => {
       try {
-        // BUG FIX: Instead of assuming the payload shape with a direct cast,
-        // we parse it and then manually construct the DraftPick object.
-        // This makes the component resilient to the exact payload structure.
         const payload = JSON.parse(event.data);
-        const newPick: DraftPick = {
+        const newPick: DraftPick & { team_id: string } = {
           id: payload.id,
           pick_number: payload.pick_number,
           card_name: payload.card_name,
           card_set: payload.card_set,
           rarity: payload.rarity,
           image_url: payload.image_url,
-          // This ensures 'team_name' is correctly assigned, fixing the "Unknown Team" bug.
           team_name: payload.team_name || 'Unknown Team',
-          // We also need to add team_id for the team view to work correctly.
-          // Let's assume the payload includes it from the broadcast.
-          team_id: payload.team_id, 
+          team_id: payload.team_id,
         };
 
-        // Add the new pick to the state
+        if (!newPick.team_id) {
+          console.warn("Received a pick without a team_id, cannot place in team view.", newPick);
+        }
+
         setPicks(currentPicks => {
-          if (currentPicks.some(p => p.id === newPick.id)) {
-            return currentPicks;
-          }
-          // FEATURE: Prepend the new pick to the array to make it appear at the top
+          if (currentPicks.some(p => p.id === newPick.id)) return currentPicks;
           return [newPick, ...currentPicks];
         });
-
-        // FEATURE: Set the ID of the newest pick for animation
         setNewestPickId(newPick.id);
-        // Reset the animation class after a short delay
         setTimeout(() => setNewestPickId(null), 3000);
-
       } catch (error) {
         console.error('Failed to parse incoming event data:', event.data, error);
       }
     };
-
     eventSource.onerror = (err) => console.error('EventSource encountered an error:', err);
-
     return () => {
       console.log('Closing EventSource connection.');
       eventSource.close();
     };
   }, [sessionId]);
 
-  // Memoize the sorted picks for the list view to prevent re-sorting on every render
   const sortedPicks = useMemo(() => {
     return [...picks].sort((a, b) => b.pick_number - a.pick_number);
   }, [picks]);
 
   return (
     <div>
-      {/* FEATURE: View Mode Toggle */}
       <div className="flex justify-end mb-4">
         <div className="inline-flex items-center rounded-md bg-gray-800 p-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setViewMode('list')}
-            className={cn("flex items-center gap-2", viewMode === 'list' ? 'bg-blue-600 text-white' : 'hover:bg-gray-700')}
-          >
+          <Button variant="ghost" size="sm" onClick={() => setViewMode('list')} className={cn("flex items-center gap-2", viewMode === 'list' ? 'bg-blue-600 text-white' : 'hover:bg-gray-700')}>
             <List className="size-4" /> List
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setViewMode('team')}
-            className={cn("flex items-center gap-2", viewMode === 'team' ? 'bg-blue-600 text-white' : 'hover:bg-gray-700')}
-          >
+          <Button variant="ghost" size="sm" onClick={() => setViewMode('team')} className={cn("flex items-center gap-2", viewMode === 'team' ? 'bg-blue-600 text-white' : 'hover:bg-gray-700')}>
             <Columns className="size-4" /> By Team
           </Button>
         </div>
       </div>
-
-      {/* FEATURE: Conditional Rendering based on View Mode */}
       {viewMode === 'list' && <ListView picks={sortedPicks} newestPickId={newestPickId} />}
       {viewMode === 'team' && draftOrder.length > 0 && <TeamView picks={picks} draftOrder={draftOrder} newestPickId={newestPickId} />}
     </div>
