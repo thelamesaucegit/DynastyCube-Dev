@@ -4,13 +4,12 @@
 
 import { useEffect, useState, useMemo, FC } from 'react';
 import { getDraftBoardData } from '@/app/actions/liveDraftActions';
-import type { DraftOrderTeam } from '@/app/actions/liveDraftActions'; // UPDATED: Import new type
+import type { DraftOrderTeam } from '@/app/actions/liveDraftActions';
 import type { DraftPick } from '@/app/draft/[sessionId]/live/page';
 import { Button } from '@/app/components/ui/button';
 import { List, Columns } from 'lucide-react';
-import { cn } from '@/lib/utils';
+// REMOVED: No longer importing 'cn' from '@lib/utils'
 
-// Define a type for the view mode
 type ViewMode = 'list' | 'team';
 
 // ============================================================================
@@ -19,10 +18,11 @@ type ViewMode = 'list' | 'team';
 const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small' }> = ({ pick, isNewest, size }) => {
   if (size === 'large') {
     return (
-      <div className={cn(
-        "bg-gray-800 border border-gray-700 rounded-lg shadow-lg p-3 transition-all duration-500",
-        isNewest ? "col-span-full animate-fade-in-down border-green-500/50 ring-2 ring-green-500/50" : "transform hover:scale-105"
-      )}>
+      // UPDATED: Replaced cn() with template literal
+      <div className={`
+        bg-gray-800 border border-gray-700 rounded-lg shadow-lg p-3 transition-all duration-500
+        ${isNewest ? "col-span-full animate-fade-in-down border-green-500/50 ring-2 ring-green-500/50" : "transform hover:scale-105"}
+      `}>
         <div className="flex justify-between items-center mb-2 text-xs">
           <span className="font-bold text-white bg-blue-600 px-2 py-1 rounded">#{pick.pick_number}</span>
           <span className="font-semibold text-gray-300 truncate">{pick.team_name}</span>
@@ -39,10 +39,11 @@ const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small
   }
 
   return (
-    <div className={cn(
-      "bg-gray-800/80 border border-gray-700/50 rounded-md p-1.5 transition-all duration-500",
-      isNewest ? "animate-fade-in border-green-500/80 ring-1 ring-green-500/80" : ""
-    )}>
+    // UPDATED: Replaced cn() with template literal
+    <div className={`
+      bg-gray-800/80 border border-gray-700/50 rounded-md p-1.5 transition-all duration-500
+      ${isNewest ? "animate-fade-in border-green-500/80 ring-1 ring-green-500/80" : ""}
+    `}>
       <p className="text-xs text-center text-gray-200 truncate font-semibold">{pick.card_name}</p>
       <p className="text-[10px] text-center text-gray-400">P: {pick.pick_number}</p>
     </div>
@@ -75,7 +76,6 @@ const TeamView: FC<{ picks: DraftPick[], draftOrder: DraftOrderTeam[], newestPic
         const team = teamEntry.team;
         if (!team) return null;
 
-        // UPDATED: Using your exact logo rendering logic
         const primaryColor = team.primary_color || "#71717a";
         const secondaryColor = team.secondary_color || "#e4e4e7";
 
@@ -101,7 +101,6 @@ const TeamView: FC<{ picks: DraftPick[], draftOrder: DraftOrderTeam[], newestPic
   );
 };
 
-
 // ============================================================================
 // MAIN LIVE DRAFT BOARD COMPONENT
 // ============================================================================
@@ -112,7 +111,7 @@ interface LiveDraftBoardProps {
 
 export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoardProps) {
   const [picks, setPicks] = useState<DraftPick[]>(serverPicks);
-  const [draftOrder, setDraftOrder] = useState<DraftOrderTeam[]>([]); // UPDATED
+  const [draftOrder, setDraftOrder] = useState<DraftOrderTeam[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [newestPickId, setNewestPickId] = useState<number | null>(null);
 
@@ -173,10 +172,22 @@ export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoar
     <div>
       <div className="flex justify-end mb-4">
         <div className="inline-flex items-center rounded-md bg-gray-800 p-1">
-          <Button variant="ghost" size="sm" onClick={() => setViewMode('list')} className={cn("flex items-center gap-2", viewMode === 'list' ? 'bg-blue-600 text-white' : 'hover:bg-gray-700')}>
+          {/* UPDATED: Replaced cn() with template literal */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setViewMode('list')}
+            className={`flex items-center gap-2 ${viewMode === 'list' ? 'bg-blue-600 text-white' : 'hover:bg-gray-700'}`}
+          >
             <List className="size-4" /> List
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => setViewMode('team')} className={cn("flex items-center gap-2", viewMode === 'team' ? 'bg-blue-600 text-white' : 'hover:bg-gray-700')}>
+          {/* UPDATED: Replaced cn() with template literal */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setViewMode('team')}
+            className={`flex items-center gap-2 ${viewMode === 'team' ? 'bg-blue-600 text-white' : 'hover:bg-gray-700'}`}
+          >
             <Columns className="size-4" /> By Team
           </Button>
         </div>
