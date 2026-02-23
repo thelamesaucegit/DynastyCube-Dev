@@ -245,13 +245,15 @@ export async function bulkImportCards(
       }
       if (!cardName) continue;
 
+      // Respect Scryfall's rate limit: 100ms between requests (10 req/s max)
+      await new Promise((r) => setTimeout(r, 100));
+
       try {
         const response = await fetch(
           `https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(cardName)}`
         );
         if (!response.ok) {
           failed.push(cardName);
-          await new Promise((r) => setTimeout(r, 75));
           continue;
         }
         const card = await response.json();
@@ -259,7 +261,6 @@ export async function bulkImportCards(
         // FIX: Check against the defined `existingCardIds` set
         if (existingCardIds.has(card.id)) {
           skipped++;
-          await new Promise((r) => setTimeout(r, 75));
           continue;
         }
 
@@ -278,10 +279,8 @@ export async function bulkImportCards(
           cubucks_cost: cubucksCost,
           pool_name: poolName,
         });
-        await new Promise((r) => setTimeout(r, 75));
       } catch {
         failed.push(cardName);
-        await new Promise((r) => setTimeout(r, 75));
       }
     }
 
