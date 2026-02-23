@@ -13,10 +13,22 @@ export interface DraftPick {
   image_url: string | null;
   team_name: string;
 }
+interface SupabasePick {
+  id: number;
+  pick_number: number;
+  card_name: string;
+  card_set: string | null;
+  rarity: string | null;
+  image_url: string | null;
+  teams: {
+    name: string;
+  } | null;
+}
 
 async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
   const supabase = await createServerClient();
-  const { data, error } = await supabase
+  
+  const { data, error }: { data: SupabasePick[] | null; error: any } = await supabase
     .from('team_draft_picks') 
     .select(`
       id,
@@ -30,11 +42,14 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
     .eq('draft_session_id', sessionId)
     .order('pick_number', { ascending: true });
 
-  if (error) {
-    console.error('Error fetching initial draft picks:', error.message);
+  // This is the fully corrected error handling block
+  if (error || !data) {
+    // Using error?.message prevents a crash if error is null but data is also null
+    console.error('Error fetching initial draft picks:', error?.message || 'Data was null.');
     return [];
   }
 
+  // The rest of your function is perfect
   return data.map(pick => ({
     id: pick.id,
     pick_number: pick.pick_number,
@@ -42,12 +57,9 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
     card_set: pick.card_set,
     rarity: pick.rarity,
     image_url: pick.image_url,
-    // This logic correctly processes the 'teams' object from Supabase...
-    // ...and assigns the result to the 'team_name' property as required by the interface.
     team_name: Array.isArray(pick.teams) ? 'Error' : pick.teams?.name || 'Unknown Team',
   }));
 }
-
 
 // Apply the same Promise pattern to the page props
 export default async function LiveDraftPage({ params }: { params: Promise<{ sessionId: string }> }) {
