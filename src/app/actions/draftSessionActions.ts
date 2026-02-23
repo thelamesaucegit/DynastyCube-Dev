@@ -468,7 +468,16 @@ export async function advanceDraft(): Promise<{
     );
     const pastEndTime = session.end_time && new Date() >= new Date(session.end_time);
 
-    if (allTeamsReachedRounds || pastEndTime) {
+    // Check if all teams have spent all their cubucks
+    const { data: teamBalances } = await supabase
+      .from("teams")
+      .select("id, cubucks_balance");
+    const allTeamsOutOfCubucks =
+      teamBalances != null &&
+      teamBalances.length > 0 &&
+      teamBalances.every((t: { id: string; cubucks_balance: number }) => t.cubucks_balance <= 0);
+
+    if (allTeamsReachedRounds || pastEndTime || allTeamsOutOfCubucks) {
       // Draft is complete
       await supabase
         .from("draft_sessions")
@@ -481,9 +490,14 @@ export async function advanceDraft(): Promise<{
         .eq("id", session.id);
 
       // Notify everyone
+      const completionReason = allTeamsOutOfCubucks
+        ? "All teams have spent their Cubucks."
+        : pastEndTime
+        ? "The draft deadline has been reached."
+        : `All teams have completed ${session.total_rounds} rounds.`;
       await supabase.rpc("notify_all_users_draft", {
         p_notification_type: "draft_completed",
-        p_message: `The draft is complete! ${draftStatus.totalPicks} total picks were made across ${session.total_rounds} rounds.`,
+        p_message: `The draft is complete! ${draftStatus.totalPicks} total picks were made. ${completionReason}`,
       });
 
       return { success: true, completed: true };
@@ -726,24 +740,13 @@ export async function checkDraftTimer(): Promise<{
           message: `Auto-drafted ${autoDraftResult.pick?.cardName || "a card"} for team ${teamId}. ${advanceResult.completed ? "Draft is now complete!" : ""}`,
         };
       } else {
-        // Auto-draft failed (maybe no affordable cards). Skip this team's pick and advance.
-        // Set the next team's deadline without making a pick
+        // Auto-draft failed (e.g. no affordable cards). Advance to the next team.
         console.error(`Auto-draft failed for ${teamId}: ${autoDraftResult.error}`);
 
-        // Force advance by resetting the deadline for the same team
-        // This prevents infinite loops — if auto-draft fails, we just reset the timer
-        const deadline = new Date(now.getTime() + session.hours_per_pick * 60 * 60 * 1000);
-        await supabase
-          .from("draft_sessions")
-          .update({
-            current_pick_deadline: deadline.toISOString(),
-            updated_at: now.toISOString(),
-          })
-          .eq("id", session.id);
-
+        const advanceResult = await advanceDraft();
         return {
           action: "error",
-          error: `Auto-draft failed for team: ${autoDraftResult.error}. Timer has been reset.`,
+          error: `Auto-draft failed for team: ${autoDraftResult.error}. ${advanceResult.completed ? "Draft is now complete!" : "Advanced to next team."}`,
         };
       }
     }
