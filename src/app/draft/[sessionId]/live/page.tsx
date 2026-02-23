@@ -4,7 +4,6 @@ import { createServerClient } from '@/lib/supabase';
 import LiveDraftBoard from '@/components/LiveDraftBoard';
 import { notFound } from 'next/navigation';
 // NEW: Import the specific error type from the Supabase library
-import { PostgrestError } from '@supabase/supabase-js';
 
 export interface DraftPick {
   id: number;
@@ -23,16 +22,16 @@ interface SupabasePick {
   card_set: string | null;
   rarity: string | null;
   image_url: string | null;
+  // This is the key change to match Supabase's inference.
   teams: {
     name: string;
-  } | null;
+  }[]; // It's an array of objects.
 }
 
 async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
   const supabase = await createServerClient();
   
-  // UPDATED: Replace 'any' with 'PostgrestError | null' to satisfy the linter.
-  const { data, error }: { data: SupabasePick[] | null; error: PostgrestError | null } = await supabase
+ const { data, error } = await supabase
     .from('team_draft_picks') 
     .select(`
       id,
@@ -43,8 +42,8 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
       image_url,
       teams ( name )
     `)
-    .eq('draft_session_id', sessionId)
-    .order('pick_number', { ascending: true });
+    // We now cast the query itself to the correct type.
+    .returns<SupabasePick[]>();
 
   if (error || !data) {
     console.error('Error fetching initial draft picks:', error?.message || 'Data was null.');
@@ -58,7 +57,9 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
     card_set: pick.card_set,
     rarity: pick.rarity,
     image_url: pick.image_url,
-    team_name: Array.isArray(pick.teams) ? 'Error' : pick.teams?.name || 'Unknown Team',
+    // UPDATED: This logic now correctly handles the 'teams' array.
+    // It checks if the array exists and has at least one item before accessing its name.
+    team_name: (pick.teams && pick.teams.length > 0) ? pick.teams[0].name : 'Unknown Team',
   }));
 }
 
