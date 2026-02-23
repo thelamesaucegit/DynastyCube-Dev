@@ -11,9 +11,6 @@ import { List, Columns } from 'lucide-react';
 
 type ViewMode = 'list' | 'team';
 
-// ============================================================================
-// DRAFT CARD SUB-COMPONENT (DEFINITION IS HERE)
-// ============================================================================
 const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small' }> = ({ pick, isNewest, size }) => {
   const cardClasses = "transition-all duration-500";
   if (size === 'large') {
@@ -42,9 +39,6 @@ const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small
   );
 };
 
-// ============================================================================
-// LIST VIEW SUB-COMPONENT (DEFINITION IS HERE)
-// ============================================================================
 const ListView: FC<{ picks: DraftPick[], newestPickId: number | null }> = ({ picks, newestPickId }) => (
   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
     {picks.map((pick) => (
@@ -53,9 +47,6 @@ const ListView: FC<{ picks: DraftPick[], newestPickId: number | null }> = ({ pic
   </div>
 );
 
-// ============================================================================
-// TEAM VIEW SUB-COMPONENT (DEFINITION IS HERE)
-// ============================================================================
 const TeamView: FC<{ picks: DraftPick[], draftOrder: DraftOrderTeam[], newestPickId: number | null }> = ({ picks, draftOrder, newestPickId }) => {
   const picksByTeam = useMemo(() => {
     const grouped: Record<string, DraftPick[]> = {};
@@ -63,10 +54,8 @@ const TeamView: FC<{ picks: DraftPick[], draftOrder: DraftOrderTeam[], newestPic
       if (team.team_id) grouped[team.team_id] = [];
     }
     for (const pick of picks) {
-      // It's possible for team_id to be missing on the DraftPick from the page.tsx props
-      const pickWithTeamId = pick as DraftPick & { team_id?: string };
-      if (pickWithTeamId.team_id && grouped[pickWithTeamId.team_id]) {
-        grouped[pickWithTeamId.team_id].push(pick);
+      if (pick.team_id && grouped[pick.team_id]) {
+        grouped[pick.team_id].push(pick);
       }
     }
     for (const teamId in grouped) {
@@ -126,14 +115,12 @@ export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoar
         setDraftOrder(fetchedOrder);
       }
     };
-    // Only fetch if we have a sessionId
     if (sessionId) {
       fetchDraftOrder();
     }
-  }, [sessionId]); // Dependency array is correct
+  }, [sessionId]);
 
   useEffect(() => {
-    // Prevent creating a connection if there's no sessionId
     if (!sessionId) return;
     
     const eventSource = new EventSource(`/api/draft-stream/${sessionId}`);
@@ -185,7 +172,6 @@ export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoar
           </Button>
         </div>
       </div>
-      {/* This line will now work because ListView is defined above */}
       {viewMode === 'list' && <ListView picks={sortedPicks} newestPickId={newestPickId} />}
       {viewMode === 'team' && draftOrder.length > 0 && <TeamView picks={picks} draftOrder={draftOrder} newestPickId={newestPickId} />}
     </div>
