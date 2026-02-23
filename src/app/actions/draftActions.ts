@@ -86,6 +86,7 @@ export async function addSkippedPick(
   try {
     const { error } = await supabase.from("team_draft_picks").insert({
       team_id: teamId,
+      draft_session_id: draftSessionId, 
       card_id: "skipped-pick", // Special identifier for skipped picks
       card_name: "SKIPPED",
       pick_number: pickNumber,
