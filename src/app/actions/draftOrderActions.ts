@@ -595,6 +595,7 @@ export interface DraftStatus {
  */
 export async function getDraftStatus(): Promise<{
   status: DraftStatus | null;
+  seasonId?: string;
   error?: string;
 }> {
   try {
@@ -697,6 +698,7 @@ export async function getDraftStatus(): Promise<{
         seasonName: activeSeason.season_name,
         draftOrder,
       },
+            seasonId: activeSeason.id, 
     };
   } catch (error) {
     console.error("Unexpected error fetching draft status:", error);
