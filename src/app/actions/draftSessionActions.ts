@@ -592,7 +592,6 @@ export async function checkDraftTimer(): Promise<{
 }> {
   try {
     const supabase = await createServerClient();
-    // Fetch the active session
     const { data: session } = await supabase
       .from("draft_sessions")
       .select("*")
@@ -604,7 +603,6 @@ export async function checkDraftTimer(): Promise<{
 
     const now = new Date();
 
-    // Case 1: Activate a scheduled draft
     if (session.status === "scheduled" && new Date(session.start_time) <= now) {
       const result = await activateDraft(session.id);
       return result.success
@@ -612,26 +610,24 @@ export async function checkDraftTimer(): Promise<{
         : { action: "error", error: result.error };
     }
     
-    // Case 2: Process an active draft
     if (session.status === "active") {
-      // Sub-case 2a: Draft hard end time reached
       if (session.end_time && new Date(session.end_time) <= now) {
         await completeDraft(session.id);
         return { action: "completed", message: "Draft has ended (hard deadline reached)." };
       }
       
-      // Sub-case 2b: Pick deadline has expired
       if (
         session.current_pick_deadline &&
         session.current_on_clock_team_id &&
         new Date(session.current_pick_deadline) <= now
       ) {
         const teamId = session.current_on_clock_team_id;
-        const autoDraftResult = await executeAutoDraft(teamId);
+        
+        // CRITICAL FIX: Pass the correct session.id to executeAutoDraft
+        const autoDraftResult = await executeAutoDraft(teamId, session.id);
 
-        // This is a successful, NON-SKIPPED pick
         if (autoDraftResult.success && autoDraftResult.source !== 'skipped') {
-          await resetSkipCounter(session.id); // <-- RESET COUNTER ON SUCCESS
+          await resetSkipCounter(session.id);
           const advanceResult = await advanceDraft();
           return {
             action: "auto_drafted",
@@ -639,11 +635,14 @@ export async function checkDraftTimer(): Promise<{
           };
         }
         
-        // This is a FAILED pick (e.g., no funds), which becomes a SKIPPED pick
+        if (autoDraftResult.staleDeployment) {
+          return { action: "error", error: autoDraftResult.error, needsReload: true };
+        }
+        
         else {
           console.error(`Auto-draft failed for ${teamId}: ${autoDraftResult.error}. The pick will be skipped.`);
-          const { status: draftStatus, seasonId: draftSessionId } = await getDraftStatus();
-          if (!draftStatus || !draftSessionId) {
+          const { status: draftStatus } = await getDraftStatus();
+          if (!draftStatus) {
               return { action: "error", error: "Could not get draft status to log skipped pick." };
           }
           
@@ -658,20 +657,18 @@ export async function checkDraftTimer(): Promise<{
               };
           }
 
-          // Increment the counter in the database
           await supabase
               .from("draft_sessions")
               .update({ consecutive_skipped_picks: newSkipCount })
               .eq("id", session.id);
 
-          // Add the skipped pick record (with session ID)
-          const skippedResult = await addSkippedPick(teamId, draftStatus.totalPicks + 1, draftSessionId);
+          // Pass the correct session.id to addSkippedPick
+          const skippedResult = await addSkippedPick(teamId, draftStatus.totalPicks + 1, session.id);
 
           if (!skippedResult.success) {
               return { action: "error", error: `Auto-draft failed and could not log skipped pick: ${skippedResult.error}` };
           }
           
-          // Advance the draft, which will now NOT reset the counter
           const advanceResult = await advanceDraft();
           if (!advanceResult.success) {
               return { action: "error", error: `Auto-draft failed and draft could not be advanced: ${advanceResult.error}` };

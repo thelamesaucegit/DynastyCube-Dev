@@ -698,7 +698,8 @@ export async function conditionallyCleanupDraftQueues(
 }
 
 export async function executeAutoDraft(
-  teamId: string
+  teamId: string,
+	  draftSessionId: string 
 ): Promise<{
   success: boolean;
   pick?: { cardId: string; cardName: string; cost: number };
@@ -707,7 +708,7 @@ export async function executeAutoDraft(
   staleDeployment?: boolean;
 }> {
   try {
-    const { status: draftStatus, seasonId: draftSessionId } = await getDraftStatus();
+    const { status: draftStatus} = await getDraftStatus();
     
     if (!draftStatus || !draftSessionId) { 
         return { success: false, error: "No active draft or draft ID is missing" };
