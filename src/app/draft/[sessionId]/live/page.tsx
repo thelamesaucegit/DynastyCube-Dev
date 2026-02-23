@@ -3,6 +3,8 @@
 import { createServerClient } from '@/lib/supabase';
 import LiveDraftBoard from '@/components/LiveDraftBoard';
 import { notFound } from 'next/navigation';
+// NEW: Import the specific error type from the Supabase library
+import { PostgrestError } from '@supabase/supabase-js';
 
 export interface DraftPick {
   id: number;
@@ -13,6 +15,7 @@ export interface DraftPick {
   image_url: string | null;
   team_name: string;
 }
+
 interface SupabasePick {
   id: number;
   pick_number: number;
@@ -28,7 +31,8 @@ interface SupabasePick {
 async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
   const supabase = await createServerClient();
   
-  const { data, error }: { data: SupabasePick[] | null; error: any } = await supabase
+  // UPDATED: Replace 'any' with 'PostgrestError | null' to satisfy the linter.
+  const { data, error }: { data: SupabasePick[] | null; error: PostgrestError | null } = await supabase
     .from('team_draft_picks') 
     .select(`
       id,
@@ -42,14 +46,11 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
     .eq('draft_session_id', sessionId)
     .order('pick_number', { ascending: true });
 
-  // This is the fully corrected error handling block
   if (error || !data) {
-    // Using error?.message prevents a crash if error is null but data is also null
     console.error('Error fetching initial draft picks:', error?.message || 'Data was null.');
     return [];
   }
 
-  // The rest of your function is perfect
   return data.map(pick => ({
     id: pick.id,
     pick_number: pick.pick_number,
@@ -67,7 +68,6 @@ export default async function LiveDraftPage({ params }: { params: Promise<{ sess
   const { sessionId } = await params;
   
   const initialPicks = await getInitialDraftPicks(sessionId);
-
   if (!initialPicks) {
     notFound();
   }
