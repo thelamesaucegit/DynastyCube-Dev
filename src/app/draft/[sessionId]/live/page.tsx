@@ -36,10 +36,18 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
   }
 
   return data.map(pick => ({
-    ...pick,
+    id: pick.id,
+    pick_number: pick.pick_number,
+    card_name: pick.card_name,
+    card_set: pick.card_set,
+    rarity: pick.rarity,
+    image_url: pick.image_url,
+    // This logic correctly processes the 'teams' object from Supabase...
+    // ...and assigns the result to the 'team_name' property as required by the interface.
     team_name: Array.isArray(pick.teams) ? 'Error' : pick.teams?.name || 'Unknown Team',
   }));
 }
+
 
 // Apply the same Promise pattern to the page props
 export default async function LiveDraftPage({ params }: { params: Promise<{ sessionId: string }> }) {
