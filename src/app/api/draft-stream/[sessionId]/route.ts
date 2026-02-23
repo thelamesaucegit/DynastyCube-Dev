@@ -1,16 +1,18 @@
 // src/app/api/draft-stream/[sessionId]/route.ts
+
 import { createServerClient } from '@/lib/supabase';
+// Import NextRequest from 'next/server'
+import { NextRequest } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-// The function signature for GET is updated here
 export async function GET(
-  request: Request,
-  // Correctly destructure `params` from the second argument
-  { params }: { params: { sessionId: string } }
+  // Use NextRequest here instead of the standard Request
+  request: NextRequest,
+  // This context structure is now correct because we're using NextRequest
+  context: { params: { sessionId: string } }
 ) {
-  // We now get 'sessionId' directly from params
-  const { sessionId } = params;
+  const { sessionId } = context.params;
 
   if (!sessionId) {
     return new Response('Missing session ID', { status: 400 });
@@ -39,7 +41,7 @@ export async function GET(
       };
     },
     cancel() {
-      console.log(`Readable stream cancelled for session ${sessionId}`);
+        console.log(`Readable stream cancelled for session ${sessionId}`);
     }
   });
 
