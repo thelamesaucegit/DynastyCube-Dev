@@ -2,10 +2,10 @@
 
 "use server";
 
-import { getActiveDraftOrder } from "@/app/actions/draftOrderActions";
+import { getDraftOrder } from "@/app/actions/draftOrderActions";
 import type { DraftOrderEntry } from "@/app/actions/draftOrderActions";
 
-// UPDATED: Define a more specific type that includes the nested team colors
+// This interface is correct and defines the shape our component needs.
 export interface DraftOrderTeam extends DraftOrderEntry {
   team?: {
     id: string;
@@ -17,25 +17,25 @@ export interface DraftOrderTeam extends DraftOrderEntry {
 }
 
 /**
- * Fetches all necessary data for the live draft board,
- * primarily the official draft order for the active season, including team colors.
+ * Fetches the official draft order for a given draft session,
+ * including team colors for the UI.
  */
-export async function getDraftBoardData(): Promise<{
+export async function getDraftBoardData(sessionId: string): Promise<{
   draftOrder: DraftOrderTeam[];
   error?: string;
 }> {
   try {
-    // getActiveDraftOrder is smart and can handle nested selects.
-    // We will ask it for the colors directly.
-    const { order, error } = await getActiveDraftOrder();
-    
+    // UPDATED: We now call getDraftOrder and pass the specific sessionId.
+    // This is more precise than relying on getActiveDraftOrder().
+    const { order, error } = await getDraftOrder(sessionId);
+
     if (error) {
       return { draftOrder: [], error };
     }
     
-    // We will need to adjust the function that calls this one to include the colors
-    // For now, let's just cast the type to include the colors we need
-    const draftOrderWithColors = order as unknown as DraftOrderTeam[];
+    // Because we updated getDraftOrder to select the colors,
+    // we can safely cast the result without using 'unknown'.
+    const draftOrderWithColors = order as DraftOrderTeam[];
 
     return { draftOrder: draftOrderWithColors };
 
