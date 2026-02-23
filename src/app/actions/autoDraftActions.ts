@@ -708,7 +708,9 @@ export async function executeAutoDraft(
 }> {
   try {
     const { status: draftStatus } = await getDraftStatus();
-    if (!draftStatus) return { success: false, error: "No active draft" };
+    if (!draftStatus || !draftStatus.draftId) { // Ensure draftId exists
+        return { success: false, error: "No active draft or draft ID is missing" };
+    }
     if (draftStatus.onTheClock.teamId !== teamId) {
       return { success: false, error: "This team is not on the clock" };
     }
@@ -734,13 +736,13 @@ export async function executeAutoDraft(
     }
 
     const { picks: existingPicks } = await getTeamDraftPicks(teamId);
-
-    // Add the draft pick (internal — no user session required)
+    
     const pickResult = await addDraftPickInternal({
       team_id: teamId,
       card_pool_id: card.id,
       card_id: card.card_id,
       card_name: card.card_name,
+	  draft_session_id: draftStatus.id, // Using the unique 'id'
       card_set: card.card_set,
       card_type: card.card_type,
       rarity: card.rarity,
@@ -750,11 +752,13 @@ export async function executeAutoDraft(
       cmc: card.cmc,
       pick_number: existingPicks.length + 1,
     }, true); 
-    if (!pickResult.success) {
+
+    if (!pickResult.success || !pickResult.pick) { // Check for pick data
       return { success: false, error: pickResult.error || "Failed to add draft pick" };
     }
-
+    
     const supabase = await createServerClient();
+
     await supabase.from("auto_draft_log").insert({
       team_id: teamId,
       card_id: card.card_id,
@@ -766,6 +770,27 @@ export async function executeAutoDraft(
     });
 
     await conditionallyCleanupDraftQueues(card.card_id);
+
+    //  NEW CODE FOR LIVE UPDATE BROADCAST
+  
+    const { data: teamData } = await supabase
+      .from('teams')
+      .select('name')
+      .eq('id', teamId)
+      .single();
+
+    const broadcastPayload = {
+      ...pickResult.pick, // Use the detailed pick data from the insert result
+      team_name: teamData?.name || 'Unknown Team'
+    };
+    
+    const channel = supabase.channel(`draft-updates-${draftStatus.id}`);
+    
+    await channel.send({
+        type: 'broadcast',
+        event: 'new_pick',
+        payload: broadcastPayload
+    });
 
     return {
       success: true,
