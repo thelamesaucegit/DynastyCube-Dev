@@ -16,6 +16,7 @@ import {
   getAdminNews,
   getRecentGames,
   getActiveCountdownTimer,
+  getActiveDraftSession, // UPDATED: Import the new function
   type RecentDraftPick,
   type CurrentSeason,
   type AdminNews,
@@ -40,6 +41,7 @@ export default function HomePage() {
   const [recentPicks, setRecentPicks] = useState<RecentDraftPick[]>([]);
   const [recentGames, setRecentGames] = useState<RecentGame[]>([]);
   const [countdownTimer, setCountdownTimer] = useState<CountdownTimerType | null>(null);
+  const [draftSessionId, setDraftSessionId] = useState<string | null>(null); // UPDATED: Add state for the correct ID
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -49,18 +51,22 @@ export default function HomePage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [seasonResult, newsResult, picksResult, gamesResult, timerResult] = await Promise.all([
+      // UPDATED: Add getActiveDraftSession to the parallel calls
+      const [seasonResult, newsResult, picksResult, gamesResult, timerResult, draftSessionResult] = await Promise.all([
         getCurrentSeason(),
         getAdminNews(3),
         getRecentDraftPicks(5),
         getRecentGames(5),
         getActiveCountdownTimer(),
+        getActiveDraftSession(),
       ]);
+
       setSeason(seasonResult.season);
       setAdminNews(newsResult.news);
       setRecentPicks(picksResult.picks);
       setRecentGames(gamesResult.games);
       setCountdownTimer(timerResult.timer);
+      setDraftSessionId(draftSessionResult.session?.id || null); // UPDATED: Set the new state
     } catch (error) {
       console.error("Error loading home page data:", error);
     } finally {
@@ -87,8 +93,8 @@ export default function HomePage() {
     );
   }
 
-  // Determine the link for the live draft page
-  const liveDraftLink = season?.id ? `/draft/${season.id}/live` : '/'; // Fallback to home or a dedicated "no draft" page if needed
+  // UPDATED: Use the correct draftSessionId to build the link
+  const liveDraftLink = draftSessionId ? `/draft/${draftSessionId}/live` : '#'; 
 
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8 space-y-12">
@@ -180,7 +186,7 @@ export default function HomePage() {
           <CardHeader className="pb-3">
             <CardDescription>Recent Games</CardDescription>
             <CardTitle className="text-3xl">{recentGames.length > 0 ? recentGames.length + "+" : "—"}</CardTitle>
-          </CardHeader>
+          </Header>
           <CardContent>
             <p className="text-sm text-muted-foreground">Games played</p>
           </CardContent>
@@ -193,7 +199,7 @@ export default function HomePage() {
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-bold">Recent Draft Picks</h2>
             <Button variant="ghost" asChild>
-              {/* UPDATED LINK */}
+              {/* UPDATED: This now uses the correct link */}
               <Link href={liveDraftLink}>View All</Link> 
             </Button>
           </div>
