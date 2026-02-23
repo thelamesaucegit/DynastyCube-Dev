@@ -1,4 +1,5 @@
 // src/app/page.tsx
+
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -26,7 +27,6 @@ function getRelativeTime(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
   if (diffInSeconds < 60) return "Just now";
   if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
   if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
@@ -86,6 +86,9 @@ export default function HomePage() {
       </div>
     );
   }
+
+  // Determine the link for the live draft page
+  const liveDraftLink = season?.id ? `/draft/${season.id}/live` : '/'; // Fallback to home or a dedicated "no draft" page if needed
 
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8 space-y-12">
@@ -190,7 +193,8 @@ export default function HomePage() {
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-bold">Recent Draft Picks</h2>
             <Button variant="ghost" asChild>
-              <Link href="/pools">View All</Link>
+              {/* UPDATED LINK */}
+              <Link href={liveDraftLink}>View All</Link> 
             </Button>
           </div>
           <Card>
