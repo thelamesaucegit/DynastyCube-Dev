@@ -14,11 +14,8 @@ export interface DraftPick {
   team_name: string;
 }
 
-// UPDATED: Function name and parameter changed to 'sessionId'
 async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
   const supabase = await createServerClient();
-
-  // UPDATED: Querying the correct table 'team_draft_picks'
   const { data, error } = await supabase
     .from('team_draft_picks') 
     .select(`
@@ -30,7 +27,6 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
       image_url,
       teams ( name )
     `)
-    // UPDATED: Filtering by the correct column 'draft_session_id'
     .eq('draft_session_id', sessionId)
     .order('pick_number', { ascending: true });
 
@@ -45,10 +41,12 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
   }));
 }
 
-// UPDATED: The parameter is now correctly 'sessionId'
-export default async function LiveDraftPage({ params }: { params: { sessionId: string } }) {
-  // UPDATED: Passing the correct parameter to the fetch function
-  const initialPicks = await getInitialDraftPicks(params.sessionId);
+// Apply the same Promise pattern to the page props
+export default async function LiveDraftPage({ params }: { params: Promise<{ sessionId: string }> }) {
+  // Await the params to get the sessionId
+  const { sessionId } = await params;
+  
+  const initialPicks = await getInitialDraftPicks(sessionId);
 
   if (!initialPicks) {
     notFound();
@@ -61,10 +59,10 @@ export default async function LiveDraftPage({ params }: { params: { sessionId: s
         <p className="text-lg text-gray-400 mt-2">Picks will appear automatically as they happen.</p>
       </div>
       
-      {/* UPDATED: Passing the correct prop 'sessionId' to the client component */}
       <LiveDraftBoard 
         serverPicks={initialPicks} 
-        sessionId={params.sessionId} 
+        // Pass the resolved sessionId to the client component
+        sessionId={sessionId} 
       />
     </div>
   );
