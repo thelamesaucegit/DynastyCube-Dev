@@ -706,10 +706,9 @@ export async function executeAutoDraft(
   error?: string;
   staleDeployment?: boolean;
 }> {
- // UPDATED: Destructure 'seasonId' and rename it to 'draftSessionId'
+  try {
     const { status: draftStatus, seasonId: draftSessionId } = await getDraftStatus();
     
-    // UPDATED: Check for the new draftSessionId variable
     if (!draftStatus || !draftSessionId) { 
         return { success: false, error: "No active draft or draft ID is missing" };
     }
@@ -717,7 +716,7 @@ export async function executeAutoDraft(
     if (draftStatus.onTheClock.teamId !== teamId) {
       return { success: false, error: "This team is not on the clock" };
     }
-
+    
     const preview = await getAutoDraftPreview(teamId);
     if (!preview.nextPick) {
       return { success: false, error: preview.error || "No card available to auto-draft" };
@@ -745,10 +744,9 @@ export async function executeAutoDraft(
       card_pool_id: card.id,
       card_id: card.card_id,
       card_name: card.card_name,
-	  draft_session_id: draftStatus.id, // Using the unique 'id'
+      draft_session_id: draftSessionId,
       card_set: card.card_set,
       card_type: card.card_type,
-	  draft_session_id: draftSessionId,
       rarity: card.rarity,
       colors: card.colors,
       image_url: card.image_url,
@@ -756,13 +754,12 @@ export async function executeAutoDraft(
       cmc: card.cmc,
       pick_number: existingPicks.length + 1,
     }, true); 
-
-    if (!pickResult.success || !pickResult.pick) { // Check for pick data
+    
+    if (!pickResult.success || !pickResult.pick) {
       return { success: false, error: pickResult.error || "Failed to add draft pick" };
     }
-    
-    const supabase = await createServerClient();
 
+    const supabase = await createServerClient();
     await supabase.from("auto_draft_log").insert({
       team_id: teamId,
       card_id: card.card_id,
@@ -774,9 +771,7 @@ export async function executeAutoDraft(
     });
 
     await conditionallyCleanupDraftQueues(card.card_id);
-
-    //  NEW CODE FOR LIVE UPDATE BROADCAST
-  
+    
     const { data: teamData } = await supabase
       .from('teams')
       .select('name')
@@ -784,7 +779,7 @@ export async function executeAutoDraft(
       .single();
 
     const broadcastPayload = {
-      ...pickResult.pick, // Use the detailed pick data from the insert result
+      ...pickResult.pick,
       team_name: teamData?.name || 'Unknown Team'
     };
     
@@ -801,7 +796,7 @@ export async function executeAutoDraft(
       pick: { cardId: card.card_id, cardName: card.card_name, cost },
       source: preview.source,
     };
- } catch (error) {
+  } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (errorMessage.includes("Failed to find Server Action")) {
       return { success: false, error: "Deployment has changed. Please refresh the page.", staleDeployment: true };
