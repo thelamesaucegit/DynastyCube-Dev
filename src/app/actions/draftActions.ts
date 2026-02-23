@@ -559,7 +559,7 @@ export async function getDeckCards(
 export async function addCardToDeck(
   deckCard: DeckCard
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerClient();
+  const supabase = await createClient();
   try {
     const teamId = await getDeckTeamId(deckCard.deck_id);
     if (!teamId) return { success: false, error: "Deck not found" };
