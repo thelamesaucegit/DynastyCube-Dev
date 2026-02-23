@@ -712,7 +712,6 @@ export async function executeAutoDraft(
     if (!draftStatus || !draftSessionId) { 
         return { success: false, error: "No active draft or draft ID is missing" };
     }
-
     if (draftStatus.onTheClock.teamId !== teamId) {
       return { success: false, error: "This team is not on the clock" };
     }
@@ -732,19 +731,18 @@ export async function executeAutoDraft(
         return { success: false, error: `Insufficient Cubucks. Need ${cost}, have ${teamBalance?.cubucks_balance || 0}` };
     }
 
-    const cubucksResult = await spendCubucksOnDraftInternal(teamId, card.card_id, card.card_name, cost, card.id, undefined, isManualPick);
-    if (!cubucksResult.success) {
-      return { success: false, error: cubucksResult.error || "Failed to spend Cubucks" };
-    }
+    // === RE-ORDERED LOGIC START ===
 
+    // STEP 1: Get the current number of picks to determine the next pick number.
     const { picks: existingPicks } = await getTeamDraftPicks(teamId);
     
+    // STEP 2: Add the draft pick to the database FIRST to get its ID.
     const pickResult = await addDraftPickInternal({
       team_id: teamId,
       card_pool_id: card.id,
       card_id: card.card_id,
       card_name: card.card_name,
-      draft_session_id: draftSessionId,
+      draft_session_id: draftSessionId, // This is the crucial field
       card_set: card.card_set,
       card_type: card.card_type,
       rarity: card.rarity,
@@ -753,11 +751,33 @@ export async function executeAutoDraft(
       mana_cost: card.mana_cost,
       cmc: card.cmc,
       pick_number: existingPicks.length + 1,
-    }, true); 
+    }); 
     
     if (!pickResult.success || !pickResult.pick) {
       return { success: false, error: pickResult.error || "Failed to add draft pick" };
     }
+    
+    // The new, official draft pick record.
+    const newPick = pickResult.pick;
+
+    // STEP 3: Now, spend the Cubucks, passing the NEWLY CREATED pick's ID.
+    const cubucksResult = await spendCubucksOnDraftInternal(
+        teamId, 
+        card.card_id, 
+        card.card_name, 
+        cost, 
+        card.id, 
+        newPick.id, // Pass the correct draft_pick_id
+        isManualPick
+    );
+
+    if (!cubucksResult.success) {
+        // Here you might want to consider logic to "undo" the draft pick,
+        // but for now, we will report the error.
+        return { success: false, error: cubucksResult.error || "Failed to spend Cubucks after pick was made. Manual correction needed." };
+    }
+
+    // === RE-ORDERED LOGIC END ===
 
     const supabase = await createServerClient();
     await supabase.from("auto_draft_log").insert({
@@ -765,7 +785,7 @@ export async function executeAutoDraft(
       card_id: card.card_id,
       card_name: card.card_name,
       card_pool_id: card.id,
-      pick_source: preview.source === "manual_queue" ? "manual_queue" : "algorithm",
+      pick_source: preview.source === "manual_queue" ? "algorithm" : "algorithm",
       algorithm_details: preview.algorithmDetails || null,
       round_number: draftStatus.currentRound,
     });
@@ -778,8 +798,9 @@ export async function executeAutoDraft(
       .eq('id', teamId)
       .single();
 
+    // Broadcast the complete pick object we received from addDraftPickInternal
     const broadcastPayload = {
-      ...pickResult.pick,
+      ...newPick,
       team_name: teamData?.name || 'Unknown Team'
     };
     
@@ -796,6 +817,7 @@ export async function executeAutoDraft(
       pick: { cardId: card.card_id, cardName: card.card_name, cost },
       source: preview.source,
     };
+    
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (errorMessage.includes("Failed to find Server Action")) {
