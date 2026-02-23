@@ -29,7 +29,9 @@ async function createClient() {
     }
   );
 }
-
+export interface ActiveDraftSession {
+  id: string;
+}
 export interface RecentDraftPick {
   id: string;
   card_id: string;
@@ -81,7 +83,35 @@ export interface RecentGame {
   winner_id?: string;
   played_at: string;
 }
+/**
+ * Get the currently active draft session ID
+ */
+export async function getActiveDraftSession(): Promise<{
+  session: ActiveDraftSession | null;
+  error?: string;
+}> {
+  const supabase = await createClient();
+  try {
+    const { data, error } = await supabase
+      .from("draft_sessions")
+      .select("id")
+      .eq("status", "active")
+      .single();
 
+    if (error) {
+      // It's not an error if no session is active
+      if (error.code === "PGRST116") {
+        return { session: null };
+      }
+      console.error("Error fetching active draft session:", error);
+      return { session: null, error: error.message };
+    }
+    return { session: data };
+  } catch (error) {
+    console.error("Unexpected error fetching active draft session:", error);
+    return { session: null, error: "An unexpected error occurred" };
+  }
+}
 /**
  * Get the currently active countdown timer
  */
