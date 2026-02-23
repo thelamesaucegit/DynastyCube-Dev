@@ -3,20 +3,20 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { DraftPick } from '@/app/draft/[draftId]/live/page';
+import type { DraftPick } from '@/app/draft/[sessionId]/live/page';
 
 interface LiveDraftBoardProps {
   serverPicks: DraftPick[];
-  draftId: string;
+  sessionId: string;
 }
 
-export default function LiveDraftBoard({ serverPicks, draftId }: LiveDraftBoardProps) {
+export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoardProps) {
   const [picks, setPicks] = useState<DraftPick[]>(serverPicks);
 
   useEffect(() => {
     // The EventSource API is built into modern browsers.
     // It's the client-side counterpart to our SSE API route.
-    const eventSource = new EventSource(`/api/draft-stream/${draftId}`);
+    const eventSource = new EventSource(`/api/draft-stream/${sessionId}`);
 
     // This handler is called for every "data: ..." message from the stream.
     eventSource.onmessage = (event) => {
@@ -49,7 +49,7 @@ export default function LiveDraftBoard({ serverPicks, draftId }: LiveDraftBoardP
       console.log('Closing EventSource connection.');
       eventSource.close();
     };
-  }, [draftId]); // The dependency array ensures this effect runs only when draftId changes.
+  }, [sessionId]); // The dependency array ensures this effect runs only when sessionId changes.
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">

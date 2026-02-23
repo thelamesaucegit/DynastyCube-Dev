@@ -3,6 +3,7 @@
 import { createServerClient } from '@/lib/supabase';
 import LiveDraftBoard from '@/components/LiveDraftBoard';
 import { notFound } from 'next/navigation';
+// NEW: Import the specific error type from the Supabase library
 
 export interface DraftPick {
   id: number;
@@ -14,9 +15,23 @@ export interface DraftPick {
   team_name: string;
 }
 
+interface SupabasePick {
+  id: number;
+  pick_number: number;
+  card_name: string;
+  card_set: string | null;
+  rarity: string | null;
+  image_url: string | null;
+  // This is the key change to match Supabase's inference.
+  teams: {
+    name: string;
+  }[]; // It's an array of objects.
+}
+
 async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
   const supabase = await createServerClient();
-  const { data, error } = await supabase
+  
+ const { data, error } = await supabase
     .from('team_draft_picks') 
     .select(`
       id,
@@ -27,17 +42,24 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
       image_url,
       teams ( name )
     `)
-    .eq('draft_session_id', sessionId)
-    .order('pick_number', { ascending: true });
+    // We now cast the query itself to the correct type.
+    .returns<SupabasePick[]>();
 
-  if (error) {
-    console.error('Error fetching initial draft picks:', error.message);
+  if (error || !data) {
+    console.error('Error fetching initial draft picks:', error?.message || 'Data was null.');
     return [];
   }
 
   return data.map(pick => ({
-    ...pick,
-    team_name: Array.isArray(pick.teams) ? 'Error' : pick.teams?.name || 'Unknown Team',
+    id: pick.id,
+    pick_number: pick.pick_number,
+    card_name: pick.card_name,
+    card_set: pick.card_set,
+    rarity: pick.rarity,
+    image_url: pick.image_url,
+    // UPDATED: This logic now correctly handles the 'teams' array.
+    // It checks if the array exists and has at least one item before accessing its name.
+    team_name: (pick.teams && pick.teams.length > 0) ? pick.teams[0].name : 'Unknown Team',
   }));
 }
 
@@ -47,7 +69,6 @@ export default async function LiveDraftPage({ params }: { params: Promise<{ sess
   const { sessionId } = await params;
   
   const initialPicks = await getInitialDraftPicks(sessionId);
-
   if (!initialPicks) {
     notFound();
   }
