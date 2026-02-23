@@ -1,18 +1,17 @@
 // src/app/api/draft-stream/[sessionId]/route.ts
-
 import { createServerClient } from '@/lib/supabase';
-// Import NextRequest from 'next/server'
-import { NextRequest } from 'next/server';
+// No need for NextRequest here, the standard Request type is correct
+// when using the signature below.
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(
-  // Use NextRequest here instead of the standard Request
-  request: NextRequest,
-  // This context structure is now correct because we're using NextRequest
-  context: { params: { sessionId: string } }
+  request: Request,
+  // This is the key: Destructure `params` directly from the second argument.
+  // The type annotation { params: { sessionId: string } } then describes the object being destructured.
+  { params }: { params: { sessionId: string } }
 ) {
-  const { sessionId } = context.params;
+  const { sessionId } = params;
 
   if (!sessionId) {
     return new Response('Missing session ID', { status: 400 });
