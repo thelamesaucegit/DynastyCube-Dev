@@ -56,6 +56,20 @@ export interface UserForDropdown {
   email?: string;
 }
 
+export interface TeamWithDetails {
+  id: string;
+  name: string;
+  emoji: string;
+  motto: string;
+  wins: number;
+  losses: number;
+  primary_color: string | null;
+  secondary_color: string | null;
+  last_pick: {
+    image_url: string | null;
+    card_name: string;
+  } | null;
+}
 /**
  * Get all users for dropdown selection (Admin only)
  */
@@ -426,6 +440,65 @@ export async function getAllTeams(): Promise<{
     return { teams: data || [] };
   } catch (error) {
     console.error("Unexpected error fetching teams:", error);
+    return { teams: [], error: "An unexpected error occurred" };
+  }
+}
+/**
+ * Get all VISIBLE teams with their season record and last draft pick.
+ */
+export async function getTeamsWithDetails(): Promise<{
+  teams: TeamWithDetails[];
+  error?: string;
+}> {
+  const supabase = await createClient(); // Uses the existing createClient function in this file
+  try {
+    // 1. Get all visible teams and their records
+    const { data: teams, error: teamsError } = await supabase
+      .from("teams")
+      .select("id, name, emoji, motto, wins, losses, primary_color, secondary_color")
+      .eq('is_hidden', false); // <-- Filter to only get visible teams
+
+    if (teamsError) {
+      console.error("Error fetching teams:", teamsError);
+      return { teams: [], error: teamsError.message };
+    }
+    if (!teams) {
+      return { teams: [] };
+    }
+
+    // 2. Get the most recent draft pick for every team in a single query
+    const { data: latestPicks, error: picksError } = await supabase
+      .rpc('get_latest_pick_for_each_team'); // Assumes an RPC function for efficiency
+
+    // Fallback if RPC doesn't exist (less efficient but works)
+    const lastPickMap = new Map<string, { image_url: string | null; card_name: string }>();
+    if (picksError || !latestPicks) {
+        console.warn("Could not use RPC 'get_latest_pick_for_each_team'. Falling back to client-side logic. Error:", picksError?.message);
+        const { data: allPicks } = await supabase.from("team_draft_picks").select("team_id, image_url, card_name, pick_number").order("pick_number", { ascending: false });
+        if (allPicks) {
+          for (const pick of allPicks) {
+            if (pick.team_id && !lastPickMap.has(pick.team_id)) {
+              lastPickMap.set(pick.team_id, { image_url: pick.image_url, card_name: pick.card_name });
+            }
+          }
+        }
+    } else {
+        // If RPC exists and works
+        for (const pick of latestPicks) {
+            lastPickMap.set(pick.team_id, { image_url: pick.image_url, card_name: pick.card_name });
+        }
+    }
+
+    // 3. Combine the data
+    const enrichedTeams: TeamWithDetails[] = teams.map(team => ({
+      ...team,
+      last_pick: lastPickMap.get(team.id) || null,
+    }));
+
+    return { teams: enrichedTeams };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("Unexpected error fetching team details:", errorMessage);
     return { teams: [], error: "An unexpected error occurred" };
   }
 }

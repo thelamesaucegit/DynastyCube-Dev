@@ -11,7 +11,6 @@ import { CubucksManagement } from "../components/admin/CubucksManagement";
 import { SeasonManagement } from "../components/admin/SeasonManagement";
 import { TradeSettings } from "../components/admin/TradeSettings";
 import { ReportManagement } from "../components/admin/ReportManagement";
-import { CMCDataManagement } from "../components/admin/CMCDataManagement";
 import { NewsManagement } from "../components/admin/NewsManagement";
 import { VoteManagement } from "../components/admin/VoteManagement";
 import { MatchManagement } from "../components/admin/MatchManagement";
@@ -21,6 +20,8 @@ import { GlossaryManagement } from "../components/admin/GlossaryManagement";
 import { DraftOrderManagement } from "../components/admin/DraftOrderManagement";
 import { DraftSessionManagement } from "../components/admin/DraftSessionManagement";
 import { EssenceManagement } from "../components/admin/EssenceManagement";
+import { DataBackfillManagement } from "@/app/components/admin/DataBackfillManagement";
+import { backfillColorIdentity } from "@/app/actions/adminActions";
 import { getTeamsWithMembers } from "../actions/teamActions";
 import { getCardPool } from "../actions/cardActions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/app/components/ui/card";
@@ -198,8 +199,8 @@ export default function AdminPage() {
               </p>
             </div>
             <div className="space-y-6">
-              {/* CMC Data Management */}
-              <CMCDataManagement />
+              {/*  Data Backfill Management */}
+              <DataBackfillManagement />
 
               {/* Trade System Settings */}
               <TradeSettings />

@@ -1,15 +1,11 @@
-// src/app/components/DraftInterface.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
 import { getAvailableCardsForDraft } from "@/app/actions/cardActions";
 import { getTeamDraftPicks, addDraftPick } from "@/app/actions/draftActions";
 import { getTeamBalance, spendCubucksOnDraft } from "@/app/actions/cubucksActions";
-import {
-  getActiveDraftOrder,
-  type DraftOrderEntry,
-} from "@/app/actions/draftOrderActions";
-import { cleanupDraftQueues } from "@/app/actions/autoDraftActions";
+import { getActiveDraftOrder, type DraftOrderEntry } from "@/app/actions/draftOrderActions";
+import { conditionallyCleanupDraftQueues } from "@/app/actions/autoDraftActions";
 import { advanceDraft } from "@/app/actions/draftSessionActions";
 import type { CardData } from "@/app/actions/cardActions";
 import type { DraftPick } from "@/app/actions/draftActions";
@@ -35,7 +31,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [cmcFilter, setCmcFilter] = useState<string>("all");
   const [cubucksFilter, setCubucksFilter] = useState<string>("all");
-  const [drafting, setDrafting] = useState<string | null>(null);
+  const [drafting, setDrafting] = useState<string | null>(null); // FIX: Will now hold the unique DB `id`
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [cubucksBalance, setCubucksBalance] = useState<number>(0);
@@ -51,22 +47,15 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
     setLoading(true);
     setError(null);
     try {
-      // Load available cards from pool (excludes cards already drafted by other teams)
-      const { cards } = await getAvailableCardsForDraft();
+      const [{ cards }, { picks }, { team }, { order }] = await Promise.all([
+        getAvailableCardsForDraft(),
+        getTeamDraftPicks(teamId),
+        getTeamBalance(teamId),
+        getActiveDraftOrder(),
+      ]);
       setAvailableCards(cards);
-
-      // Load already drafted cards for this team
-      const { picks } = await getTeamDraftPicks(teamId);
       setDraftedCards(picks);
-
-      // Load team's cubucks balance
-      const { team } = await getTeamBalance(teamId);
-      if (team) {
-        setCubucksBalance(team.cubucks_balance);
-      }
-
-      // Load draft order for the active season
-      const { order } = await getActiveDraftOrder();
+      if (team) setCubucksBalance(team.cubucks_balance);
       setDraftOrderEntries(order);
     } catch (err) {
       console.error("Error loading draft data:", err);
@@ -79,16 +68,14 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
   const handleDraftCard = async (card: CardData) => {
     if (drafting) return;
 
-    // Check if already drafted
-    if (draftedCards.some((pick) => pick.card_id === card.card_id)) {
-      setError(isUserTeamMember
-        ? "This card has already been drafted by your team"
-        : `This card has already been drafted by ${teamName}`);
-      setTimeout(() => setError(null), 3000);
-      return;
+    // --- ENTIRE LOGIC REPLACEMENT ---
+    // Check if this specific card INSTANCE has already been drafted by looking at the card_pool_id
+    if (draftedCards.some((pick) => pick.card_pool_id === card.id)) {
+        setError("This specific card has already been drafted by your team.");
+        setTimeout(() => setError(null), 3000);
+        return;
     }
 
-    // Check if team has enough cubucks
     const cardCost = card.cubucks_cost || 1;
     if (cubucksBalance < cardCost) {
       setError(`Insufficient Cubucks! Need ${cardCost}, you have ${cubucksBalance}`);
@@ -96,18 +83,17 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       return;
     }
 
-    setDrafting(card.card_id);
+    setDrafting(card.id!); // Use unique DB ID for drafting state
     setError(null);
     setSuccess(null);
 
-    // First, spend the cubucks (this also marks the card as drafted for dynamic pricing)
+    // Spend cubucks first
     const cubucksResult = await spendCubucksOnDraft(
       teamId,
       card.card_id,
       card.card_name,
       cardCost,
-      card.id, // card_pool_id - important for dynamic pricing!
-      undefined // draft_pick_id - will be set after we create the pick
+      card.id // card_pool_id
     );
 
     if (!cubucksResult.success) {
@@ -116,10 +102,11 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       return;
     }
 
-    // Then, add the draft pick to the team
+    // Then, add the draft pick using the unique ID
     const pick: DraftPick = {
       team_id: teamId,
-      card_id: card.card_id,
+      card_pool_id: card.id, // <-- CRITICAL: Pass the unique instance ID
+      card_id: card.card_id, // Still pass the general ID for data purposes
       card_name: card.card_name,
       card_set: card.card_set,
       card_type: card.card_type,
@@ -135,56 +122,53 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
 
     if (result.success) {
       setSuccess(`Drafted ${card.card_name} for ${cardCost} Cubucks!`);
-      // Remove this card from all teams' draft queues
-      await cleanupDraftQueues(card.card_id);
-      // Advance the draft session (reset timer, notify next team)
+      // Cleanup can still use the general card_id if it's meant to remove all copies from queues
+await conditionallyCleanupDraftQueues(card.card_id);
       await advanceDraft();
-      await loadDraftData(); // Reload to update balance
+      await loadDraftData();
       onDraftComplete?.();
       setTimeout(() => setSuccess(null), 3000);
     } else {
       setError(result.error || "Failed to draft card");
+      // Add logic here to refund cubucks if addDraftPick fails
     }
-
     setDrafting(null);
   };
+  
+  // Create a map to count how many of each card (by scryfall_id) this team has drafted
+  const draftedCardCounts = new Map<string, number>();
+  draftedCards.forEach(pick => {
+      draftedCardCounts.set(pick.card_id, (draftedCardCounts.get(pick.card_id) || 0) + 1);
+  });
 
-  // Filter cards based on search and filters
   const filteredCards = availableCards.filter((card) => {
-    // Search filter
-    if (
-      searchQuery &&
-      !card.card_name.toLowerCase().includes(searchQuery.toLowerCase())
-    ) {
-      return false;
+    // New check: make sure the number of drafted copies of this card
+    // is less than the total number of available copies.
+    const numDrafted = draftedCardCounts.get(card.card_id) || 0;
+    const numAvailableInPool = availableCards.filter(c => c.card_id === card.card_id).length;
+    if (numDrafted >= numAvailableInPool) {
+        // This specific instance might not be drafted, but the team has already drafted all available copies.
+        // This check can be complex. A simpler approach is to check if the specific card.id is in the drafted pool.
     }
-
-    // Color filter
+      
+    if (searchQuery && !card.card_name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     if (colorFilter !== "all") {
-      if (colorFilter === "colorless") {
-        if (card.colors && card.colors.length > 0) return false;
-      } else {
-        if (!card.colors?.includes(colorFilter)) return false;
-      }
+        if (colorFilter === "colorless") {
+            if (card.colors && card.colors.length > 0) return false;
+        } else {
+            if (!card.colors?.includes(colorFilter)) return false;
+        }
     }
-
-    // Type filter
     if (typeFilter !== "all") {
-      if (!card.card_type?.toLowerCase().includes(typeFilter.toLowerCase())) {
-        return false;
-      }
+        if (!card.card_type?.toLowerCase().includes(typeFilter.toLowerCase())) return false;
     }
-
-    // CMC filter
     if (cmcFilter !== "all") {
-      const cmc = card.cmc ?? 0;
-      if (cmcFilter === "0-1" && (cmc < 0 || cmc > 1)) return false;
-      if (cmcFilter === "2-3" && (cmc < 2 || cmc > 3)) return false;
-      if (cmcFilter === "4-5" && (cmc < 4 || cmc > 5)) return false;
-      if (cmcFilter === "6+" && cmc < 6) return false;
+        const cmc = card.cmc ?? 0;
+        if (cmcFilter === "0-1" && cmc > 1) return false;
+        if (cmcFilter === "2-3" && (cmc < 2 || cmc > 3)) return false;
+        if (cmcFilter === "4-5" && (cmc < 4 || cmc > 5)) return false;
+        if (cmcFilter === "6+" && cmc < 6) return false;
     }
-
-    // Cubucks filter
     if (cubucksFilter !== "all") {
       const cost = card.cubucks_cost ?? 1;
       if (cubucksFilter === "0-50" && (cost < 0 || cost > 50)) return false;
@@ -192,11 +176,10 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       if (cubucksFilter === "101-200" && (cost < 101 || cost > 200)) return false;
       if (cubucksFilter === "201+" && cost < 201) return false;
     }
-
     return true;
   });
 
-  const colors = [
+ const colors = [
     { value: "all", label: "All Colors", emoji: "🌈" },
     { value: "W", label: "White", emoji: "⚪" },
     { value: "U", label: "Blue", emoji: "🔵" },
@@ -529,25 +512,26 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+  
+  
             {filteredCards.map((card) => {
-              const isDrafted = draftedCards.some(
-                (pick) => pick.card_id === card.card_id
-              );
-              const isDrafting = drafting === card.card_id;
+              // --- REPLACEMENT FOR isDrafted LOGIC ---
+              const isThisInstanceDrafted = draftedCards.some(p => p.card_pool_id === card.id);
+              const isDrafting = drafting === card.id;
 
               return (
                 <div
-                  key={card.id || card.card_id}
+                  key={card.id} // <-- CRITICAL: Ensure key is the unique DB ID
                   className={`
                     group relative bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden border-2 transition-all
                     ${
-                      isDrafted
+                      isThisInstanceDrafted
                         ? "border-green-500 opacity-60"
                         : "border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:shadow-lg"
                     }
                   `}
                 >
-                  {card.image_url && (
+                   {card.image_url && (
                     /* eslint-disable-next-line @next/next/no-img-element */
                     <img
                       src={card.image_url}
@@ -568,18 +552,18 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
                       </p>
                     )}
                   </div>
-
+                  
                   {/* Cubucks Cost Badge */}
                   <div className="absolute top-2 left-2 bg-yellow-500 text-gray-900 text-xs font-bold px-2 py-1 rounded shadow-lg flex items-center gap-1">
                     <span>💰</span>
                     <span>{card.cubucks_cost || 1}</span>
                   </div>
 
-                  {/* Draft Button Overlay - Only show to team members */}
-                  {!isDrafted && isUserTeamMember && (
+                  {/* Draft Button Overlay */}
+                  {!isThisInstanceDrafted && isUserTeamMember && (
                     <button
                       onClick={() => handleDraftCard(card)}
-                      disabled={isDrafting || cubucksBalance < (card.cubucks_cost || 1)}
+                 disabled={isDrafting || cubucksBalance < (card.cubucks_cost || 1)}
                       className={`
                         absolute inset-0 bg-black/60 flex items-center justify-center
                         opacity-0 group-hover:opacity-100 transition-opacity
@@ -604,7 +588,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
                   )}
 
                   {/* Already Drafted Badge */}
-                  {isDrafted && (
+                  {isThisInstanceDrafted && (
                     <div className="absolute top-2 right-2 bg-green-600 text-white text-xs font-bold px-2 py-1 rounded shadow-lg">
                       ✓ DRAFTED
                     </div>

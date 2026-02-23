@@ -32,6 +32,7 @@ async function createClient() {
 
 export interface DraftPick {
   id?: string;
+  card_pool_id?: string;
   team_id: string;
   card_id: string;
   card_name: string;
@@ -70,6 +71,97 @@ export interface DeckCard {
   quantity?: number;
   is_commander?: boolean;
   category?: string;
+}
+
+/**
+ * Internal: Adds a "skipped" pick to the draft history.
+ * This is used when a team fails to auto-draft, allowing the draft to advance.
+ */
+export async function addSkippedPick(
+  teamId: string,
+  pickNumber: number
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  try {
+    const { error } = await supabase.from("team_draft_picks").insert({
+      team_id: teamId,
+      card_id: "skipped-pick", // Special identifier for skipped picks
+      card_name: "SKIPPED",
+      pick_number: pickNumber,
+      drafted_by: null, // auto-drafted
+    });
+
+    if (error) {
+      console.error("Error adding skipped pick:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Unexpected error adding skipped pick:", error);
+    return { success: false, error: "An unexpected error occurred" };
+  }
+}
+
+
+/**
+ * Add a card to team's draft picks
+ */
+export async function addDraftPick(
+  pick: DraftPick
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  try {
+    // Verify user is authenticated and is a member of the team
+    const authCheck = await verifyTeamMembership(pick.team_id);
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error };
+    }
+
+    // --- FIX: Check if the card instance has already been drafted ---
+    // This prevents race conditions where two users draft the same instance at the same time.
+    if (pick.card_pool_id) {
+        const { data: existingPick, error: checkError } = await supabase
+            .from("team_draft_picks")
+            .select("id")
+            .eq("card_pool_id", pick.card_pool_id)
+            .single();
+
+        if (checkError && checkError.code !== 'PGRST116') { // Ignore "not found" error
+            console.error("Error checking for existing draft pick:", checkError);
+            return { success: false, error: "Database error checking card availability." };
+        }
+        if (existingPick) {
+            return { success: false, error: "This specific card has already been drafted." };
+        }
+    }
+    
+    const { error } = await supabase.from("team_draft_picks").insert({
+      team_id: pick.team_id,
+      card_pool_id: pick.card_pool_id, // <-- ADD THIS
+      card_id: pick.card_id,
+      card_name: pick.card_name,
+      card_set: pick.card_set,
+      card_type: pick.card_type,
+      rarity: pick.rarity,
+      colors: pick.colors || [],
+      image_url: pick.image_url,
+      mana_cost: pick.mana_cost,
+      cmc: pick.cmc,
+      pick_number: pick.pick_number,
+      drafted_by: authCheck.userId,
+    });
+
+    if (error) {
+      console.error("Error adding draft pick:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Unexpected error adding draft pick:", error);
+    return { success: false, error: "An unexpected error occurred" };
+  }
 }
 
 /**
@@ -180,60 +272,42 @@ export async function getTeamDraftPicks(
   }
 }
 
-/**
- * Add a card to team's draft picks
- */
-export async function addDraftPick(
-  pick: DraftPick
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
 
-  try {
-    // Verify user is authenticated and is a member of the team
-    const authCheck = await verifyTeamMembership(pick.team_id);
-    if (!authCheck.authorized) {
-      return { success: false, error: authCheck.error };
-    }
 
-    const { error } = await supabase.from("team_draft_picks").insert({
-      team_id: pick.team_id,
-      card_id: pick.card_id,
-      card_name: pick.card_name,
-      card_set: pick.card_set,
-      card_type: pick.card_type,
-      rarity: pick.rarity,
-      colors: pick.colors || [],
-      image_url: pick.image_url,
-      mana_cost: pick.mana_cost,
-      cmc: pick.cmc,
-      pick_number: pick.pick_number,
-      drafted_by: authCheck.userId,
-    });
-
-    if (error) {
-      console.error("Error adding draft pick:", error);
-      return { success: false, error: error.message };
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error("Unexpected error adding draft pick:", error);
-    return { success: false, error: "An unexpected error occurred" };
-  }
-}
 
 /**
  * Internal: Add a draft pick without user session check.
  * Only for use by server-side auto-draft logic.
  */
+// FIX: Added the second argument to match the function call.
+// FIX: Added a race condition check to prevent duplicate drafts.
 export async function addDraftPickInternal(
-  pick: DraftPick
+  pick: DraftPick,
+  isAutoDraft?: boolean // <-- This is the new optional second argument
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
-
   try {
+    // Prevent race conditions where two processes draft the same instance.
+    if (pick.card_pool_id) {
+        const { data: existingPick, error: checkError } = await supabase
+            .from("team_draft_picks")
+            .select("id")
+            .eq("card_pool_id", pick.card_pool_id)
+            .single();
+
+        if (checkError && checkError.code !== 'PGRST116') { // Ignore "not found" error
+            console.error("Error checking for existing auto-draft pick:", checkError);
+            return { success: false, error: "Database error checking card availability for auto-draft." };
+        }
+
+        if (existingPick) {
+            return { success: false, error: "This specific card has already been drafted by another process." };
+        }
+    }
+
     const { error } = await supabase.from("team_draft_picks").insert({
       team_id: pick.team_id,
+      card_pool_id: pick.card_pool_id, // Ensure card_pool_id is included
       card_id: pick.card_id,
       card_name: pick.card_name,
       card_set: pick.card_set,
@@ -258,6 +332,7 @@ export async function addDraftPickInternal(
     return { success: false, error: "An unexpected error occurred" };
   }
 }
+
 
 /**
  * Remove a card from team's draft picks
@@ -485,23 +560,33 @@ export async function addCardToDeck(
   deckCard: DeckCard
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
-
   try {
-    // Get the team_id for this deck
     const teamId = await getDeckTeamId(deckCard.deck_id);
-    if (!teamId) {
-      return { success: false, error: "Deck not found" };
-    }
+    if (!teamId) return { success: false, error: "Deck not found" };
 
-    // Verify user is authenticated and is a member of the team
     const authCheck = await verifyTeamMembership(teamId);
-    if (!authCheck.authorized) {
-      return { success: false, error: authCheck.error };
+    if (!authCheck.authorized) return { success: false, error: authCheck.error };
+
+    // --- FIX: Prevent adding the same DRAFT PICK instance twice ---
+    if (deckCard.draft_pick_id) {
+        const { data: existingCard, error: checkError } = await supabase
+            .from("deck_cards")
+            .select("id")
+            .eq("deck_id", deckCard.deck_id)
+            .eq("draft_pick_id", deckCard.draft_pick_id)
+            .single();
+
+        if (checkError && checkError.code !== 'PGRST116') {
+            return { success: false, error: "Database error checking for card." };
+        }
+        if (existingCard) {
+            return { success: false, error: "This specific drafted card is already in the deck." };
+        }
     }
 
     const { error } = await supabase.from("deck_cards").insert({
       deck_id: deckCard.deck_id,
-      draft_pick_id: deckCard.draft_pick_id,
+      draft_pick_id: deckCard.draft_pick_id, // This is the key link
       card_id: deckCard.card_id,
       card_name: deckCard.card_name,
       quantity: deckCard.quantity || 1,
@@ -520,6 +605,7 @@ export async function addCardToDeck(
     return { success: false, error: "An unexpected error occurred" };
   }
 }
+
 
 /**
  * Update a deck card's quantity
