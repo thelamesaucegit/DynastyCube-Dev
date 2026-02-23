@@ -510,7 +510,7 @@ export async function getDraftOrder(
       .from("draft_order")
       .select(`
         *,
-        team:teams(id, name, emoji)
+        team:teams(id, name, emoji, primary_color, secondary_color)
       `)
       .eq("season_id", seasonId)
       .order("pick_position", { ascending: true });
