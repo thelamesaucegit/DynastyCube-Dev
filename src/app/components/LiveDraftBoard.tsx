@@ -1,4 +1,4 @@
-// src/components/LiveDraftBoard.tsx
+// src/app/components/LiveDraftBoard.tsx
 
 'use client';
 
