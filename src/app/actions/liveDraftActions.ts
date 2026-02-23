@@ -2,10 +2,10 @@
 
 "use server";
 
+import { createServerClient } from "@/lib/supabase"; 
 import { getDraftOrder } from "@/app/actions/draftOrderActions";
 import type { DraftOrderEntry } from "@/app/actions/draftOrderActions";
 
-// This interface is correct and defines the shape our component needs.
 export interface DraftOrderTeam extends DraftOrderEntry {
   team?: {
     id: string;
@@ -25,18 +25,30 @@ export async function getDraftBoardData(sessionId: string): Promise<{
   error?: string;
 }> {
   try {
-    // UPDATED: We now call getDraftOrder and pass the specific sessionId.
-    // This is more precise than relying on getActiveDraftOrder().
-    const { order, error } = await getDraftOrder(sessionId);
+    const supabase = await createServerClient();
 
-    if (error) {
-      return { draftOrder: [], error };
+    // STEP 1: Find the season_id associated with the current draft session.
+    const { data: sessionData, error: sessionError } = await supabase
+      .from("draft_sessions")
+      .select("season_id")
+      .eq("id", sessionId)
+      .single();
+
+    if (sessionError || !sessionData) {
+      console.error("Could not find season for draft session:", sessionId, sessionError);
+      return { draftOrder: [], error: "Could not find a season for this draft session." };
+    }
+
+    const { season_id } = sessionData;
+
+    // STEP 2: Use the correct season_id to fetch the draft order.
+    const { order, error: orderError } = await getDraftOrder(season_id);
+
+    if (orderError) {
+      return { draftOrder: [], error: orderError };
     }
     
-    // Because we updated getDraftOrder to select the colors,
-    // we can safely cast the result without using 'unknown'.
     const draftOrderWithColors = order as DraftOrderTeam[];
-
     return { draftOrder: draftOrderWithColors };
 
   } catch (error) {

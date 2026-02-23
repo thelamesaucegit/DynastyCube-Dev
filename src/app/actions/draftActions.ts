@@ -139,7 +139,8 @@ export async function addDraftPick(
     
     const { error } = await supabase.from("team_draft_picks").insert({
       team_id: pick.team_id,
-      card_pool_id: pick.card_pool_id, // <-- ADD THIS
+      card_pool_id: pick.card_pool_id, 
+      draft_session_id: pick.draft_session_id, 
       card_id: pick.card_id,
       card_name: pick.card_name,
       card_set: pick.card_set,
