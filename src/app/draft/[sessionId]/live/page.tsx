@@ -3,8 +3,8 @@
 import { createServerClient } from '@/lib/supabase';
 import LiveDraftBoard from '@/components/LiveDraftBoard';
 import { notFound } from 'next/navigation';
-// NEW: Import the specific error type from the Supabase library
 
+// UPDATED: Added 'team_id' to the core DraftPick interface. This is crucial.
 export interface DraftPick {
   id: number;
   pick_number: number;
@@ -13,6 +13,7 @@ export interface DraftPick {
   rarity: string | null;
   image_url: string | null;
   team_name: string;
+  team_id: string; // <-- ADD THIS PROPERTY
 }
 
 interface SupabasePick {
@@ -22,16 +23,16 @@ interface SupabasePick {
   card_set: string | null;
   rarity: string | null;
   image_url: string | null;
-  // This is the key change to match Supabase's inference.
-  teams: {
+  team_id: string; // UPDATED: Ensure we select team_id
+  teams: { // This comes from the foreign key relationship
     name: string;
-  }[]; // It's an array of objects.
+  } | null; // Supabase returns a single object for a to-one relationship, not an array
 }
 
 async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
   const supabase = await createServerClient();
   
- const { data, error } = await supabase
+  const { data, error } = await supabase
     .from('team_draft_picks') 
     .select(`
       id,
@@ -40,9 +41,10 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
       card_set,
       rarity,
       image_url,
+      team_id, 
       teams ( name )
     `)
-    // We now cast the query itself to the correct type.
+    .eq('draft_session_id', sessionId)
     .returns<SupabasePick[]>();
 
   if (error || !data) {
@@ -50,6 +52,7 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
     return [];
   }
 
+  // This map now correctly constructs the full DraftPick object
   return data.map(pick => ({
     id: pick.id,
     pick_number: pick.pick_number,
@@ -57,15 +60,13 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
     card_set: pick.card_set,
     rarity: pick.rarity,
     image_url: pick.image_url,
-    // UPDATED: This logic now correctly handles the 'teams' array.
-    // It checks if the array exists and has at least one item before accessing its name.
-    team_name: (pick.teams && pick.teams.length > 0) ? pick.teams[0].name : 'Unknown Team',
+    team_id: pick.team_id, // Pass the team_id through
+    team_name: pick.teams?.name || 'Unknown Team',
   }));
 }
 
-// Apply the same Promise pattern to the page props
+// The rest of the file remains the same
 export default async function LiveDraftPage({ params }: { params: Promise<{ sessionId: string }> }) {
-  // Await the params to get the sessionId
   const { sessionId } = await params;
   
   const initialPicks = await getInitialDraftPicks(sessionId);
@@ -82,7 +83,6 @@ export default async function LiveDraftPage({ params }: { params: Promise<{ sess
       
       <LiveDraftBoard 
         serverPicks={initialPicks} 
-        // Pass the resolved sessionId to the client component
         sessionId={sessionId} 
       />
     </div>
