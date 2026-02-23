@@ -46,7 +46,27 @@
       "Bash(git merge:*)",
       "Bash(git remote set-url:*)",
       "Bash(git config:*)",
-      "Bash(git config --global --add safe.directory '%\\(prefix\\)///wsl.localhost/Ubuntu/home/itstoxicqt/Documents/Projects/DynastyCube-Dev')"
+      "Bash(git config --global --add safe.directory '%\\(prefix\\)///wsl.localhost/Ubuntu/home/itstoxicqt/Documents/Projects/DynastyCube-Dev')",
+      "Bash(git fetch:*)",
+      "Bash(wsl -e bash -c \"cd /home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum && git status -s && git log --oneline -5\")",
+      "Bash(wsl -e bash -c \"cd /home/itstoxicqt/Documents/Projects/DynastyCube-Dev && git status -s && git log --oneline -5\")",
+      "Bash(wsl -e bash -c \"cd /home/itstoxicqt/Documents/Projects/DynastyCube-Dev && git branch && git diff --stat\")",
+      "Bash(wsl -e bash -c \"cd /home/itstoxicqt/Documents/Projects/DynastyCube-Dev && git worktree list\")",
+      "Bash(wsl -e bash -c \"cd /home/itstoxicqt/Documents/Projects/DynastyCube-Dev && git diff --stat HEAD\")",
+      "Bash(wsl -e bash -c \"cd /home/itstoxicqt/Documents/Projects/DynastyCube-Dev && git log origin/main..HEAD --oneline\")",
+      "Bash(wsl -e bash -c \"cd /home/itstoxicqt/Documents/Projects/DynastyCube-Dev && git show origin/claude/jovial-chaum:src/app/actions/draftSessionActions.ts | head -30\")",
+      "Bash(wsl -e bash -c \"cd /home/itstoxicqt/Documents/Projects/DynastyCube-Dev && git add .claude/settings.local.json upgrade.sh && git stash -- .claude/settings.local.json upgrade.sh 2>/dev/null; cd /home/itstoxicqt/Documents/Projects/DynastyCube-Dev && git checkout claude/jovial-chaum 2>&1 | head -5\")",
+      "Bash(wsl -e bash -c \"cd ''//wsl.localhost/Ubuntu/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum'' && git status -s\")",
+      "Bash(wsl -e bash -c \"ls /home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/\")",
+      "Bash(wsl -e bash -c \"cd /home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum && git status -s && git log --oneline -3\")",
+      "Bash(wsl -e bash -c \"cat /home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum/.git\")",
+      "Bash(cmd.exe /c \"cd /d Z:\\\\home\\\\itstoxicqt\\\\Documents\\\\Projects\\\\DynastyCube-Dev\\\\.claude\\\\worktrees\\\\jovial-chaum && git status -s && git log --oneline -3\")",
+      "Bash(cmd.exe /c \"git -C \"\"Z:\\\\home\\\\itstoxicqt\\\\Documents\\\\Projects\\\\DynastyCube-Dev\\\\.claude\\\\worktrees\\\\jovial-chaum\"\" status -s\")",
+      "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" status -s)",
+      "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" log --oneline -5)",
+      "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" fetch origin claude/jovial-chaum)",
+      "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" log --oneline origin/claude/jovial-chaum..HEAD)",
+      "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" log --oneline HEAD..origin/claude/jovial-chaum)"
     ]
   }
 }
