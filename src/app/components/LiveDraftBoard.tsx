@@ -8,17 +8,15 @@ import type { DraftOrderTeam } from '@/app/actions/liveDraftActions';
 import type { DraftPick } from '@/app/draft/[sessionId]/live/page';
 import { Button } from '@/app/components/ui/button';
 import { List, Columns } from 'lucide-react';
-// REMOVED: No longer importing 'cn' from '@lib/utils'
 
 type ViewMode = 'list' | 'team';
 
 // ============================================================================
-// DRAFT CARD SUB-COMPONENT
+// DRAFT CARD SUB-COMPONENT (DEFINITION IS HERE)
 // ============================================================================
 const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small' }> = ({ pick, isNewest, size }) => {
   if (size === 'large') {
     return (
-      // UPDATED: Replaced cn() with template literal
       <div className={`
         bg-gray-800 border border-gray-700 rounded-lg shadow-lg p-3 transition-all duration-500
         ${isNewest ? "col-span-full animate-fade-in-down border-green-500/50 ring-2 ring-green-500/50" : "transform hover:scale-105"}
@@ -39,7 +37,6 @@ const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small
   }
 
   return (
-    // UPDATED: Replaced cn() with template literal
     <div className={`
       bg-gray-800/80 border border-gray-700/50 rounded-md p-1.5 transition-all duration-500
       ${isNewest ? "animate-fade-in border-green-500/80 ring-1 ring-green-500/80" : ""}
@@ -51,7 +48,18 @@ const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small
 };
 
 // ============================================================================
-// TEAM VIEW SUB-COMPONENT
+// LIST VIEW SUB-COMPONENT (DEFINITION IS HERE)
+// ============================================================================
+const ListView: FC<{ picks: DraftPick[], newestPickId: number | null }> = ({ picks, newestPickId }) => (
+  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+    {picks.map((pick) => (
+      <DraftCard key={pick.id} pick={pick} isNewest={pick.id === newestPickId} size="large" />
+    ))}
+  </div>
+);
+
+// ============================================================================
+// TEAM VIEW SUB-COMPONENT (DEFINITION IS HERE)
 // ============================================================================
 const TeamView: FC<{ picks: DraftPick[], draftOrder: DraftOrderTeam[], newestPickId: number | null }> = ({ picks, draftOrder, newestPickId }) => {
   const picksByTeam = useMemo(() => {
@@ -60,8 +68,10 @@ const TeamView: FC<{ picks: DraftPick[], draftOrder: DraftOrderTeam[], newestPic
       if (team.team_id) grouped[team.team_id] = [];
     }
     for (const pick of picks) {
-      if (pick.team_id && grouped[pick.team_id]) {
-        grouped[pick.team_id].push(pick);
+      // It's possible for team_id to be missing on the DraftPick from the page.tsx props
+      const pickWithTeamId = pick as DraftPick & { team_id?: string };
+      if (pickWithTeamId.team_id && grouped[pickWithTeamId.team_id]) {
+        grouped[pickWithTeamId.team_id].push(pick);
       }
     }
     for (const teamId in grouped) {
@@ -172,7 +182,6 @@ export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoar
     <div>
       <div className="flex justify-end mb-4">
         <div className="inline-flex items-center rounded-md bg-gray-800 p-1">
-          {/* UPDATED: Replaced cn() with template literal */}
           <Button
             variant="ghost"
             size="sm"
@@ -181,7 +190,6 @@ export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoar
           >
             <List className="size-4" /> List
           </Button>
-          {/* UPDATED: Replaced cn() with template literal */}
           <Button
             variant="ghost"
             size="sm"
@@ -192,6 +200,7 @@ export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoar
           </Button>
         </div>
       </div>
+      {/* This line will now work because ListView is defined above */}
       {viewMode === 'list' && <ListView picks={sortedPicks} newestPickId={newestPickId} />}
       {viewMode === 'team' && draftOrder.length > 0 && <TeamView picks={picks} draftOrder={draftOrder} newestPickId={newestPickId} />}
     </div>
