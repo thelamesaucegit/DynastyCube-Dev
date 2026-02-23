@@ -706,11 +706,14 @@ export async function executeAutoDraft(
   error?: string;
   staleDeployment?: boolean;
 }> {
-  try {
-    const { status: draftStatus } = await getDraftStatus();
-    if (!draftStatus || !draftStatus.sessionId) { // Ensure draftId exists
+ // UPDATED: Destructure 'seasonId' and rename it to 'draftSessionId'
+    const { status: draftStatus, seasonId: draftSessionId } = await getDraftStatus();
+    
+    // UPDATED: Check for the new draftSessionId variable
+    if (!draftStatus || !draftSessionId) { 
         return { success: false, error: "No active draft or draft ID is missing" };
     }
+
     if (draftStatus.onTheClock.teamId !== teamId) {
       return { success: false, error: "This team is not on the clock" };
     }
@@ -745,6 +748,7 @@ export async function executeAutoDraft(
 	  draft_session_id: draftStatus.id, // Using the unique 'id'
       card_set: card.card_set,
       card_type: card.card_type,
+	  draft_session_id: draftSessionId,
       rarity: card.rarity,
       colors: card.colors,
       image_url: card.image_url,
@@ -784,7 +788,7 @@ export async function executeAutoDraft(
       team_name: teamData?.name || 'Unknown Team'
     };
     
-    const channel = supabase.channel(`draft-updates-${draftStatus.id}`);
+    const channel = supabase.channel(`draft-updates-${draftSessionId}`);
     
     await channel.send({
         type: 'broadcast',
