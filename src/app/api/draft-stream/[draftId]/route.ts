@@ -1,50 +1,48 @@
-// src/app/api/draft-stream/[draftId]/route.ts
+// src/app/api/draft-stream/[sessionId]/route.ts
 
 import { createServerClient } from '@/lib/supabase';
 
-export const dynamic = 'force-dynamic'; // Ensures this route is not statically cached
+export const dynamic = 'force-dynamic';
 
+// The function signature for GET is updated here
 export async function GET(
   request: Request,
-  { params }: { params: { draftId: string } }
+  // The second argument should be a single object, often called `context`
+  context: { params: { sessionId: string } } 
 ) {
-  const { draftId } = params;
+  // We now get 'sessionId' from context.params
+  const { sessionId } = context.params;
   
-  // Validate draftId if necessary
-  if (!draftId) {
-    return new Response('Missing draft ID', { status: 400 });
+  if (!sessionId) {
+    return new Response('Missing session ID', { status: 400 });
   }
 
   const supabase = createServerClient();
 
   const stream = new ReadableStream({
     start(controller) {
-      const channelName = `draft-updates-${draftId}`;
-      console.log(`Client connected to SSE for draft: ${channelName}`);
+      const channelName = `draft-updates-${sessionId}`;
+      console.log(`Client connected to SSE for draft session: ${channelName}`);
 
       const channel = supabase
         .channel(channelName)
         .on('broadcast', { event: 'new_pick' }, ({ payload }) => {
-          console.log(`SSE: Broadcasting new pick for draft ${draftId}`, payload);
-          // Format the data as a Server-Sent Event
+          console.log(`SSE: Broadcasting new pick for session ${sessionId}`, payload);
           controller.enqueue(`data: ${JSON.stringify(payload)}\n\n`);
         })
         .subscribe((status) => {
-          // You can optionally log the subscription status
           if (status !== 'SUBSCRIBED') {
             console.warn(`Failed to subscribe to channel: ${channelName}, status: ${status}`);
           }
         });
 
-      // When the client disconnects (e.g., closes the tab), clean up the subscription
       request.signal.onabort = () => {
-        console.log(`Client disconnected from SSE for draft ${draftId}. Cleaning up.`);
+        console.log(`Client disconnected from SSE for session ${sessionId}. Cleaning up.`);
         supabase.removeChannel(channel);
       };
     },
     cancel() {
-        // This is called if the readable stream is cancelled
-        console.log(`Readable stream cancelled for draft ${draftId}`);
+        console.log(`Readable stream cancelled for session ${sessionId}`);
     }
   });
 
@@ -53,7 +51,7 @@ export async function GET(
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
       'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no', // Important for disabling buffering in some environments
+      'X-Accel-Buffering': 'no',
     },
   });
 }
