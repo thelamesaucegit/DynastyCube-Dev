@@ -39,6 +39,7 @@ export interface DraftPick {
   card_set?: string;
   card_type?: string;
   rarity?: string;
+  draft_session_id?: string; 
   colors?: string[];
   image_url?: string;
   mana_cost?: string;
@@ -284,7 +285,7 @@ export async function getTeamDraftPicks(
 export async function addDraftPickInternal(
   pick: DraftPick,
   isAutoDraft?: boolean // <-- This is the new optional second argument
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; pick?: DraftPick; error?: string }> {
   const supabase = await createClient();
   try {
     // Prevent race conditions where two processes draft the same instance.
