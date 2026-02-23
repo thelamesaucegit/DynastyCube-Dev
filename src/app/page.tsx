@@ -186,7 +186,7 @@ export default function HomePage() {
           <CardHeader className="pb-3">
             <CardDescription>Recent Games</CardDescription>
             <CardTitle className="text-3xl">{recentGames.length > 0 ? recentGames.length + "+" : "—"}</CardTitle>
-          </Header>
+          </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">Games played</p>
           </CardContent>
