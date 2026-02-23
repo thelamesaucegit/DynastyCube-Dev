@@ -708,7 +708,7 @@ export async function executeAutoDraft(
 }> {
   try {
     const { status: draftStatus } = await getDraftStatus();
-    if (!draftStatus || !draftStatus.sessionId) { // Ensure draftId exists
+    if (!draftStatus || !draftStatus.id) { // Ensure draftId exists
         return { success: false, error: "No active draft or draft ID is missing" };
     }
     if (draftStatus.onTheClock.teamId !== teamId) {
