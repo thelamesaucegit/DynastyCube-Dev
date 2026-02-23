@@ -742,6 +742,7 @@ export async function executeAutoDraft(
       card_pool_id: card.id,
       card_id: card.card_id,
       card_name: card.card_name,
+	  draft_session_id: draftStatus.id, // Using the unique 'id'
       card_set: card.card_set,
       card_type: card.card_type,
       rarity: card.rarity,
@@ -783,7 +784,7 @@ export async function executeAutoDraft(
       team_name: teamData?.name || 'Unknown Team'
     };
     
-    const channel = supabase.channel(`draft-updates-${draftStatus.draftId}`);
+    const channel = supabase.channel(`draft-updates-${draftStatus.id}`);
     
     await channel.send({
         type: 'broadcast',
