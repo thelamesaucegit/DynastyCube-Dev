@@ -1,20 +1,21 @@
 // src/app/api/draft-stream/[sessionId]/route.ts
 import { createServerClient } from '@/lib/supabase';
-// No need for NextRequest here, the standard Request type is correct
-// when using the signature below.
+// Make sure to import NextRequest
+import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(
-  request: Request,
-  // This is the key: Destructure `params` directly from the second argument.
-  // The type annotation { params: { sessionId: string } } then describes the object being destructured.
-  { params }: { params: { sessionId: string } }
+  request: NextRequest,
+  // This is the pattern you found: params is a Promise
+  { params }: { params: Promise<{ sessionId: string }> }
 ) {
-  const { sessionId } = params;
+  // We must now 'await' the params to get the value
+  const { sessionId } = await params;
 
   if (!sessionId) {
-    return new Response('Missing session ID', { status: 400 });
+    // It's good practice to use NextResponse for consistency
+    return new NextResponse('Missing session ID', { status: 400 });
   }
 
   const supabase = createServerClient();
@@ -44,6 +45,7 @@ export async function GET(
     }
   });
 
+  // Using a standard Response is perfectly fine for streams
   return new Response(stream, {
     headers: {
       'Content-Type': 'text/event-stream',
