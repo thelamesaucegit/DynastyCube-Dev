@@ -81,7 +81,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
     }
     const cardCost = card.cubucks_cost || 1;
     if (cubucksBalance < cardCost) {
-      setError(`Insufficient Cubucks! Need ${cardCost}, you have ${cubucksBalance}`);
+      setError(`Insufficient Çubucks! Need ${cardCost}, you have ${cubucksBalance}`);
       setTimeout(() => setError(null), 5000);
       return;
     }
@@ -97,7 +97,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       card.id // card_pool_id
     );
     if (!cubucksResult.success) {
-      setError(cubucksResult.error || "Failed to spend Cubucks");
+      setError(cubucksResult.error || "Failed to spend Çubucks");
       setDrafting(null);
       return;
     }
