@@ -728,10 +728,9 @@ export async function executeAutoDraft(
     const canAfford = (teamBalance?.cubucks_balance ?? 0) >= cost;
     const isManualPick = preview.source === 'manual_queue';
 
-    if (!canAfford && !isManualPick) {
-        return { success: false, error: `Insufficient Cubucks. Need ${cost}, have ${teamBalance?.cubucks_balance || 0}` };
+   if (!canAfford) {
+      return { success: false, source: "skipped", error: `Insufficient Cubucks. Need ${cost}, have ${teamBalance?.cubucks_balance || 0}` };
     }
-
     // === RE-ORDERED LOGIC START ===
 
     // STEP 1: Get the current number of picks to determine the next pick number.
