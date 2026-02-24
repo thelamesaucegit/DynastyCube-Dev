@@ -311,7 +311,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                         Draft Priority Queue
                       </h2>
                       <p className="text-sm text-muted-foreground">
-                        Set your team's desired draft picks before the draft begins.
+                        Set your team&apos;s desired draft picks before the draft begins.
                       </p>
                     </div>
                     <DraftQueueManager teamId={teamId} isUserTeamMember={isUserTeamMember} />
@@ -451,7 +451,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                     <p className="text-sm text-muted-foreground">
                       {isUserTeamMember
                         ? "Create and manage decks from your drafted cards"
-                        : `View and manage ${team.name}'s decks`}
+                        : `View and manage ${team.name}&apos;s decks`}
                     </p>
                   </div>
                   <DeckBuilder teamId={teamId} teamName={team.name} isUserTeamMember={isUserTeamMember} />
