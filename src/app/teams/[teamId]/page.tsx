@@ -353,31 +353,32 @@ export default function TeamPage({ params }: TeamPageProps) {
               )}
             </TabsContent>
 
-            <TabsContent value="picks">
-              {activeTab === "picks" && (
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-semibold flex items-center gap-2">
-                      <Layers className="size-5" />
-                      Draft Picks
-                    </h2>
-                  </div>
-                  {/* Success/Error Messages */}
-                  {undraftMessage && (
-                    <div
-                      className={\`mb-4 p-4 rounded-lg border flex items-center gap-2 ${
-                        undraftMessage.type === "success"
-                          ? "bg-accent text-foreground"
-                          : "bg-destructive/10 border-destructive/30 text-destructive"
-                      }\`}
-                    >
-                      {undraftMessage.type === "success" ? (
-                        <CheckCircle2 className="size-4 shrink-0" />
-                      ) : (
-                        <XCircle className="size-4 shrink-0" />
-                      )}
-                      {undraftMessage.text}
-                    </div>
+           <TabsContent value="picks">
+  {activeTab === "picks" && (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-semibold flex items-center gap-2">
+          <Layers className="size-5" />
+          Draft Picks
+        </h2>
+      </div>
+
+      {/* Success & Error Messages */}
+      {undraftMessage && (
+        <div
+          className={`mb-4 p-4 rounded-lg border flex items-center gap-2 ${
+            undraftMessage.type === "success"
+              ? "bg-accent text-foreground"
+              : "bg-destructive/10 border-destructive/30 text-destructive"
+          }`}
+        >
+          {undraftMessage.type === "success" ? (
+            <CheckCircle2 className="size-4 shrink-0" />
+          ) : (
+            <XCircle className="size-4 shrink-0" />
+          )}
+          {undraftMessage.text}
+        </div>
                   )}
 
                   {draftPicks.length === 0 ? (
