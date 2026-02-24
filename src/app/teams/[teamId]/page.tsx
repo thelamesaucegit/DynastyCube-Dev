@@ -1,4 +1,5 @@
 // src/app/teams/[teamId]/page.tsx
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -79,11 +80,9 @@ export default function TeamPage({ params }: TeamPageProps) {
   const [undrafting, setUndrafting] = useState<string | null>(null);
   const [undraftMessage, setUndraftMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [cubucksRefreshKey, setCubucksRefreshKey] = useState(0);
-    const [seasonPhase, setSeasonPhase] = useState<string | null>(null);
-
+  const [seasonPhase, setSeasonPhase] = useState<string | null>(null);
   const isFreeAgencyActive = seasonPhase === 'season';
 
-  // Check if current user is a member of this team
   const isUserTeamMember = team?.members?.some(
     (member) => member.user_id === user?.id
   ) || userRoles.length > 0;
@@ -96,34 +95,26 @@ export default function TeamPage({ params }: TeamPageProps) {
   const loadTeamData = async () => {
     setLoading(true);
     try {
-      // Load team info
       const teams = await getTeamsWithMembers();
       const foundTeam = teams.find((t) => t.id === teamId);
       setTeam(foundTeam || null);
 
-      // Load draft picks
       const { picks } = await getTeamDraftPicks(teamId);
       setDraftPicks(picks);
 
-      // Load decks
       const { decks: teamDecks } = await getTeamDecks(teamId);
       setDecks(teamDecks);
 
-      // Load user's roles for this team
-      console.log("[TeamPage] Fetching roles for team:", teamId);
       const { roles, error: rolesError } = await getCurrentUserRolesForTeam(teamId);
-      console.log("[TeamPage] Roles returned:", roles);
-      console.log("[TeamPage] Roles error:", rolesError);
       setUserRoles(roles);
 
-      // Load all members with their roles
       const { members: allMembersWithRoles } = await getTeamMembersWithRoles(teamId);
       setMembersWithRoles(allMembersWithRoles);
+
       const { season, error: seasonError } = await getCurrentSeason();
       if (seasonError) {
           console.error("Could not fetch season status:", seasonError);
       }
-          // Set the phase from the returned season object
       setSeasonPhase(season?.phase || null);
     } catch (error) {
       console.error("Error loading team data:", error);
@@ -149,9 +140,7 @@ export default function TeamPage({ params }: TeamPageProps) {
         <Card className="border-destructive">
           <CardContent className="pt-6 text-center">
             <AlertCircle className="size-10 text-destructive mx-auto mb-4" />
-            <h2 className="text-2xl font-bold mb-2">
-              Team Not Found
-            </h2>
+            <h2 className="text-2xl font-bold mb-2">Team Not Found</h2>
             <p className="text-muted-foreground">
               The team &quot;{teamId}&quot; does not exist.
             </p>
@@ -162,10 +151,8 @@ export default function TeamPage({ params }: TeamPageProps) {
   }
 
   const handleDraftComplete = async () => {
-    // Reload draft picks when a card is drafted
     const { picks } = await getTeamDraftPicks(teamId);
     setDraftPicks(picks);
-    // Refresh the cubucks display
     setCubucksRefreshKey((prev) => prev + 1);
   };
 
@@ -180,22 +167,15 @@ export default function TeamPage({ params }: TeamPageProps) {
     setUndrafting(pick.id);
     setUndraftMessage(null);
 
-    const result = await refundDraftPick(
-      teamId,
-      pick.id,
-      pick.card_id,
-      pick.card_name
-    );
+    const result = await refundDraftPick(teamId, pick.id, pick.card_id, pick.card_name);
 
     if (result.success) {
       setUndraftMessage({
         type: "success",
         text: `Undrafted ${pick.card_name}! Refunded ${result.refundAmount} Çubucks.`,
       });
-      // Reload draft picks
       const { picks } = await getTeamDraftPicks(teamId);
       setDraftPicks(picks);
-      // Refresh the cubucks display
       setCubucksRefreshKey((prev) => prev + 1);
     } else {
       setUndraftMessage({
@@ -203,14 +183,13 @@ export default function TeamPage({ params }: TeamPageProps) {
         text: result.error || "Failed to undraft card",
       });
     }
-
     setUndrafting(null);
     setTimeout(() => setUndraftMessage(null), 5000);
   };
+
   const isDraftingEnabled = seasonPhase === 'season';
 
- const tabs: { id: TabType; label: string; icon: React.ReactNode; count?: number, disabled?: boolean }[] = [
-    // Conditionally add the Draft tab and control its state
+  const tabs: { id: TabType; label: string; icon: React.ReactNode; count?: number, disabled?: boolean }[] = [
     ...(isUserTeamMember ? [{
       id: "draft" as TabType,
       label: "Draft & Free Agency",
@@ -222,13 +201,12 @@ export default function TeamPage({ params }: TeamPageProps) {
     { id: "decks" as TabType, label: "Decks", icon: <BookOpen className="size-4" />, count: decks.length },
     { id: "trades" as TabType, label: "Trades", icon: <ArrowLeftRight className="size-4" />, count: undefined },
     { id: "matches" as TabType, label: "Matches", icon: <Swords className="size-4" />, count: undefined },
-    // Only show Votes tab to team members
     ...(isUserTeamMember ? [{ id: "votes" as TabType, label: "Votes", icon: <Vote className="size-4" />, count: undefined }] : []),
     { id: "stats" as TabType, label: "Statistics", icon: <BarChart3 className="size-4" />, count: undefined },
-    // Only show roles tab to team members
     ...(isUserTeamMember ? [{ id: "roles" as TabType, label: "Team Roles", icon: <Crown className="size-4" />, count: undefined }] : []),
     { id: "members" as TabType, label: "Members", icon: <Users className="size-4" />, count: team.members?.length || 0 },
   ];
+
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8">
       {/* Team Header */}
@@ -239,12 +217,8 @@ export default function TeamPage({ params }: TeamPageProps) {
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h1 className="text-3xl font-bold tracking-tight mb-1">
-                    {team.name}
-                  </h1>
-                  <p className="text-lg text-muted-foreground italic">
-                    &quot;{team.motto}&quot;
-                  </p>
+                  <h1 className="text-3xl font-bold tracking-tight mb-1">{team.name}</h1>
+                  <p className="text-lg text-muted-foreground italic">&quot;{team.motto}&quot;</p>
                 </div>
                 <Button asChild>
                   <Link href={`/teams/${teamId}/trades`} className="shrink-0">
@@ -254,17 +228,11 @@ export default function TeamPage({ params }: TeamPageProps) {
                 </Button>
               </div>
               <div className="flex gap-4 mt-4 text-sm text-muted-foreground">
-                <span>
-                  <strong className="text-foreground">{draftPicks.length}</strong> cards
-                </span>
+                <span><strong className="text-foreground">{draftPicks.length}</strong> cards</span>
                 <span className="text-muted-foreground/50">|</span>
-                <span>
-                  <strong className="text-foreground">{decks.length}</strong> decks
-                </span>
+                <span><strong className="text-foreground">{decks.length}</strong> decks</span>
                 <span className="text-muted-foreground/50">|</span>
-                <span>
-                  <strong className="text-foreground">{team.members?.length || 0}</strong> members
-                </span>
+                <span><strong className="text-foreground">{team.members?.length || 0}</strong> members</span>
               </div>
             </div>
           </div>
@@ -280,17 +248,14 @@ export default function TeamPage({ params }: TeamPageProps) {
       </div>
 
       {/* Tabs */}
-    <Tabs
-        value={activeTab}
-        onValueChange={(value) => setActiveTab(value as TabType)}
-      >
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabType)}>
         <TabsList className="flex-wrap h-auto gap-1 mb-6">
           {tabs.map((tab) => (
             <TabsTrigger key={tab.id} value={tab.id} className="gap-1.5">
               {tab.icon}
               <span className="hidden sm:inline">{tab.label}</span>
               {tab.count !== undefined && (
-                <Badge variant="secondary" className="ml-1 text-\[10px\] px-1.5 py-0">
+                <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">
                   {tab.count}
                 </Badge>
               )}
@@ -301,94 +266,73 @@ export default function TeamPage({ params }: TeamPageProps) {
         {/* Tab Content */}
         <Card>
           <CardContent className="pt-6">
-             <TabsContent value="draft">
+            <TabsContent value="draft">
               {activeTab === "draft" && isUserTeamMember && (
                 <div className="space-y-8">
-                  {/* SECTION 1: DRAFT QUEUE (Always Visible) */}
+                  {/* SECTION 1: DRAFT QUEUE */}
                   <div>
                     <div className="mb-4">
-                      <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
-                        Draft Priority Queue
-                      </h2>
-                      <p className="text-sm text-muted-foreground">
-                        Set your team&apos;s desired draft picks before the draft begins.
-                      </p>
+                      <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">Draft Priority Queue</h2>
+                      <p className="text-sm text-muted-foreground">Set your team&apos;s desired draft picks before the draft begins.</p>
                     </div>
                     <DraftQueueManager teamId={teamId} isUserTeamMember={isUserTeamMember} />
                   </div>
-
                   {/* SECTION 2: DRAFT PROGRESS & PICK ORDER */}
                   <div>
                     <div className="mb-4">
-                      <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
-                        Draft Progress & Pick Order
-                      </h2>
-                      <p className="text-sm text-muted-foreground">
-                        View the current draft progress and upcoming pick order.
-                      </p>
+                      <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">Draft Progress & Pick Order</h2>
+                      <p className="text-sm text-muted-foreground">View the current draft progress and upcoming pick order.</p>
                     </div>
                     <DraftStatusWidget variant="team" teamId={teamId} />
                   </div>
-
-                  {/* SECTION 3: FREE AGENCY POOL (Always Visible) */}
+                  {/* SECTION 3: FREE AGENCY POOL */}
                   <div>
                     <div className="mb-4">
-                      <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
-                        Free Agent Pool
-                      </h2>
-                      <p className="text-sm text-muted-foreground">
-                        Browse cards available for acquisition. Acquiring free agents is only enabled during the active season.
-                      </p>
+                      <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">Free Agent Pool</h2>
+                      <p className="text-sm text-muted-foreground">Browse cards available for acquisition. Acquiring free agents is only enabled during the active season.</p>
                     </div>
-                    
                     <DraftInterface
                       teamId={teamId}
                       teamName={team.name}
                       isUserTeamMember={isUserTeamMember}
                       onDraftComplete={handleDraftComplete}
-                      isFreeAgencyEnabled={isFreeAgencyActive} 
+                      isFreeAgencyEnabled={isFreeAgencyActive}
                     />
                   </div>
                 </div>
               )}
             </TabsContent>
 
-           <TabsContent value="picks">
-  {activeTab === "picks" && (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold flex items-center gap-2">
-          <Layers className="size-5" />
-          Draft Picks
-        </h2>
-      </div>
-
-      {/* Success & Error Messages */}
-      {undraftMessage && (
-        <div
-          className={`mb-4 p-4 rounded-lg border flex items-center gap-2 ${
-            undraftMessage.type === "success"
-              ? "bg-accent text-foreground"
-              : "bg-destructive/10 border-destructive/30 text-destructive"
-          }`}
-        >
-          {undraftMessage.type === "success" ? (
-            <CheckCircle2 className="size-4 shrink-0" />
-          ) : (
-            <XCircle className="size-4 shrink-0" />
-          )}
-          {undraftMessage.text}
-        </div>
+            <TabsContent value="picks">
+              {activeTab === "picks" && (
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-semibold flex items-center gap-2">
+                      <Layers className="size-5" />
+                      Draft Picks
+                    </h2>
+                  </div>
+                  {/* Success & Error Messages */}
+                  {undraftMessage && (
+                    <div
+                      className={`mb-4 p-4 rounded-lg border flex items-center gap-2 ${
+                        undraftMessage.type === "success"
+                          ? "bg-accent text-foreground"
+                          : "bg-destructive/10 border-destructive/30 text-destructive"
+                      }`}
+                    >
+                      {undraftMessage.type === "success" ? <CheckCircle2 className="size-4 shrink-0" /> : <XCircle className="size-4 shrink-0" />}
+                      {undraftMessage.text}
+                    </div>
                   )}
-
                   {draftPicks.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground">
                       <Layers className="size-10 mx-auto mb-3 opacity-50" />
                       <p className="text-lg mb-1">No cards drafted yet</p>
                       <p className="text-sm">
                         {isUserTeamMember
-                          ? "Your team hasn&apos;t selected any cards from the pool"
-                          : \`${team.name} hasn&apos;t selected any cards from the pool\`}
+                          ? "Your team hasn't selected any cards from the pool"
+                          : `${team.name} hasn't selected any cards from the pool`}
                       </p>
                     </div>
                   ) : (
@@ -396,45 +340,29 @@ export default function TeamPage({ params }: TeamPageProps) {
                       {draftPicks.map((pick) => {
                         const isUndrafting = undrafting === pick.id;
                         return (
-                          <CardPreview
-                            key={pick.id}
-                            imageUrl={pick.image_url || ""}
-                            cardName={pick.card_name}
-                          >
-                            <div
-                              className="group relative bg-muted rounded-lg overflow-hidden border hover:border-primary/50 transition-all hover:shadow-md"
-                            >
+                          <CardPreview key={pick.id} imageUrl={pick.image_url || ""} cardName={pick.card_name}>
+                            <div className="group relative bg-muted rounded-lg overflow-hidden border hover:border-primary/50 transition-all hover:shadow-md">
                               {pick.image_url && (
-                                /* eslint-disable-next-line @next/next/no-img-element */
-                                <img
-                                  src={pick.image_url}
-                                  alt={pick.card_name}
-                                  className="w-full h-64 object-cover"
-                                />
+                                <img src={pick.image_url} alt={pick.card_name} className="w-full h-64 object-cover" />
                               )}
                               <div className="p-2">
-                                <h4 className="font-semibold text-sm truncate">
-                                  {pick.card_name}
-                                </h4>
-                                <p className="text-xs text-muted-foreground truncate">
-                                  {pick.card_set}
-                                </p>
+                                <h4 className="font-semibold text-sm truncate">{pick.card_name}</h4>
+                                <p className="text-xs text-muted-foreground truncate">{pick.card_set}</p>
                                 {pick.cubecobra_elo != null && (
                                   <p className="text-xs text-purple-600 dark:text-purple-400 font-medium mt-0.5">
                                     ELO: {pick.cubecobra_elo.toLocaleString()}
                                   </p>
                                 )}
                               </div>
-                              {/* Undraft Button Overlay - Only show to team members */}
                               {isUserTeamMember && (
                                 <button
                                   onClick={() => handleUndraftCard(pick)}
                                   disabled={isUndrafting || !!undrafting}
-                                  className={\`
+                                  className={`
                                     absolute inset-0 bg-black/60 flex items-center justify-center
                                     opacity-0 group-hover:opacity-100 transition-opacity
                                     disabled:opacity-50 disabled:cursor-not-allowed
-                                  \`}
+                                  `}
                                 >
                                   <span className="px-4 py-2 rounded-lg font-semibold shadow-lg bg-destructive hover:bg-destructive/90 text-white">
                                     {isUndrafting ? "Removing..." : "Undraft & Refund"}
@@ -462,7 +390,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                     <p className="text-sm text-muted-foreground">
                       {isUserTeamMember
                         ? "Create and manage decks from your drafted cards"
-                        : \`View and manage ${team.name}&apos;s decks\`}
+                        : `View and manage ${team.name}'s decks`}
                     </p>
                   </div>
                   <DeckBuilder teamId={teamId} teamName={team.name} isUserTeamMember={isUserTeamMember} />
@@ -478,20 +406,16 @@ export default function TeamPage({ params }: TeamPageProps) {
                       <ArrowLeftRight className="size-5" />
                       Trade Center
                     </h2>
-                    <p className="text-sm text-muted-foreground">
-                      Propose trades, manage offers, and negotiate with other teams
-                    </p>
+                    <p className="text-sm text-muted-foreground">Propose trades, manage offers, and negotiate with other teams</p>
                   </div>
                   <div className="text-center py-12">
                     <ArrowLeftRight className="size-12 mx-auto mb-4 text-muted-foreground" />
-                    <h3 className="text-2xl font-bold mb-4">
-                      Team Trade Management
-                    </h3>
+                    <h3 className="text-2xl font-bold mb-4">Team Trade Management</h3>
                     <p className="text-muted-foreground mb-8 max-w-xl mx-auto">
                       Trade cards and future draft picks with other teams. Captains and Brokers receive notifications about all trade activities.
                     </p>
                     <Button asChild size="lg">
-                      <Link href={\`/teams/${teamId}/trades\`}>
+                      <Link href={`/teams/${teamId}/trades`}>
                         View All Trades
                         <ExternalLink className="size-4 ml-2" />
                       </Link>
@@ -509,18 +433,11 @@ export default function TeamPage({ params }: TeamPageProps) {
                       <Swords className="size-5" />
                       Matches
                     </h2>
-                    <p className="text-sm text-muted-foreground">
-                      Schedule match times and record results
-                    </p>
+                    <p className="text-sm text-muted-foreground">Schedule match times and record results</p>
                   </div>
-                  {/* Match Scheduling Widget - Only for Pilots and Captains */}
                   <MatchSchedulingWidget teamId={teamId} userRoles={userRoles} />
-
-                  {/* Match Recording */}
                   <div>
-                    <h3 className="text-lg font-semibold mb-4">
-                      Record Match Results
-                    </h3>
+                    <h3 className="text-lg font-semibold mb-4">Record Match Results</h3>
                     <MatchRecording teamId={teamId} />
                   </div>
                 </div>
@@ -535,9 +452,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                       <Vote className="size-5" />
                       Team Votes
                     </h2>
-                    <p className="text-sm text-muted-foreground">
-                      Vote on team decisions and view results
-                    </p>
+                    <p className="text-sm text-muted-foreground">Vote on team decisions and view results</p>
                   </div>
                   <TeamVoting teamId={teamId} userRoles={userRoles} />
                 </div>
@@ -552,9 +467,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                       <BarChart3 className="size-5" />
                       Team Statistics
                     </h2>
-                    <p className="text-sm text-muted-foreground">
-                      Comprehensive statistics for {team.name}&apos;s draft picks and decks
-                    </p>
+                    <p className="text-sm text-muted-foreground">Comprehensive statistics for {team.name}&apos;s draft picks and decks</p>
                   </div>
                   <TeamStats teamId={teamId} />
                 </div>
@@ -569,9 +482,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                       <Crown className="size-5" />
                       Team Roles & Permissions
                     </h2>
-                    <p className="text-sm text-muted-foreground">
-                      Manage team member roles and responsibilities
-                    </p>
+                    <p className="text-sm text-muted-foreground">Manage team member roles and responsibilities</p>
                   </div>
                   <TeamRoles teamId={teamId} teamName={team.name} isUserTeamMember={isUserTeamMember} />
                 </div>
@@ -594,30 +505,17 @@ export default function TeamPage({ params }: TeamPageProps) {
                   ) : (
                     <div className="space-y-3">
                       {team.members.map((member) => {
-                        // Find this member's roles from membersWithRoles
-                        const memberRoleData = membersWithRoles.find(
-                          (m) => m.user_id === member.user_id
-                        );
+                        const memberRoleData = membersWithRoles.find((m) => m.user_id === member.user_id);
                         const memberRoles = memberRoleData?.roles || [];
                         return (
-                          <div
-                            key={member.id}
-                            className="flex items-center justify-between bg-muted rounded-lg p-4 border"
-                          >
+                          <div key={member.id} className="flex items-center justify-between bg-muted rounded-lg p-4 border">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <p className="font-semibold">
-                                  {member.user_display_name || "Unknown User"}
-                                </p>
-                                {/* Display role badges */}
+                                <p className="font-semibold">{member.user_display_name || "Unknown User"}</p>
                                 {memberRoles.length > 0 && (
                                   <div className="flex gap-1 flex-wrap">
                                     {memberRoles.map((role) => (
-                                      <Badge
-                                        key={role}
-                                        variant="secondary"
-                                        title={getRoleDisplayName(role)}
-                                      >
+                                      <Badge key={role} variant="secondary" title={getRoleDisplayName(role)}>
                                         {getRoleEmoji(role)} {getRoleDisplayName(role)}
                                       </Badge>
                                     ))}
