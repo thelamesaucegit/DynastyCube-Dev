@@ -8,6 +8,7 @@ import {
   removeCardFromPool,
   bulkImportCards,
   removeFilteredCards,
+  undraftAllCards, 
 } from "@/app/actions/cardActions";
 import type { CardData } from "@/app/actions/cardActions";
 import { getPoolCardsWithStatus } from "@/app/actions/poolActions";
@@ -220,7 +221,7 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
     setConfirmText("");
   };
 
-  const handleClearPool = async () => {
+   const handleClearPool = async () => {
     if (!clearFilter || confirmText !== "CONFIRM") return;
 
     setClearing(true);
@@ -228,17 +229,33 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
     setSuccess(null);
 
     try {
-      const result = await removeFilteredCards(clearFilter);
-      if (result.success) {
-        setSuccess(
-          `Removed ${result.removedCount} card(s) from the pool`
-        );
-        closeClearDialog();
-        await loadCards();
-        onUpdate?.();
+      if (clearFilter === "drafted") {
+        // === 1. UNDRAFT LOGIC (UPDATE) ===
+        const result = await undraftAllCards();
+        
+        if (result.success) {
+          setSuccess(`Successfully returned ${result.updatedCount || 0} card(s) to the pool`);
+          closeClearDialog();
+          await loadCards();
+          onUpdate?.();
+        } else {
+          setError(result.error || "Failed to undraft cards");
+          closeClearDialog();
+        }
+
       } else {
-        setError(result.error || "Failed to remove cards");
-        closeClearDialog();
+        // === 2. REMOVE LOGIC (DELETE) ===
+        const result = await removeFilteredCards(clearFilter);
+        
+        if (result.success) {
+          setSuccess(`Removed ${result.removedCount || 0} card(s) from the pool`);
+          closeClearDialog();
+          await loadCards();
+          onUpdate?.();
+        } else {
+          setError(result.error || "Failed to remove cards");
+          closeClearDialog();
+        }
       }
     } catch (err) {
       console.error("Error clearing pool:", err);
