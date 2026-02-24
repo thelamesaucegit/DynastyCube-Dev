@@ -17,7 +17,8 @@ import { useUserTimezone } from "../hooks/useUserTimezone";
 import { formatDate } from "../utils/timezoneUtils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
-import { Loader2, LogOut, Link2, ChevronRight, Users, Sparkles } from "lucide-react";
+import { Loader2, LogOut, Link2, ChevronRight, Users, Sparkles, Trash2 } from "lucide-react";
+import { deleteOwnAccount } from "../actions/userManagementActions";
 
 interface Team {
     id: string;
@@ -32,6 +33,10 @@ export default function AccountPage() {
     const [userTeam, setUserTeam] = useState<Team | null>(null);
     const [loadingTeam, setLoadingTeam] = useState(true);
     const [essenceBalance, setEssenceBalance] = useState<EssenceBalance | null>(null);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [deleteConfirmText, setDeleteConfirmText] = useState("");
+    const [deletingAccount, setDeletingAccount] = useState(false);
+    const [deleteError, setDeleteError] = useState<string | null>(null);
     const { timezone } = useUserTimezone();
 
     useEffect(() => {
@@ -67,6 +72,19 @@ export default function AccountPage() {
 
     const handleSignOut = async () => {
         await signOut();
+    };
+
+    const handleDeleteAccount = async () => {
+        if (deleteConfirmText !== "DELETE") return;
+        setDeletingAccount(true);
+        setDeleteError(null);
+        const result = await deleteOwnAccount();
+        if (result.success) {
+            await signOut();
+        } else {
+            setDeleteError(result.error || "Failed to delete account.");
+            setDeletingAccount(false);
+        }
     };
 
     const UserProfile = () => (
@@ -112,7 +130,9 @@ export default function AccountPage() {
                         <div className="flex justify-between py-2 border-b border-border">
                             <span className="text-muted-foreground">Discord Username</span>
                             <span className="font-medium">
-                                {user?.user_metadata?.full_name || user?.user_metadata?.username}
+                                {user?.user_metadata?.username
+                                    ? `@${user.user_metadata.username}`
+                                    : user?.user_metadata?.full_name || "Unknown"}
                             </span>
                         </div>
                         <div className="flex justify-between py-2 border-b border-border">
@@ -257,6 +277,79 @@ export default function AccountPage() {
                     Sign Out
                 </Button>
             </div>
+
+            {/* Danger Zone */}
+            <Card className="border-destructive/50">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-destructive">
+                        <Trash2 className="h-5 w-5" />
+                        Danger Zone
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {!showDeleteConfirm ? (
+                        <div className="space-y-3">
+                            <p className="text-sm text-muted-foreground">
+                                Permanently delete your account and all associated data. This action cannot be undone.
+                            </p>
+                            <Button
+                                variant="outline"
+                                className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground gap-2"
+                                onClick={() => setShowDeleteConfirm(true)}
+                            >
+                                <Trash2 className="h-4 w-4" />
+                                Delete My Account
+                            </Button>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <p className="text-sm font-medium text-destructive">
+                                This will permanently delete your account, profile, and remove you from any teams. This cannot be undone.
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                                Type <strong>DELETE</strong> to confirm:
+                            </p>
+                            <input
+                                type="text"
+                                value={deleteConfirmText}
+                                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                                placeholder="DELETE"
+                                className="w-full px-4 py-2 border border-destructive rounded-lg bg-background text-foreground focus:ring-2 focus:ring-destructive focus:border-transparent"
+                                disabled={deletingAccount}
+                            />
+                            {deleteError && (
+                                <p className="text-sm text-destructive">{deleteError}</p>
+                            )}
+                            <div className="flex gap-3">
+                                <Button
+                                    variant="destructive"
+                                    onClick={handleDeleteAccount}
+                                    disabled={deleteConfirmText !== "DELETE" || deletingAccount}
+                                    className="gap-2"
+                                >
+                                    {deletingAccount ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Trash2 className="h-4 w-4" />
+                                    )}
+                                    {deletingAccount ? "Deleting..." : "Confirm Delete"}
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        setShowDeleteConfirm(false);
+                                        setDeleteConfirmText("");
+                                        setDeleteError(null);
+                                    }}
+                                    disabled={deletingAccount}
+                                >
+                                    Cancel
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
         </div>
     );
 
