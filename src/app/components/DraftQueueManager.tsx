@@ -486,7 +486,7 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
       // Only save cards that are marked as manual (or that have been reordered by user)
       // When the user drags, all items become "manual" overrides
       const manualEntries = queueToSave
-        .filter((entry) => entry.source === "manual" || entry.pinned)
+        .filter((entry) => entry.source === "manual_queue" || entry.pinned)
         .map((entry) => ({
           cardPoolId: entry.cardPoolId,
           cardId: entry.cardId,
@@ -553,7 +553,7 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
   };
 
   const activeEntry = activeId ? queue.find((e) => e.cardId === activeId) : null;
-  const manualCount = queue.filter((e) => e.source === "manual").length;
+  const manualCount = queue.filter((e) => e.source === "manual_queue").length;
   const existingCardIds = new Set(queue.map((e) => e.cardId));
 
   return (
@@ -655,7 +655,7 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
                         entry={entry}
                         onPin={handlePin}
                         onRemove={handleRemove}
-                        isManual={entry.source === "manual"}
+                        isManual={entry.source === "manual_queue"}
                       />
                     ))}
                   </div>
@@ -672,7 +672,7 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
                   <div
                     key={entry.cardId}
                     className={`flex items-center gap-3 p-3 rounded-lg border ${
-                      entry.source === "manual"
+                      entry.source === "manual_queue"
                         ? "bg-card border-purple-500/20"
                         : "bg-muted/50 border-border/50"
                     }`}
@@ -714,7 +714,7 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
                           </span>
                         )}
                         <Badge variant="outline" className="text-[10px] px-1 py-0">
-                          {entry.source === "manual" ? "📌 Manual" : "🧠 Auto"}
+                          {entry.source === "manual_queue" ? "📌 Manual" : "🧠 Auto"}
                         </Badge>
                       </div>
                     </div>
