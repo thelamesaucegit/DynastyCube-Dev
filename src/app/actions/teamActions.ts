@@ -46,6 +46,7 @@ interface Team {
   name: string;
   emoji: string;
   motto: string;
+  is_hidden?: boolean;
   members?: TeamMember[];
 }
 

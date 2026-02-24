@@ -131,14 +131,6 @@ export const DisplayNameEditor: React.FC<DisplayNameEditorProps> = ({ onUpdate }
         Your display name is shown to other users throughout the Dynasty Cube (messages, teams, etc.).
       </p>
 
-      {discordUsername && (
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3 mb-4">
-          <p className="text-sm text-blue-800 dark:text-blue-200">
-            <strong>Discord Username:</strong> {discordUsername}
-          </p>
-        </div>
-      )}
-
       <div className="space-y-4">
         <div>
           <label htmlFor="displayName" className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
