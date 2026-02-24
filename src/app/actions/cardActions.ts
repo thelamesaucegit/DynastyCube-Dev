@@ -11,7 +11,7 @@ export async function undraftAllCards(): Promise<{ success: boolean; updatedCoun
   try {
     const { data, error, count } = await supabase
       .from("card_pools")
-      .update({ was_drafted: false, times_drafted: 0, team_id: null }) 
+      .update({ was_drafted: false, times_drafted: 0}) 
       .eq("was_drafted", true)
       .select();
 
