@@ -67,7 +67,18 @@
       "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" fetch origin claude/jovial-chaum)",
       "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" log --oneline origin/claude/jovial-chaum..HEAD)",
       "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" log --oneline HEAD..origin/claude/jovial-chaum)",
-      "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" push origin claude/jovial-chaum)"
+      "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" push origin claude/jovial-chaum)",
+      "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" fetch origin)",
+      "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" status)",
+      "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" fetch origin main)",
+      "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" log --oneline HEAD..origin/main)",
+      "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" merge origin/main --no-edit)",
+      "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" branch -a)",
+      "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" log --oneline origin/Toxics-Work..origin/main)",
+      "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" log --oneline origin/Toxics-Work -5)",
+      "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" checkout -B Toxics-Work origin/main)",
+      "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" log --oneline origin/main..origin/claude/jovial-chaum)",
+      "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" cherry-pick 5fa55b2)"
     ]
   }
 }
