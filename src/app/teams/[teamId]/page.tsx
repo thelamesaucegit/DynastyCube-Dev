@@ -18,6 +18,7 @@ import { MatchSchedulingWidget } from "@/app/components/team/MatchSchedulingWidg
 import { TeamVoting } from "@/app/components/team/TeamVoting";
 import { DraftStatusWidget } from "@/app/components/DraftStatusWidget";
 import { DraftQueueManager } from "@/app/components/DraftQueueManager";
+import { getCurrentSeason } from "@/app/actions/seasonPhaseActions";
 import { getCurrentUserRolesForTeam, getTeamMembersWithRoles, type TeamMemberWithRoles } from "@/app/actions/roleActions";
 import { getRoleEmoji, getRoleDisplayName } from "@/app/utils/roleUtils";
 import type { DraftPick, Deck } from "@/app/actions/draftActions";
@@ -78,6 +79,8 @@ export default function TeamPage({ params }: TeamPageProps) {
   const [undrafting, setUndrafting] = useState<string | null>(null);
   const [undraftMessage, setUndraftMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [cubucksRefreshKey, setCubucksRefreshKey] = useState(0);
+    const [seasonPhase, setSeasonPhase] = useState<string | null>(null);
+
 
   // Check if current user is a member of this team
   const isUserTeamMember = team?.members?.some(
@@ -115,6 +118,12 @@ export default function TeamPage({ params }: TeamPageProps) {
       // Load all members with their roles
       const { members: allMembersWithRoles } = await getTeamMembersWithRoles(teamId);
       setMembersWithRoles(allMembersWithRoles);
+      const { season, error: seasonError } = await getCurrentSeason();
+      if (seasonError) {
+          console.error("Could not fetch season status:", seasonError);
+      }
+          // Set the phase from the returned season object
+      setSeasonPhase(season?.phase || null);
     } catch (error) {
       console.error("Error loading team data:", error);
     } finally {
@@ -197,10 +206,17 @@ export default function TeamPage({ params }: TeamPageProps) {
     setUndrafting(null);
     setTimeout(() => setUndraftMessage(null), 5000);
   };
+  const isDraftingEnabled = seasonPhase === 'season';
 
-  const tabs: { id: TabType; label: string; icon: React.ReactNode; count?: number }[] = [
-    // Only show Draft Cards tab to team members
-    ...(isUserTeamMember ? [{ id: "draft" as TabType, label: "Draft Cards", icon: <Target className="size-4" />, count: undefined }] : []),
+ const tabs: { id: TabType; label: string; icon: React.ReactNode; count?: number, disabled?: boolean }[] = [
+    // Conditionally add the Draft tab and control its state
+    ...(isUserTeamMember ? [{
+      id: "draft" as TabType,
+      label: "Draft & Free Agency",
+      icon: <Target className="size-4" />,
+      count: undefined,
+      disabled: false 
+    }] : []),
     { id: "picks" as TabType, label: "Draft Picks", icon: <Layers className="size-4" />, count: draftPicks.length },
     { id: "decks" as TabType, label: "Decks", icon: <BookOpen className="size-4" />, count: decks.length },
     { id: "trades" as TabType, label: "Trades", icon: <ArrowLeftRight className="size-4" />, count: undefined },
@@ -212,7 +228,6 @@ export default function TeamPage({ params }: TeamPageProps) {
     ...(isUserTeamMember ? [{ id: "roles" as TabType, label: "Team Roles", icon: <Crown className="size-4" />, count: undefined }] : []),
     { id: "members" as TabType, label: "Members", icon: <Users className="size-4" />, count: team.members?.length || 0 },
   ];
-
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8">
       {/* Team Header */}
@@ -285,25 +300,42 @@ export default function TeamPage({ params }: TeamPageProps) {
         {/* Tab Content */}
         <Card>
           <CardContent className="pt-6">
-            <TabsContent value="draft">
+             <TabsContent value="draft">
               {activeTab === "draft" && isUserTeamMember && (
-                <div>
-                  <div className="mb-6">
-                    <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
-                      <Target className="size-5" />
-                      Draft Cards from Pool
-                    </h2>
-                    <p className="text-sm text-muted-foreground">
-                      Select cards from the available pool to add to your team&apos;s collection
-                    </p>
-                  </div>
-
-                  {/* Auto-Draft Queue Manager */}
-                  <div className="mb-6">
+                <div className="space-y-8">
+                  {/* SECTION 1: DRAFT QUEUE (Always Visible) */}
+                  <div>
+                    <div className="mb-4">
+                      <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
+                        Draft Priority Queue
+                      </h2>
+                      <p className="text-sm text-muted-foreground">
+                        Set your team's desired draft picks before the draft begins.
+                      </p>
+                    </div>
                     <DraftQueueManager teamId={teamId} isUserTeamMember={isUserTeamMember} />
                   </div>
 
-                  <DraftInterface teamId={teamId} teamName={team.name} isUserTeamMember={isUserTeamMember} onDraftComplete={handleDraftComplete} />
+                  {/* SECTION 2: FREE AGENCY POOL (Always Visible) */}
+                  <div>
+                    <div className="mb-4">
+                      <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
+                        Free Agent Pool
+                      </h2>
+                      <p className="text-sm text-muted-foreground">
+                        Browse cards available for acquisition. Acquiring free agents is only enabled during the active season.
+                      </p>
+                    </div>
+                    
+                    {/* --- KEY CHANGE: Pass the status down as a prop --- */}
+                    <DraftInterface
+                      teamId={teamId}
+                      teamName={team.name}
+                      isUserTeamMember={isUserTeamMember}
+                      onDraftComplete={handleDraftComplete}
+                      isDraftingEnabled={isFreeAgencyActive} // Pass the status down
+                    />
+                  </div>
                 </div>
               )}
             </TabsContent>
