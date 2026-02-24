@@ -76,8 +76,8 @@ BEGIN
     NEW.email,
     -- Store provider_id in discord_id (for Discord users, this is their Discord ID)
     NEW.raw_user_meta_data->>'provider_id',
-    -- Only store discord_username for Discord OAuth
-    CASE WHEN v_provider = 'discord' THEN NEW.raw_user_meta_data->>'full_name' ELSE NULL END,
+    -- Only store discord_username for Discord OAuth — use 'username' (the @handle), not 'full_name' (global_name/display name)
+    CASE WHEN v_provider = 'discord' THEN NEW.raw_user_meta_data->>'username' ELSE NULL END,
     -- Set display_name to full_name from OAuth provider, with fallback to email username
     COALESCE(
       NEW.raw_user_meta_data->>'full_name',
@@ -124,7 +124,7 @@ SELECT
   au.email,
   au.raw_user_meta_data->>'provider_id',
   CASE WHEN au.raw_app_meta_data->>'provider' = 'discord'
-    THEN au.raw_user_meta_data->>'full_name'
+    THEN au.raw_user_meta_data->>'username'
     ELSE NULL
   END,
   COALESCE(
