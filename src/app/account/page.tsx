@@ -128,14 +128,6 @@ export default function AccountPage() {
                 <CardContent>
                     <div className="space-y-3 text-sm">
                         <div className="flex justify-between py-2 border-b border-border">
-                            <span className="text-muted-foreground">Discord Username</span>
-                            <span className="font-medium">
-                                {user?.user_metadata?.username
-                                    ? `@${user.user_metadata.username}`
-                                    : user?.user_metadata?.full_name || "Unknown"}
-                            </span>
-                        </div>
-                        <div className="flex justify-between py-2 border-b border-border">
                             <span className="text-muted-foreground">Email</span>
                             <span className="font-medium">{user?.email}</span>
                         </div>
