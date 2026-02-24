@@ -80,24 +80,23 @@ export interface DeckCard {
  */
 export async function addSkippedPick(
   teamId: string,
-  pickNumber: number
+  pickNumber: number,
+  draftSessionId: string // <-- This parameter is required
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
   try {
     const { error } = await supabase.from("team_draft_picks").insert({
       team_id: teamId,
-      draft_session_id: draftSessionId, 
-      card_id: "skipped-pick", // Special identifier for skipped picks
+      draft_session_id: draftSessionId, // <-- Now this variable exists and is correct
+      card_id: "skipped-pick",
       card_name: "SKIPPED",
       pick_number: pickNumber,
-      drafted_by: null, // auto-drafted
+      drafted_by: null,
     });
-
     if (error) {
       console.error("Error adding skipped pick:", error);
       return { success: false, error: error.message };
     }
-
     return { success: true };
   } catch (error) {
     console.error("Unexpected error adding skipped pick:", error);
