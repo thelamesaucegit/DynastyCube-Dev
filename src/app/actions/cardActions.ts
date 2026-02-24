@@ -9,7 +9,6 @@ import { invalidateDraftCache } from '@/lib/draftCache';
 export async function undraftAllCards(): Promise<{ success: boolean; updatedCount?: number; error?: string }> {
   const supabase = await createServerClient();
   try {
-    // Note: Adjust the column names (e.g., is_drafted, team_id) to match your actual schema
     const { data, error, count } = await supabase
       .from("card_pools")
       .update({ was_drafted: false, times_drafted: 0, team_id: null }) 
@@ -18,9 +17,13 @@ export async function undraftAllCards(): Promise<{ success: boolean; updatedCoun
 
     if (error) throw error;
 
-    return { success: true, updatedCount: count || data?.length || 0 };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  return { success: true, updatedCount: count || data?.length || 0 };
+  } catch (error) { 
+    console.error("Error undrafting cards:", error);
+    
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    return { success: false, error: errorMessage };
   }
 }
 
