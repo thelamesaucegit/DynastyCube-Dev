@@ -7,7 +7,7 @@ import { cookies } from "next/headers";
 import { invalidateDraftCache } from '@/lib/draftCache';
 
 export async function undraftAllCards(): Promise<{ success: boolean; updatedCount?: number; error?: string }> {
-  const supabase = await createServerClient();
+  const supabase = await createClient();
   try {
     const { data, error, count } = await supabase
       .from("card_pools")
