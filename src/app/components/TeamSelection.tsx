@@ -9,6 +9,7 @@ interface Team {
   name: string;
   emoji: string;
   motto: string;
+  is_hidden?: boolean;
   members?: Array<{
     id: string;
     user_id: string;
@@ -39,7 +40,7 @@ export const TeamSelection: React.FC<TeamSelectionProps> = ({ userEmail, onTeamJ
     setLoading(true);
     try {
       const teamsData = await getTeamsWithMembers();
-      setTeams(teamsData);
+      setTeams(teamsData.filter((team) => !team.is_hidden));
     } catch (err) {
       console.error("Error loading teams:", err);
       setError("Failed to load teams");
