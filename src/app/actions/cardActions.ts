@@ -18,9 +18,13 @@ export async function undraftAllCards(): Promise<{ success: boolean; updatedCoun
 
     if (error) throw error;
 
-    return { success: true, updatedCount: count || data?.length || 0 };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  return { success: true, updatedCount: count || data?.length || 0 };
+  } catch (error) { 
+    console.error("Error undrafting cards:", error);
+    
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    return { success: false, error: errorMessage };
   }
 }
 
