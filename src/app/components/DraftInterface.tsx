@@ -42,6 +42,8 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
   const [cubucksBalance, setCubucksBalance] = useState<number>(0);
   const [draftOrderEntries, setDraftOrderEntries] = useState<DraftOrderEntry[]>([]);
   const [draftOrderExpanded, setDraftOrderExpanded] = useState(false);
+    const [sortBy, setSortBy] = useState<string>("card_name");
+  const [sortOrder, setSortOrder] = useState<string>("asc");
 
   useEffect(() => {
     loadDraftData();
