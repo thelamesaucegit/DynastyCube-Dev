@@ -336,18 +336,7 @@ export async function deleteDraftSession(
  * Resets the consecutive skip counter for a draft session.
  * This should be called after a successful, non-skipped pick is made.
  */
-export async function resetSkipCounter(sessionId: string): Promise<void> {
-  const supabase = await createServerClient();
-  try {
-    await supabase
-      .from("draft_sessions")
-      .update({ consecutive_skipped_picks: 0 })
-      .eq("id", sessionId);
-    console.log(`Reset skip counter for session ${sessionId}.`);
-  } catch (error) {
-    console.error(`Failed to reset skip counter for session ${sessionId}:`, error);
-  }
-}
+
 export async function activateDraft(
   sessionId: string
 ): Promise<{ success: boolean; error?: string }> {
