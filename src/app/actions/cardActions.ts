@@ -8,14 +8,25 @@ import { invalidateDraftCache } from '@/lib/draftCache';
 
 export async function undraftAllCards(): Promise<{ success: boolean; updatedCount?: number; error?: string }> {
   const supabase = await createClient();
-  try {
-    const { data, error, count } = await supabase
+try {
+    // 1. Reset the cards in the pool
+    const { data, error: updateError, count } = await supabase
       .from("card_pools")
-      .update({ was_drafted: false, times_drafted: 0, team_id: null }) 
+      .update({ was_drafted: false, times_drafted: 0 }) 
       .eq("was_drafted", true)
       .select();
 
-    if (error) throw error;
+    if (updateError) throw updateError;
+
+    // 2. Completely clear the team_draft_picks table
+    // Supabase requires a filter to delete rows. .not("id", "is", null) safely targets all rows.
+    // If your primary key is not "id", change "id" to whatever your primary key column is named.
+    const { error: deleteError } = await supabase
+      .from("team_draft_picks")
+      .delete()
+      .not("id", "is", null);
+
+    if (deleteError) throw deleteError;
 
   return { success: true, updatedCount: count || data?.length || 0 };
   } catch (error) { 
