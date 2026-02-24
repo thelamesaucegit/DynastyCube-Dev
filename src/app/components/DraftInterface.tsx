@@ -540,7 +540,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
                   </div>
                   {/* Draft Button Overlay */}
                   {!isThisInstanceDrafted && isUserTeamMember && (
-                  {/*  --- MODIFICATION 5 of 5: This is the key change for the button's logic and text ---*/}
+                  // --- MODIFICATION 5 of 5: This is the key change for the button's logic and text 
                     <button
                       onClick={() => handleDraftCard(card)}
                       disabled={!isFreeAgencyEnabled || isDrafting || notEnoughCubucks}
