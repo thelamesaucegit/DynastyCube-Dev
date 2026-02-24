@@ -210,6 +210,56 @@ export async function updateUserDisplayName(
 }
 
 /**
+ * Delete the currently authenticated user's own account.
+ * Removes the user's row from the public users table and deletes
+ * their Supabase Auth record. The user will be signed out automatically.
+ */
+export async function deleteOwnAccount(): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createServerClient();
+
+  try {
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return { success: false, error: "Not authenticated" };
+    }
+
+    // Delete the user row from the public users table first.
+    // Cascade deletes on team_members etc. are handled by DB constraints.
+    const { error: deleteRowError } = await supabase
+      .from("users")
+      .delete()
+      .eq("id", user.id);
+
+    if (deleteRowError) {
+      console.error("Error deleting user row:", deleteRowError);
+      return { success: false, error: deleteRowError.message };
+    }
+
+    // Delete the Supabase Auth user record.
+    // This requires the service-role key, so we use the admin API via RPC.
+    const { error: deleteAuthError } = await supabase.rpc("delete_auth_user", {
+      p_user_id: user.id,
+    });
+
+    if (deleteAuthError) {
+      console.error("Error deleting auth user:", deleteAuthError);
+      // The profile row is already gone — still report the error so
+      // the user knows to contact an admin if needed.
+      return { success: false, error: "Profile deleted but auth record could not be removed. Please contact an admin." };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Unexpected error deleting account:", error);
+    return { success: false, error: "An unexpected error occurred" };
+  }
+}
+
+/**
  * Remove user from a team (Admin only)
  */
 export async function removeUserFromTeam(
