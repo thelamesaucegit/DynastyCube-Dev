@@ -30,7 +30,7 @@ export interface QueueEntry {
   cardName: string;
   position: number;
   pinned: boolean;
-  source: "manual" | "algorithm";
+  source?: "manual_queue" | "algorithm" | "skipped"; 
   cardSet?: string;
   cardType?: string;
   rarity?: string;
@@ -44,7 +44,7 @@ export interface QueueEntry {
 
 export interface AutoDraftPreviewResult {
   nextPick: CardData | null;
-  source: "manual_queue" | "algorithm";
+  source?: "manual_queue" | "algorithm" | "skipped"; 
   queueDepth: number;
   algorithmDetails?: AlgorithmDetails;
   error?: string;
@@ -703,7 +703,7 @@ export async function executeAutoDraft(
 ): Promise<{
   success: boolean;
   pick?: { cardId: string; cardName: string; cost: number };
-  source?: "manual_queue" | "algorithm";
+  source?: "manual_queue" | "algorithm" | "skipped"; 
   error?: string;
   staleDeployment?: boolean;
 }> {
