@@ -55,7 +55,7 @@ BEGIN
 
   -- If nothing to allocate, skip
   IF v_effective_amount <= 0 THEN
-    RAISE EXCEPTION 'Team is already at or above the season cap of % Cubucks', v_cap;
+    RAISE EXCEPTION 'Team is already at or above the season cap of % Çubucks', v_cap;
   END IF;
 
   -- Update team balance
@@ -81,7 +81,7 @@ BEGIN
     'allocation',
     v_effective_amount,
     v_new_balance,
-    COALESCE(p_description, 'Cubucks allocation'),
+    COALESCE(p_description, 'Çubucks allocation'),
     p_created_by
   ) RETURNING id INTO v_transaction_id;
 
@@ -126,6 +126,6 @@ BEGIN
       'Balance reset to season cap (45). Was ' || team_record.cubucks_balance || '.'
     );
 
-    RAISE NOTICE 'Reset team % from % to 45 Cubucks', team_record.name, team_record.cubucks_balance;
+    RAISE NOTICE 'Reset team % from % to 45 Çubucks', team_record.name, team_record.cubucks_balance;
   END LOOP;
 END $$;

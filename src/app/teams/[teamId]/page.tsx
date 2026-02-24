@@ -173,7 +173,7 @@ export default function TeamPage({ params }: TeamPageProps) {
     if (!pick.id || undrafting) return;
 
     const confirmed = window.confirm(
-      `Are you sure you want to undraft "${pick.card_name}"? The cubucks spent will be refunded to the team.`
+      `Are you sure you want to undraft "${pick.card_name}"? The Çubucks spent will be refunded to the team.`
     );
     if (!confirmed) return;
 
@@ -190,7 +190,7 @@ export default function TeamPage({ params }: TeamPageProps) {
     if (result.success) {
       setUndraftMessage({
         type: "success",
-        text: `Undrafted ${pick.card_name}! Refunded ${result.refundAmount} Cubucks.`,
+        text: `Undrafted ${pick.card_name}! Refunded ${result.refundAmount} Çubucks.`,
       });
       // Reload draft picks
       const { picks } = await getTeamDraftPicks(teamId);
@@ -274,13 +274,13 @@ export default function TeamPage({ params }: TeamPageProps) {
       {/* Draft Status */}
       <DraftStatusWidget variant="team" teamId={teamId} />
 
-      {/* Team Cubucks Balance */}
+      {/* Team Çubucks Balance */}
       <div className="mb-6">
         <TeamCubucksDisplay teamId={teamId} showTransactions={true} refreshKey={cubucksRefreshKey} isUserTeamMember={isUserTeamMember} />
       </div>
 
       {/* Tabs */}
-      <Tabs
+    <Tabs
         value={activeTab}
         onValueChange={(value) => setActiveTab(value as TabType)}
       >
@@ -290,7 +290,7 @@ export default function TeamPage({ params }: TeamPageProps) {
               {tab.icon}
               <span className="hidden sm:inline">{tab.label}</span>
               {tab.count !== undefined && (
-                <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">
+                <Badge variant="secondary" className="ml-1 text-\[10px\] px-1.5 py-0">
                   {tab.count}
                 </Badge>
               )}
@@ -317,7 +317,20 @@ export default function TeamPage({ params }: TeamPageProps) {
                     <DraftQueueManager teamId={teamId} isUserTeamMember={isUserTeamMember} />
                   </div>
 
-                  {/* SECTION 2: FREE AGENCY POOL (Always Visible) */}
+                  {/* SECTION 2: DRAFT PROGRESS & PICK ORDER */}
+                  <div>
+                    <div className="mb-4">
+                      <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
+                        Draft Progress & Pick Order
+                      </h2>
+                      <p className="text-sm text-muted-foreground">
+                        View the current draft progress and upcoming pick order.
+                      </p>
+                    </div>
+                    <DraftStatusWidget variant="team" teamId={teamId} />
+                  </div>
+
+                  {/* SECTION 3: FREE AGENCY POOL (Always Visible) */}
                   <div>
                     <div className="mb-4">
                       <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
@@ -328,7 +341,6 @@ export default function TeamPage({ params }: TeamPageProps) {
                       </p>
                     </div>
                     
-                    {/* --- KEY CHANGE: Pass the status down as a prop --- */}
                     <DraftInterface
                       teamId={teamId}
                       teamName={team.name}
@@ -350,15 +362,14 @@ export default function TeamPage({ params }: TeamPageProps) {
                       Draft Picks
                     </h2>
                   </div>
-
                   {/* Success/Error Messages */}
                   {undraftMessage && (
                     <div
-                      className={`mb-4 p-4 rounded-lg border flex items-center gap-2 ${
+                      className={\`mb-4 p-4 rounded-lg border flex items-center gap-2 ${
                         undraftMessage.type === "success"
                           ? "bg-accent text-foreground"
                           : "bg-destructive/10 border-destructive/30 text-destructive"
-                      }`}
+                      }\`}
                     >
                       {undraftMessage.type === "success" ? (
                         <CheckCircle2 className="size-4 shrink-0" />
@@ -376,7 +387,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                       <p className="text-sm">
                         {isUserTeamMember
                           ? "Your team hasn&apos;t selected any cards from the pool"
-                          : `${team.name} hasn&apos;t selected any cards from the pool`}
+                          : \`${team.name} hasn&apos;t selected any cards from the pool\`}
                       </p>
                     </div>
                   ) : (
@@ -413,17 +424,16 @@ export default function TeamPage({ params }: TeamPageProps) {
                                   </p>
                                 )}
                               </div>
-
                               {/* Undraft Button Overlay - Only show to team members */}
                               {isUserTeamMember && (
                                 <button
                                   onClick={() => handleUndraftCard(pick)}
                                   disabled={isUndrafting || !!undrafting}
-                                  className={`
+                                  className={\`
                                     absolute inset-0 bg-black/60 flex items-center justify-center
                                     opacity-0 group-hover:opacity-100 transition-opacity
                                     disabled:opacity-50 disabled:cursor-not-allowed
-                                  `}
+                                  \`}
                                 >
                                   <span className="px-4 py-2 rounded-lg font-semibold shadow-lg bg-destructive hover:bg-destructive/90 text-white">
                                     {isUndrafting ? "Removing..." : "Undraft & Refund"}
@@ -451,7 +461,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                     <p className="text-sm text-muted-foreground">
                       {isUserTeamMember
                         ? "Create and manage decks from your drafted cards"
-                        : `View and manage ${team.name}&apos;s decks`}
+                        : \`View and manage ${team.name}&apos;s decks\`}
                     </p>
                   </div>
                   <DeckBuilder teamId={teamId} teamName={team.name} isUserTeamMember={isUserTeamMember} />
@@ -480,7 +490,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                       Trade cards and future draft picks with other teams. Captains and Brokers receive notifications about all trade activities.
                     </p>
                     <Button asChild size="lg">
-                      <Link href={`/teams/${teamId}/trades`}>
+                      <Link href={\`/teams/${teamId}/trades\`}>
                         View All Trades
                         <ExternalLink className="size-4 ml-2" />
                       </Link>
@@ -502,7 +512,6 @@ export default function TeamPage({ params }: TeamPageProps) {
                       Schedule match times and record results
                     </p>
                   </div>
-
                   {/* Match Scheduling Widget - Only for Pilots and Captains */}
                   <MatchSchedulingWidget teamId={teamId} userRoles={userRoles} />
 
@@ -589,7 +598,6 @@ export default function TeamPage({ params }: TeamPageProps) {
                           (m) => m.user_id === member.user_id
                         );
                         const memberRoles = memberRoleData?.roles || [];
-
                         return (
                           <div
                             key={member.id}

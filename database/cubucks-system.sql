@@ -11,9 +11,9 @@ ADD COLUMN IF NOT EXISTS cubucks_balance integer DEFAULT 0,
 ADD COLUMN IF NOT EXISTS cubucks_total_earned integer DEFAULT 0,
 ADD COLUMN IF NOT EXISTS cubucks_total_spent integer DEFAULT 0;
 
-COMMENT ON COLUMN teams.cubucks_balance IS 'Current available Cubucks for this team';
-COMMENT ON COLUMN teams.cubucks_total_earned IS 'Total Cubucks earned all-time';
-COMMENT ON COLUMN teams.cubucks_total_spent IS 'Total Cubucks spent all-time';
+COMMENT ON COLUMN teams.cubucks_balance IS 'Current available Çubucks for this team';
+COMMENT ON COLUMN teams.cubucks_total_earned IS 'Total Çubucks earned all-time';
+COMMENT ON COLUMN teams.cubucks_total_spent IS 'Total Çubucks spent all-time';
 
 -- =================================
 -- 2. ADD COSTS TO CARD POOLS
@@ -21,7 +21,7 @@ COMMENT ON COLUMN teams.cubucks_total_spent IS 'Total Cubucks spent all-time';
 ALTER TABLE card_pools
 ADD COLUMN IF NOT EXISTS cubucks_cost integer DEFAULT 0;
 
-COMMENT ON COLUMN card_pools.cubucks_cost IS 'Cost in Cubucks to draft this card';
+COMMENT ON COLUMN card_pools.cubucks_cost IS 'Cost in Çubucks to draft this card';
 
 -- Create index for cost-based queries
 CREATE INDEX IF NOT EXISTS card_pools_cubucks_cost_idx ON card_pools(cubucks_cost);
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS seasons (
 );
 
 COMMENT ON TABLE seasons IS 'Draft seasons/periods';
-COMMENT ON COLUMN seasons.cubucks_allocation IS 'Cubucks given to each team at start of season';
+COMMENT ON COLUMN seasons.cubucks_allocation IS 'Çubucks given to each team at start of season';
 
 -- Create index for active season queries
 CREATE INDEX IF NOT EXISTS seasons_is_active_idx ON seasons(is_active);
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS cubucks_transactions (
   created_at timestamp with time zone DEFAULT now()
 );
 
-COMMENT ON TABLE cubucks_transactions IS 'Audit log of all Cubucks transactions';
+COMMENT ON TABLE cubucks_transactions IS 'Audit log of all Çubucks transactions';
 COMMENT ON COLUMN cubucks_transactions.transaction_type IS 'Type: allocation, draft_pick, refund, adjustment';
 COMMENT ON COLUMN cubucks_transactions.amount IS 'Positive for earning, negative for spending';
 
@@ -201,7 +201,7 @@ BEGIN
 
   -- If nothing to allocate, skip
   IF v_effective_amount <= 0 THEN
-    RAISE EXCEPTION 'Team is already at or above the season cap of % Cubucks', v_cap;
+    RAISE EXCEPTION 'Team is already at or above the season cap of % Çubucks', v_cap;
   END IF;
 
   -- Update team balance
@@ -227,7 +227,7 @@ BEGIN
     'allocation',
     v_effective_amount,
     v_new_balance,
-    COALESCE(p_description, 'Cubucks allocation'),
+    COALESCE(p_description, 'Çubucks allocation'),
     p_created_by
   ) RETURNING id INTO v_transaction_id;
 
@@ -262,7 +262,7 @@ BEGIN
   WHERE id = p_team_id;
 
   IF v_current_balance < p_amount THEN
-    RAISE EXCEPTION 'Insufficient Cubucks. Balance: %, Cost: %', v_current_balance, p_amount;
+    RAISE EXCEPTION 'Insufficient Çubucks. Balance: %, Cost: %', v_current_balance, p_amount;
   END IF;
 
   -- Update team balance

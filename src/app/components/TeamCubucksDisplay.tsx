@@ -53,7 +53,7 @@ export const TeamCubucksDisplay: React.FC<TeamCubucksDisplayProps> = ({
         setTransactions(txRes.transactions);
       }
     } catch (error) {
-      console.error("Error loading team Cubucks:", error);
+      console.error("Error loading team Çubucks:", error);
     } finally {
       setLoading(false);
     }
@@ -100,7 +100,7 @@ export const TeamCubucksDisplay: React.FC<TeamCubucksDisplayProps> = ({
       <div className="inline-flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg">
         <span className="text-xl">💰</span>
         <div className="flex flex-col">
-          <span className="text-xs text-gray-600 dark:text-gray-400">Cubucks</span>
+          <span className="text-xs text-gray-600 dark:text-gray-400">Çubucks</span>
           <span className="text-lg font-bold text-gray-900 dark:text-gray-100">
             {team.cubucks_balance.toLocaleString()}
           </span>
@@ -121,7 +121,7 @@ export const TeamCubucksDisplay: React.FC<TeamCubucksDisplayProps> = ({
               <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
                 {team.name}
               </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Cubucks Balance</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Çubucks Balance</p>
             </div>
           </div>
           <div className="text-right">
@@ -223,18 +223,19 @@ export const TeamCubucksDisplay: React.FC<TeamCubucksDisplayProps> = ({
       {/* Info Box */}
       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-300 dark:border-blue-700 rounded-lg p-4">
         <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
-          💡 About Cubucks
+          💡 About Çubucks
         </h4>
         <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1 ml-4 list-disc">
-          <li>Cubucks are a finite resource that each Team allocates to the cards in their Pool.</li>
-          <li>Each card has a different value based on power level and number of times it has been drafted.</li>
+          <li>Çubucks are a finite resource that each Team allocates to the cards in their Pool.</li>
+                    <li>As you add and remove cards from your Team Pool, your Çubucks Balance will adjust to reflect the allocated funds.</li>
+          <li>Each card has a different value based on power level and how frequently it has been drafted.</li>
           <li>The Season Cap ({(activeSeason?.cubucks_allocation || 0).toLocaleString()} this season) is set at the beginning of each season and remains fixed.</li>
           <li>
             {isUserTeamMember
-              ? "Your Cubucks Balance reflects remaining funds for the Draft, Free Agency, Waivers, and Trades."
-              : "The Cubucks Balance reflects remaining funds for the Draft, Free Agency, Waivers, and Trades."}
+              ? "Your Çubucks Balance reflects remaining funds for the Draft, Free Agency, Waivers, and Trades."
+              : "The Çubucks Balance reflects remaining funds for the Draft, Free Agency, Waivers, and Trades."}
           </li>
-          <li>Budget wisely - teams can&apos;t draft if they run out!</li>
+          <li>Budget wisely - cards will be cut automatically from your Team Pool if you exceed The Cap before a match!</li>
         </ul>
       </div>
     </div>
