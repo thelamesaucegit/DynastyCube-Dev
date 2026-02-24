@@ -9,7 +9,6 @@ import { invalidateDraftCache } from '@/lib/draftCache';
 export async function undraftAllCards(): Promise<{ success: boolean; updatedCount?: number; error?: string }> {
   const supabase = await createServerClient();
   try {
-    // Note: Adjust the column names (e.g., is_drafted, team_id) to match your actual schema
     const { data, error, count } = await supabase
       .from("card_pools")
       .update({ was_drafted: false, times_drafted: 0, team_id: null }) 
