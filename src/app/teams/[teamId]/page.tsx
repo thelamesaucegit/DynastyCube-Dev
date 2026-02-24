@@ -81,6 +81,7 @@ export default function TeamPage({ params }: TeamPageProps) {
   const [cubucksRefreshKey, setCubucksRefreshKey] = useState(0);
     const [seasonPhase, setSeasonPhase] = useState<string | null>(null);
 
+  const isFreeAgencyActive = seasonPhase === 'season';
 
   // Check if current user is a member of this team
   const isUserTeamMember = team?.members?.some(
@@ -333,7 +334,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                       teamName={team.name}
                       isUserTeamMember={isUserTeamMember}
                       onDraftComplete={handleDraftComplete}
-                      isDraftingEnabled={isFreeAgencyActive} // Pass the status down
+                      isFreeAgencyEnabled={isFreeAgencyActive} 
                     />
                   </div>
                 </div>
@@ -374,8 +375,8 @@ export default function TeamPage({ params }: TeamPageProps) {
                       <p className="text-lg mb-1">No cards drafted yet</p>
                       <p className="text-sm">
                         {isUserTeamMember
-                          ? "Your team hasn't selected any cards from the pool"
-                          : `${team.name} hasn't selected any cards from the pool`}
+                          ? "Your team hasn&apos;t selected any cards from the pool"
+                          : `${team.name} hasn&apos;t selected any cards from the pool`}
                       </p>
                     </div>
                   ) : (
