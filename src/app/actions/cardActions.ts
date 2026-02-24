@@ -6,6 +6,24 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { invalidateDraftCache } from '@/lib/draftCache';
 
+export async function undraftAllCards(): Promise<{ success: boolean; updatedCount?: number; error?: string }> {
+  const supabase = await createServerClient();
+  try {
+    // Note: Adjust the column names (e.g., is_drafted, team_id) to match your actual schema
+    const { data, error, count } = await supabase
+      .from("card_pools")
+      .update({ was_drafted: false, times_drafted: 0, team_id: null }) 
+      .eq("was_drafted", true)
+      .select();
+
+    if (error) throw error;
+
+    return { success: true, updatedCount: count || data?.length || 0 };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
 // Create a Supabase client with cookies support
 async function createClient() {
   const cookieStore = await cookies();
