@@ -1,4 +1,4 @@
-//src/app/components/DraftInterface.tsx
+// src/app/components/DraftInterface.tsx
 
 "use client";
 
@@ -12,11 +12,13 @@ import { advanceDraft } from "@/app/actions/draftSessionActions";
 import type { CardData } from "@/app/actions/cardActions";
 import type { DraftPick } from "@/app/actions/draftActions";
 
+// --- MODIFICATION 1 of 5: Add the new `isFreeAgencyEnabled` prop ---
 interface DraftInterfaceProps {
   teamId: string;
   teamName?: string;
   isUserTeamMember?: boolean;
   onDraftComplete?: () => void;
+  isFreeAgencyEnabled: boolean; // This prop controls if the button is active
 }
 
 export const DraftInterface: React.FC<DraftInterfaceProps> = ({
@@ -24,6 +26,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
   teamName = "This team",
   isUserTeamMember = true,
   onDraftComplete,
+  isFreeAgencyEnabled, // Destructure the new prop
 }) => {
   const [availableCards, setAvailableCards] = useState<CardData[]>([]);
   const [draftedCards, setDraftedCards] = useState<DraftPick[]>([]);
@@ -69,7 +72,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
 
   const handleDraftCard = async (card: CardData) => {
     if (drafting) return;
-
     // --- ENTIRE LOGIC REPLACEMENT ---
     // Check if this specific card INSTANCE has already been drafted by looking at the card_pool_id
     if (draftedCards.some((pick) => pick.card_pool_id === card.id)) {
@@ -77,18 +79,15 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
         setTimeout(() => setError(null), 3000);
         return;
     }
-
     const cardCost = card.cubucks_cost || 1;
     if (cubucksBalance < cardCost) {
       setError(`Insufficient Cubucks! Need ${cardCost}, you have ${cubucksBalance}`);
       setTimeout(() => setError(null), 5000);
       return;
     }
-
     setDrafting(card.id!); // Use unique DB ID for drafting state
     setError(null);
     setSuccess(null);
-
     // Spend cubucks first
     const cubucksResult = await spendCubucksOnDraft(
       teamId,
@@ -97,13 +96,11 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       cardCost,
       card.id // card_pool_id
     );
-
     if (!cubucksResult.success) {
       setError(cubucksResult.error || "Failed to spend Cubucks");
       setDrafting(null);
       return;
     }
-
     // Then, add the draft pick using the unique ID
     const pick: DraftPick = {
       team_id: teamId,
@@ -119,19 +116,17 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       cmc: card.cmc,
       pick_number: draftedCards.length + 1,
     };
-
     const result = await addDraftPick(pick);
-
     if (result.success) {
-      setSuccess(`Drafted ${card.card_name} for ${cardCost} Cubucks!`);
+      setSuccess(`Acquired ${card.card_name} for ${cardCost} Cubucks!`);
       // Cleanup can still use the general card_id if it's meant to remove all copies from queues
-await conditionallyCleanupDraftQueues(card.card_id);
+      await conditionallyCleanupDraftQueues(card.card_id);
       await advanceDraft();
       await loadDraftData();
       onDraftComplete?.();
       setTimeout(() => setSuccess(null), 3000);
     } else {
-      setError(result.error || "Failed to draft card");
+      setError(result.error || "Failed to acquire card");
       // Add logic here to refund cubucks if addDraftPick fails
     }
     setDrafting(null);
@@ -142,7 +137,6 @@ await conditionallyCleanupDraftQueues(card.card_id);
   draftedCards.forEach(pick => {
       draftedCardCounts.set(pick.card_id, (draftedCardCounts.get(pick.card_id) || 0) + 1);
   });
-
   const filteredCards = availableCards.filter((card) => {
     // New check: make sure the number of drafted copies of this card
     // is less than the total number of available copies.
@@ -190,7 +184,6 @@ await conditionallyCleanupDraftQueues(card.card_id);
     { value: "G", label: "Green", emoji: "🟢" },
     { value: "colorless", label: "Colorless", emoji: "◇" },
   ];
-
   const types = [
     { value: "all", label: "All Types" },
     { value: "creature", label: "Creature" },
@@ -201,7 +194,6 @@ await conditionallyCleanupDraftQueues(card.card_id);
     { value: "planeswalker", label: "Planeswalker" },
     { value: "land", label: "Land" },
   ];
-
   const cmcRanges = [
     { value: "all", label: "All CMC" },
     { value: "0-1", label: "0-1 Mana" },
@@ -209,7 +201,6 @@ await conditionallyCleanupDraftQueues(card.card_id);
     { value: "4-5", label: "4-5 Mana" },
     { value: "6+", label: "6+ Mana" },
   ];
-
   const cubucksRanges = [
     { value: "all", label: "All Costs" },
     { value: "0-50", label: "0-50 💰" },
@@ -222,7 +213,8 @@ await conditionallyCleanupDraftQueues(card.card_id);
     return (
       <div className="text-center py-8">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-        <p className="text-gray-600 dark:text-gray-400">Loading draft pool...</p>
+        {/* // --- MODIFICATION 2 of 5: Update loading text for clarity --- */}
+        <p className="text-gray-600 dark:text-gray-400">Loading free agent pool...</p>
       </div>
     );
   }
@@ -235,13 +227,11 @@ await conditionallyCleanupDraftQueues(card.card_id);
           ✓ {success}
         </div>
       )}
-
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg p-4 text-red-800 dark:text-red-200">
           ✗ {error}
         </div>
       )}
-
       {/* Draft Stats */}
       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-300 dark:border-blue-700 rounded-lg p-4">
         <div className="flex items-center justify-between">
@@ -262,7 +252,6 @@ await conditionallyCleanupDraftQueues(card.card_id);
           </div>
         </div>
       </div>
-
       {/* Draft Order Panel */}
       {draftOrderEntries.length > 0 && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
@@ -290,7 +279,6 @@ await conditionallyCleanupDraftQueues(card.card_id);
               {draftOrderExpanded ? "▲ Collapse" : "▼ Expand"}
             </span>
           </button>
-
           {draftOrderExpanded && (
             <div className="border-t border-gray-200 dark:border-gray-700">
               <table className="w-full text-sm">
@@ -371,7 +359,6 @@ await conditionallyCleanupDraftQueues(card.card_id);
           )}
         </div>
       )}
-
       {/* Read-only notice for non-members */}
       {!isUserTeamMember && (
         <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg p-4">
@@ -380,13 +367,12 @@ await conditionallyCleanupDraftQueues(card.card_id);
           </p>
         </div>
       )}
-
       {/* Search and Filters */}
+      {/* // --- MODIFICATION 3 of 5: Update Search and Filter section labels --- */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-4">
-        {/* Search */}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            🔍 Search Cards
+            🔍 Search Free Agents
           </label>
           <input
             type="text"
@@ -396,7 +382,6 @@ await conditionallyCleanupDraftQueues(card.card_id);
             className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
-
         {/* Filters */}
         <div className="space-y-4">
           {/* Color Filter */}
@@ -423,7 +408,6 @@ await conditionallyCleanupDraftQueues(card.card_id);
               ))}
             </div>
           </div>
-
           {/* Other Filters Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Type Filter */}
@@ -443,7 +427,6 @@ await conditionallyCleanupDraftQueues(card.card_id);
                 ))}
               </select>
             </div>
-
             {/* CMC Filter */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -461,7 +444,6 @@ await conditionallyCleanupDraftQueues(card.card_id);
                 ))}
               </select>
             </div>
-
             {/* Cubucks Filter */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -479,7 +461,6 @@ await conditionallyCleanupDraftQueues(card.card_id);
                 ))}
               </select>
             </div>
-
             {/* Balance Display - Only show to team members */}
             {isUserTeamMember && (
               <div>
@@ -494,19 +475,17 @@ await conditionallyCleanupDraftQueues(card.card_id);
             )}
           </div>
         </div>
-
         {/* Result count */}
         <div className="text-sm text-gray-600 dark:text-gray-400">
           Showing {filteredCards.length} of {availableCards.length} cards
         </div>
       </div>
-
       {/* Available Cards Grid */}
+      {/* // --- MODIFICATION 4 of 5: Update Available Cards Grid section header --- */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
         <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
-          Available Cards
+          Free Agent Pool
         </h3>
-
         {filteredCards.length === 0 ? (
           <div className="text-center py-12 text-gray-500 dark:text-gray-500">
             <p className="text-lg mb-2">No cards found</p>
@@ -514,12 +493,11 @@ await conditionallyCleanupDraftQueues(card.card_id);
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-  
-  
             {filteredCards.map((card) => {
               // --- REPLACEMENT FOR isDrafted LOGIC ---
               const isThisInstanceDrafted = draftedCards.some(p => p.card_pool_id === card.id);
               const isDrafting = drafting === card.id;
+              const notEnoughCubucks = cubucksBalance < (card.cubucks_cost || 1);
 
               return (
                 <div
@@ -560,12 +538,19 @@ await conditionallyCleanupDraftQueues(card.card_id);
                     <span>💰</span>
                     <span>{card.cubucks_cost || 1}</span>
                   </div>
-
                   {/* Draft Button Overlay */}
                   {!isThisInstanceDrafted && isUserTeamMember && (
+                  {/* // --- MODIFICATION 5 of 5: This is the key change for the button's logic and text ---*/}
                     <button
                       onClick={() => handleDraftCard(card)}
-                 disabled={isDrafting || cubucksBalance < (card.cubucks_cost || 1)}
+                      disabled={!isFreeAgencyEnabled || isDrafting || notEnoughCubucks}
+                      title={
+                        !isFreeAgencyEnabled 
+                          ? "Free agency is only available during the 'season' phase."
+                          : notEnoughCubucks
+                          ? "Not enough Cubucks to acquire."
+                          : `Acquire ${card.card_name}`
+                      }
                       className={`
                         absolute inset-0 bg-black/60 flex items-center justify-center
                         opacity-0 group-hover:opacity-100 transition-opacity
@@ -573,22 +558,21 @@ await conditionallyCleanupDraftQueues(card.card_id);
                       `}
                     >
                       <span className={`
-                        px-4 py-2 rounded-lg font-semibold shadow-lg
-                        ${cubucksBalance < (card.cubucks_cost || 1)
-                          ? "bg-red-600 text-white"
-                          : "bg-blue-600 hover:bg-blue-700 text-white"
-                        }
+                        px-4 py-2 rounded-lg font-semibold shadow-lg text-white
+                        ${notEnoughCubucks ? "bg-red-600" : "bg-blue-600 hover:bg-blue-700"}
+                        ${!isFreeAgencyEnabled ? "!bg-gray-600" : ""}
                       `}>
                         {isDrafting
-                          ? "Drafting..."
-                          : cubucksBalance < (card.cubucks_cost || 1)
+                          ? "Acquiring..."
+                          : notEnoughCubucks
                           ? "Not Enough Cubucks"
-                          : `Draft for ${card.cubucks_cost || 1} 💰`
+                          : !isFreeAgencyEnabled
+                          ? "FA Closed"
+                          : `Acquire FA for ${card.cubucks_cost || 1} 💰`
                         }
                       </span>
                     </button>
                   )}
-
                   {/* Already Drafted Badge */}
                   {isThisInstanceDrafted && (
                     <div className="absolute top-2 right-2 bg-green-600 text-white text-xs font-bold px-2 py-1 rounded shadow-lg">
