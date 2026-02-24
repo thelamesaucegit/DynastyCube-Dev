@@ -385,7 +385,7 @@ export async function getTeamDraftQueue(
               cardName: entry.card_name,
               position: queue.length + 1,
               pinned: entry.pinned,
-              source: "manual",
+              source: "manual_queue",
               cardSet: cardData.card_set,
               cardType: cardData.card_type,
               rarity: cardData.rarity,
