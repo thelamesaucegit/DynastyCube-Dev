@@ -1,28 +1,21 @@
 // src/app/about/page.tsx
 import React from "react";
-import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { Separator } from "@/app/components/ui/separator";
 import { Sparkles, Users, History, Trophy, Globe, Disc, ArrowRight } from "lucide-react";
+import { getTeamsWithDetails } from "@/app/actions/teamActions";
 
 export const metadata = {
   title: "About | The Dynasty Cube",
   description: "Learn about the living, collaborative draft format of The Dynasty Cube.",
 };
 
-const TEAMS = [
-  { name: "Alara Shards", emoji: "🌟", motto: "Why not both?", color: "border-orange-500/30 bg-orange-500/5 text-orange-600 dark:text-orange-400" },
-  { name: "Kamigawa Ninja", emoji: "⛩️", motto: "Omae wa mou shindeiru.", color: "border-indigo-500/30 bg-indigo-500/5 text-indigo-600 dark:text-indigo-400" },
-  { name: "Innistrad Creeps", emoji: "🧟", motto: "Braaaaaaiiiiins", color: "border-slate-500/30 bg-slate-500/5 text-slate-600 dark:text-slate-400" },
-  { name: "Theros Demigods", emoji: "🌞", motto: "The Fates will decide", color: "border-yellow-500/30 bg-yellow-500/5 text-yellow-600 dark:text-yellow-400" },
-  { name: "Ravnica Guildpact", emoji: "🔗", motto: "A Championship is won and lost before ever entering the battlefield.", color: "border-blue-500/30 bg-blue-500/5 text-blue-600 dark:text-blue-400" },
-  { name: "Lorwyn Changelings", emoji: "👽", motto: "Expect the unexpected", color: "border-green-500/30 bg-green-500/5 text-green-600 dark:text-green-400" },
-  { name: "Zendikar Hedrons", emoji: "💠", motto: "Good Vibes, No Escape", color: "border-cyan-500/30 bg-cyan-500/5 text-cyan-600 dark:text-cyan-400" },
-  { name: "Tarkir Dragons", emoji: "🐲", motto: "No cost too great", color: "border-purple-500/30 bg-purple-500/5 text-purple-600 dark:text-purple-400" },
-];
+export default async function AboutPage() {
+  // Fetch teams directly on the server to ensure data is always up-to-date
+  const { teams } = await getTeamsWithDetails();
+  const sortedTeams = teams ? teams.sort((a, b) => a.name.localeCompare(b.name)) : [];
 
-export default function AboutPage() {
   return (
     <div className="container max-w-4xl mx-auto px-4 py-12 space-y-16">
       
@@ -173,17 +166,41 @@ export default function AboutPage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {TEAMS.map((team) => (
-            <Card key={team.name} className={`border-l-4 ${team.color} transition-all hover:shadow-md`}>
-              <CardContent className="p-5 flex items-center gap-4">
-                <span className="text-4xl">{team.emoji}</span>
-                <div>
-                  <h3 className="text-xl font-bold text-foreground">{team.name}</h3>
-                  <p className="text-sm italic opacity-80">&quot;{team.motto}&quot;</p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+          {sortedTeams.length > 0 ? (
+            sortedTeams.map((team) => {
+              const primaryColor = team.primary_color || "#8b5cf6"; // Default fallback (purple-500)
+              
+              return (
+                <Card 
+                  key={team.id} 
+                  className="border-l-4 transition-all hover:shadow-md"
+                  style={{
+                    borderLeftColor: primaryColor,
+                    backgroundColor: `${primaryColor}10`, // Appends hex opacity for a subtle 6% tint
+                  }}
+                >
+                  <CardContent className="p-5 flex items-center gap-4">
+                    <span className="text-4xl drop-shadow-sm">{team.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <h3 
+                        className="text-xl font-bold truncate" 
+                        style={{ color: primaryColor }}
+                      >
+                        {team.name}
+                      </h3>
+                      <p className="text-sm italic opacity-80 text-foreground truncate">
+                        &quot;{team.motto}&quot;
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })
+          ) : (
+            <div className="col-span-1 sm:col-span-2 text-center py-8 text-muted-foreground">
+              Loading teams...
+            </div>
+          )}
         </div>
       </section>
 
