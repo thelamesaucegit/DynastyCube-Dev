@@ -44,9 +44,30 @@ export default function HomePage() {
   const [countdownTimer, setCountdownTimer] = useState<CountdownTimerType | null>(null);
   const [draftSessionId, setDraftSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // State for the random background panning
+  const [bgPosition, setBgPosition] = useState({ x: 50, y: 50 });
 
   useEffect(() => {
     loadData();
+
+    // Setup the random background panning interval
+    const moveBackground = () => {
+      setBgPosition({
+        x: Math.floor(Math.random() * 100),
+        y: Math.floor(Math.random() * 100),
+      });
+    };
+
+    // Give it a tiny delay to start moving immediately on first load
+    const initialTimeout = setTimeout(moveBackground, 100);
+    // Pick a new random destination every 25 seconds
+    const panInterval = setInterval(moveBackground, 25000);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(panInterval);
+    };
   }, []);
 
   const loadData = async () => {
@@ -97,43 +118,61 @@ export default function HomePage() {
 
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8 space-y-12">
-      {/* Hero Section */}
-      <section className="relative overflow-hidden rounded-2xl">
-        <div className="absolute inset-0 bg-gradient-to-br from-purple-600/20 via-blue-600/20 to-indigo-600/20" />
-        <div className="relative px-8 py-16 md:py-24">
+      
+      {/* Hero Section with Random Panning Background */}
+      <section className="relative overflow-hidden rounded-2xl min-h-[400px] flex flex-col justify-center">
+        
+        {/* The Image Layer */}
+        <div 
+          className="absolute inset-0"
+          style={{
+            backgroundImage: "url('/images/logo/logo.jpg')",
+            backgroundSize: "150%", // Zoom in to allow panning without showing edges
+            backgroundRepeat: "no-repeat",
+            backgroundPosition: `${bgPosition.x}% ${bgPosition.y}%`,
+            transition: "background-position 25s ease-in-out" // Matches interval for endless smooth gliding
+          }}
+        />
+
+        {/* The Overlays for Legibility */}
+        <div className="absolute inset-0 bg-black/60" /> {/* Base darkness */}
+        <div className="absolute inset-0 bg-gradient-to-br from-purple-900/50 via-blue-900/40 to-indigo-900/50 mix-blend-multiply" /> {/* Color tint */}
+        
+        {/* Content Layer */}
+        <div className="relative px-8 py-16 md:py-24 z-10">
           <div className="max-w-3xl">
             <div className="flex items-center gap-2 mb-4">
-              <Sparkles className="size-6 text-purple-400" />
+              <Sparkles className="size-6 text-purple-400 drop-shadow-md" />
               {season && (
-                <Badge variant="secondary" className="text-xs">
+                <Badge variant="secondary" className="text-xs bg-black/50 text-white border-white/20 backdrop-blur-md">
                   {season.name} {season.status === "active" ? "Active" : ""}
                 </Badge>
               )}
             </div>
             
-            <h1 className="text-4xl md:text-6xl font-bold mb-4 bg-gradient-to-r from-foreground to-purple-400 bg-clip-text text-transparent">
+            <h1 className="text-4xl md:text-6xl font-bold mb-4 text-white drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] tracking-tight">
               The Dynasty Cube
             </h1>
             
-            <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl">
+            <p className="text-lg md:text-xl text-zinc-200 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] mb-8 max-w-2xl font-medium leading-relaxed">
               A collaborative, living draft league where teams compete, evolve, and shape the fate of the multiverse.
               Part draft league, part fantasy sports, part cosmic entity.
             </p>
             
             <div className="flex flex-wrap gap-4">
-              <Button size="lg" asChild>
+              <Button size="lg" className="bg-purple-600 hover:bg-purple-700 text-white shadow-lg" asChild>
                 <Link href="/about">
                   <Info className="mr-2 size-4" />
                   About The League
                 </Link>
               </Button>
-              <Button size="lg" variant="secondary" asChild>
+              <Button size="lg" variant="secondary" className="bg-white/10 hover:bg-white/20 text-white border-white/20 backdrop-blur-sm" asChild>
                 <Link href="/pools">
                   Browse Draft Pool
                   <ArrowRight className="ml-2 size-4" />
                 </Link>
               </Button>
-              <Button size="lg" variant="outline" asChild>
+              <Button size="lg" variant="outline" className="bg-black/40 hover:bg-black/60 text-white border-white/30 backdrop-blur-sm" asChild>
                 <Link href="/schedule">View Schedule</Link>
               </Button>
             </div>
