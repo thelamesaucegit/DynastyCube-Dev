@@ -1,6 +1,7 @@
 // src/app/auth/callback/route.ts
 // Server-side OAuth callback handler
 // Exchanges the auth code for a session and sets cookies properly
+
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
@@ -9,7 +10,21 @@ export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
   const error = requestUrl.searchParams.get("error");
-  const origin = requestUrl.origin;
+  
+  // FIX: Handle reverse proxies (like DigitalOcean) modifying request.url
+  // We check for the forwarded host or the original host header to get the true domain
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const hostHeader = request.headers.get("host");
+  const isLocal = process.env.NODE_ENV === "development";
+  
+  let origin = requestUrl.origin;
+  if (!isLocal) {
+    if (forwardedHost) {
+      origin = `https://${forwardedHost}`;
+    } else if (hostHeader) {
+      origin = `https://${hostHeader}`;
+    }
+  }
 
   // If there's an OAuth error, redirect to error page
   if (error) {
@@ -21,7 +36,6 @@ export async function GET(request: NextRequest) {
 
   if (code) {
     const cookieStore = await cookies();
-
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
