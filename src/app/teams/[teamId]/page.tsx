@@ -24,7 +24,6 @@ import { getRoleEmoji, getRoleDisplayName } from "@/app/utils/roleUtils";
 import { getAutoDraftPreview, toggleQueuePickVote, type AutoDraftPreviewResult } from "@/app/actions/autoDraftActions";
 import { getDraftStatus } from "@/app/actions/draftOrderActions";
 import type { DraftPick, Deck } from "@/app/actions/draftActions";
-
 import Link from "next/link";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
@@ -72,7 +71,6 @@ type TabType = "picks" | "decks" | "members" | "draft" | "stats" | "roles" | "tr
 export default function TeamPage({ params }: TeamPageProps) {
   const { teamId } = use(params);
   const { user } = useAuth();
-
   const [team, setTeam] = useState<Team | null>(null);
   const [draftPicks, setDraftPicks] = useState<DraftPick[]>([]);
   const [decks, setDecks] = useState<Deck[]>([]);
@@ -80,13 +78,11 @@ export default function TeamPage({ params }: TeamPageProps) {
   const [membersWithRoles, setMembersWithRoles] = useState<TeamMemberWithRoles[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>("picks");
-
   const [undrafting, setUndrafting] = useState<string | null>(null);
   const [undraftMessage, setUndraftMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [cubucksRefreshKey, setCubucksRefreshKey] = useState(0);
-
   const [seasonPhase, setSeasonPhase] = useState<string | null>(null);
-  const isFreeAgencyActive = seasonPhase === 'season';
+  const isFreeAgencyActive = seasonPhase === "season";
 
   const [draftPreview, setDraftPreview] = useState<AutoDraftPreviewResult | null>(null);
   const [activeDraftSessionId, setActiveDraftSessionId] = useState<string | null>(null);
@@ -122,19 +118,18 @@ export default function TeamPage({ params }: TeamPageProps) {
 
       const { season, error: seasonError } = await getCurrentSeason();
       if (seasonError) {
-          console.error("Could not fetch season status:", seasonError);
+        console.error("Could not fetch season status:", seasonError);
       }
       setSeasonPhase(season?.phase || null);
 
       // --- NEW VOTING LOGIC ---
-      const { status: currentDraftStatus } = await getDraftStatus();
-      if (currentDraftStatus?.sessionId) {
-        setActiveDraftSessionId(currentDraftStatus.sessionId);
+      const { seasonId } = await getDraftStatus();
+      if (seasonId) {
+        setActiveDraftSessionId(seasonId);
       }
       
       const preview = await getAutoDraftPreview(teamId);
       setDraftPreview(preview);
-
     } catch (error) {
       console.error("Error loading team data:", error);
     } finally {
@@ -183,8 +178,8 @@ export default function TeamPage({ params }: TeamPageProps) {
   // NEW HANDLER FOR TOGGLING VOTES
   const handleToggleVote = async () => {
     if (!draftPreview?.nextPick?.id || !activeDraftSessionId) return;
-
     setIsVoting(true);
+
     try {
       const result = await toggleQueuePickVote(
         teamId,
@@ -242,7 +237,7 @@ export default function TeamPage({ params }: TeamPageProps) {
     setTimeout(() => setUndraftMessage(null), 5000);
   };
 
-  const isDraftingEnabled = seasonPhase === 'season';
+  const isDraftingEnabled = seasonPhase === "season";
 
   const tabs: { id: TabType; label: string; icon: React.ReactNode; count?: number, disabled?: boolean }[] = [
     ...(isUserTeamMember ? [{
@@ -649,7 +644,6 @@ export default function TeamPage({ params }: TeamPageProps) {
                 </div>
               )}
             </TabsContent>
-
           </CardContent>
         </Card>
       </Tabs>
