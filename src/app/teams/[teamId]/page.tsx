@@ -120,7 +120,8 @@ export default function TeamPage({ params }: TeamPageProps) {
       if (seasonError) {
         console.error("Could not fetch season status:", seasonError);
       }
-      setSeasonPhase(season?.phase || null);
+      const fetchedPhase = season?.phase || null;
+      setSeasonPhase(fetchedPhase);
 
       // --- NEW VOTING LOGIC ---
       const { seasonId } = await getDraftStatus();
@@ -130,6 +131,23 @@ export default function TeamPage({ params }: TeamPageProps) {
       
       const preview = await getAutoDraftPreview(teamId);
       setDraftPreview(preview);
+
+      // --- NEW DEFAULT TAB LOGIC ---
+      // Determine the default tab based on the active season phase.
+      // If the user is not a team member, restrict access to member-only tabs.
+      const isMember = foundTeam?.members?.some((m) => m.user_id === user?.id) || roles.length > 0;
+      let defaultTab: TabType = "picks";
+      
+      if (fetchedPhase === "preseason" || fetchedPhase === "draft") {
+        defaultTab = isMember ? "draft" : "picks";
+      } else if (fetchedPhase === "season" || fetchedPhase === "playoffs") {
+        defaultTab = "picks"; // Re-labeled as "Team Pool"
+      } else if (fetchedPhase === "postseason") {
+        defaultTab = isMember ? "votes" : "picks";
+      }
+      
+      setActiveTab(defaultTab);
+
     } catch (error) {
       console.error("Error loading team data:", error);
     } finally {
@@ -148,7 +166,6 @@ export default function TeamPage({ params }: TeamPageProps) {
     );
   }
 
-  // FIXED: This "if (!team)" block was missing in your pasted code
   if (!team) {
     return (
       <div className="container max-w-7xl mx-auto px-4 py-8">
@@ -247,7 +264,7 @@ export default function TeamPage({ params }: TeamPageProps) {
       count: undefined,
       disabled: false 
     }] : []),
-    { id: "picks" as TabType, label: "Draft Picks", icon: <Layers className="size-4" />, count: draftPicks.length },
+    { id: "picks" as TabType, label: "Team Pool", icon: <Layers className="size-4" />, count: draftPicks.length },
     { id: "decks" as TabType, label: "Decks", icon: <BookOpen className="size-4" />, count: decks.length },
     { id: "trades" as TabType, label: "Trades", icon: <ArrowLeftRight className="size-4" />, count: undefined },
     { id: "matches" as TabType, label: "Matches", icon: <Swords className="size-4" />, count: undefined },
@@ -416,7 +433,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-xl font-semibold flex items-center gap-2">
                       <Layers className="size-5" />
-                      Draft Picks
+                      Team Pool
                     </h2>
                   </div>
 
