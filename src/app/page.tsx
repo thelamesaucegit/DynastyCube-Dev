@@ -1,5 +1,4 @@
 // src/app/page.tsx
-
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -7,7 +6,7 @@ import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { Badge } from "@/app/components/ui/badge";
-import { Sparkles, Users, Trophy, Calendar, ArrowRight } from "lucide-react";
+import { Sparkles, Users, Trophy, Calendar, ArrowRight, Info } from "lucide-react";
 import CountdownTimer from "@/app/components/CountdownTimer";
 import { DraftStatusWidget } from "@/app/components/DraftStatusWidget";
 import {
@@ -16,7 +15,7 @@ import {
   getAdminNews,
   getRecentGames,
   getActiveCountdownTimer,
-  getActiveDraftSession, // UPDATED: Import the new function
+  getActiveDraftSession,
   type RecentDraftPick,
   type CurrentSeason,
   type AdminNews,
@@ -28,10 +27,12 @@ function getRelativeTime(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
   if (diffInSeconds < 60) return "Just now";
   if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
   if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
   if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
+
   return date.toLocaleDateString();
 }
 
@@ -41,7 +42,7 @@ export default function HomePage() {
   const [recentPicks, setRecentPicks] = useState<RecentDraftPick[]>([]);
   const [recentGames, setRecentGames] = useState<RecentGame[]>([]);
   const [countdownTimer, setCountdownTimer] = useState<CountdownTimerType | null>(null);
-  const [draftSessionId, setDraftSessionId] = useState<string | null>(null); // UPDATED: Add state for the correct ID
+  const [draftSessionId, setDraftSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -51,7 +52,6 @@ export default function HomePage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      // UPDATED: Add getActiveDraftSession to the parallel calls
       const [seasonResult, newsResult, picksResult, gamesResult, timerResult, draftSessionResult] = await Promise.all([
         getCurrentSeason(),
         getAdminNews(3),
@@ -66,7 +66,7 @@ export default function HomePage() {
       setRecentPicks(picksResult.picks);
       setRecentGames(gamesResult.games);
       setCountdownTimer(timerResult.timer);
-      setDraftSessionId(draftSessionResult.session?.id || null); // UPDATED: Set the new state
+      setDraftSessionId(draftSessionResult.session?.id || null);
     } catch (error) {
       console.error("Error loading home page data:", error);
     } finally {
@@ -93,7 +93,6 @@ export default function HomePage() {
     );
   }
 
-  // UPDATED: Use the correct draftSessionId to build the link
   const liveDraftLink = draftSessionId ? `/draft/${draftSessionId}/live` : '#'; 
 
   return (
@@ -111,17 +110,26 @@ export default function HomePage() {
                 </Badge>
               )}
             </div>
+            
             <h1 className="text-4xl md:text-6xl font-bold mb-4 bg-gradient-to-r from-foreground to-purple-400 bg-clip-text text-transparent">
               The Dynasty Cube
             </h1>
+            
             <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl">
               A collaborative, living draft league where teams compete, evolve, and shape the fate of the multiverse.
               Part draft league, part fantasy sports, part cosmic entity.
             </p>
+            
             <div className="flex flex-wrap gap-4">
               <Button size="lg" asChild>
+                <Link href="/about">
+                  <Info className="mr-2 size-4" />
+                  About The League
+                </Link>
+              </Button>
+              <Button size="lg" variant="secondary" asChild>
                 <Link href="/pools">
-                  Browse Cube
+                  Browse Draft Pool
                   <ArrowRight className="ml-2 size-4" />
                 </Link>
               </Button>
@@ -162,6 +170,7 @@ export default function HomePage() {
             </p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Active Teams</CardDescription>
@@ -173,6 +182,7 @@ export default function HomePage() {
             <p className="text-sm text-muted-foreground">Competing this season</p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Recent Picks</CardDescription>
@@ -182,6 +192,7 @@ export default function HomePage() {
             <p className="text-sm text-muted-foreground">Draft picks this season</p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Recent Games</CardDescription>
@@ -199,10 +210,10 @@ export default function HomePage() {
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-bold">Recent Draft Picks</h2>
             <Button variant="ghost" asChild>
-              {/* UPDATED: This now uses the correct link */}
               <Link href={liveDraftLink}>View All</Link> 
             </Button>
           </div>
+
           <Card>
             <CardContent className="p-0">
               {recentPicks.length > 0 ? (
@@ -248,6 +259,7 @@ export default function HomePage() {
               <Link href="/schedule">View All</Link>
             </Button>
           </div>
+
           <div className="space-y-3">
             {recentGames.length > 0 ? (
               recentGames.map((game) => (
@@ -259,6 +271,7 @@ export default function HomePage() {
                         {new Date(game.played_at).toLocaleDateString()}
                       </span>
                     </div>
+
                     <div className="space-y-1">
                       <p className="font-semibold text-sm">
                         {game.team1_emoji} {game.team1_name}
@@ -270,6 +283,7 @@ export default function HomePage() {
                         <span className="text-muted-foreground font-normal ml-2">{game.team2_score}</span>
                       </p>
                     </div>
+
                     {game.winner_id && (
                       <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
                         <Trophy className="size-3 text-yellow-500" />
@@ -298,6 +312,7 @@ export default function HomePage() {
             <Link href="/news">View All</Link>
           </Button>
         </div>
+
         {adminNews.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {adminNews.map((item) => (
@@ -346,25 +361,6 @@ export default function HomePage() {
                 <ArrowRight className="ml-2 size-4" />
               </a>
             </Button>
-          </CardContent>
-        </Card>
-      </section>
-
-      {/* About Section */}
-      <section className="space-y-4">
-        <h2 className="text-2xl font-bold">About Dynasty Cube</h2>
-        <Card>
-          <CardContent className="p-6 space-y-4">
-            <p className="text-muted-foreground">
-              Dynasty Cube is a collaborative, living draft league for Magic: The Gathering that combines elements
-              of rotisserie draft, fantasy sports, and the chaos of Blaseball. Eight teams compete weekly in matches
-              played on Cockatrice, while the cube itself evolves based on player choices and team voting.
-            </p>
-            <p className="text-muted-foreground">
-              Starting from Magic&apos;s earliest sets, new sets are gradually introduced each season while undrafted
-              cards are removed. Cards that are repeatedly drafted become harder to retain, creating an ever-shifting
-              metagame where strategy and adaptation are key.
-            </p>
           </CardContent>
         </Card>
       </section>
