@@ -128,8 +128,8 @@ export default function TeamPage({ params }: TeamPageProps) {
 
       // --- NEW VOTING LOGIC ---
       const { status: currentDraftStatus } = await getDraftStatus();
-      if (currentDraftStatus?.sessionId) {
-        setActiveDraftSessionId(currentDraftStatus.sessionId);
+      if (currentDraftStatus?.id) {
+        setActiveDraftSessionId(currentDraftStatus.id);
       }
       
       const preview = await getAutoDraftPreview(teamId);
