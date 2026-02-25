@@ -423,4 +423,149 @@ function CompactWidget({ status, session, recentPick }: { status: DraftStatus; s
               <div className="flex items-center gap-1.5 animate-in fade-in duration-300">
                 <Clock className="size-4 text-amber-500" />
                 <span className="font-semibold">Draft Status</span>
- 
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-green-500 animate-pulse" />
+                <span className="text-muted-foreground">On the Clock:</span>
+                <span className="font-semibold">{status.onTheClock.teamEmoji} {status.onTheClock.teamName}</span>
+              </div>
+
+              <ChevronRight className="size-3 text-muted-foreground hidden sm:block" />
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-muted-foreground">On Deck:</span>
+                <span className="font-medium">{status.onDeck.teamEmoji} {status.onDeck.teamName}</span>
+              </div>
+            </>
+          )}
+
+          <div className="flex items-center gap-2 ml-auto">
+            {pickCountdown && !recentPick && (
+              <Badge variant="outline" className="text-xs font-mono animate-in fade-in">
+                <Timer className="size-3 mr-1" />
+                {pickCountdown}
+              </Badge>
+            )}
+            <Badge variant="outline" className="text-xs">
+              Round {status.currentRound}
+              {session?.total_rounds ? `/${session.total_rounds}` : ""}
+            </Badge>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ============================================================================
+// TEAM VARIANT (Team Detail Page)
+// ============================================================================
+function TeamWidget({ status, session, teamId, recentPick }: { status: DraftStatus; session: DraftSession | null; teamId: string; recentPick: any }) {
+  const isOnClock = status.onTheClock.teamId === teamId;
+  const isOnDeck = status.onDeck.teamId === teamId;
+  const teamEntry = status.draftOrder.find((t) => t.teamId === teamId);
+
+  const pickCountdown = useCountdown(
+    session?.status === "active" ? session.current_pick_deadline : null
+  );
+
+  if (!teamEntry) return null;
+
+  return (
+    <Card
+      className={`mb-6 border-2 transition-colors ${
+        isOnClock
+          ? "border-green-500/40 bg-green-500/5"
+          : isOnDeck
+            ? "border-yellow-500/40 bg-yellow-500/5"
+            : "border-border"
+      }`}
+    >
+      <CardContent className="py-4 px-5">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-x-5 gap-y-3">
+          
+          {/* Recent Pick Override Banner */}
+          {recentPick && recentPick.teamName === teamEntry.teamName ? (
+             <div className="flex items-center gap-2 text-green-600 dark:text-green-400 font-bold animate-in fade-in zoom-in w-full sm:w-auto">
+               <PartyPopper className="size-4 animate-bounce" />
+               <span>You drafted {recentPick.cardName}!</span>
+             </div>
+          ) : recentPick ? (
+             <div className="flex items-center gap-2 text-muted-foreground animate-in fade-in w-full sm:w-auto">
+               <span>{recentPick.teamEmoji} {recentPick.teamName} drafted {recentPick.cardName}!</span>
+             </div>
+          ) : (
+            /* Standard Team Status */
+            <div className="flex items-center gap-2 animate-in fade-in w-full sm:w-auto">
+              <Clock className={`size-4 ${isOnClock ? "text-green-500" : isOnDeck ? "text-yellow-500" : "text-muted-foreground"}`} />
+              {isOnClock ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="size-2 rounded-full bg-green-500 animate-pulse" />
+                  <span className="font-bold text-green-600 dark:text-green-400">You are on the clock!</span>
+                </div>
+              ) : isOnDeck ? (
+                <span className="font-semibold text-yellow-600 dark:text-yellow-400">You are on deck</span>
+              ) : (
+                <span className="text-muted-foreground">Waiting to pick</span>
+              )}
+            </div>
+          )}
+
+          {/* Countdown for on-clock team */}
+          {isOnClock && pickCountdown && !recentPick && (
+            <div className="flex items-center gap-1.5 text-sm w-full sm:w-auto">
+              <Timer className="size-3.5 text-amber-500" />
+              <span className="font-mono font-bold text-amber-600 dark:text-amber-400">{pickCountdown}</span>
+              <span className="text-xs text-muted-foreground">until auto-draft</span>
+            </div>
+          )}
+
+          {/* Stats */}
+          <div className="flex items-center gap-3 text-sm text-muted-foreground sm:ml-auto w-full sm:w-auto justify-between sm:justify-end">
+            <span>Pick #{teamEntry.pickPosition}</span>
+            <span className="text-muted-foreground/40 hidden sm:inline">|</span>
+            <span>
+              Round {status.currentRound}
+              {session?.total_rounds ? ` of ${session.total_rounds}` : ""}
+            </span>
+            <span className="text-muted-foreground/40 hidden sm:inline">|</span>
+            <span>{teamEntry.picksMade} picks made</span>
+          </div>
+
+          {/* Who's picking if not this team */}
+          {!isOnClock && !recentPick && (
+            <div className="w-full flex items-center gap-2 text-sm pt-2 sm:pt-1 border-t border-border/50 sm:mt-1 animate-in fade-in">
+              <span className="text-muted-foreground">On the clock:</span>
+              <span className="font-medium">{status.onTheClock.teamEmoji} {status.onTheClock.teamName}</span>
+              {pickCountdown && (
+                <span className="text-xs text-muted-foreground font-mono">({pickCountdown})</span>
+              )}
+              {!isOnDeck && (
+                <>
+                  <ChevronRight className="size-3 text-muted-foreground" />
+                  <span className="text-muted-foreground">On deck:</span>
+                  <span className="font-medium">{status.onDeck.teamEmoji} {status.onDeck.teamName}</span>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Utility: Get badge data for a team in the teams listing.
+ * Returns "clock" | "deck" | null based on team status.
+ */
+export function getTeamDraftBadge(
+  status: DraftStatus | null,
+  teamId: string
+): "clock" | "deck" | null {
+  if (!status) return null;
+  if (status.onTheClock.teamId === teamId) return "clock";
+  if (status.onDeck.teamId === teamId) return "deck";
+  return null;
+}
