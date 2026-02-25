@@ -40,6 +40,8 @@ export interface QueueEntry {
   cmc?: number;
   cubucksCost?: number;
   cubecobraElo?: number;
+	votes?: string[];           // Array of user IDs who have voted
+  voteThreshold?: number;
 }
 
 export interface AutoDraftPreviewResult {
@@ -47,7 +49,10 @@ export interface AutoDraftPreviewResult {
   source?: "manual_queue" | "algorithm" | "skipped"; 
   queueDepth: number;
   algorithmDetails?: AlgorithmDetails;
+	votes?: string[];
+  voteThreshold?: number;
   error?: string;
+	
 }
 
 // ============================================================================
@@ -90,6 +95,181 @@ function countDraftedColors(picks: Array<{ colors?: string[] }>): Record<string,
     }
   }
   return counts;
+}
+
+// ============================================================================
+// TEAM VOTING & MANUAL EXECUTION
+// ============================================================================
+
+/**
+ * Gets the total number of members in a team to calculate thresholds.
+ */
+async function getTeamMemberCount(teamId: string): Promise<number> {
+  const supabase = await createServerClient();
+  const { count, error } = await supabase
+    .from("team_members")
+    .select("*", { count: 'exact', head: true })
+    .eq("team_id", teamId);
+    
+  if (error) {
+    console.error("Error fetching team member count:", error);
+    return 1; // Fallback to 1 to prevent division/math errors
+  }
+  return count || 1;
+}
+
+/**
+ * Calculates the 51% rounded up threshold based on member count.
+ */
+function calculateVoteThreshold(memberCount: number): number {
+  return Math.ceil(memberCount * 0.51);
+}
+
+/**
+ * Toggles a user's vote for a specific queued card.
+ * If the vote pushes the count over the threshold and the team is on the clock,
+ * it immediately executes the draft pick.
+ */
+export async function toggleQueuePickVote(
+  teamId: string,
+  cardPoolId: string,
+  draftSessionId: string
+): Promise<{ success: boolean; pickExecuted: boolean; error?: string }> {
+  try {
+    const auth = await verifyTeamMembership(teamId);
+    if (!auth.authorized || !auth.userId) {
+      return { success: false, pickExecuted: false, error: auth.error };
+    }
+
+    const supabase = await createServerClient();
+
+    // 1. Get the current queue entry and its votes
+    const { data: queueEntry, error: fetchError } = await supabase
+      .from("team_draft_queue")
+      .select("id, votes, position")
+      .eq("team_id", teamId)
+      .eq("card_pool_id", cardPoolId)
+      .single();
+
+    if (fetchError || !queueEntry) {
+      return { success: false, pickExecuted: false, error: "Queue entry not found" };
+    }
+
+    // 2. Toggle the user's vote
+    let currentVotes: string[] = queueEntry.votes || [];
+    const hasVoted = currentVotes.includes(auth.userId);
+
+    if (hasVoted) {
+      currentVotes = currentVotes.filter(id => id !== auth.userId);
+    } else {
+      currentVotes.push(auth.userId);
+    }
+
+    // 3. Save the updated votes back to the database
+    const { error: updateError } = await supabase
+      .from("team_draft_queue")
+      .update({ votes: currentVotes })
+      .eq("id", queueEntry.id);
+
+    if (updateError) {
+      return { success: false, pickExecuted: false, error: "Failed to record vote" };
+    }
+
+    // 4. Check Thresholds and trigger execution if met
+    const memberCount = await getTeamMemberCount(teamId);
+    const threshold = calculateVoteThreshold(memberCount);
+
+    // We only execute if they hit the threshold AND it's the #1 card in their queue
+    if (currentVotes.length >= threshold && queueEntry.position === 1) {
+      
+      const { status: draftStatus } = await getDraftStatus();
+      
+      // Check if it is currently this team's turn to pick
+      if (draftStatus?.onTheClock?.teamId === teamId) {
+        
+        // Execute the pick using the internal logic
+        const pickResult = await executeConfirmedTeamPick(teamId, cardPoolId, draftSessionId);
+        
+        if (!pickResult.success) {
+           return { success: true, pickExecuted: false, error: pickResult.error }; // Vote saved, but pick failed
+        }
+        
+        return { success: true, pickExecuted: true };
+      }
+    }
+
+    return { success: true, pickExecuted: false };
+  } catch (error) {
+    console.error("Error toggling vote:", error);
+    return { success: false, pickExecuted: false, error: "An unexpected error occurred" };
+  }
+}
+
+/**
+ * Internal helper to process the confirmed pick once the threshold is met.
+ * Contains the core logic originally proposed in executeManualPick.
+ */
+async function executeConfirmedTeamPick(
+  teamId: string, 
+  cardPoolId: string, 
+  draftSessionId: string
+) {
+  const { cards: availableCards } = await getAvailableCardsForDraft();
+  const card = availableCards.find(c => c.id === cardPoolId);
+  
+  if (!card) return { success: false, error: "Card is no longer available." };
+
+  const cost = card.cubucks_cost || 1;
+  const { team: teamBalance } = await getTeamBalance(teamId);
+  
+  if ((teamBalance?.cubucks_balance ?? 0) < cost) {
+    return { success: false, error: "Insufficient Cubucks for this pick." };
+  }
+
+  const { picks: existingPicks } = await getTeamDraftPicks(teamId);
+  
+  const pickResult = await addDraftPickInternal({
+    team_id: teamId,
+    card_pool_id: card.id,
+    card_id: card.card_id,
+    card_name: card.card_name,
+    draft_session_id: draftSessionId,
+    card_set: card.card_set,
+    card_type: card.card_type,
+    rarity: card.rarity,
+    colors: card.colors,
+    image_url: card.image_url,
+    mana_cost: card.mana_cost,
+    cmc: card.cmc,
+    pick_number: existingPicks.length + 1,
+  });
+
+  if (!pickResult.success || !pickResult.pick) {
+    return { success: false, error: pickResult.error };
+  }
+
+  const cubucksResult = await spendCubucksOnDraftInternal(
+    teamId, card.card_id, card.card_name, cost, card.id, pickResult.pick.id, true
+  );
+
+  if (!cubucksResult.success) {
+    return { success: false, error: cubucksResult.error };
+  }
+
+  // Cleanup queues & Broadcast
+  const supabase = await createServerClient();
+  await conditionallyCleanupDraftQueues(card.card_id);
+
+  const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
+  const channel = supabase.channel(`draft-updates-${draftSessionId}`);
+  
+  await channel.send({
+    type: 'broadcast',
+    event: 'new_pick',
+    payload: { ...pickResult.pick, team_name: teamData?.name || 'Unknown Team' }
+  });
+
+  return { success: true };
 }
 
 // ============================================================================
@@ -283,7 +463,7 @@ export async function getAutoDraftPreview(
     const supabase = await createServerClient();
     const { data: queueEntries, error: queueError } = await supabase
       .from("team_draft_queue")
-      .select("id, card_pool_id, card_id, card_name, position, pinned")
+      .select("id, card_pool_id, card_id, card_name, position, pinned, votes")
       .eq("team_id", teamId)
       .order("position", { ascending: true });
 
@@ -303,10 +483,13 @@ export async function getAutoDraftPreview(
         if (entry.card_pool_id && availableInstanceIds.has(entry.card_pool_id)) {
           // Find the full card data for that specific instance.
           const card = availableCards.find((c) => c.id === entry.card_pool_id) || null;
+			 const memberCount = await getTeamMemberCount(teamId);
           return {
             nextPick: card,
             source: "manual_queue",
             queueDepth,
+			     votes: entry.votes || [],                           // Add this
+            voteThreshold: calculateVoteThreshold(memberCount),
           };
         }
       }
@@ -349,9 +532,11 @@ export async function getTeamDraftQueue(
     const supabase = await createServerClient();
     const { data: manualEntries, error: queueError } = await supabase
       .from("team_draft_queue")
-      .select("id, card_pool_id, card_id, card_name, position, pinned")
+      .select("id, card_pool_id, card_id, card_name, position, pinned, votes")
       .eq("team_id", teamId)
       .order("position", { ascending: true });
+const memberCount = await getTeamMemberCount(teamId);
+    const voteThreshold = calculateVoteThreshold(memberCount);
 
     if (queueError) {
       console.error("Error fetching draft queue:", queueError);
@@ -395,6 +580,8 @@ export async function getTeamDraftQueue(
               cmc: cardData.cmc,
               cubucksCost: cardData.cubucks_cost,
               cubecobraElo: cardData.cubecobra_elo,
+				votes: entry.votes || [],
+              voteThreshold: voteThreshold,
             });
             usedInstanceIds.add(entry.card_pool_id);
           }
@@ -466,6 +653,13 @@ export async function setTeamDraftQueue(
     }
 
     const supabase = await createServerClient();
+const { data: existingQueue } = await supabase
+      .from("team_draft_queue")
+      .select("card_pool_id, votes")
+      .eq("team_id", teamId);
+      
+    const voteMap = new Map<string, string[]>();
+    existingQueue?.forEach(e => voteMap.set(e.card_pool_id, e.votes || []));
 
     // Delete all existing queue entries for this team
     const { error: deleteError } = await supabase
@@ -488,6 +682,7 @@ export async function setTeamDraftQueue(
         position: index + 1,
         pinned: entry.pinned || false,
         added_by: auth.userId,
+		  votes: voteMap.get(entry.cardPoolId) || [],
       }));
 
       const { error: insertError } = await supabase
