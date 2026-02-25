@@ -430,4 +430,229 @@ export default function TeamPage({ params }: TeamPageProps) {
                     <div
                       className={`mb-4 p-4 rounded-lg border flex items-center gap-2 ${
                         undraftMessage.type === "success"
-       
+                          ? "bg-accent text-foreground"
+                          : "bg-destructive/10 border-destructive/30 text-destructive"
+                      }`}
+                    >
+                      {undraftMessage.type === "success" ? <CheckCircle2 className="size-4 shrink-0" /> : <XCircle className="size-4 shrink-0" />}
+                      {undraftMessage.text}
+                    </div>
+                  )}
+
+                  {draftPicks.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <Layers className="size-10 mx-auto mb-3 opacity-50" />
+                      <p className="text-lg mb-1">No cards drafted yet</p>
+                      <p className="text-sm">
+                        {isUserTeamMember
+                          ? "Your team hasn't selected any cards from the pool"
+                          : `${team.name} hasn't selected any cards from the pool`}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                      {draftPicks.map((pick) => {
+                        const isUndrafting = undrafting === pick.id;
+                        return (
+                          <CardPreview key={pick.id} imageUrl={pick.image_url || ""} cardName={pick.card_name}>
+                            <div className="group relative bg-muted rounded-lg overflow-hidden border hover:border-primary/50 transition-all hover:shadow-md">
+                              {pick.image_url && (
+                                <img src={pick.image_url} alt={pick.card_name} className="w-full h-64 object-cover" />
+                              )}
+                              <div className="p-2">
+                                <h4 className="font-semibold text-sm truncate">{pick.card_name}</h4>
+                                <p className="text-xs text-muted-foreground truncate">{pick.card_set}</p>
+                                {pick.cubecobra_elo != null && (
+                                  <p className="text-xs text-purple-600 dark:text-purple-400 font-medium mt-0.5">
+                                    ELO: {pick.cubecobra_elo.toLocaleString()}
+                                  </p>
+                                )}
+                              </div>
+                              {isUserTeamMember && (
+                                <button
+                                  onClick={() => handleUndraftCard(pick)}
+                                  disabled={isUndrafting || !!undrafting}
+                                  className={`
+                                    absolute inset-0 bg-black/60 flex items-center justify-center
+                                    opacity-0 group-hover:opacity-100 transition-opacity
+                                    disabled:opacity-50 disabled:cursor-not-allowed
+                                  `}
+                                >
+                                  <span className="px-4 py-2 rounded-lg font-semibold shadow-lg bg-destructive hover:bg-destructive/90 text-white">
+                                    {isUndrafting ? "Removing..." : "Undraft & Refund"}
+                                  </span>
+                                </button>
+                              )}
+                            </div>
+                          </CardPreview>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="decks">
+              {activeTab === "decks" && (
+                <div>
+                  <div className="mb-6">
+                    <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
+                      <BookOpen className="size-5" />
+                      Deck Builder
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      {isUserTeamMember
+                        ? "Create and manage decks from your drafted cards"
+                        : `View and manage ${team.name}'s decks`}
+                    </p>
+                  </div>
+                  <DeckBuilder teamId={teamId} teamName={team.name} isUserTeamMember={isUserTeamMember} />
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="trades">
+              {activeTab === "trades" && (
+                <div>
+                  <div className="mb-6">
+                    <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
+                      <ArrowLeftRight className="size-5" />
+                      Trade Center
+                    </h2>
+                    <p className="text-sm text-muted-foreground">Propose trades, manage offers, and negotiate with other teams</p>
+                  </div>
+                  <div className="text-center py-12">
+                    <ArrowLeftRight className="size-12 mx-auto mb-4 text-muted-foreground" />
+                    <h3 className="text-2xl font-bold mb-4">Team Trade Management</h3>
+                    <p className="text-muted-foreground mb-8 max-w-xl mx-auto">
+                      Trade cards and future draft picks with other teams. Captains and Brokers receive notifications about all trade activities.
+                    </p>
+                    <Button asChild size="lg">
+                      <Link href={`/teams/${teamId}/trades`}>
+                        View All Trades
+                        <ExternalLink className="size-4 ml-2" />
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="matches">
+              {activeTab === "matches" && (
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
+                      <Swords className="size-5" />
+                      Matches
+                    </h2>
+                    <p className="text-sm text-muted-foreground">Schedule match times and record results</p>
+                  </div>
+                  <MatchSchedulingWidget teamId={teamId} userRoles={userRoles} />
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4">Record Match Results</h3>
+                    <MatchRecording teamId={teamId} />
+                  </div>
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="votes">
+              {activeTab === "votes" && isUserTeamMember && (
+                <div>
+                  <div className="mb-6">
+                    <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
+                      <Vote className="size-5" />
+                      Team Votes
+                    </h2>
+                    <p className="text-sm text-muted-foreground">Vote on team decisions and view results</p>
+                  </div>
+                  <TeamVoting teamId={teamId} userRoles={userRoles} />
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="stats">
+              {activeTab === "stats" && (
+                <div>
+                  <div className="mb-6">
+                    <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
+                      <BarChart3 className="size-5" />
+                      Team Statistics
+                    </h2>
+                    <p className="text-sm text-muted-foreground">Comprehensive statistics for {team.name}&apos;s draft picks and decks</p>
+                  </div>
+                  <TeamStats teamId={teamId} />
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="roles">
+              {activeTab === "roles" && isUserTeamMember && (
+                <div>
+                  <div className="mb-6">
+                    <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
+                      <Crown className="size-5" />
+                      Team Roles & Permissions
+                    </h2>
+                    <p className="text-sm text-muted-foreground">Manage team member roles and responsibilities</p>
+                  </div>
+                  <TeamRoles teamId={teamId} teamName={team.name} isUserTeamMember={isUserTeamMember} />
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="members">
+              {activeTab === "members" && (
+                <div>
+                  <h2 className="text-xl font-semibold flex items-center gap-2 mb-4">
+                    <Users className="size-5" />
+                    Team Members
+                  </h2>
+                  {!team.members || team.members.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <Users className="size-10 mx-auto mb-3 opacity-50" />
+                      <p className="text-lg mb-1">No members yet</p>
+                      <p className="text-sm">This team is waiting for players to join</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {team.members.map((member) => {
+                        const memberRoleData = membersWithRoles.find((m) => m.user_id === member.user_id);
+                        const memberRoles = memberRoleData?.roles || [];
+                        return (
+                          <div key={member.id} className="flex items-center justify-between bg-muted rounded-lg p-4 border">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="font-semibold">{member.user_display_name || "Unknown User"}</p>
+                                {memberRoles.length > 0 && (
+                                  <div className="flex gap-1 flex-wrap">
+                                    {memberRoles.map((role) => (
+                                      <Badge key={role} variant="secondary" title={getRoleDisplayName(role)}>
+                                        {getRoleEmoji(role)} {getRoleDisplayName(role)}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
+                                <CalendarDays className="size-3" />
+                                Joined {new Date(member.joined_at).toLocaleDateString()}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </TabsContent>
+
+          </CardContent>
+        </Card>
+      </Tabs>
+    </div>
+  );
+}
