@@ -7,7 +7,6 @@ import { cookies } from "next/headers";
 // Create a Supabase client with cookies support
 async function createClient() {
   const cookieStore = await cookies();
-
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -66,11 +65,13 @@ export interface TeamWithDetails {
   losses: number;
   primary_color: string | null;
   secondary_color: string | null;
+  member_count: number;
   last_pick: {
     image_url: string | null;
     card_name: string;
   } | null;
 }
+
 /**
  * Get all users for dropdown selection (Admin only)
  */
@@ -79,7 +80,6 @@ export async function getUsersForDropdown(): Promise<{
   error?: string;
 }> {
   const supabase = await createClient();
-
   try {
     const { data, error } = await supabase
       .from("users")
@@ -109,7 +109,6 @@ export async function getUsersForDropdown(): Promise<{
  */
 export async function getTeamsWithMembers(): Promise<Team[]> {
   const supabase = await createClient();
-
   try {
     // Fetch all teams
     const { data: teams, error: teamsError } = await supabase
@@ -176,7 +175,6 @@ export async function addMemberToTeam(
   userEmail: string
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
-
   try {
     // Get user for audit purposes (non-blocking)
     const {
@@ -218,7 +216,6 @@ export async function addMemberToTeamById(
   userId: string
 ): Promise<{ success: boolean; memberId?: string; error?: string }> {
   const supabase = await createClient();
-
   try {
     // Get the user's profile to get their email/display name
     const { data: userProfile, error: profileError } = await supabase
@@ -274,7 +271,6 @@ export async function removeMemberFromTeam(
   userEmail: string
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
-
   try {
     const { error } = await supabase
       .from("team_members")
@@ -301,7 +297,6 @@ export async function getTeamMembers(
   teamId: string
 ): Promise<{ members: TeamMember[]; error?: string }> {
   const supabase = await createClient();
-
   try {
     const { data, error } = await supabase
       .from("team_members")
@@ -328,7 +323,6 @@ export async function getUserTeam(
   userEmail: string
 ): Promise<{ team: Team | null; error?: string }> {
   const supabase = await createClient();
-
   try {
     // Get the team membership for this email
     const { data: membership, error: memberError } = await supabase
@@ -377,7 +371,6 @@ export async function joinTeam(
   userEmail: string
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
-
   try {
     if (!userEmail) {
       return { success: false, error: "User email not provided" };
@@ -426,7 +419,6 @@ export async function getAllTeams(): Promise<{
   error?: string;
 }> {
   const supabase = await createClient();
-
   try {
     const { data, error } = await supabase
       .from("teams")
@@ -444,6 +436,7 @@ export async function getAllTeams(): Promise<{
     return { teams: [], error: "An unexpected error occurred" };
   }
 }
+
 /**
  * Get all VISIBLE teams with their season record and last draft pick.
  */
@@ -453,16 +446,17 @@ export async function getTeamsWithDetails(): Promise<{
 }> {
   const supabase = await createClient(); // Uses the existing createClient function in this file
   try {
-    // 1. Get all visible teams and their records
+    // 1. Get all visible teams and their records + member count
     const { data: teams, error: teamsError } = await supabase
       .from("teams")
-      .select("id, name, emoji, motto, wins, losses, primary_color, secondary_color")
+      .select("id, name, emoji, motto, wins, losses, primary_color, secondary_color, member_count")
       .eq('is_hidden', false); // <-- Filter to only get visible teams
 
     if (teamsError) {
       console.error("Error fetching teams:", teamsError);
       return { teams: [], error: teamsError.message };
     }
+
     if (!teams) {
       return { teams: [] };
     }
@@ -473,9 +467,16 @@ export async function getTeamsWithDetails(): Promise<{
 
     // Fallback if RPC doesn't exist (less efficient but works)
     const lastPickMap = new Map<string, { image_url: string | null; card_name: string }>();
+
     if (picksError || !latestPicks) {
         console.warn("Could not use RPC 'get_latest_pick_for_each_team'. Falling back to client-side logic. Error:", picksError?.message);
-        const { data: allPicks } = await supabase.from("team_draft_picks").select("team_id, image_url, card_name, pick_number").order("pick_number", { ascending: false });
+        
+        const { data: allPicks } = await supabase
+          .from("team_draft_picks")
+          .select("team_id, image_url, card_name, pick_number")
+          .neq("card_id", "skipped-pick") // Skip skipped picks
+          .order("pick_number", { ascending: false });
+
         if (allPicks) {
           for (const pick of allPicks) {
             if (pick.team_id && !lastPickMap.has(pick.team_id)) {
