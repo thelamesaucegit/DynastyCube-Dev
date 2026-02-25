@@ -216,7 +216,7 @@ export default async function AboutPage() {
           </a>
         </Button>
         <p className="text-sm text-muted-foreground max-w-md mx-auto mt-4">
-          Not sure which team suits you? Join as a Spectator or drop into our recruitment channel where teams will try to win you over.
+          Not sure which team suits you? Drop into our recruitment channel where Teams will try to win you over!
         </p>
       </section>
       
