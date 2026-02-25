@@ -35,14 +35,20 @@ export default async function AboutPage() {
       {/* The Ominous Hook */}
       <section>
         <Card className="border-l-4 border-l-purple-500 bg-muted/30">
-          <CardContent className="p-6 md:p-8 italic text-muted-foreground space-y-4 text-lg">
-            <p>
-              &quot;It&apos;s that time of year again. The weather is getting warmer, and your commissioner is asking if you&apos;ll be participating again this season. You missed the playoffs last year, as usual. You contemplate why you do this every year...&quot;
+          <CardContent className="p-6 md:p-8 italic text-muted-foreground space-y-5 text-lg">
+            <p className="text-foreground font-medium">
+              &quot;Good. You&apos;re here.&quot;
             </p>
             <p>
-              &quot;You think back on simpler times. <strong>Happier days.</strong> Days when you played Magic: The Gathering to get your social gaming fix. To scratch that strategic, creative itch.&quot;
+              &quot;Are you interested in playing through the entire history of Magic: The Gathering from its beginning?&quot;
             </p>
-            <p className="font-semibold text-foreground mt-6 text-center">
+            <p>
+              &quot;Do you love Legacy-style games that continue to grow and evolve as a consequence of the actions you and your fellow players take?&quot;
+            </p>
+            <p>
+              &quot;Does <span className="font-semibold text-foreground">the ominous horror of things beyond your comprehension creeping into this world</span> bring you joy?&quot;
+            </p>
+            <p className="font-bold text-foreground mt-8 text-center text-xl not-italic tracking-wide uppercase">
               We have what you need. <span className="text-purple-500">What you crave.</span>
             </p>
           </CardContent>
@@ -100,11 +106,11 @@ export default async function AboutPage() {
 
       {/* The Lore */}
       <section className="space-y-6">
-        <h2 className="text-3xl font-bold flex items-center gap-3">
+        <h2 className="text-3xl font-bold flex items-center justify-center gap-3 text-center">
           <Sparkles className="size-6 text-indigo-500" />
           The Awakening
         </h2>
-        <div className="bg-slate-950 text-slate-200 p-6 md:p-8 rounded-xl font-serif space-y-4 border border-slate-800 shadow-inner">
+        <div className="bg-slate-950 text-slate-200 p-6 md:p-8 rounded-xl font-serif space-y-5 border border-slate-800 shadow-inner text-center">
           <p>
             In the <strong>BEGINNING</strong>, <strong>The Cube</strong> was a Celestial - a sentient, cosmological being. For millennia it consumed, silently, slowly but purposefully, until nothing remained of its home plane. 
           </p>
@@ -117,7 +123,7 @@ export default async function AboutPage() {
           <p>
             <strong>THE LEAGUE IS FORMED.</strong> At first, there was only <em>chaos</em>. The displaced inhabitants of these disparate planes were lost, aimless, hopeless - trapped within a Celestial with unfathomable, seemingly infinite power. In time, like found like, and factions were formed, representatives of their home planes desperate for an escape.
           </p>
-          <p className="text-center font-bold text-lg pt-4 tracking-widest text-white">
+          <p className="font-bold text-lg pt-4 tracking-widest text-white">
             THE BLIND ETERNITIES SHIFT.
           </p>
         </div>
@@ -139,7 +145,7 @@ export default async function AboutPage() {
           <div>
             <h3 className="text-xl font-semibold mb-2">2. The Season</h3>
             <p className="text-muted-foreground">
-              Teams pare down to a strict 35-card limit (excluding basic lands). Over the coming weeks, a designated Pilot from your team will play scheduled matches to determine the rankings, leading up to the Championship match. During this time, Teams may actively trade cards with one another—trades do not need to be equal.
+              Over the coming weeks, teams will construct their decks from their drafted pools and play scheduled matches to determine the rankings, leading up to the Championship match. During this time, Teams collaborate on strategies and may actively trade cards with one another—trades do not need to be equal.
             </p>
           </div>
           <div>
@@ -160,7 +166,7 @@ export default async function AboutPage() {
               The Factions
             </h2>
             <p className="text-muted-foreground">
-              Participants are separated into 8 distinct teams. Each has a Captain (the sole arbiter of off-field decisions) and a Pilot (the designated player for weekly matches).
+              Participants are separated into 8 distinct factions. Together, team members collaborate in private channels to discuss draft strategies, evaluate trades, build their decks, and vote on the future rules of the league.
             </p>
           </div>
         </div>
@@ -205,18 +211,27 @@ export default async function AboutPage() {
       </section>
 
       {/* CTA */}
-      <section className="pb-12 pt-8 text-center space-y-6">
-        <p className="text-2xl font-serif italic text-muted-foreground">
+      <section className="pb-12 pt-16 text-center space-y-6">
+        <div className="max-w-2xl mx-auto space-y-4 mb-8">
+          <h2 className="text-3xl font-bold">Shape the Multiverse</h2>
+          <p className="text-muted-foreground text-lg">
+            The Dynasty Cube is more than just a draft—it&apos;s a living community. Whether you&apos;re strategizing in private team channels, negotiating blockbuster trades with rivals, or voting on the cosmic rules that will shape the next era, your voice matters.
+          </p>
+        </div>
+        
+        <p className="text-2xl font-serif italic text-muted-foreground mb-6">
           &quot;It&apos;s already here. There&apos;s no stopping it now.&quot;
         </p>
+        
         <Button size="lg" className="h-14 px-8 text-lg" asChild>
           <a href="https://discord.gg/9cfVJF4yrt" target="_blank" rel="noopener noreferrer">
             Join the Discord
             <ArrowRight className="ml-2 size-5" />
           </a>
         </Button>
-        <p className="text-sm text-muted-foreground max-w-md mx-auto mt-4">
-          Not sure which team suits you? Drop into our recruitment channel where Teams will try to win you over!
+        
+        <p className="text-sm text-muted-foreground max-w-md mx-auto mt-6">
+          Join the server, find your faction, and leave your mark on the Cube.
         </p>
       </section>
       
