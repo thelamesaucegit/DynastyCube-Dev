@@ -346,7 +346,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                             <Badge className="mb-2 bg-primary">Up Next in Queue</Badge>
                             <h3 className="text-xl font-bold mb-2">{draftPreview.nextPick.card_name}</h3>
                             <p className="text-sm text-muted-foreground mb-4 max-w-2xl">
-                              This card is at the top of your team's manual queue. Vote to confirm it for immediate submission. If the vote threshold is met while your team is on the clock, the pick will be processed instantly.
+                              This card is at the top of your team&apos;s manual queue. Vote to confirm it for immediate submission. If the vote threshold is met while your team is on the clock, the pick will be processed instantly.
                             </p>
                             
                             {(() => {
@@ -445,8 +445,8 @@ export default function TeamPage({ params }: TeamPageProps) {
                       <p className="text-lg mb-1">No cards drafted yet</p>
                       <p className="text-sm">
                         {isUserTeamMember
-                          ? "Your team hasn't selected any cards from the pool"
-                          : `${team.name} hasn't selected any cards from the pool`}
+                          ? "Your team hasn&apos;t selected any cards from the pool"
+                          : `${team.name} hasn&apos;t selected any cards from the pool`}
                       </p>
                     </div>
                   ) : (
@@ -504,7 +504,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                     <p className="text-sm text-muted-foreground">
                       {isUserTeamMember
                         ? "Create and manage decks from your drafted cards"
-                        : `View and manage ${team.name}'s decks`}
+                        : `View and manage ${team.name}&apos;s decks`}
                     </p>
                   </div>
                   <DeckBuilder teamId={teamId} teamName={team.name} isUserTeamMember={isUserTeamMember} />
