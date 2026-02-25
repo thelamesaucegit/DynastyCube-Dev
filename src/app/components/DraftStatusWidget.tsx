@@ -18,6 +18,12 @@ interface DraftStatusWidgetProps {
   teamId?: string;
 }
 
+interface RecentPickData {
+  teamName: string;
+  teamEmoji: string;
+  cardName: string;
+}
+
 export function DraftStatusWidget({ variant, teamId }: DraftStatusWidgetProps) {
   const [status, setStatus] = useState<DraftStatus | null>(null);
   const [session, setSession] = useState<DraftSession | null>(null);
@@ -27,7 +33,7 @@ export function DraftStatusWidget({ variant, teamId }: DraftStatusWidgetProps) {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   
   // State to hold the "Team X drafted Y" notification
-  const [recentPick, setRecentPick] = useState<{ teamName: string; teamEmoji: string; cardName: string } | null>(null);
+  const [recentPick, setRecentPick] = useState<RecentPickData | null>(null);
 
   useEffect(() => {
     loadStatus();
@@ -39,7 +45,6 @@ export function DraftStatusWidget({ variant, teamId }: DraftStatusWidgetProps) {
       clearInterval(interval);
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadStatus = async () => {
@@ -249,7 +254,7 @@ function CompletedWidget() {
 // ============================================================================
 // FULL VARIANT (Homepage)
 // ============================================================================
-function FullWidget({ status, session, recentPick }: { status: DraftStatus; session: DraftSession | null; recentPick: any }) {
+function FullWidget({ status, session, recentPick }: { status: DraftStatus; session: DraftSession | null; recentPick: RecentPickData | null }) {
   const pickCountdown = useCountdown(
     session?.status === "active" ? session.current_pick_deadline : null
   );
@@ -402,7 +407,7 @@ function FullWidget({ status, session, recentPick }: { status: DraftStatus; sess
 // ============================================================================
 // COMPACT VARIANT (Teams Listing)
 // ============================================================================
-function CompactWidget({ status, session, recentPick }: { status: DraftStatus; session: DraftSession | null; recentPick: any }) {
+function CompactWidget({ status, session, recentPick }: { status: DraftStatus; session: DraftSession | null; recentPick: RecentPickData | null }) {
   const pickCountdown = useCountdown(
     session?.status === "active" ? session.current_pick_deadline : null
   );
@@ -461,7 +466,7 @@ function CompactWidget({ status, session, recentPick }: { status: DraftStatus; s
 // ============================================================================
 // TEAM VARIANT (Team Detail Page)
 // ============================================================================
-function TeamWidget({ status, session, teamId, recentPick }: { status: DraftStatus; session: DraftSession | null; teamId: string; recentPick: any }) {
+function TeamWidget({ status, session, teamId, recentPick }: { status: DraftStatus; session: DraftSession | null; teamId: string; recentPick: RecentPickData | null }) {
   const isOnClock = status.onTheClock.teamId === teamId;
   const isOnDeck = status.onDeck.teamId === teamId;
   const teamEntry = status.draftOrder.find((t) => t.teamId === teamId);
