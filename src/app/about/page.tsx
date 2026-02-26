@@ -139,7 +139,7 @@ export default async function AboutPage() {
           <div>
             <h3 className="text-xl font-semibold mb-2">1. The Draft</h3>
             <p className="text-muted-foreground">
-              Picks are made in a serpentine pattern. After each team has made a single card selection, the pick order reverses (so the team that picked first then picks last). This repeats until each team has constructed their deck pool. Starting from Magic&apos;s earliest sets (ABUR, Arabian Nights, Antiquities, Legends), we draft sequentially through history.
+              Each round, one Team picks a card from the Draft Pool at a time, in reverse standings order from the previous Season. This repeats until each Team has constructed their Team Pool. Starting from Magic&apos;s earliest sets (ABUR, Arabian Nights, Antiquities, Legends), we draft sequentially through history.
             </p>
           </div>
           <div>
