@@ -139,7 +139,7 @@ export default async function AboutPage() {
           <div>
             <h3 className="text-xl font-semibold mb-2">1. The Draft</h3>
             <p className="text-muted-foreground">
-              Each round, one Team picks a card from the Draft Pool at a time, in reverse standings order from the previous Season. This repeats until each Team has constructed their Team Pool. Starting from Magic&apos;s earliest sets (ABUR, Arabian Nights, Antiquities, Legends), we draft sequentially through history.
+              Each round, each Team picks one card from the Draft Pool at a time, in reverse standings order from the previous Season. This repeats until each Team has constructed their Team Pool. Starting from Magic&apos;s earliest sets (ABUR, Arabian Nights, Antiquities, Legends), we draft sequentially through history.
             </p>
           </div>
           <div>
