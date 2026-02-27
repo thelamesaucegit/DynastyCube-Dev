@@ -130,30 +130,34 @@ export default function HomePage() {
         />
         {/* The Overlays for Legibility */}
         <div className="absolute inset-0 bg-black/60" /> {/* Base darkness */}
-        {/* Removed the purple gradient overlay */}
 
         {/* Content Layer */}
         <div className="relative px-8 py-16 md:py-24 z-10">
           <div className="max-w-3xl">
-            <div className="flex items-center gap-2 mb-4">
-              {/* Replaced Sparkles icon with site logo */}
-              <Image
-                src="/images/logo/logo.jpg"
-                alt="Dynasty Cube Logo"
-                width={24}
-                height={24}
-                className="size-6 rounded-md drop-shadow-md"
-              />
-              {season && (
+            {/* Season Badge is now above the title */}
+            {season && (
+              <div className="mb-4">
                 <Badge variant="secondary" className="text-xs bg-black/50 text-white border-white/20 backdrop-blur-md">
                   {season.name} {season.status === "active" ? "Active" : ""}
                 </Badge>
-              )}
-            </div>
+              </div>
+            )}
 
-            <h1 className="text-4xl md:text-6xl font-bold mb-4 text-white drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] tracking-tight">
-              The Dynasty Cube
-            </h1>
+            {/* Container for logo and title */}
+            <div className="flex items-center gap-4 md:gap-6 mb-4">
+              {/* Scaled-up logo */}
+              <Image
+                src="/images/logo/logo.jpg"
+                alt="Dynasty Cube Logo"
+                width={56}
+                height={56}
+                className="size-10 md:size-14 rounded-lg drop-shadow-md flex-shrink-0"
+              />
+              {/* Main title */}
+              <h1 className="text-4xl md:text-6xl font-bold text-white drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] tracking-tight">
+                The Dynasty Cube
+              </h1>
+            </div>
 
             <p className="text-lg md:text-xl text-zinc-200 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] mb-8 max-w-2xl font-medium leading-relaxed">
               A collaborative, living draft league where teams compete, evolve, and shape the fate of the multiverse.
