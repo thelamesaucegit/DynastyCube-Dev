@@ -1,4 +1,5 @@
 // src/app/layout.tsx
+
 import "./globals.css";
 import { Metadata } from "next";
 import Providers from "./components/Providers";
@@ -16,6 +17,8 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        {/* New Favicon Link */}
+        <link rel="icon" href="/images/logo/logo.jpg" sizes="any" />
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -26,7 +29,6 @@ export default function RootLayout({
                   document.documentElement.classList.add('dark');
                 }
               } catch (e) {}
-
               // Handle chunk load errors (deployment mismatch) - auto refresh once
               window.addEventListener('error', function(e) {
                 if (e.message && e.message.includes('Loading chunk') ||
@@ -38,7 +40,6 @@ export default function RootLayout({
                   }
                 }
               }, true);
-
               // Clear reload flag on successful load
               window.addEventListener('load', function() {
                 sessionStorage.removeItem('chunk_reload');
