@@ -22,8 +22,8 @@ export default async function AboutPage() {
     <div className="container max-w-4xl mx-auto px-4 py-12 space-y-16">
       {/* Introduction / Welcome with Large Fading Background Logo */}
       <section className="relative text-center space-y-6 pt-16 pb-8 md:pt-24 md:pb-12">
-        {/* Container for the large, faded background logo */}
-        <div className="absolute top-0 inset-x-0 flex justify-center items-start h-[400px] -z-10 overflow-hidden pointer-events-none">
+        {/* Container for the large, faded background logo. Corrected z-index. */}
+        <div className="absolute top-0 inset-x-0 flex justify-center items-start h-[400px] z-0 overflow-hidden pointer-events-none">
           <Image
             src="/images/logo/logo.jpg"
             alt=""
@@ -38,13 +38,15 @@ export default async function AboutPage() {
           />
         </div>
 
-        {/* Removed small logo, text now sits on top of the background image */}
-        <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-foreground">
-          The Dynasty Cube
-        </h1>
-        <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-          A collaborative, living draft league in which Teams draft through the history of Magic, beginning with the earliest sets of 1993, and culminating in a metagame shaped entirely by player choice.
-        </p>
+        {/* New content wrapper with a positive z-index to ensure it's on top */}
+        <div className="relative z-10">
+          <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-foreground">
+            The Dynasty Cube
+          </h1>
+          <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+            A collaborative, living draft league in which Teams draft through the history of Magic, beginning with the earliest sets of 1993, and culminating in a metagame shaped entirely by player choice.
+          </p>
+        </div>
       </section>
 
       {/* The Ominous Hook */}
