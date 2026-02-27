@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -31,7 +32,6 @@ import {
 } from "./ui/navigation-menu";
 import { Sheet, SheetContent, SheetTrigger } from "./ui/sheet";
 import {
-  Sparkles,
   Menu,
   X,
   User,
@@ -43,7 +43,7 @@ import {
   BookOpen,
   Newspaper,
   History,
-  Info
+  Info,
 } from "lucide-react";
 
 export default function Navigation() {
@@ -90,11 +90,16 @@ export default function Navigation() {
             href="/"
             className="flex items-center gap-2 transition-opacity hover:opacity-80 shrink-0"
           >
-            <div className="relative">
-              <Sparkles className="size-8 text-purple-500" />
-              <div className="absolute inset-0 animate-pulse bg-purple-500/20 blur-lg" />
-            </div>
-            <span className="font-bold text-xl bg-gradient-to-r from-purple-500 to-blue-500 bg-clip-text text-transparent hidden sm:inline-block">
+            {/* Replaced Sparkle icon with actual logo */}
+            <Image
+              src="/images/logo/logo.jpg"
+              alt="Dynasty Cube Logo"
+              width={32}
+              height={32}
+              className="size-8 rounded-md"
+            />
+            {/* Removed gradient from text */}
+            <span className="font-bold text-xl text-foreground hidden sm:inline-block">
               Dynasty Cube
             </span>
           </Link>
@@ -106,7 +111,7 @@ export default function Navigation() {
                 {/* Home */}
                 <NavigationMenuItem>
                   <Link href="/" legacyBehavior passHref>
-                    <NavigationMenuLink 
+                    <NavigationMenuLink
                       className={`${navigationMenuTriggerStyle()} bg-transparent ${isActive("/") ? "bg-accent/50 text-accent-foreground font-medium" : ""}`}
                     >
                       Home
@@ -138,7 +143,7 @@ export default function Navigation() {
                 {/* Teams */}
                 <NavigationMenuItem>
                   <Link href="/teams" legacyBehavior passHref>
-                    <NavigationMenuLink 
+                    <NavigationMenuLink
                       className={`${navigationMenuTriggerStyle()} bg-transparent ${isActive("/teams") ? "bg-accent/50 text-accent-foreground font-medium" : ""}`}
                     >
                       Teams
@@ -149,7 +154,7 @@ export default function Navigation() {
                 {/* Matches */}
                 <NavigationMenuItem>
                   <Link href="/schedule" legacyBehavior passHref>
-                    <NavigationMenuLink 
+                    <NavigationMenuLink
                       className={`${navigationMenuTriggerStyle()} bg-transparent ${isActive("/schedule") ? "bg-accent/50 text-accent-foreground font-medium" : ""}`}
                     >
                       Matches
@@ -161,7 +166,7 @@ export default function Navigation() {
                 {user && (
                   <NavigationMenuItem>
                     <Link href="/vote" legacyBehavior passHref>
-                      <NavigationMenuLink 
+                      <NavigationMenuLink
                         className={`${navigationMenuTriggerStyle()} bg-transparent ${isActive("/vote") ? "bg-accent/50 text-accent-foreground font-medium" : ""}`}
                       >
                         Vote
@@ -172,7 +177,7 @@ export default function Navigation() {
 
                 {/* Info Dropdown */}
                 <NavigationMenuItem>
-                  <NavigationMenuTrigger className={`bg-transparent ${['/about', '/history', '/news', '/glossary'].some(isActive) ? "bg-accent/50 text-accent-foreground font-medium" : ""}`}>
+                  <NavigationMenuTrigger className={`bg-transparent ${["/about", "/history", "/news", "/glossary"].some(isActive) ? "bg-accent/50 text-accent-foreground font-medium" : ""}`}>
                     Info
                   </NavigationMenuTrigger>
                   <NavigationMenuContent>
@@ -229,7 +234,7 @@ export default function Navigation() {
                 {user && isAdmin && (
                   <NavigationMenuItem>
                     <Link href="/admin" legacyBehavior passHref>
-                      <NavigationMenuLink 
+                      <NavigationMenuLink
                         className={`${navigationMenuTriggerStyle()} bg-transparent flex items-center gap-1.5 ${isActive("/admin") ? "bg-orange-500/20 text-orange-600 dark:text-orange-400 font-medium" : "text-orange-600 dark:text-orange-400 hover:bg-orange-500/10"}`}
                       >
                         <Shield className="size-3.5" />
@@ -238,7 +243,6 @@ export default function Navigation() {
                     </Link>
                   </NavigationMenuItem>
                 )}
-
               </NavigationMenuList>
             </NavigationMenu>
           </nav>
@@ -330,7 +334,6 @@ export default function Navigation() {
             </SheetTrigger>
             <SheetContent side="right" className="w-72 overflow-y-auto">
               <nav className="flex flex-col gap-1 mt-8">
-                
                 <Link
                   href="/"
                   onClick={() => setMobileMenuOpen(false)}
@@ -338,7 +341,6 @@ export default function Navigation() {
                 >
                   Home
                 </Link>
-
                 <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                   Pools
                 </div>
@@ -349,7 +351,6 @@ export default function Navigation() {
                 >
                   Draft Pool
                 </Link>
-
                 <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                   League
                 </div>
@@ -376,7 +377,6 @@ export default function Navigation() {
                     Vote
                   </Link>
                 )}
-
                 <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                   Info
                 </div>
@@ -408,7 +408,6 @@ export default function Navigation() {
                 >
                   Glossary
                 </Link>
-
                 {user && isAdmin && (
                   <>
                     <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
@@ -424,7 +423,6 @@ export default function Navigation() {
                     </Link>
                   </>
                 )}
-
                 {user && (
                   <div className="flex items-center gap-3 px-4 py-2 border-t mt-4 pt-6">
                     <ReportButton />
