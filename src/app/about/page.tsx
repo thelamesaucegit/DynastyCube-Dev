@@ -1,9 +1,11 @@
 // src/app/about/page.tsx
+
 import React from "react";
+import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { Separator } from "@/app/components/ui/separator";
-import { Sparkles, Users, History, Trophy, Globe, Disc, ArrowRight } from "lucide-react";
+import { Users, History, Trophy, Globe, Disc, ArrowRight, BookOpen } from "lucide-react";
 import { getTeamsWithDetails } from "@/app/actions/teamActions";
 
 export const metadata = {
@@ -18,13 +20,20 @@ export default async function AboutPage() {
 
   return (
     <div className="container max-w-4xl mx-auto px-4 py-12 space-y-16">
-      
       {/* Introduction / Welcome */}
       <section className="text-center space-y-6">
-        <div className="inline-flex items-center justify-center p-3 bg-purple-500/10 rounded-full mb-4">
-          <Sparkles className="size-8 text-purple-500" />
+        {/* Replaced sparkle icon with site logo */}
+        <div className="inline-block mb-4">
+          <Image
+            src="/images/logo/logo.jpg"
+            alt="Dynasty Cube Logo"
+            width={48}
+            height={48}
+            className="rounded-full size-12"
+          />
         </div>
-        <h1 className="text-4xl md:text-6xl font-bold tracking-tight bg-gradient-to-r from-foreground to-purple-500 bg-clip-text text-transparent">
+        {/* Removed gradient from title */}
+        <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-foreground">
           The Dynasty Cube
         </h1>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
@@ -34,7 +43,8 @@ export default async function AboutPage() {
 
       {/* The Ominous Hook */}
       <section>
-        <Card className="border-l-4 border-l-purple-500 bg-muted/30">
+        {/* Changed purple border to a neutral theme color */}
+        <Card className="border-l-4 border-l-ring bg-muted/30">
           <CardContent className="p-6 md:p-8 italic text-muted-foreground space-y-5 text-lg">
             <p className="text-foreground font-medium">
               &quot;Good. You&apos;re here.&quot;
@@ -48,8 +58,9 @@ export default async function AboutPage() {
             <p>
               &quot;Does <span className="font-semibold text-foreground">the ominous horror of things beyond your comprehension creeping into this world</span> bring you joy?&quot;
             </p>
+            {/* Removed purple text color */}
             <p className="font-bold text-foreground mt-8 text-center text-xl not-italic tracking-wide uppercase">
-              We have what you need. <span className="text-purple-500">What you crave.</span>
+              We have what you need. <span className="font-semibold">What you crave.</span>
             </p>
           </CardContent>
         </Card>
@@ -64,12 +75,13 @@ export default async function AboutPage() {
         <p className="text-lg text-muted-foreground">
           At its core, The Dynasty Cube combines a normal cube draft with the long-term planning of a dynasty sports league and the evolving horror of a community-driven simulation.
         </p>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card className="h-full">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Disc className="size-5 text-purple-500" />
+                {/* Changed icon color from purple */}
+                <Disc className="size-5 text-primary" />
                 Rotisserie Draft
               </CardTitle>
             </CardHeader>
@@ -107,12 +119,13 @@ export default async function AboutPage() {
       {/* The Lore */}
       <section className="space-y-6">
         <h2 className="text-3xl font-bold flex items-center justify-center gap-3 text-center">
-          <Sparkles className="size-6 text-indigo-500" />
+          {/* Replaced Sparkles icon with BookOpen for lore */}
+          <BookOpen className="size-6 text-muted-foreground" />
           The Awakening
         </h2>
         <div className="bg-slate-950 text-slate-200 p-6 md:p-8 rounded-xl font-serif space-y-5 border border-slate-800 shadow-inner text-center">
           <p>
-            In the <strong>BEGINNING</strong>, <strong>The Cube</strong> was a Celestial - a sentient, cosmological being. For millennia it consumed, silently, slowly but purposefully, until nothing remained of its home plane. 
+            In the <strong>BEGINNING</strong>, <strong>The Cube</strong> was a Celestial - a sentient, cosmological being. For millennia it consumed, silently, slowly but purposefully, until nothing remained of its home plane.
           </p>
           <p>
             Further eons passed without consequence, The Cube lying dormant until, quite suddenly - something changed. <em>The Dynasty Cube&apos;s Spark had ignited.</em> <strong>THE DYNASTY CUBE AWAKENS.</strong>
@@ -134,7 +147,7 @@ export default async function AboutPage() {
       {/* How It Works */}
       <section className="space-y-8">
         <h2 className="text-3xl font-bold">How The League Works</h2>
-        
+
         <div className="space-y-6 pl-4 border-l-2 border-muted">
           <div>
             <h3 className="text-xl font-semibold mb-2">1. The Draft</h3>
@@ -170,11 +183,11 @@ export default async function AboutPage() {
             </p>
           </div>
         </div>
-
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {sortedTeams.length > 0 ? (
             sortedTeams.map((team) => {
-              const primaryColor = team.primary_color || "#8b5cf6"; // Default fallback (purple-500)
+              // Changed purple fallback to a neutral gray
+              const primaryColor = team.primary_color || "#6b7280";
               
               return (
                 <Card 
