@@ -20,19 +20,25 @@ export default async function AboutPage() {
 
   return (
     <div className="container max-w-4xl mx-auto px-4 py-12 space-y-16">
-      {/* Introduction / Welcome */}
-      <section className="text-center space-y-6">
-        {/* Replaced sparkle icon with site logo */}
-        <div className="inline-block mb-4">
+      {/* Introduction / Welcome with Large Fading Background Logo */}
+      <section className="relative text-center space-y-6 pt-16 pb-8 md:pt-24 md:pb-12">
+        {/* Container for the large, faded background logo */}
+        <div className="absolute top-0 inset-x-0 flex justify-center items-start h-[400px] -z-10 overflow-hidden pointer-events-none">
           <Image
             src="/images/logo/logo.jpg"
-            alt="Dynasty Cube Logo"
-            width={48}
-            height={48}
-            className="rounded-full size-12"
+            alt=""
+            width={480}
+            height={480}
+            className="opacity-10 dark:opacity-5"
+            aria-hidden="true"
+            style={{
+              maskImage: "linear-gradient(to bottom, black 40%, transparent 100%)",
+              WebkitMaskImage: "linear-gradient(to bottom, black 40%, transparent 100%)", // Vendor prefix for Safari
+            }}
           />
         </div>
-        {/* Removed gradient from title */}
+
+        {/* Removed small logo, text now sits on top of the background image */}
         <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-foreground">
           The Dynasty Cube
         </h1>
