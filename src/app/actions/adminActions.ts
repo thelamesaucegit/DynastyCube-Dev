@@ -342,3 +342,33 @@ export async function backfillAllCMCData(): Promise<{
     errors: [...poolsResult.errors, ...picksResult.errors],
   };
 }
+
+/**
+ * Fetches all available AI profiles from the database.
+ * @returns A promise that resolves to an array of AI profiles.
+ */
+export async function getAiProfiles(): Promise<AiProfile[]> {
+  const supabase = await createClient(); // Uses the existing createClient function in this file
+  const { data, error } = await supabase
+    .from('ai_profiles')
+    .select('*')
+    .order('profile_name', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching AI profiles:', error);
+    // In a real app, you might want more robust error handling
+    return [];
+  }
+
+  return data || [];
+}
+
+// You need to define the AiProfile type here as well since it's used
+// by the getAiProfiles function. It's good practice to have shared types
+// in a central file, but for now, we can define it here.
+export interface AiProfile {
+  id: string;
+  created_at: string;
+  profile_name: string;
+  description: string | null;
+}
