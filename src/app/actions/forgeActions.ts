@@ -17,11 +17,13 @@ export async function generateDeckString(deckId: string, deckName: string): Prom
     error?: string;
 }> {
   try {
+    // 1. Fetch the latest cards in the deck from your database
     const { cards, error } = await getDeckCards(deckId);
     if (error || !cards) {
       throw new Error(`Could not fetch cards for deck ID: ${deckId}. Error: ${error}`);
     }
 
+    // 2. Format into the Forge .dck structure
     let dckContent = `[metadata]\nName=${deckName}\n`;
     
     const mainboard = cards.filter(c => c.category === "mainboard");
@@ -41,8 +43,10 @@ export async function generateDeckString(deckId: string, deckName: string): Prom
       });
     }
 
+    // 3. Clean the filename to be safe for filesystem commands
     const safeFilename = deckName.replace(/[^a-z0-9-]/gi, '_').toLowerCase() + ".dck";
 
+    // 4. Return the string payload instead of saving to disk
     return { success: true, dckContent, safeFilename };
   } catch (error) {
     console.error("Failed to generate deck string:", error);
