@@ -372,3 +372,21 @@ export interface AiProfile {
   profile_name: string;
   description: string | null;
 }
+/**
+ * Fetches all available AI profiles from the database.
+ * @returns A promise that resolves to an array of AI profiles.
+ */
+export async function getAiProfiles(): Promise<AiProfile[]> {
+  const supabase = await createClient(); // Uses the existing createClient function
+  const { data, error } = await supabase
+    .from('ai_profiles')
+    .select('*')
+    .order('profile_name', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching AI profiles:', error);
+    return [];
+  }
+
+  return data || [];
+}
