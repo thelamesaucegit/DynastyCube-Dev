@@ -22,15 +22,15 @@ export default async function AboutPage() {
     <div className="container max-w-4xl mx-auto px-4 py-12 space-y-16">
       {/* Introduction / Welcome with Large Fading Background Logo */}
       <section className="relative text-center space-y-6 pt-16 pb-8 md:pt-24 md:pb-12">
-        {/* Container for the large, faded background logo. Corrected z-index. */}
+        {/* Container for the large, faded background logo. */}
         <div className="absolute top-0 inset-x-0 flex justify-center items-start h-[400px] z-0 overflow-hidden pointer-events-none">
           <Image
             src="/images/logo/logo.jpg"
             alt=""
             width={480}
             height={480}
-            className="opacity-10 dark:opacity-5"
             aria-hidden="true"
+            // Removed the incorrect opacity class. The mask now operates on a fully opaque image.
             style={{
               maskImage: "linear-gradient(to bottom, black 40%, transparent 100%)",
               WebkitMaskImage: "linear-gradient(to bottom, black 40%, transparent 100%)", // Vendor prefix for Safari
@@ -38,7 +38,7 @@ export default async function AboutPage() {
           />
         </div>
 
-        {/* New content wrapper with a positive z-index to ensure it's on top */}
+        {/* Content wrapper with a positive z-index to ensure it's on top */}
         <div className="relative z-10">
           <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-foreground">
             The Dynasty Cube
@@ -51,7 +51,6 @@ export default async function AboutPage() {
 
       {/* The Ominous Hook */}
       <section>
-        {/* Changed purple border to a neutral theme color */}
         <Card className="border-l-4 border-l-ring bg-muted/30">
           <CardContent className="p-6 md:p-8 italic text-muted-foreground space-y-5 text-lg">
             <p className="text-foreground font-medium">
@@ -66,7 +65,6 @@ export default async function AboutPage() {
             <p>
               &quot;Does <span className="font-semibold text-foreground">the ominous horror of things beyond your comprehension creeping into this world</span> bring you joy?&quot;
             </p>
-            {/* Removed purple text color */}
             <p className="font-bold text-foreground mt-8 text-center text-xl not-italic tracking-wide uppercase">
               We have what you need. <span className="font-semibold">What you crave.</span>
             </p>
@@ -88,7 +86,6 @@ export default async function AboutPage() {
           <Card className="h-full">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                {/* Changed icon color from purple */}
                 <Disc className="size-5 text-primary" />
                 Rotisserie Draft
               </CardTitle>
@@ -127,7 +124,6 @@ export default async function AboutPage() {
       {/* The Lore */}
       <section className="space-y-6">
         <h2 className="text-3xl font-bold flex items-center justify-center gap-3 text-center">
-          {/* Replaced Sparkles icon with BookOpen for lore */}
           <BookOpen className="size-6 text-muted-foreground" />
           The Awakening
         </h2>
