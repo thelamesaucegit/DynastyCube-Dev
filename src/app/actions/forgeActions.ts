@@ -1,6 +1,7 @@
+// src/app/actions/forgeActions.ts
 "use server";
 
-import { getDeckCards } from "@/app/actions/draftActions";
+import { getDeckCards } from "@/app/actions/draftActions"; // Assumes this action exists and works
 
 /**
  * Fetches a deck's card list from the database and compiles it into the
