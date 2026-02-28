@@ -1,12 +1,13 @@
 // src/app/actions/autoDraftActions.ts
+
 "use server";
 
 import { createServerClient } from "@/lib/supabase";
 import { getAvailableCardsForDraft, type CardData } from "@/app/actions/cardActions";
-import { getTeamDraftPicks, addDraftPickInternal } from "@/app/actions/draftActions";
-import { spendCubucksOnDraftInternal, getTeamBalance } from "@/app/actions/cubucksActions";
+import { getTeamDraftPicks, addSkippedPick } from "@/app/actions/draftActions";
+import { getTeamBalance } from "@/app/actions/cubucksActions";
 import { getDraftStatus } from "@/app/actions/draftOrderActions";
-import { getDuplicateCardIdSet } from '@/lib/draftCache';
+import { getDuplicateCardIdSet } from "@/lib/draftCache";
 
 // ============================================================================
 // TYPES
@@ -30,7 +31,7 @@ export interface QueueEntry {
   cardName: string;
   position: number;
   pinned: boolean;
-  source?: "manual_queue" | "algorithm" | "skipped"; 
+  source?: "manual_queue" | "algorithm" | "skipped";
   cardSet?: string;
   cardType?: string;
   rarity?: string;
@@ -40,19 +41,18 @@ export interface QueueEntry {
   cmc?: number;
   cubucksCost?: number;
   cubecobraElo?: number;
-	votes?: string[];           // Array of user IDs who have voted
+  votes?: string[]; // Array of user IDs who have voted
   voteThreshold?: number;
 }
 
 export interface AutoDraftPreviewResult {
   nextPick: CardData | null;
-  source?: "manual_queue" | "algorithm" | "skipped"; 
+  source?: "manual_queue" | "algorithm" | "skipped";
   queueDepth: number;
   algorithmDetails?: AlgorithmDetails;
-	votes?: string[];
+  votes?: string[];
   voteThreshold?: number;
   error?: string;
-	
 }
 
 // ============================================================================
@@ -67,20 +67,25 @@ async function verifyTeamMembership(
 ): Promise<{ authorized: boolean; userId?: string; error?: string }> {
   const supabase = await createServerClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
+
   if (authError || !user) {
     return { authorized: false, error: "You must be logged in to perform this action" };
   }
+
   const { data: membership, error: membershipError } = await supabase
     .from("team_members")
     .select("id")
     .eq("team_id", teamId)
     .eq("user_id", user.id)
     .single();
+
   if (membershipError || !membership) {
     return { authorized: false, userId: user.id, error: "You must be a member of this team" };
   }
+
   return { authorized: true, userId: user.id };
 }
+
 /**
  * Count the number of drafted cards per color for a team.
  * Multi-color cards count toward each of their colors.
@@ -110,7 +115,7 @@ async function getTeamMemberCount(teamId: string): Promise<number> {
     .from("team_members")
     .select("*", { count: 'exact', head: true })
     .eq("team_id", teamId);
-    
+
   if (error) {
     console.error("Error fetching team member count:", error);
     return 1; // Fallback to 1 to prevent division/math errors
@@ -181,15 +186,13 @@ export async function toggleQueuePickVote(
 
     // We only execute if they hit the threshold AND it's the #1 card in their queue
     if (currentVotes.length >= threshold && queueEntry.position === 1) {
-      
       const { status: draftStatus } = await getDraftStatus();
-      
+
       // Check if it is currently this team's turn to pick
       if (draftStatus?.onTheClock?.teamId === teamId) {
-        
-        // Execute the pick using the internal logic
-        const pickResult = await executeConfirmedTeamPick(teamId, cardPoolId, draftSessionId);
-        
+        // Execute the pick using the ATOMIC logic
+        const pickResult = await executeConfirmedTeamPick(teamId, cardPoolId, draftSessionId, auth.userId);
+
         if (!pickResult.success) {
            return { success: true, pickExecuted: false, error: pickResult.error }; // Vote saved, but pick failed
         }
@@ -206,70 +209,67 @@ export async function toggleQueuePickVote(
 }
 
 /**
- * Internal helper to process the confirmed pick once the threshold is met.
- * Contains the core logic originally proposed in executeManualPick.
+ * NEW: Uses the atomic SQL function to execute a manual pick.
+ * This is the core logic for executing a pick that has met its vote threshold.
  */
 async function executeConfirmedTeamPick(
-  teamId: string, 
-  cardPoolId: string, 
-  draftSessionId: string
+  teamId: string,
+  cardPoolId: string,
+  draftSessionId: string,
+  userId: string
 ) {
+  const supabase = await createServerClient();
   const { cards: availableCards } = await getAvailableCardsForDraft();
   const card = availableCards.find(c => c.id === cardPoolId);
-  
-  if (!card) return { success: false, error: "Card is no longer available." };
 
-  const cost = card.cubucks_cost || 1;
-  const { team: teamBalance } = await getTeamBalance(teamId);
-  
-  if ((teamBalance?.cubucks_balance ?? 0) < cost) {
-    return { success: false, error: "Insufficient Cubucks for this pick." };
+  if (!card) {
+    return { success: false, error: "Card is no longer available to be drafted." };
   }
 
   const { picks: existingPicks } = await getTeamDraftPicks(teamId);
+
+  // Call the new atomic function
+  const { data: newPick, error } = await supabase.rpc("execute_atomic_draft_pick", {
+    p_team_id: teamId,
+    p_draft_session_id: draftSessionId,
+    p_card_pool_id: card.id,
+    p_card_id: card.card_id,
+    p_card_name: card.card_name,
+    p_card_set: card.card_set,
+    p_card_type: card.card_type,
+    p_rarity: card.rarity,
+    p_colors: card.colors,
+    p_image_url: card.image_url,
+    p_mana_cost: card.mana_cost,
+    p_cmc: card.cmc,
+    p_pick_number: existingPicks.length + 1,
+    p_cost: card.cubucks_cost || 1,
+    p_is_manual_pick: true,
+    p_user_id: userId,
+  }).single();
+
+  if (error) {
+    console.error("Atomic draft pick failed (manual):", error);
+    return { success: false, error: error.message };
+  }
   
-  const pickResult = await addDraftPickInternal({
-    team_id: teamId,
-    card_pool_id: card.id,
-    card_id: card.card_id,
-    card_name: card.card_name,
-    draft_session_id: draftSessionId,
-    card_set: card.card_set,
-    card_type: card.card_type,
-    rarity: card.rarity,
-    colors: card.colors,
-    image_url: card.image_url,
-    mana_cost: card.mana_cost,
-    cmc: card.cmc,
-    pick_number: existingPicks.length + 1,
-  });
-
-  if (!pickResult.success || !pickResult.pick) {
-    return { success: false, error: pickResult.error };
+  if (!newPick) {
+    return { success: false, error: "Draft pick could not be confirmed in the database." };
   }
-
-  const cubucksResult = await spendCubucksOnDraftInternal(
-    teamId, card.card_id, card.card_name, cost, card.id, pickResult.pick.id, true
-  );
-
-  if (!cubucksResult.success) {
-    return { success: false, error: cubucksResult.error };
-  }
-
-  // Cleanup queues & Broadcast
-  const supabase = await createServerClient();
+  
+  // The atomic function succeeded, now handle post-pick actions.
   await conditionallyCleanupDraftQueues(card.card_id);
-
+  
   const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
   const channel = supabase.channel(`draft-updates-${draftSessionId}`);
   
   await channel.send({
     type: 'broadcast',
     event: 'new_pick',
-    payload: { ...pickResult.pick, team_name: teamData?.name || 'Unknown Team' }
+    payload: { ...newPick, team_name: teamData?.name || 'Unknown Team' },
   });
 
-  return { success: true };
+  return { success: true, pick: newPick };
 }
 
 // ============================================================================
@@ -278,40 +278,6 @@ async function executeConfirmedTeamPick(
 
 /**
  * Compute the auto-draft pick for a team using an ELO/color affinity algorithm.
- *
- * Algorithm:
- * 1.  **Modify Raw ELO**:
- *     - Reduce the ELO of all 'Land' cards by a fixed multiplier (e.g., x0.8) to de-prioritize them.
- *
- * 2.  **Calculate Color Affinity**:
- *     - For each of the team's previously drafted cards, apply a bonus to the modifiers of the colors
- *       in that card (e.g., +0.1 per pick) and a penalty to the modifiers of colors not present (e.g., -0.05 per pick).
- *
- * 3.  **Determine Candidate Pool**:
- *     - Filter all available cards to those with a modified ELO greater than zero.
- *     - Sort these cards by their modified ELO in descending order.
- *     - Take the top 50 cards as the primary candidate pool.
- *
- * 4.  **Find Dominant Color**:
- *     - For each card in the top 50, calculate its "effective ELO" by multiplying its ELO by the team's
- *       highest color affinity modifier that matches the card's colors.
- *     - Sum the effective ELO for each of the five colors (W, U, B, R, G).
- *     - The color with the highest total sum is the team's "dominant color" for this pick.
- *
- * 5.  **Select Best Cards**:
- *     - **Best Colored Card**: The card from the top 50 matching the dominant color with the highest raw ELO.
- *     - **Best Colorless Card**: The card from the top 50 with no colors and the highest raw ELO.
- *
- * 6.  **Make Initial Selection**:
- *     - If the Best Colorless Card's ELO is strictly greater than the Best Colored Card's ELO, select the colorless card.
- *     - Otherwise, select the colored card. Fall back to the colorless card if no colored card was found.
- *
- * 7.  **Check Affordability**:
- *     - If the selected card costs more than the team's current Cubucks balance, discard the selection.
- *     - Re-select the highest ELO card from the top 50 that the team *can* afford.
- *     - If no cards in the top 50 are affordable, expand the search to all available cards and pick the
- *       highest ELO card the team can afford from the entire pool.
- *     - If no cards are affordable at all, return null.
  */
 export async function computeAutoDraftPick(
   teamId: string
@@ -328,16 +294,13 @@ export async function computeAutoDraftPick(
     const { picks: teamPicks } = await getTeamDraftPicks(teamId);
     const { team: teamBalance } = await getTeamBalance(teamId);
     const balance = teamBalance?.cubucks_balance ?? 0;
- // --- ALGORITHM IMPROVEMENTS ---
-    const LAND_ELO_MODIFIER = 0.8; 
-    const AFFINITY_BONUS_PER_PICK = 0.1; // x1.1 for one pick, x1.2 for two, etc.
-    const ANTI_AFFINITY_PENALTY_PER_PICK = 0.05; // x0.95 for one off-color pick
-        // --- 1. Compute new Color Affinity Modifiers ---
-	
-    // Start all colors at a neutral 1.0 modifier.
+
+    const LAND_ELO_MODIFIER = 0.8;
+    const AFFINITY_BONUS_PER_PICK = 0.1;
+    const ANTI_AFFINITY_PENALTY_PER_PICK = 0.05;
+
     const colorModifiers: Record<string, number> = { W: 1.0, U: 1.0, B: 1.0, R: 1.0, G: 1.0 };
     const allColors = ["W", "U", "B", "R", "G"];
-
     for (const pick of teamPicks) {
       const pickColors = new Set(pick.colors || []);
       if (pickColors.size === 0) continue;
@@ -349,9 +312,9 @@ export async function computeAutoDraftPick(
         }
       }
     }
-        // Ensure modifiers don't go below a certain floor (e.g., 0.5) to avoid extreme negative weights
+
     for (const color of allColors) {
-        colorModifiers[color] = Math.max(0.5, colorModifiers[color]);
+      colorModifiers[color] = Math.max(0.5, colorModifiers[color]);
     }
 
     const cardsWithElo = availableCards
@@ -418,17 +381,25 @@ export async function computeAutoDraftPick(
       selectedCard = bestColorlessCard;
       selectedSource = "colorless";
     }
-
+    
+    // --- AFFORDABILITY LOGIC ---
     if (selectedCard && (selectedCard.cubucks_cost || 1) > balance) {
-        const affordableCards = top50.filter(c => (c.cubucks_cost || 1) <= balance);
-        if (affordableCards.length > 0) {
-            selectedCard = affordableCards[0];
+        // The top pick is unaffordable. Find the best affordable card from the top 50.
+        const affordableTop50 = top50.filter(c => (c.cubucks_cost || 1) <= balance);
+        
+        if (affordableTop50.length > 0) {
+            // FIX: The affordable list is a subset of the already-sorted top50,
+            // so the first element is guaranteed to be the highest ELO affordable card.
+            selectedCard = affordableTop50[0];
         } else {
-            const anyAffordable = availableCards.filter(c => (c.cubucks_cost || 1) <= balance).sort((a, b) => (b.cubecobra_elo || 0) - (a.cubecobra_elo || 0));
-            selectedCard = anyAffordable[0] || null;
+            // If NO card in the top 50 is affordable, search all available cards.
+            const anyAffordable = availableCards
+                .filter(c => (c.cubucks_cost || 1) <= balance)
+                .sort((a, b) => (b.cubecobra_elo || 0) - (a.cubecobra_elo || 0));
+            selectedCard = anyAffordable[0] || null; // Will be null if nothing is affordable
         }
     }
-    
+
     const draftedColorCounts = countDraftedColors(teamPicks);
     const algorithmDetails: AlgorithmDetails = {
       top50CardIds: top50.map((c) => c.card_id),
@@ -440,8 +411,8 @@ export async function computeAutoDraftPick(
       teamDraftedColorCounts: draftedColorCounts,
       dominantColor,
     };
-    return { card: selectedCard, algorithmDetails };
 
+    return { card: selectedCard, algorithmDetails };
   } catch (error) {
     console.error("Error computing auto-draft pick:", error);
     return { card: null, algorithmDetails: null, error: "Failed to compute auto-draft pick" };
@@ -470,25 +441,21 @@ export async function getAutoDraftPreview(
     if (queueError) {
       console.error("Error fetching draft queue:", queueError);
     }
-    const queueDepth = (queueEntries || []).length;
 
+    const queueDepth = (queueEntries || []).length;
     if (queueEntries && queueEntries.length > 0) {
       const { cards: availableCards } = await getAvailableCardsForDraft();
       
-      // Create a Set of available INSTANCE IDs for fast, accurate lookups.
       const availableInstanceIds = new Set(availableCards.map((c) => c.id));
-
       for (const entry of queueEntries) {
-        // Check if the specific queued INSTANCE (using card_pool_id) is still available.
         if (entry.card_pool_id && availableInstanceIds.has(entry.card_pool_id)) {
-          // Find the full card data for that specific instance.
           const card = availableCards.find((c) => c.id === entry.card_pool_id) || null;
-			 const memberCount = await getTeamMemberCount(teamId);
+          const memberCount = await getTeamMemberCount(teamId);
           return {
             nextPick: card,
             source: "manual_queue",
             queueDepth,
-			     votes: entry.votes || [],                           // Add this
+            votes: entry.votes || [],
             voteThreshold: calculateVoteThreshold(memberCount),
           };
         }
@@ -497,12 +464,28 @@ export async function getAutoDraftPreview(
 
     // If no valid manual pick is found, fall back to the algorithm.
     const { card, algorithmDetails, error } = await computeAutoDraftPick(teamId);
+    
+    // Also check affordability for the algorithm pick in the preview
+    if (card) {
+        const { team: teamBalance } = await getTeamBalance(teamId);
+        const balance = teamBalance?.cubucks_balance ?? 0;
+        if ((card.cubucks_cost || 1) > balance) {
+            // If the best algorithmic pick isn't affordable, show it as skipped.
+            return {
+                nextPick: null,
+                source: "skipped",
+                queueDepth,
+                error: `Insufficient Cubucks. Need ${card.cubucks_cost || 1}, have ${balance}`
+            };
+        }
+    }
+
     return {
       nextPick: card,
-      source: "algorithm",
+      source: card ? "algorithm" : "skipped",
       queueDepth,
       algorithmDetails: algorithmDetails || undefined,
-      error,
+      error: card ? error : (error || "No affordable cards available."),
     };
   } catch (error) {
     console.error("Error getting auto-draft preview:", error);
@@ -515,14 +498,12 @@ export async function getAutoDraftPreview(
   }
 }
 
-
 // ============================================================================
 // QUEUE MANAGEMENT
 // ============================================================================
 
 /**
  * Get the full draft queue for a team.
- * Returns manual overrides first, then algorithm-computed cards.
  */
 export async function getTeamDraftQueue(
   teamId: string,
@@ -535,7 +516,8 @@ export async function getTeamDraftQueue(
       .select("id, card_pool_id, card_id, card_name, position, pinned, votes")
       .eq("team_id", teamId)
       .order("position", { ascending: true });
-const memberCount = await getTeamMemberCount(teamId);
+
+    const memberCount = await getTeamMemberCount(teamId);
     const voteThreshold = calculateVoteThreshold(memberCount);
 
     if (queueError) {
@@ -580,7 +562,7 @@ const memberCount = await getTeamMemberCount(teamId);
               cmc: cardData.cmc,
               cubucksCost: cardData.cubucks_cost,
               cubecobraElo: cardData.cubecobra_elo,
-				votes: entry.votes || [],
+              votes: entry.votes || [],
               voteThreshold: voteThreshold,
             });
             usedInstanceIds.add(entry.card_pool_id);
@@ -634,7 +616,6 @@ const memberCount = await getTeamMemberCount(teamId);
 
 /**
  * Set a team's manual draft queue (bulk operation for drag-and-drop reorder).
- * Replaces the entire manual queue with the provided entries.
  */
 export async function setTeamDraftQueue(
   teamId: string,
@@ -648,12 +629,13 @@ export async function setTeamDraftQueue(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const auth = await verifyTeamMembership(teamId);
-    if (!auth.authorized) {
+    if (!auth.authorized || !auth.userId) {
       return { success: false, error: auth.error };
     }
 
     const supabase = await createServerClient();
-const { data: existingQueue } = await supabase
+
+    const { data: existingQueue } = await supabase
       .from("team_draft_queue")
       .select("card_pool_id, votes")
       .eq("team_id", teamId);
@@ -661,7 +643,6 @@ const { data: existingQueue } = await supabase
     const voteMap = new Map<string, string[]>();
     existingQueue?.forEach(e => voteMap.set(e.card_pool_id, e.votes || []));
 
-    // Delete all existing queue entries for this team
     const { error: deleteError } = await supabase
       .from("team_draft_queue")
       .delete()
@@ -672,7 +653,6 @@ const { data: existingQueue } = await supabase
       return { success: false, error: deleteError.message };
     }
 
-    // Insert new entries if any
     if (entries.length > 0) {
       const rows = entries.map((entry, index) => ({
         team_id: teamId,
@@ -682,7 +662,7 @@ const { data: existingQueue } = await supabase
         position: index + 1,
         pinned: entry.pinned || false,
         added_by: auth.userId,
-		  votes: voteMap.get(entry.cardPoolId) || [],
+        votes: voteMap.get(entry.cardPoolId) || [],
       }));
 
       const { error: insertError } = await supabase
@@ -714,20 +694,17 @@ export async function pinCardToQueue(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const auth = await verifyTeamMembership(teamId);
-    if (!auth.authorized) {
+    if (!auth.authorized || !auth.userId) {
       return { success: false, error: auth.error };
     }
-
     const supabase = await createServerClient();
-
-    // Remove existing entry for this card if any
+    
     await supabase
       .from("team_draft_queue")
       .delete()
       .eq("team_id", teamId)
       .eq("card_pool_id", cardPoolId);
 
-    // Shift existing entries at this position and after
     const { data: existingEntries } = await supabase
       .from("team_draft_queue")
       .select("id, position")
@@ -735,7 +712,6 @@ export async function pinCardToQueue(
       .gte("position", position)
       .order("position", { ascending: false });
 
-    // Shift positions up by 1 (starting from the end to avoid unique constraint violations)
     for (const entry of existingEntries || []) {
       await supabase
         .from("team_draft_queue")
@@ -743,7 +719,6 @@ export async function pinCardToQueue(
         .eq("id", entry.id);
     }
 
-    // Insert the new entry at the desired position
     const { error: insertError } = await supabase
       .from("team_draft_queue")
       .insert({
@@ -780,10 +755,8 @@ export async function removeFromQueue(
     if (!auth.authorized) {
       return { success: false, error: auth.error };
     }
-
     const supabase = await createServerClient();
 
-    // Get the position being removed
     const { data: entry } = await supabase
       .from("team_draft_queue")
       .select("position")
@@ -795,7 +768,6 @@ export async function removeFromQueue(
       return { success: true }; // Already not in queue
     }
 
-    // Delete the entry
     const { error: deleteError } = await supabase
       .from("team_draft_queue")
       .delete()
@@ -806,7 +778,6 @@ export async function removeFromQueue(
       return { success: false, error: deleteError.message };
     }
 
-    // Re-sequence remaining entries
     const { data: remaining } = await supabase
       .from("team_draft_queue")
       .select("id, position")
@@ -820,7 +791,6 @@ export async function removeFromQueue(
         .update({ position: item.position - 1 })
         .eq("id", item.id);
     }
-
     return { success: true };
   } catch (error) {
     console.error("Error removing from queue:", error);
@@ -839,9 +809,7 @@ export async function clearTeamDraftQueue(
     if (!auth.authorized) {
       return { success: false, error: auth.error };
     }
-
     const supabase = await createServerClient();
-
     const { error } = await supabase
       .from("team_draft_queue")
       .delete()
@@ -850,7 +818,6 @@ export async function clearTeamDraftQueue(
     if (error) {
       return { success: false, error: error.message };
     }
-
     return { success: true };
   } catch (error) {
     console.error("Error clearing draft queue:", error);
@@ -861,9 +828,10 @@ export async function clearTeamDraftQueue(
 // ============================================================================
 // EXECUTION & CLEANUP
 // ============================================================================
+
 /**
- * Execute the auto-draft for a team.
- * Verifies the team is on the clock, computes the pick, and executes it.
+ * Cleans up team queues after a card has been drafted.
+ * Removes the specific card_id from all team queues unless it's a duplicate that still has available instances.
  */
 export async function conditionallyCleanupDraftQueues(
   draftedCardId: string
@@ -872,19 +840,23 @@ export async function conditionallyCleanupDraftQueues(
     const supabase = await createServerClient();
     const duplicateSet = await getDuplicateCardIdSet();
 
+    // If the card is not a duplicate, it's safe to remove all queue entries for it.
     if (!duplicateSet.has(draftedCardId)) {
       const { error } = await supabase.from("team_draft_queue").delete().eq("card_id", draftedCardId);
       if (error) return { success: false, cleaned: false, error: error.message };
       return { success: true, cleaned: true };
     }
 
+    // If it is a duplicate, check if any instances are still available.
     const { cards: availableCards } = await getAvailableCardsForDraft();
     if (!availableCards.some(card => card.card_id === draftedCardId)) {
+      // No more instances are available, so clean it from the queues.
       const { error } = await supabase.from("team_draft_queue").delete().eq("card_id", draftedCardId);
       if (error) return { success: false, cleaned: false, error: error.message };
       return { success: true, cleaned: true };
     }
 
+    // Duplicates exist and are available, so do not clean the queues.
     return { success: true, cleaned: false };
   } catch (error) {
     console.error("Unexpected error in conditional queue cleanup:", error);
@@ -892,111 +864,108 @@ export async function conditionallyCleanupDraftQueues(
   }
 }
 
+/**
+ * NEW: Executes the auto-draft for a team using an atomic transaction.
+ * Verifies the team is on the clock, computes the pick, and executes it.
+ */
 export async function executeAutoDraft(
   teamId: string,
-	  draftSessionId: string 
+  draftSessionId: string
 ): Promise<{
   success: boolean;
   pick?: { cardId: string; cardName: string; cost: number };
-  source?: "manual_queue" | "algorithm" | "skipped"; 
+  source?: "manual_queue" | "algorithm" | "skipped";
   error?: string;
   staleDeployment?: boolean;
 }> {
   try {
-    const { status: draftStatus} = await getDraftStatus();
-    
-    if (!draftStatus || !draftSessionId) { 
-        return { success: false, error: "No active draft or draft ID is missing" };
+    const supabase = await createServerClient();
+    const { status: draftStatus, error: statusError } = await getDraftStatus();
+
+    if (statusError || !draftStatus || !draftSessionId) {
+      return { success: false, error: statusError || "No active draft or draft ID is missing" };
     }
+
     if (draftStatus.onTheClock.teamId !== teamId) {
       return { success: false, error: "This team is not on the clock" };
     }
-    
-    const preview = await getAutoDraftPreview(teamId);
-    if (!preview.nextPick) {
-      return { success: false, error: preview.error || "No card available to auto-draft" };
-    }
 
-    const card = preview.nextPick;
-    const cost = card.cubucks_cost || 1;
-    const { team: teamBalance } = await getTeamBalance(teamId);
-    const canAfford = (teamBalance?.cubucks_balance ?? 0) >= cost;
-    const isManualPick = preview.source === 'manual_queue';
-
-   if (!canAfford) {
-      return { success: false, source: "skipped", error: `Insufficient Cubucks. Need ${cost}, have ${teamBalance?.cubucks_balance || 0}` };
-    }
-    // === RE-ORDERED LOGIC START ===
-
-    // STEP 1: Get the current number of picks to determine the next pick number.
     const { picks: existingPicks } = await getTeamDraftPicks(teamId);
-    
-    // STEP 2: Add the draft pick to the database FIRST to get its ID.
-    const pickResult = await addDraftPickInternal({
-      team_id: teamId,
-      card_pool_id: card.id,
-      card_id: card.card_id,
-      card_name: card.card_name,
-      draft_session_id: draftSessionId, // This is the crucial field
-      card_set: card.card_set,
-      card_type: card.card_type,
-      rarity: card.rarity,
-      colors: card.colors,
-      image_url: card.image_url,
-      mana_cost: card.mana_cost,
-      cmc: card.cmc,
-      pick_number: existingPicks.length + 1,
-    }); 
-    
-    if (!pickResult.success || !pickResult.pick) {
-      return { success: false, error: pickResult.error || "Failed to add draft pick" };
-    }
-    
-    // The new, official draft pick record.
-    const newPick = pickResult.pick;
+    const pickNumber = existingPicks.length + 1;
 
-    // STEP 3: Now, spend the Cubucks, passing the NEWLY CREATED pick's ID.
-    const cubucksResult = await spendCubucksOnDraftInternal(
-        teamId, 
-        card.card_id, 
-        card.card_name, 
-        cost, 
-        card.id, 
-        newPick.id, // Pass the correct draft_pick_id
-        isManualPick
-    );
+    // Determine the pick from the queue or algorithm.
+    const preview = await getAutoDraftPreview(teamId);
+    const card = preview.nextPick;
 
-    if (!cubucksResult.success) {
-        // Here you might want to consider logic to "undo" the draft pick,
-        // but for now, we will report the error.
-        return { success: false, error: cubucksResult.error || "Failed to spend Cubucks after pick was made. Manual correction needed." };
+    // --- NEW: Handle SKIPPED picks explicitly ---
+    // If there's no card from the preview (either unaffordable or none available),
+    // log a SKIPPED pick and exit successfully.
+    if (!card) {
+      const { pick: skippedPick, error: skipError } = await addSkippedPick(teamId, pickNumber, draftSessionId);
+      if (skipError) {
+        return { success: false, source: "skipped", error: `Failed to record skipped pick: ${skipError}` };
+      }
+
+      // Broadcast the skipped pick so the UI can update
+      const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
+      const channel = supabase.channel(`draft-updates-${draftSessionId}`);
+      await channel.send({
+        type: 'broadcast',
+        event: 'new_pick',
+        payload: { ...skippedPick, team_name: teamData?.name || 'Unknown Team' },
+      });
+
+      return { success: true, source: "skipped", pick: { cardId: "skipped", cardName: "SKIPPED", cost: 0 } };
     }
 
-    // === RE-ORDERED LOGIC END ===
+    // --- NEW: ATOMIC DRAFT EXECUTION ---
+    // A card is available and affordable, execute the draft using the atomic function.
+    const { data: newPick, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
+        p_team_id: teamId,
+        p_draft_session_id: draftSessionId,
+        p_card_pool_id: card.id,
+        p_card_id: card.card_id,
+        p_card_name: card.card_name,
+        p_card_set: card.card_set,
+        p_card_type: card.card_type,
+        p_rarity: card.rarity,
+        p_colors: card.colors,
+        p_image_url: card.image_url,
+        p_mana_cost: card.mana_cost,
+        p_cmc: card.cmc,
+        p_pick_number: pickNumber,
+        p_cost: card.cubucks_cost || 1,
+        p_is_manual_pick: preview.source === "manual_queue",
+        p_user_id: null, // This is an auto-draft, so no specific user actioned it.
+      }).single();
 
-    const supabase = await createServerClient();
+    if (rpcError) {
+      console.error("Atomic auto-draft failed:", rpcError);
+      return { success: false, error: `Draft failed: ${rpcError.message}` };
+    }
+
+    if (!newPick) {
+      return { success: false, error: "Draft pick could not be confirmed in the database." };
+    }
+
+    // --- Post-Pick Actions (only run after successful atomic transaction) ---
     await supabase.from("auto_draft_log").insert({
       team_id: teamId,
       card_id: card.card_id,
       card_name: card.card_name,
       card_pool_id: card.id,
-      pick_source: preview.source === "manual_queue" ? "algorithm" : "algorithm",
+      pick_source: preview.source,
       algorithm_details: preview.algorithmDetails || null,
       round_number: draftStatus.currentRound,
     });
-
+    
     await conditionallyCleanupDraftQueues(card.card_id);
     
-    const { data: teamData } = await supabase
-      .from('teams')
-      .select('name')
-      .eq('id', teamId)
-      .single();
-
-    // Broadcast the complete pick object we received from addDraftPickInternal
+    const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
+    
     const broadcastPayload = {
       ...newPick,
-      team_name: teamData?.name || 'Unknown Team'
+      team_name: teamData?.name || 'Unknown Team',
     };
     
     const channel = supabase.channel(`draft-updates-${draftSessionId}`);
@@ -1004,20 +973,20 @@ export async function executeAutoDraft(
     await channel.send({
         type: 'broadcast',
         event: 'new_pick',
-        payload: broadcastPayload
+        payload: broadcastPayload,
     });
 
     return {
       success: true,
-      pick: { cardId: card.card_id, cardName: card.card_name, cost },
+      pick: { cardId: card.card_id, cardName: card.card_name, cost: card.cubucks_cost || 1 },
       source: preview.source,
     };
-    
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (errorMessage.includes("Failed to find Server Action")) {
       return { success: false, error: "Deployment has changed. Please refresh the page.", staleDeployment: true };
     }
-    return { success: false, error: "Failed to execute auto-draft" };
+    console.error("Unhandled error in executeAutoDraft:", error);
+    return { success: false, error: "An unexpected error occurred during the auto-draft process." };
   }
 }
