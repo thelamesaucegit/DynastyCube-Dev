@@ -4,7 +4,6 @@
 
 import { createServerClient } from "@/lib/supabase";
 import { getAvailableCardsForDraft, type CardData } from "@/app/actions/cardActions";
-// FIX: Import the DraftPick type to provide it to the RPC call
 import { getTeamDraftPicks, addSkippedPick, type DraftPick } from "@/app/actions/draftActions";
 import { getTeamBalance } from "@/app/actions/cubucksActions";
 import { getDraftStatus } from "@/app/actions/draftOrderActions";
@@ -149,7 +148,6 @@ export async function toggleQueuePickVote(
 
     const supabase = await createServerClient();
 
-    // 1. Get the current queue entry and its votes
     const { data: queueEntry, error: fetchError } = await supabase
       .from("team_draft_queue")
       .select("id, votes, position")
@@ -161,7 +159,6 @@ export async function toggleQueuePickVote(
       return { success: false, pickExecuted: false, error: "Queue entry not found" };
     }
 
-    // 2. Toggle the user's vote
     let currentVotes: string[] = queueEntry.votes || [];
     const hasVoted = currentVotes.includes(auth.userId);
 
@@ -171,7 +168,6 @@ export async function toggleQueuePickVote(
       currentVotes.push(auth.userId);
     }
 
-    // 3. Save the updated votes back to the database
     const { error: updateError } = await supabase
       .from("team_draft_queue")
       .update({ votes: currentVotes })
@@ -181,21 +177,17 @@ export async function toggleQueuePickVote(
       return { success: false, pickExecuted: false, error: "Failed to record vote" };
     }
 
-    // 4. Check Thresholds and trigger execution if met
     const memberCount = await getTeamMemberCount(teamId);
     const threshold = calculateVoteThreshold(memberCount);
 
-    // We only execute if they hit the threshold AND it's the #1 card in their queue
     if (currentVotes.length >= threshold && queueEntry.position === 1) {
       const { status: draftStatus } = await getDraftStatus();
 
-      // Check if it is currently this team's turn to pick
       if (draftStatus?.onTheClock?.teamId === teamId) {
-        // Execute the pick using the ATOMIC logic
         const pickResult = await executeConfirmedTeamPick(teamId, cardPoolId, draftSessionId, auth.userId);
 
         if (!pickResult.success) {
-           return { success: true, pickExecuted: false, error: pickResult.error }; // Vote saved, but pick failed
+           return { success: true, pickExecuted: false, error: pickResult.error };
         }
         
         return { success: true, pickExecuted: true };
@@ -210,8 +202,7 @@ export async function toggleQueuePickVote(
 }
 
 /**
- * NEW: Uses the atomic SQL function to execute a manual pick.
- * This is the core logic for executing a pick that has met its vote threshold.
+ * Uses the atomic SQL function to execute a manual pick.
  */
 async function executeConfirmedTeamPick(
   teamId: string,
@@ -229,8 +220,8 @@ async function executeConfirmedTeamPick(
 
   const { picks: existingPicks } = await getTeamDraftPicks(teamId);
 
-  // FIX: Provide the <DraftPick> generic to correctly type the response.
-  const { data: newPick, error } = await supabase.rpc<DraftPick>("execute_atomic_draft_pick", {
+  // FIX: Removed the incorrect generic from the rpc call.
+  const { data, error } = await supabase.rpc("execute_atomic_draft_pick", {
     p_team_id: teamId,
     p_draft_session_id: draftSessionId,
     p_card_pool_id: card.id,
@@ -254,17 +245,18 @@ async function executeConfirmedTeamPick(
     return { success: false, error: error.message };
   }
   
+  // FIX: Safely cast the 'any' type response to our known 'DraftPick' interface.
+  const newPick: DraftPick = data;
+
   if (!newPick) {
     return { success: false, error: "Draft pick could not be confirmed in the database." };
   }
   
-  // The atomic function succeeded, now handle post-pick actions.
   await conditionallyCleanupDraftQueues(card.card_id);
   
   const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
   const channel = supabase.channel(`draft-updates-${draftSessionId}`);
   
-  // FIX: The spread operator now works because `newPick` is a guaranteed object.
   await channel.send({
     type: 'broadcast',
     event: 'new_pick',
@@ -384,21 +376,16 @@ export async function computeAutoDraftPick(
       selectedSource = "colorless";
     }
     
-    // --- AFFORDABILITY LOGIC ---
     if (selectedCard && (selectedCard.cubucks_cost || 1) > balance) {
-        // The top pick is unaffordable. Find the best affordable card from the top 50.
         const affordableTop50 = top50.filter(c => (c.cubucks_cost || 1) <= balance);
         
         if (affordableTop50.length > 0) {
-            // FIX: The affordable list is a subset of the already-sorted top50,
-            // so the first element is guaranteed to be the highest ELO affordable card.
             selectedCard = affordableTop50[0];
         } else {
-            // If NO card in the top 50 is affordable, search all available cards.
             const anyAffordable = availableCards
                 .filter(c => (c.cubucks_cost || 1) <= balance)
                 .sort((a, b) => (b.cubecobra_elo || 0) - (a.cubecobra_elo || 0));
-            selectedCard = anyAffordable[0] || null; // Will be null if nothing is affordable
+            selectedCard = anyAffordable[0] || null;
         }
     }
 
@@ -464,15 +451,12 @@ export async function getAutoDraftPreview(
       }
     }
 
-    // If no valid manual pick is found, fall back to the algorithm.
     const { card, algorithmDetails, error } = await computeAutoDraftPick(teamId);
     
-    // Also check affordability for the algorithm pick in the preview
     if (card) {
         const { team: teamBalance } = await getTeamBalance(teamId);
         const balance = teamBalance?.cubucks_balance ?? 0;
         if ((card.cubucks_cost || 1) > balance) {
-            // If the best algorithmic pick isn't affordable, show it as skipped.
             return {
                 nextPick: null,
                 source: "skipped",
@@ -833,7 +817,6 @@ export async function clearTeamDraftQueue(
 
 /**
  * Cleans up team queues after a card has been drafted.
- * Removes the specific card_id from all team queues unless it's a duplicate that still has available instances.
  */
 export async function conditionallyCleanupDraftQueues(
   draftedCardId: string
@@ -842,23 +825,19 @@ export async function conditionallyCleanupDraftQueues(
     const supabase = await createServerClient();
     const duplicateSet = await getDuplicateCardIdSet();
 
-    // If the card is not a duplicate, it's safe to remove all queue entries for it.
     if (!duplicateSet.has(draftedCardId)) {
       const { error } = await supabase.from("team_draft_queue").delete().eq("card_id", draftedCardId);
       if (error) return { success: false, cleaned: false, error: error.message };
       return { success: true, cleaned: true };
     }
 
-    // If it is a duplicate, check if any instances are still available.
     const { cards: availableCards } = await getAvailableCardsForDraft();
     if (!availableCards.some(card => card.card_id === draftedCardId)) {
-      // No more instances are available, so clean it from the queues.
       const { error } = await supabase.from("team_draft_queue").delete().eq("card_id", draftedCardId);
       if (error) return { success: false, cleaned: false, error: error.message };
       return { success: true, cleaned: true };
     }
 
-    // Duplicates exist and are available, so do not clean the queues.
     return { success: true, cleaned: false };
   } catch (error) {
     console.error("Unexpected error in conditional queue cleanup:", error);
@@ -867,8 +846,7 @@ export async function conditionallyCleanupDraftQueues(
 }
 
 /**
- * NEW: Executes the auto-draft for a team using an atomic transaction.
- * Verifies the team is on the clock, computes the pick, and executes it.
+ * Executes the auto-draft for a team using an atomic transaction.
  */
 export async function executeAutoDraft(
   teamId: string,
@@ -895,20 +873,15 @@ export async function executeAutoDraft(
     const { picks: existingPicks } = await getTeamDraftPicks(teamId);
     const pickNumber = existingPicks.length + 1;
 
-    // Determine the pick from the queue or algorithm.
     const preview = await getAutoDraftPreview(teamId);
     const card = preview.nextPick;
 
-    // --- NEW: Handle SKIPPED picks explicitly ---
-    // If there's no card from the preview (either unaffordable or none available),
-    // log a SKIPPED pick and exit successfully.
     if (!card) {
       const { pick: skippedPick, error: skipError } = await addSkippedPick(teamId, pickNumber, draftSessionId);
       if (skipError) {
         return { success: false, source: "skipped", error: `Failed to record skipped pick: ${skipError}` };
       }
 
-      // Broadcast the skipped pick so the UI can update
       const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
       const channel = supabase.channel(`draft-updates-${draftSessionId}`);
       await channel.send({
@@ -920,10 +893,8 @@ export async function executeAutoDraft(
       return { success: true, source: "skipped", pick: { cardId: "skipped", cardName: "SKIPPED", cost: 0 } };
     }
 
-    // --- NEW: ATOMIC DRAFT EXECUTION ---
-    // A card is available and affordable, execute the draft using the atomic function.
-    // FIX: Provide the <DraftPick> generic to correctly type the response.
-    const { data: newPick, error: rpcError } = await supabase.rpc<DraftPick>("execute_atomic_draft_pick", {
+    // FIX: Removed the incorrect generic from the rpc call.
+    const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
         p_team_id: teamId,
         p_draft_session_id: draftSessionId,
         p_card_pool_id: card.id,
@@ -939,19 +910,21 @@ export async function executeAutoDraft(
         p_pick_number: pickNumber,
         p_cost: card.cubucks_cost || 1,
         p_is_manual_pick: preview.source === "manual_queue",
-        p_user_id: null, // This is an auto-draft, so no specific user actioned it.
+        p_user_id: null,
       }).single();
 
     if (rpcError) {
       console.error("Atomic auto-draft failed:", rpcError);
       return { success: false, error: `Draft failed: ${rpcError.message}` };
     }
+    
+    // FIX: Safely cast the 'any' type response to our known 'DraftPick' interface.
+    const newPick: DraftPick = data;
 
     if (!newPick) {
       return { success: false, error: "Draft pick could not be confirmed in the database." };
     }
 
-    // --- Post-Pick Actions (only run after successful atomic transaction) ---
     await supabase.from("auto_draft_log").insert({
       team_id: teamId,
       card_id: card.card_id,
@@ -966,7 +939,6 @@ export async function executeAutoDraft(
     
     const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
     
-    // FIX: The spread operator now works because `newPick` is a guaranteed object.
     const broadcastPayload = {
       ...newPick,
       team_name: teamData?.name || 'Unknown Team',
