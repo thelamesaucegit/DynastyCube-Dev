@@ -220,7 +220,6 @@ async function executeConfirmedTeamPick(
 
   const { picks: existingPicks } = await getTeamDraftPicks(teamId);
 
-  // FIX: Removed the incorrect generic from the rpc call.
   const { data, error } = await supabase.rpc("execute_atomic_draft_pick", {
     p_team_id: teamId,
     p_draft_session_id: draftSessionId,
@@ -245,8 +244,8 @@ async function executeConfirmedTeamPick(
     return { success: false, error: error.message };
   }
   
-  // FIX: Safely cast the 'any' type response to our known 'DraftPick' interface.
-  const newPick: DraftPick = data;
+  // FIX: Use the 'as' keyword for a strong type assertion.
+  const newPick = data as DraftPick;
 
   if (!newPick) {
     return { success: false, error: "Draft pick could not be confirmed in the database." };
@@ -893,7 +892,6 @@ export async function executeAutoDraft(
       return { success: true, source: "skipped", pick: { cardId: "skipped", cardName: "SKIPPED", cost: 0 } };
     }
 
-    // FIX: Removed the incorrect generic from the rpc call.
     const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
         p_team_id: teamId,
         p_draft_session_id: draftSessionId,
@@ -918,8 +916,8 @@ export async function executeAutoDraft(
       return { success: false, error: `Draft failed: ${rpcError.message}` };
     }
     
-    // FIX: Safely cast the 'any' type response to our known 'DraftPick' interface.
-    const newPick: DraftPick = data;
+    // FIX: Use the 'as' keyword for a strong type assertion.
+    const newPick = data as DraftPick;
 
     if (!newPick) {
       return { success: false, error: "Draft pick could not be confirmed in the database." };
