@@ -94,7 +94,7 @@ function SortableQueueItem({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: entry.cardPoolId }); // FIX: Use the unique cardPoolId for sortable items
+  } = useSortable({ id: entry.cardPoolId });
 
   const style: React.CSSProperties = {
     transform: transform
@@ -165,9 +165,10 @@ function SortableQueueItem({
             )}
           </div>
           {/* ELO */}
-          {entry.cubecobraElo != null && (
+          {/* FIX: Use cubecobra_elo (snake_case) to match the data type */}
+          {entry.cubecobra_elo != null && (
             <span className="text-xs text-purple-600 dark:text-purple-400">
-              ELO {entry.cubecobraElo.toLocaleString()}
+              ELO {entry.cubecobra_elo.toLocaleString()}
             </span>
           )}
           {/* Cost */}
@@ -277,11 +278,9 @@ function AddToQueueDialog({
   }, [open, loadCards]);
 
   const filteredAndSortedCards = useMemo(() => {
-    // FIX: Filter out cards by their unique instance ID (`card.id`) if they are already in the queue.
     const availableForQueue = allAvailable.filter((card) => !existingCardPoolIds.has(card.id!));
 
     const filtered = availableForQueue.filter((card) => {
-      // FIX: Add a defensive check to ensure card.card_name is a string before filtering.
       const searchMatch = search
         ? typeof card.card_name === "string" && card.card_name.toLowerCase().includes(search.toLowerCase())
         : true;
@@ -372,6 +371,7 @@ function AddToQueueDialog({
                   }}
                   className="w-full flex items-center gap-3 p-2 rounded-lg border border-border hover:border-purple-500/40 hover:bg-accent transition-colors text-left"
                 >
+                  {/* FIX: Use image_url */}
                   {card.image_url && (
                     /* eslint-disable-next-line @next/next/no-img-element */
                     <img
@@ -392,13 +392,15 @@ function AddToQueueDialog({
                           <span>◇</span>
                         )}
                       </span>
-                      {card.cubecobraElo != null && (
+                      {/* FIX: Use cubecobra_elo */}
+                      {card.cubecobra_elo != null && (
                         <span className="text-purple-600 dark:text-purple-400">
-                          ELO {card.cubecobraElo.toLocaleString()}
+                          ELO {card.cubecobra_elo.toLocaleString()}
                         </span>
                       )}
+                      {/* FIX: Use cubucks_cost */}
                       <span className="text-yellow-600 dark:text-yellow-400">
-                        💰 {card.cubucksCost || 1}
+                        💰 {card.cubucks_cost || 1}
                       </span>
                     </div>
                   </div>
@@ -542,7 +544,6 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
 
   const activeEntry = activeId ? queue.find((e) => e.cardPoolId === activeId) : null;
   const manualCount = queue.filter((e) => e.source === "manual_queue").length;
-  // FIX: Create a Set of unique INSTANCE IDs (`cardPoolId`) from the queue.
   const existingCardPoolIds = new Set(queue.map((e) => e.cardPoolId));
 
   return (
@@ -588,7 +589,7 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
             {isUserTeamMember && (
               <div className="flex flex-wrap gap-2 mb-4">
                 <AddToQueueDialog
-                  existingCardPoolIds={existingCardPoolIds} // FIX: Pass the Set of instance IDs
+                  existingCardPoolIds={existingCardPoolIds}
                   onAdd={handleAddToQueue}
                 />
                 {manualCount > 0 && (
@@ -632,13 +633,13 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
                 onDragEnd={handleDragEnd}
               >
                 <SortableContext
-                  items={queue.map((e) => e.cardPoolId)} // FIX: Use unique cardPoolId here
+                  items={queue.map((e) => e.cardPoolId)}
                   strategy={verticalListSortingStrategy}
                 >
                   <div className="space-y-2">
                     {queue.map((entry) => (
                       <SortableQueueItem
-                        key={entry.cardPoolId} // FIX: Use unique cardPoolId for the key
+                        key={entry.cardPoolId}
                         entry={entry}
                         onPin={handlePin}
                         onRemove={handleRemove}
@@ -694,9 +695,9 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
                             <span className="text-xs text-muted-foreground">◇</span>
                           )}
                         </div>
-                        {entry.cubecobraElo != null && (
+                        {entry.cubecobra_elo != null && (
                           <span className="text-xs text-purple-600 dark:text-purple-400">
-                            ELO {entry.cubecobraElo.toLocaleString()}
+                            ELO {entry.cubecobra_elo.toLocaleString()}
                           </span>
                         )}
                         <Badge variant="outline" className="text-[10px] px-1 py-0">
