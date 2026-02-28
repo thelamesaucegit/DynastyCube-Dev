@@ -114,7 +114,6 @@ function SortableQueueItem({
           : "bg-muted/50 border-border/50"
       } ${isDragging ? "shadow-lg ring-2 ring-purple-500/30" : ""}`}
     >
-      {/* Drag Handle */}
       <button
         className="touch-none p-1 rounded text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing"
         {...attributes}
@@ -123,7 +122,6 @@ function SortableQueueItem({
         <GripVertical className="size-4" />
       </button>
 
-      {/* Position Number */}
       <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
         entry.position <= 3
           ? "bg-purple-500/15 text-purple-600 dark:text-purple-400"
@@ -132,7 +130,7 @@ function SortableQueueItem({
         {entry.position}
       </div>
 
-      {/* Card Thumbnail */}
+      {/* FIX: Use entry.imageUrl (camelCase) for QueueEntry */}
       {entry.imageUrl && (
         /* eslint-disable-next-line @next/next/no-img-element */
         <img
@@ -142,7 +140,6 @@ function SortableQueueItem({
         />
       )}
 
-      {/* Card Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-semibold text-sm truncate">{entry.cardName}</span>
@@ -151,7 +148,6 @@ function SortableQueueItem({
           )}
         </div>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-          {/* Colors */}
           <div className="flex gap-0.5">
             {entry.colors && entry.colors.length > 0 ? (
               entry.colors.map((color) => {
@@ -164,27 +160,24 @@ function SortableQueueItem({
               <span className="text-xs text-muted-foreground">◇</span>
             )}
           </div>
-          {/* ELO */}
-          {/* FIX: Use cubecobra_elo (snake_case) to match the data type */}
-          {entry.cubecobra_elo != null && (
+          {/* FIX: Use entry.cubecobraElo (camelCase) for QueueEntry */}
+          {entry.cubecobraElo != null && (
             <span className="text-xs text-purple-600 dark:text-purple-400">
-              ELO {entry.cubecobra_elo.toLocaleString()}
+              ELO {entry.cubecobraElo.toLocaleString()}
             </span>
           )}
-          {/* Cost */}
+          {/* FIX: Use entry.cubucksCost (camelCase) for QueueEntry */}
           {entry.cubucksCost != null && (
             <span className="text-xs text-yellow-600 dark:text-yellow-400">
               💰 {entry.cubucksCost || 1}
             </span>
           )}
-          {/* Source indicator */}
           <Badge variant="outline" className="text-[10px] px-1 py-0">
             {isManual ? "📌 Manual" : "🧠 Auto"}
           </Badge>
         </div>
       </div>
 
-      {/* Actions */}
       <div className="flex items-center gap-1 flex-shrink-0">
         <Button
           variant="ghost"
@@ -226,6 +219,7 @@ function DragOverlayItem({ entry }: { entry: QueueEntry }) {
       <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold bg-purple-500/15 text-purple-600 dark:text-purple-400 flex-shrink-0">
         {entry.position}
       </div>
+      {/* FIX: Use entry.imageUrl (camelCase) for QueueEntry */}
       {entry.imageUrl && (
         /* eslint-disable-next-line @next/next/no-img-element */
         <img
@@ -371,7 +365,7 @@ function AddToQueueDialog({
                   }}
                   className="w-full flex items-center gap-3 p-2 rounded-lg border border-border hover:border-purple-500/40 hover:bg-accent transition-colors text-left"
                 >
-                  {/* FIX: Use image_url */}
+                  {/* Correct: Use image_url (snake_case) for CardData */}
                   {card.image_url && (
                     /* eslint-disable-next-line @next/next/no-img-element */
                     <img
@@ -392,13 +386,13 @@ function AddToQueueDialog({
                           <span>◇</span>
                         )}
                       </span>
-                      {/* FIX: Use cubecobra_elo */}
+                      {/* Correct: Use cubecobra_elo (snake_case) for CardData */}
                       {card.cubecobra_elo != null && (
                         <span className="text-purple-600 dark:text-purple-400">
                           ELO {card.cubecobra_elo.toLocaleString()}
                         </span>
                       )}
-                      {/* FIX: Use cubucks_cost */}
+                      {/* Correct: Use cubucks_cost (snake_case) for CardData */}
                       <span className="text-yellow-600 dark:text-yellow-400">
                         💰 {card.cubucks_cost || 1}
                       </span>
@@ -548,14 +542,12 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
 
   return (
     <div className="space-y-4">
-      {/* Auto-Draft Preview */}
       <AutoDraftPreview
         teamId={teamId}
         compact={false}
         onManageQueue={() => setExpanded(!expanded)}
         refreshKey={previewRefreshKey}
       />
-      {/* Queue Manager (collapsible) */}
       <Card className="border-border">
         <button
           onClick={() => setExpanded(!expanded)}
@@ -585,7 +577,6 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
 
         {expanded && (
           <CardContent className="pt-0 pb-4">
-            {/* Queue Actions */}
             {isUserTeamMember && (
               <div className="flex flex-wrap gap-2 mb-4">
                 <AddToQueueDialog
@@ -614,7 +605,6 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
                 </Button>
               </div>
             )}
-            {/* Queue List */}
             {loading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="size-6 animate-spin text-muted-foreground" />
@@ -653,7 +643,6 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
                 </DragOverlay>
               </DndContext>
             ) : (
-              // Read-only view for non-members
               <div className="space-y-2">
                 {queue.map((entry) => (
                   <div
@@ -671,6 +660,7 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
                     }`}>
                       {entry.position}
                     </div>
+                    {/* FIX: Use entry.imageUrl (camelCase) for QueueEntry */}
                     {entry.imageUrl && (
                       /* eslint-disable-next-line @next/next/no-img-element */
                       <img
@@ -695,9 +685,10 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
                             <span className="text-xs text-muted-foreground">◇</span>
                           )}
                         </div>
-                        {entry.cubecobra_elo != null && (
+                        {/* FIX: Use entry.cubecobraElo (camelCase) for QueueEntry */}
+                        {entry.cubecobraElo != null && (
                           <span className="text-xs text-purple-600 dark:text-purple-400">
-                            ELO {entry.cubecobra_elo.toLocaleString()}
+                            ELO {entry.cubecobraElo.toLocaleString()}
                           </span>
                         )}
                         <Badge variant="outline" className="text-[10px] px-1 py-0">
@@ -709,7 +700,6 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
                 ))}
               </div>
             )}
-            {/* Legend */}
             <div className="flex items-center gap-4 mt-4 pt-4 border-t text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <span className="w-3 h-3 rounded border border-purple-500/20 bg-card" /> Manual override
