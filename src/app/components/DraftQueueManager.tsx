@@ -1,7 +1,8 @@
 // src/app/components/DraftQueueManager.tsx
+
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -251,48 +252,61 @@ function AddToQueueDialog({
   onAdd: (card: CardData) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [cards, setCards] = useState<CardData[]>([]);
+  const [allAvailable, setAllAvailable] = useState<CardData[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [colorFilter, setColorFilter] = useState<string>("all");
 
-  const loadCards = async () => {
+  // FIX: Wrap data loading in useCallback to give it a stable identity
+  const loadCards = useCallback(async () => {
     setLoading(true);
     try {
+      // Fetch all cards not drafted by ANY team.
       const { cards: available } = await getAvailableCardsForDraft();
-      setCards(available.filter((c) => !existingCardIds.has(c.card_id)));
+      setAllAvailable(available);
     } catch (error) {
       console.error("Error loading cards:", error);
+      setAllAvailable([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
+  // FIX: Correctly use useEffect to load data only when the dialog opens
   useEffect(() => {
     if (open) {
       loadCards();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, loadCards]);
 
-  const filteredCards = cards.filter((card) => {
-    if (search && !card.card_name.toLowerCase().includes(search.toLowerCase())) {
-      return false;
-    }
-    if (colorFilter !== "all") {
-      if (colorFilter === "colorless") {
-        if (card.colors && card.colors.length > 0) return false;
-      } else {
-        if (!card.colors?.includes(colorFilter)) return false;
-      }
-    }
-    return true;
-  });
+  // FIX: Memoize the expensive filtering and sorting logic.
+  // This recalculates the list ONLY when the source data or filters change.
+  const filteredAndSortedCards = useMemo(() => {
+    const availableForQueue = allAvailable.filter((c) => !existingCardIds.has(c.card_id));
 
-  // Sort by ELO descending
-  const sortedCards = [...filteredCards].sort(
-    (a, b) => (b.cubecobra_elo || 0) - (a.cubecobra_elo || 0)
-  );
+    const filtered = availableForQueue.filter((card) => {
+      // Search filter
+      const searchMatch = search
+        ? card.card_name.toLowerCase().includes(search.toLowerCase())
+        : true;
+      if (!searchMatch) return false;
+      
+      // Color filter
+      const colorMatch = (() => {
+        if (colorFilter === "all") return true;
+        if (colorFilter === "colorless") {
+          return !card.colors || card.colors.length === 0;
+        }
+        return card.colors?.includes(colorFilter) ?? false;
+      })();
+      if (!colorMatch) return false;
+
+      return true;
+    });
+
+    // Sort by ELO descending after filtering
+    return filtered.sort((a, b) => (b.cubecobra_elo || 0) - (a.cubecobra_elo || 0));
+  }, [allAvailable, existingCardIds, search, colorFilter]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -309,7 +323,6 @@ function AddToQueueDialog({
             Search for cards to add to your manual priority queue. Cards at the top of your queue will be auto-drafted first.
           </DialogDescription>
         </DialogHeader>
-
         {/* Search & Filters */}
         <div className="space-y-3">
           <div className="relative">
@@ -321,7 +334,6 @@ function AddToQueueDialog({
               className="pl-9"
             />
           </div>
-
           <div className="flex flex-wrap gap-1.5">
             {[
               { value: "all", label: "All", emoji: "🌈" },
@@ -343,27 +355,25 @@ function AddToQueueDialog({
               </Button>
             ))}
           </div>
-
           <p className="text-xs text-muted-foreground">
-            {sortedCards.length} cards available
+            Showing {Math.min(50, filteredAndSortedCards.length)} of {filteredAndSortedCards.length} matching cards
           </p>
         </div>
-
         {/* Card List */}
         <ScrollArea className="h-[400px]">
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="size-6 animate-spin text-muted-foreground" />
             </div>
-          ) : sortedCards.length === 0 ? (
+          ) : filteredAndSortedCards.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <p>No cards found</p>
             </div>
           ) : (
             <div className="space-y-2 pr-4">
-              {sortedCards.slice(0, 50).map((card) => (
+              {filteredAndSortedCards.slice(0, 50).map((card) => (
                 <button
-                  key={card.card_id}
+                  key={card.id} // Use the unique instance ID for the key
                   onClick={() => {
                     onAdd(card);
                     setOpen(false);
@@ -390,22 +400,22 @@ function AddToQueueDialog({
                           <span>◇</span>
                         )}
                       </span>
-                      {card.cubecobra_elo != null && (
+                      {card.cubecobraElo != null && (
                         <span className="text-purple-600 dark:text-purple-400">
-                          ELO {card.cubecobra_elo.toLocaleString()}
+                          ELO {card.cubecobraElo.toLocaleString()}
                         </span>
                       )}
                       <span className="text-yellow-600 dark:text-yellow-400">
-                        💰 {card.cubucks_cost || 1}
+                        💰 {card.cubucksCost || 1}
                       </span>
                     </div>
                   </div>
                   <Plus className="size-4 text-muted-foreground flex-shrink-0" />
                 </button>
               ))}
-              {sortedCards.length > 50 && (
+              {filteredAndSortedCards.length > 50 && (
                 <p className="text-xs text-center text-muted-foreground py-2">
-                  Showing 50 of {sortedCards.length} cards. Use search to narrow results.
+                  Showing 50 of {filteredAndSortedCards.length} cards. Use search to narrow results.
                 </p>
               )}
             </div>
@@ -415,6 +425,7 @@ function AddToQueueDialog({
     </Dialog>
   );
 }
+
 
 // ============================================================================
 // Main DraftQueueManager
@@ -460,31 +471,25 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
 
   const handleDragEnd = async (event: DragEndEvent) => {
     setActiveId(null);
-
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
     const oldIndex = queue.findIndex((e) => e.cardId === active.id);
     const newIndex = queue.findIndex((e) => e.cardId === over.id);
-
     if (oldIndex === -1 || newIndex === -1) return;
 
-    // Optimistically update the UI
     const newQueue = arrayMove(queue, oldIndex, newIndex).map((entry, index) => ({
       ...entry,
       position: index + 1,
     }));
     setQueue(newQueue);
 
-    // Save the manual entries to the database
     await saveManualQueue(newQueue);
   };
 
   const saveManualQueue = async (queueToSave: QueueEntry[]) => {
     setSaving(true);
     try {
-      // Only save cards that are marked as manual (or that have been reordered by user)
-      // When the user drags, all items become "manual" overrides
       const manualEntries = queueToSave
         .filter((entry) => entry.source === "manual_queue" || entry.pinned)
         .map((entry) => ({
@@ -494,7 +499,6 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
           position: entry.position,
           pinned: entry.pinned,
         }));
-
       await setTeamDraftQueue(teamId, manualEntries);
       setPreviewRefreshKey((prev) => prev + 1);
     } catch (error) {
@@ -506,22 +510,17 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
 
   const handlePin = async (entry: QueueEntry) => {
     if (!entry.cardPoolId) return;
-
     if (entry.pinned) {
-      // Unpin: remove from manual queue
       await removeFromQueue(teamId, entry.cardPoolId);
     } else {
-      // Pin: add to manual queue at current position
       await pinCardToQueue(teamId, entry.cardPoolId, entry.cardId, entry.cardName, entry.position);
     }
-
     await loadQueue();
     setPreviewRefreshKey((prev) => prev + 1);
   };
 
   const handleRemove = async (entry: QueueEntry) => {
     if (!entry.cardPoolId) return;
-
     await removeFromQueue(teamId, entry.cardPoolId);
     await loadQueue();
     setPreviewRefreshKey((prev) => prev + 1);
@@ -529,8 +528,6 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
 
   const handleAddToQueue = async (card: CardData) => {
     if (!card.id) return;
-
-    // Add to the top of the queue (position 1)
     await pinCardToQueue(teamId, card.id, card.card_id, card.card_name, 1);
     await loadQueue();
     setPreviewRefreshKey((prev) => prev + 1);
@@ -541,7 +538,6 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
       "Clear your entire manual draft queue? This will revert to the algorithm-computed order."
     );
     if (!confirmed) return;
-
     await clearTeamDraftQueue(teamId);
     await loadQueue();
     setPreviewRefreshKey((prev) => prev + 1);
@@ -565,7 +561,6 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
         onManageQueue={() => setExpanded(!expanded)}
         refreshKey={previewRefreshKey}
       />
-
       {/* Queue Manager (collapsible) */}
       <Card className="border-border">
         <button
@@ -625,7 +620,6 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
                 </Button>
               </div>
             )}
-
             {/* Queue List */}
             {loading ? (
               <div className="flex items-center justify-center py-8">
@@ -660,7 +654,6 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
                     ))}
                   </div>
                 </SortableContext>
-
                 <DragOverlay>
                   {activeEntry ? <DragOverlayItem entry={activeEntry} /> : null}
                 </DragOverlay>
@@ -722,7 +715,6 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
                 ))}
               </div>
             )}
-
             {/* Legend */}
             <div className="flex items-center gap-4 mt-4 pt-4 border-t text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
