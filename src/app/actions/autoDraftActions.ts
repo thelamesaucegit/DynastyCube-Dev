@@ -4,7 +4,8 @@
 
 import { createServerClient } from "@/lib/supabase";
 import { getAvailableCardsForDraft, type CardData } from "@/app/actions/cardActions";
-import { getTeamDraftPicks, addSkippedPick } from "@/app/actions/draftActions";
+// FIX: Import the DraftPick type to provide it to the RPC call
+import { getTeamDraftPicks, addSkippedPick, type DraftPick } from "@/app/actions/draftActions";
 import { getTeamBalance } from "@/app/actions/cubucksActions";
 import { getDraftStatus } from "@/app/actions/draftOrderActions";
 import { getDuplicateCardIdSet } from "@/lib/draftCache";
@@ -228,8 +229,8 @@ async function executeConfirmedTeamPick(
 
   const { picks: existingPicks } = await getTeamDraftPicks(teamId);
 
-  // Call the new atomic function
-  const { data: newPick, error } = await supabase.rpc("execute_atomic_draft_pick", {
+  // FIX: Provide the <DraftPick> generic to correctly type the response.
+  const { data: newPick, error } = await supabase.rpc<DraftPick>("execute_atomic_draft_pick", {
     p_team_id: teamId,
     p_draft_session_id: draftSessionId,
     p_card_pool_id: card.id,
@@ -263,6 +264,7 @@ async function executeConfirmedTeamPick(
   const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
   const channel = supabase.channel(`draft-updates-${draftSessionId}`);
   
+  // FIX: The spread operator now works because `newPick` is a guaranteed object.
   await channel.send({
     type: 'broadcast',
     event: 'new_pick',
@@ -920,7 +922,8 @@ export async function executeAutoDraft(
 
     // --- NEW: ATOMIC DRAFT EXECUTION ---
     // A card is available and affordable, execute the draft using the atomic function.
-    const { data: newPick, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
+    // FIX: Provide the <DraftPick> generic to correctly type the response.
+    const { data: newPick, error: rpcError } = await supabase.rpc<DraftPick>("execute_atomic_draft_pick", {
         p_team_id: teamId,
         p_draft_session_id: draftSessionId,
         p_card_pool_id: card.id,
@@ -963,6 +966,7 @@ export async function executeAutoDraft(
     
     const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
     
+    // FIX: The spread operator now works because `newPick` is a guaranteed object.
     const broadcastPayload = {
       ...newPick,
       team_name: teamData?.name || 'Unknown Team',
