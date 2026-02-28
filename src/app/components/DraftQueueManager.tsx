@@ -94,7 +94,7 @@ function SortableQueueItem({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: entry.cardId });
+  } = useSortable({ id: entry.cardPoolId });
 
   const style: React.CSSProperties = {
     transform: transform
@@ -165,9 +165,10 @@ function SortableQueueItem({
             )}
           </div>
           {/* ELO */}
-          {entry.cubecobraElo != null && (
+          {/* FIX: Use cubecobra_elo (snake_case) to match the data type */}
+          {entry.cubecobra_elo != null && (
             <span className="text-xs text-purple-600 dark:text-purple-400">
-              ELO {entry.cubecobraElo.toLocaleString()}
+              ELO {entry.cubecobra_elo.toLocaleString()}
             </span>
           )}
           {/* Cost */}
@@ -245,10 +246,10 @@ function DragOverlayItem({ entry }: { entry: QueueEntry }) {
 // ============================================================================
 
 function AddToQueueDialog({
-  existingCardIds,
+  existingCardPoolIds,
   onAdd,
 }: {
-  existingCardIds: Set<string>;
+  existingCardPoolIds: Set<string>;
   onAdd: (card: CardData) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -257,11 +258,9 @@ function AddToQueueDialog({
   const [search, setSearch] = useState("");
   const [colorFilter, setColorFilter] = useState<string>("all");
 
-  // FIX: Wrap data loading in useCallback to give it a stable identity
   const loadCards = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch all cards not drafted by ANY team.
       const { cards: available } = await getAvailableCardsForDraft();
       setAllAvailable(available);
     } catch (error) {
@@ -272,26 +271,21 @@ function AddToQueueDialog({
     }
   }, []);
 
-  // FIX: Correctly use useEffect to load data only when the dialog opens
   useEffect(() => {
     if (open) {
       loadCards();
     }
   }, [open, loadCards]);
 
-  // FIX: Memoize the expensive filtering and sorting logic.
-  // This recalculates the list ONLY when the source data or filters change.
   const filteredAndSortedCards = useMemo(() => {
-    const availableForQueue = allAvailable.filter((c) => !existingCardIds.has(c.card_id));
+    const availableForQueue = allAvailable.filter((card) => !existingCardPoolIds.has(card.id!));
 
     const filtered = availableForQueue.filter((card) => {
-      // Search filter
       const searchMatch = search
-        ? card.card_name.toLowerCase().includes(search.toLowerCase())
+        ? typeof card.card_name === "string" && card.card_name.toLowerCase().includes(search.toLowerCase())
         : true;
       if (!searchMatch) return false;
       
-      // Color filter
       const colorMatch = (() => {
         if (colorFilter === "all") return true;
         if (colorFilter === "colorless") {
@@ -304,9 +298,8 @@ function AddToQueueDialog({
       return true;
     });
 
-    // Sort by ELO descending after filtering
     return filtered.sort((a, b) => (b.cubecobra_elo || 0) - (a.cubecobra_elo || 0));
-  }, [allAvailable, existingCardIds, search, colorFilter]);
+  }, [allAvailable, existingCardPoolIds, search, colorFilter]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -323,7 +316,6 @@ function AddToQueueDialog({
             Search for cards to add to your manual priority queue. Cards at the top of your queue will be auto-drafted first.
           </DialogDescription>
         </DialogHeader>
-        {/* Search & Filters */}
         <div className="space-y-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -359,7 +351,6 @@ function AddToQueueDialog({
             Showing {Math.min(50, filteredAndSortedCards.length)} of {filteredAndSortedCards.length} matching cards
           </p>
         </div>
-        {/* Card List */}
         <ScrollArea className="h-[400px]">
           {loading ? (
             <div className="flex items-center justify-center py-8">
@@ -373,13 +364,14 @@ function AddToQueueDialog({
             <div className="space-y-2 pr-4">
               {filteredAndSortedCards.slice(0, 50).map((card) => (
                 <button
-                  key={card.id} // Use the unique instance ID for the key
+                  key={card.id}
                   onClick={() => {
                     onAdd(card);
                     setOpen(false);
                   }}
                   className="w-full flex items-center gap-3 p-2 rounded-lg border border-border hover:border-purple-500/40 hover:bg-accent transition-colors text-left"
                 >
+                  {/* FIX: Use image_url */}
                   {card.image_url && (
                     /* eslint-disable-next-line @next/next/no-img-element */
                     <img
@@ -400,13 +392,15 @@ function AddToQueueDialog({
                           <span>◇</span>
                         )}
                       </span>
-                      {card.cubecobraElo != null && (
+                      {/* FIX: Use cubecobra_elo */}
+                      {card.cubecobra_elo != null && (
                         <span className="text-purple-600 dark:text-purple-400">
-                          ELO {card.cubecobraElo.toLocaleString()}
+                          ELO {card.cubecobra_elo.toLocaleString()}
                         </span>
                       )}
+                      {/* FIX: Use cubucks_cost */}
                       <span className="text-yellow-600 dark:text-yellow-400">
-                        💰 {card.cubucksCost || 1}
+                        💰 {card.cubucks_cost || 1}
                       </span>
                     </div>
                   </div>
@@ -474,8 +468,8 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const oldIndex = queue.findIndex((e) => e.cardId === active.id);
-    const newIndex = queue.findIndex((e) => e.cardId === over.id);
+    const oldIndex = queue.findIndex((e) => e.cardPoolId === active.id);
+    const newIndex = queue.findIndex((e) => e.cardPoolId === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
 
     const newQueue = arrayMove(queue, oldIndex, newIndex).map((entry, index) => ({
@@ -548,9 +542,9 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
     setPreviewRefreshKey((prev) => prev + 1);
   };
 
-  const activeEntry = activeId ? queue.find((e) => e.cardId === activeId) : null;
+  const activeEntry = activeId ? queue.find((e) => e.cardPoolId === activeId) : null;
   const manualCount = queue.filter((e) => e.source === "manual_queue").length;
-  const existingCardIds = new Set(queue.map((e) => e.cardId));
+  const existingCardPoolIds = new Set(queue.map((e) => e.cardPoolId));
 
   return (
     <div className="space-y-4">
@@ -595,7 +589,7 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
             {isUserTeamMember && (
               <div className="flex flex-wrap gap-2 mb-4">
                 <AddToQueueDialog
-                  existingCardIds={existingCardIds}
+                  existingCardPoolIds={existingCardPoolIds}
                   onAdd={handleAddToQueue}
                 />
                 {manualCount > 0 && (
@@ -639,13 +633,13 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
                 onDragEnd={handleDragEnd}
               >
                 <SortableContext
-                  items={queue.map((e) => e.cardId)}
+                  items={queue.map((e) => e.cardPoolId)}
                   strategy={verticalListSortingStrategy}
                 >
                   <div className="space-y-2">
                     {queue.map((entry) => (
                       <SortableQueueItem
-                        key={entry.cardId}
+                        key={entry.cardPoolId}
                         entry={entry}
                         onPin={handlePin}
                         onRemove={handleRemove}
@@ -663,7 +657,7 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
               <div className="space-y-2">
                 {queue.map((entry) => (
                   <div
-                    key={entry.cardId}
+                    key={entry.cardPoolId}
                     className={`flex items-center gap-3 p-3 rounded-lg border ${
                       entry.source === "manual_queue"
                         ? "bg-card border-purple-500/20"
@@ -701,9 +695,9 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
                             <span className="text-xs text-muted-foreground">◇</span>
                           )}
                         </div>
-                        {entry.cubecobraElo != null && (
+                        {entry.cubecobra_elo != null && (
                           <span className="text-xs text-purple-600 dark:text-purple-400">
-                            ELO {entry.cubecobraElo.toLocaleString()}
+                            ELO {entry.cubecobra_elo.toLocaleString()}
                           </span>
                         )}
                         <Badge variant="outline" className="text-[10px] px-1 py-0">
