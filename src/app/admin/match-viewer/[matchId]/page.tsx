@@ -1,8 +1,7 @@
 // src/app/admin/match-viewer/[matchId]/page.tsx
-"use client";
 
 import React, { use } from "react";
-import MatchReplayClient from "@/app/components/MatchReplayClient"; // We will create this component next
+import MatchReplayClient from "@/app/components/MatchReplayClient";
 
 // This is a Server Component. Its only job is to get the matchId from the URL
 // and pass it to the Client Component that will do the heavy lifting.
