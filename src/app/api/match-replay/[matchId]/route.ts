@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 
-// @ts-ignore - This directive is intentionally placed to bypass a persistent,
+// @ts-expect-error - This directive is intentionally placed to bypass a persistent,
 // spurious build error in the Next.js type-checking process. All other avenues
 // (dependency alignment, config changes, syntax correction) have been exhausted.
 // The function signature is correct according to Next.js documentation.
