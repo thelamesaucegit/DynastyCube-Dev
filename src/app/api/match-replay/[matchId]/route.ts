@@ -16,11 +16,11 @@ export async function GET(request: Request, { params }: { params: { matchId: str
 
     if (error) throw error;
     
-    // Extract just the state_data object from each row
     const states = data.map(row => row.state_data);
 
     return NextResponse.json(states);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) { // FIX: Use 'unknown' instead of 'any'
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
