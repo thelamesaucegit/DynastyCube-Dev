@@ -22,9 +22,11 @@ export async function GET(
 
     if (error) throw error;
 
-    const states = data.map((row) => row.state_data);
+    // Supabase returns an array, but the `state_data` in each object
+    // might be null if the column is empty. We need to handle that.
+    const states = data ? data.map((row) => row.state_data).filter(Boolean) : [];
     return NextResponse.json(states);
-  } catch (error: unknown) { // FIX: Use 'unknown' instead of 'any'
+  } catch (error: unknown) {
     const errorMessage =
       error instanceof Error ? error.message : "An unknown error occurred.";
     return NextResponse.json({ error: errorMessage }, { status: 500 });
