@@ -2,10 +2,10 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import MatchDisplay from '@/app/components/MatchDisplay'; // We assume a component that can render a GameState
+import MatchDisplay from '@/app/components/MatchDisplay';
 import { Button } from '@/app/components/ui/button';
 import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
-import { GameState } from '@/app/types'; // You'll need to define this type based on parser.ts
+import { GameState } from '@/app/types';
 
 export default function MatchReplayPage({ params }: { params: { matchId: string } }) {
   const { matchId } = params;
@@ -23,8 +23,12 @@ export default function MatchReplayPage({ params }: { params: { matchId: string 
         
         const states = await response.json();
         setAllStates(states);
-      } catch (err: any) {
-        setError(err.message);
+      } catch (err: unknown) { // FIX: Use 'unknown' instead of 'any'
+        if (err instanceof Error) {
+            setError(err.message);
+        } else {
+            setError("An unknown error occurred while fetching replay data.");
+        }
       } finally {
         setIsLoading(false);
       }
@@ -42,7 +46,7 @@ export default function MatchReplayPage({ params }: { params: { matchId: string 
           }
           return prevIndex + 1;
         });
-      }, 1000); // 1 second per state update
+      }, 1000);
       return () => clearInterval(timer);
     }
   }, [isPlaying, allStates.length]);

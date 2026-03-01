@@ -17,7 +17,7 @@ export async function GET(request: Request, { params }: { params: { matchId: str
     if (error) throw error;
 
     return NextResponse.json({ winner: data?.winner || null });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

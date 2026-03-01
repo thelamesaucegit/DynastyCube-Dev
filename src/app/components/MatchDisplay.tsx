@@ -4,7 +4,7 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/card';
 import { Separator } from '@/app/components/ui/separator';
-import { GameState, PlayerState, Card as GameCard } from '@/app/types'; // Import from our new types file
+import { GameState, PlayerState } from '@/app/types'; // FIX: Removed unused 'GameCard' import
 
 function PlayerDisplay({ player, isActive }: { player: PlayerState, isActive: boolean }) {
   return (
