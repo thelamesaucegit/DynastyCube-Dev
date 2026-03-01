@@ -5,14 +5,10 @@ import { NextResponse } from "next/server";
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 
-// @ts-expect-error - This directive is intentionally placed to bypass a persistent,
-// spurious build error in the Next.js type-checking process. All other avenues
-// (dependency alignment, config changes, syntax correction) have been exhausted.
-// The function signature is correct according to Next.js documentation.
-export async function GET(
-  request: Request,
-  context: { params: { matchId: string } },
-) {
+// LAST ATTEMPT: Removing all explicit type annotations to see if
+// the build environment can infer them correctly without hitting the
+// poisoned type definition that seems to be causing the build to fail.
+export async function GET(request, context) {
   const { matchId } = context.params;
 
   try {
