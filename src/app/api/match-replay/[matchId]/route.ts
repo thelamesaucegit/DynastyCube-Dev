@@ -1,14 +1,14 @@
 // src/app/api/match-replay/[matchId]/route.ts
 
 import { createClient } from "@supabase/supabase-js";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server"; // Import NextRequest
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 
-// LAST ATTEMPT: Removing all explicit type annotations to see if
-// the build environment can infer them correctly without hitting the
-// poisoned type definition that seems to be causing the build to fail.
-export async function GET(request, context) {
+export async function GET(
+  request: NextRequest, // Use the specific NextRequest type to match the middleware
+  context: { params: { matchId: string } },
+) {
   const { matchId } = context.params;
 
   try {
