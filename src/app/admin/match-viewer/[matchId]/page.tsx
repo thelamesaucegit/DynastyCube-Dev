@@ -1,11 +1,14 @@
 // src/app/admin/match-viewer/[matchId]/page.tsx
-import React from 'react';
-import MatchReplayClient from '@/app/components/MatchReplayClient'; // We will create this component next
+
+import React, { use } from "react";
+import MatchReplayClient from "@/app/components/MatchReplayClient";
 
 // This is a Server Component. Its only job is to get the matchId from the URL
 // and pass it to the Client Component that will do the heavy lifting.
-export default function MatchViewerPage({ params }: { params: { matchId: string } }) {
-  const { matchId } = params;
+// It uses the `use` hook to handle promise-based params from Next.js 15.
+export default function MatchViewerPage({ params }: { params: Promise<{ matchId: string }> }) {
+  // The `use` hook unwraps the Promise-like object for the route parameters.
+  const { matchId } = use(params);
 
   return (
     <div className="container mx-auto p-4 md:p-8">
