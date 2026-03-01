@@ -1,22 +1,28 @@
-// src/app/api/match-runner/[matchId]/route.ts
-import { createClient } from '@supabase/supabase-js';
+// src/app/api/match-runner/route.ts
 import { NextResponse } from 'next/server';
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
-
-export async function GET(request: Request, { params }: { params: { matchId: string } }) {
-  const { matchId } = params;
-
+export async function POST(request: Request) {
+  const body = await request.json();
+  
   try {
-    const { data, error } = await supabase
-      .from('sim_matches')
-      .select('winner')
-      .eq('id', matchId)
-      .single();
+    const simServerUrl = process.env.SIMULATION_SERVER_URL;
+    if (!simServerUrl) throw new Error("Simulation server URL is not configured.");
 
-    if (error) throw error;
+    // This just forwards the request. No need for a Supabase client here.
+    const response = await fetch(`${simServerUrl}/start-match`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
 
-    return NextResponse.json({ winner: data?.winner || null });
+    if (!response.ok) {
+        throw new Error(`Simulation server returned an error: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+
+    return NextResponse.json(data);
+
   } catch (error: unknown) { // FIX: Use 'unknown' instead of 'any'
     const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
     return NextResponse.json({ error: errorMessage }, { status: 500 });
