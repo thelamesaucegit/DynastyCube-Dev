@@ -1,53 +1,35 @@
-// src/app/api/match-runner/route.ts
+// src/app/api/match-runner/[matchId]/route.ts
 
-import { createClient } from "@supabase/supabase-js";
-import { NextResponse } from "next/server";
+import { createClient } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
 
-export async function POST(request: Request) {
-  const body = await request.json();
-  const { deck1, deck2 } = body;
+export async function GET(request: Request, { params }: { params: { matchId: string } }) {
+  const { matchId } = params;
 
-  // Initialize a Supabase client for this server-side operation
+  if (!matchId || typeof matchId !== 'string') {
+    return NextResponse.json({ error: "Invalid match ID provided." }, { status: 400 });
+  }
+
   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 
-  let matchId: string; // Use string for UUID
-
   try {
-    // Step 1: Create the initial match entry in the database to get an ID.
-    const player1Info = `${deck1.filename} (AI: ${deck1.aiProfile})`;
-    const player2Info = `${deck2.filename} (AI: ${deck2.aiProfile})`;
-
-    const { data: matchData, error: matchError } = await supabase
+    const { data, error } = await supabase
       .from('sim_matches')
-      .insert({ player1_info: player1Info, player2_info: player2Info })
-      .select('id')
+      .select('winner')
+      .eq('id', matchId)
       .single();
 
-    if (matchError || !matchData) {
-      throw new Error(matchError?.message || "Failed to create sim_matches entry.");
-    }
-
-    matchId = matchData.id;
-
-    // Step 2: Forward the request to the forgesim server in a "fire-and-forget" manner.
-    const simServerUrl = process.env.SIMULATION_SERVER_URL;
-    if (!simServerUrl) {
-      throw new Error("Simulation server URL is not configured.");
+    if (error) {
+      if (error.code === 'PGRST116') { // Specific Supabase code for "Not Found"
+        return NextResponse.json({ winner: null, message: "Match pending or not found." });
+      }
+      throw error;
     }
     
-    fetch(`${simServerUrl}/start-match`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...body, matchId }), // Pass the new matchId
-    }).catch(e => {
-        console.error("[FORGESIM_FETCH_ERROR]", e);
-    });
-
-    // Step 3: Immediately return the matchId to the frontend.
-    return NextResponse.json({ matchId: matchId });
-
+    return NextResponse.json({ winner: data?.winner || null });
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during orchestration.";
+    const errorMessage = error instanceof Error ? error.message : "An unknown database error occurred.";
+    console.error(`[POLL_ERROR] for matchId ${matchId}:`, errorMessage);
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
