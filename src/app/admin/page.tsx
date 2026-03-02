@@ -1,4 +1,5 @@
 // src/app/admin/page.tsx
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -84,10 +85,8 @@ export default function AdminPage() {
         (sum, team) => sum + (team.members?.length || 0),
         0
       );
-
       // Get card pool
       const { cards } = await getCardPool();
-
       setStats({
         totalUsers: totalMembers,
         activeTeams: teams.length,
@@ -148,18 +147,25 @@ export default function AdminPage() {
         return <VoteManagement />;
       case "matches":
         return (
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-xl font-semibold flex items-center gap-2">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
                 <Swords className="size-5" />
-                Match Management
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Create and manage team matches, adjust scores, and view match history
-              </p>
-            </div>
-            <MatchManagement />
-          </div>
+                Forge Match Simulator
+              </CardTitle>
+              <CardDescription>
+                Use the dedicated match runner page to simulate a match between two decklists using custom AI profiles and record the results.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild>
+                <a href="/admin/match-runner" className="inline-flex items-center gap-2">
+                  Open Match Runner
+                  <ArrowRight className="size-4" />
+                </a>
+              </Button>
+            </CardContent>
+          </Card>
         );
       case "draft-order":
         return <DraftOrderManagement />;
@@ -201,10 +207,8 @@ export default function AdminPage() {
             <div className="space-y-6">
               {/*  Data Backfill Management */}
               <DataBackfillManagement />
-
               {/* Trade System Settings */}
               <TradeSettings />
-
               {/* Team Role Management Link */}
               <Card>
                 <CardHeader>
@@ -226,7 +230,6 @@ export default function AdminPage() {
                   </Button>
                 </CardContent>
               </Card>
-
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-lg">
@@ -250,7 +253,6 @@ export default function AdminPage() {
                   </div>
                 </CardContent>
               </Card>
-
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-lg">
@@ -278,7 +280,6 @@ export default function AdminPage() {
                   </ul>
                 </CardContent>
               </Card>
-
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-lg">
