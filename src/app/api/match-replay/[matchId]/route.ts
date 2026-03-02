@@ -3,13 +3,13 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 
+// Reverting to the Promise-based params type to match your specific Next.js 15 build environment.
 export async function GET(
   request: NextRequest,
-  // Corrected: The context.params object is synchronous for API routes.
-  context: { params: { matchId: string } },
+  context: { params: Promise<{ matchId: string }> },
 ) {
-  // Corrected: Destructure matchId directly without 'await'.
-  const { matchId } = context.params;
+  // Awaiting the promise as required by your build configuration.
+  const { matchId } = await context.params;
 
   if (!matchId || matchId === 'undefined') {
     return NextResponse.json({ error: "Invalid or missing match ID provided for replay." }, { status: 400 });
