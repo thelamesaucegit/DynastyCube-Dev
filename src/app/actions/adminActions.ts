@@ -1,6 +1,6 @@
 // src/app/actions/adminActions.ts
 "use server";
-
+import { createClient as createServiceRoleClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { fetchAllCards } from "@/lib/scryfall-client";
@@ -30,6 +30,45 @@ async function createClient() {
     }
   );
 }
+/**
+ * Validates a list of card names against the database, case-insensitively.
+ * @param cardNames - An array of card names entered by the user.
+ * @returns An object containing a map of valid names (lowercase -> canonical) and an array of invalid names.
+ */
+export async function validateAndCanonicalizeDeck(cardNames: string[]): Promise<{
+  valid: Map<string, string>;
+  invalid: string[];
+}> {
+  const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+
+  // Get a unique set of non-empty, lowercase card names from the input.
+  const lowerCaseNames = [...new Set(cardNames.map(name => name.trim().toLowerCase()).filter(Boolean))];
+
+  if (lowerCaseNames.length === 0) {
+    return { valid: new Map(), invalid: [] };
+  }
+
+  // Call the new SQL function we created.
+  const { data, error } = await supabase.rpc('get_canonical_card_names', { names_to_check: lowerCaseNames });
+
+  if (error) {
+    console.error("Database error during card validation:", error);
+    // If the RPC fails, we can't validate, so we'll have to assume all are invalid to be safe.
+    return { valid: new Map(), invalid: lowerCaseNames };
+  }
+
+  // Create a map of the valid, canonically-cased names for easy lookup.
+  const validCanonicalMap = new Map<string, string>();
+  data.forEach(item => {
+    validCanonicalMap.set(item.canonical_name.toLowerCase(), item.canonical_name);
+  });
+
+  // Determine which of the user's input names were not found in the valid map.
+  const invalidNames = lowerCaseNames.filter(name => !validCanonicalMap.has(name));
+
+  return { valid: validCanonicalMap, invalid: invalidNames };
+}
+
 /**
  * Backfill Color Identity data for all cards in card_pools that are missing it.
  */

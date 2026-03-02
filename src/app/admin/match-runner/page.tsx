@@ -10,30 +10,41 @@ import { Label } from '@/app/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { Textarea } from '@/app/components/ui/textarea';
 import { Input } from '@/app/components/ui/input';
-import { Swords, Hourglass } from 'lucide-react';
-import { getAiProfiles, AiProfile } from '@/app/actions/adminActions';
+import { Swords, Hourglass, ShieldCheck, ShieldX } from 'lucide-react';
+import { getAiProfiles, AiProfile, validateAndCanonicalizeDeck } from '@/app/actions/adminActions';
 
-// --- THE FIX IS HERE ---
-// This function now correctly formats the raw decklist text into the
-// "Count Card Name" format expected by the Java DeckSerializer.
+// --- THE FINAL FIX IS HERE ---
+// This function now intelligently checks if a line already starts with a number.
+// It will correctly format both "25 Mountain" and "Lightning Bolt".
 function formatDecklistToDck(decklist: string, deckName: string): string {
   const mainDeck = decklist
-    .split('\\n')
+    .split('\n')
     .map(line => line.trim())
     .filter(line => line) // Remove empty lines
-    .map(cardName => `1 ${cardName}`) // Assume each line is one copy of a card
+    .map(line => {
+      // Check if the line already starts with a number followed by a space.
+      if (/^\\d+\\s/.test(line)) {
+        return line; // Line is already correctly formatted (e.g., "25 Mountain")
+      }
+      return `1 ${line}`; // Prepend "1 " if no number is present (e.g., "Lightning Bolt")
+    })
     .join('\\n');
 
   return `[metadata]\\nName=${deckName}\\n\\n[Main]\\n${mainDeck}`;
 }
 
+
 export default function MatchRunnerPage() {
   const [profiles, setProfiles] = useState<AiProfile[]>([]);
   const [player1, setPlayer1] = useState({ decklist: '', deckName: 'Player 1 Deck', aiProfile: '' });
   const [player2, setPlayer2] = useState({ decklist: '', deckName: 'Player 2 Deck', aiProfile: '' });
+  
   const [isSimulating, setIsSimulating] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState('');
+
   const router = useRouter();
 
   useEffect(() => {
@@ -49,13 +60,49 @@ export default function MatchRunnerPage() {
   }, []);
 
   const handleSimulate = async () => {
+    setError(null);
+    setValidationError(null);
+
     if (!player1.aiProfile || !player2.aiProfile || !player1.decklist || !player2.decklist) {
       setError('Please provide a decklist and AI profile for both players.');
       return;
     }
+
+    setIsValidating(true);
+
+    const allCardNames = [...player1.decklist.split('\n'), ...player2.decklist.split('\n')]
+      .map(line => line.trim().replace(/^\\d+\\s/, '')); // Strip numbers before validation
+
+    const { valid, invalid } = await validateAndCanonicalizeDeck(allCardNames);
+
+    if (invalid.length > 0) {
+      setValidationError(`The following card names were not found: ${invalid.join(', ')}. Please correct them.`);
+      setIsValidating(false);
+      return;
+    }
+
+    setIsValidating(false);
     setIsSimulating(true);
-    setError(null);
-    setStatusMessage('Submitting match to simulation server...');
+    setStatusMessage('Validation successful. Submitting match...');
+
+    const correctedDeck1 = player1.decklist.split('\n').map(line => {
+        const trimmed = line.trim();
+        const match = trimmed.match(/^(\\d+)\\s(.+)/);
+        const cardName = match ? match[2] : trimmed;
+        const count = match ? match[1] : '1';
+        const canonicalName = valid.get(cardName.toLowerCase());
+        return canonicalName ? `${count} ${canonicalName}` : line;
+    }).join('\n');
+
+    const correctedDeck2 = player2.decklist.split('\n').map(line => {
+        const trimmed = line.trim();
+        const match = trimmed.match(/^(\\d+)\\s(.+)/);
+        const cardName = match ? match[2] : trimmed;
+        const count = match ? match[1] : '1';
+        const canonicalName = valid.get(cardName.toLowerCase());
+        return canonicalName ? `${count} ${canonicalName}` : line;
+    }).join('\n');
+
 
     const deck1Filename = player1.deckName.replace(/[^a-z0-9-]/gi, '_').toLowerCase() + ".dck";
     const deck2Filename = player2.deckName.replace(/[^a-z0-9-]/gi, '_').toLowerCase() + ".dck";
@@ -65,27 +112,25 @@ export default function MatchRunnerPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          deck1: { filename: deck1Filename, content: formatDecklistToDck(player1.decklist, player1.deckName), aiProfile: player1.aiProfile },
-          deck2: { filename: deck2Filename, content: formatDecklistToDck(player2.decklist, player2.deckName), aiProfile: player2.aiProfile },
+          deck1: { filename: deck1Filename, content: formatDecklistToDck(correctedDeck1, player1.deckName), aiProfile: player1.aiProfile },
+          deck2: { filename: deck2Filename, content: formatDecklistToDck(correctedDeck2, player2.deckName), aiProfile: player2.aiProfile },
         })
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to start simulation on the server.');
+        throw new Error(errorData.error || 'Failed to start simulation.');
       }
       
       const { matchId } = await response.json();
-      if (!matchId) {
-        throw new Error("API did not return a valid match ID.");
-      }
+      if (!matchId) throw new Error("API did not return a valid match ID.");
 
       setStatusMessage(`Simulation started with ID: ${matchId}. Waiting for completion...`);
       
       const poll = setInterval(async () => {
         try {
           const statusRes = await fetch(`/api/match-runner/${matchId}`);
-          if (!statusRes.ok) return; // Continue polling on transient errors
+          if (!statusRes.ok) return;
 
           const { winner } = await statusRes.json();
           
@@ -95,7 +140,6 @@ export default function MatchRunnerPage() {
             router.push(`/admin/match-viewer/${matchId}`);
           }
         } catch (pollError) {
-          // Log polling errors but don't stop the polling process
           console.error("Polling error:", pollError);
         }
       }, 5000);
@@ -127,35 +171,54 @@ export default function MatchRunnerPage() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-xl"><Swords /> Forge Match Simulator</CardTitle>
-        <CardDescription>Create a match and record the results to the database for later viewing.</CardDescription>
+        <CardDescription>Enter two decklists. You can specify a count (e.g., "25 Mountain") or enter one card name per line.</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-                <Label>Player 1 Deck Name</Label>
-                <Input value={player1.deckName} onChange={(e) => setPlayer1({ ...player1, deckName: e.target.value })} />
-                <Label>Player 1 AI Profile</Label>
+                <Label htmlFor="p1_deck_name">Player 1 Deck Name</Label>
+                <Input id="p1_deck_name" value={player1.deckName} onChange={(e) => setPlayer1({ ...player1, deckName: e.target.value })} />
+                <Label className="mt-4 block">Player 1 AI Profile</Label>
                 <Select onValueChange={(value) => setPlayer1({ ...player1, aiProfile: value })}>
                     <SelectTrigger><SelectValue placeholder="Select AI..." /></SelectTrigger>
                     <SelectContent>{profiles.map(p => <SelectItem key={p.id} value={p.profile_name}>{p.profile_name}</SelectItem>)}</SelectContent>
                 </Select>
-                <Label>Player 1 Decklist</Label>
-                <Textarea placeholder="One card name per line..." value={player1.decklist} onChange={(e) => setPlayer1({ ...player1, decklist: e.target.value })} />
+                <Label className="mt-4 block" htmlFor="p1_decklist">Player 1 Decklist</Label>
+                <Textarea id="p1_decklist" placeholder="25 Mountain&#10;15 Lightning Bolt" value={player1.decklist} onChange={(e) => setPlayer1({ ...player1, decklist: e.target.value })} className="h-48"/>
             </div>
             <div>
-                <Label>Player 2 Deck Name</Label>
-                <Input value={player2.deckName} onChange={(e) => setPlayer2({ ...player2, deckName: e.target.value })} />
-                <Label>Player 2 AI Profile</Label>
+                <Label htmlFor="p2_deck_name">Player 2 Deck Name</Label>
+                <Input id="p2_deck_name" value={player2.deckName} onChange={(e) => setPlayer2({ ...player2, deckName: e.target.value })} />
+                <Label className="mt-4 block">Player 2 AI Profile</Label>
                 <Select onValueChange={(value) => setPlayer2({ ...player2, aiProfile: value })}>
                     <SelectTrigger><SelectValue placeholder="Select AI..." /></SelectTrigger>
                     <SelectContent>{profiles.map(p => <SelectItem key={p.id} value={p.profile_name}>{p.profile_name}</SelectItem>)}</SelectContent>
                 </Select>
-                <Label>Player 2 Decklist</Label>
-                <Textarea placeholder="One card name per line..." value={player2.decklist} onChange={(e) => setPlayer2({ ...player2, decklist: e.target.value })} />
+                <Label className="mt-4 block" htmlFor="p2_decklist">Player 2 Decklist</Label>
+                <Textarea id="p2_decklist" placeholder="25 Plains&#10;15 Savannah Lions" value={player2.decklist} onChange={(e) => setPlayer2({ ...player2, decklist: e.target.value })} className="h-48"/>
             </div>
         </div>
+
+        {validationError && (
+          <div className="bg-destructive/10 border border-destructive/50 text-destructive p-3 rounded-md flex items-start gap-3">
+            <ShieldX className="size-5 mt-0.5 shrink-0" />
+            <div>
+              <h4 className="font-semibold">Validation Failed</h4>
+              <p className="text-sm">{validationError}</p>
+            </div>
+          </div>
+        )}
         {error && <p className="text-sm text-red-500">{error}</p>}
-        <Button onClick={handleSimulate}>Simulate Match</Button>
+
+        <Button onClick={handleSimulate} disabled={isValidating || isSimulating}>
+          {isValidating ? (
+            <><Hourglass className="size-4 mr-2 animate-spin" /> Validating...</>
+          ) : isSimulating ? (
+            <><Hourglass className="size-4 mr-2 animate-spin" /> Simulating...</>
+          ) : (
+            <><ShieldCheck className="size-4 mr-2" /> Validate & Simulate Match</>
+          )}
+        </Button>
       </CardContent>
     </Card>
   );
