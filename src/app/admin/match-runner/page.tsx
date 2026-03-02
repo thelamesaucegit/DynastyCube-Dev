@@ -13,26 +13,21 @@ import { Input } from '@/app/components/ui/input';
 import { Swords, Hourglass, ShieldCheck, ShieldX } from 'lucide-react';
 import { getAiProfiles, AiProfile, validateAndCanonicalizeDeck } from '@/app/actions/adminActions';
 
-// --- THE FINAL FIX IS HERE ---
-// This function now intelligently checks if a line already starts with a number.
-// It will correctly format both "25 Mountain" and "Lightning Bolt".
 function formatDecklistToDck(decklist: string, deckName: string): string {
   const mainDeck = decklist
     .split('\n')
     .map(line => line.trim())
-    .filter(line => line) // Remove empty lines
+    .filter(line => line)
     .map(line => {
-      // Check if the line already starts with a number followed by a space.
       if (/^\\d+\\s/.test(line)) {
-        return line; // Line is already correctly formatted (e.g., "25 Mountain")
+        return line;
       }
-      return `1 ${line}`; // Prepend "1 " if no number is present (e.g., "Lightning Bolt")
+      return `1 ${line}`;
     })
     .join('\\n');
 
   return `[metadata]\\nName=${deckName}\\n\\n[Main]\\n${mainDeck}`;
 }
-
 
 export default function MatchRunnerPage() {
   const [profiles, setProfiles] = useState<AiProfile[]>([]);
@@ -52,8 +47,9 @@ export default function MatchRunnerPage() {
       try {
         const fetchedProfiles = await getAiProfiles();
         setProfiles(fetchedProfiles);
-      } catch (err) {
-        setError('Failed to load AI profiles.');
+      } catch (err: unknown) { // FIX: Using the error variable
+        const message = err instanceof Error ? err.message : "An unknown error occurred";
+        setError(`Failed to load AI profiles: ${message}`);
       }
     }
     loadProfiles();
@@ -71,7 +67,7 @@ export default function MatchRunnerPage() {
     setIsValidating(true);
 
     const allCardNames = [...player1.decklist.split('\n'), ...player2.decklist.split('\n')]
-      .map(line => line.trim().replace(/^\\d+\\s/, '')); // Strip numbers before validation
+      .map(line => line.trim().replace(/^\\d+\\s/, ''));
 
     const { valid, invalid } = await validateAndCanonicalizeDeck(allCardNames);
 
@@ -102,7 +98,6 @@ export default function MatchRunnerPage() {
         const canonicalName = valid.get(cardName.toLowerCase());
         return canonicalName ? `${count} ${canonicalName}` : line;
     }).join('\n');
-
 
     const deck1Filename = player1.deckName.replace(/[^a-z0-9-]/gi, '_').toLowerCase() + ".dck";
     const deck2Filename = player2.deckName.replace(/[^a-z0-9-]/gi, '_').toLowerCase() + ".dck";
@@ -171,7 +166,8 @@ export default function MatchRunnerPage() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-xl"><Swords /> Forge Match Simulator</CardTitle>
-        <CardDescription>Enter two decklists. You can specify a count (e.g., "25 Mountain") or enter one card name per line.</CardDescription>
+        {/* FIX: Escaped double quotes */}
+        <CardDescription>Enter two decklists. You can specify a count (e.g., &quot;25 Mountain&quot;) or enter one card name per line.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
