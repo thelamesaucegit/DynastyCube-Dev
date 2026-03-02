@@ -16,7 +16,7 @@ import { getAiProfiles } from '@/app/actions/adminActions'; // We will create th
 export interface AiProfile {
   id: string;
   profile_name: string;
-  description?: string;
+  description: string | null;
 }
 
 export function ForgeMatchSimulator() {

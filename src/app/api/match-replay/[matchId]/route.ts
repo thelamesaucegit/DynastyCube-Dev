@@ -3,13 +3,12 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server"; // Import NextRequest
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
-
 export async function GET(
   request: NextRequest, // Use the specific NextRequest type to match the middleware
-  context: { params: { matchId: string } },
+  context: { params: Promise<{ matchId: string }> },
 ) {
-  const { matchId } = context.params;
+  const { matchId } = await context.params;
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 
   try {
     const { data, error } = await supabase
