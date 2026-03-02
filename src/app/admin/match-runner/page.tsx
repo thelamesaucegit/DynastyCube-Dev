@@ -19,15 +19,16 @@ function formatDecklistToDck(decklist: string, deckName: string): string {
     .map(line => line.trim())
     .filter(line => line)
     .map(line => {
-      if (/^\\d+\\s/.test(line)) {
+      // This regex correctly checks if a line starts with one or more digits followed by a space
+      if (/^\d+\s/.test(line)) {
         return line;
       }
       return `1 ${line}`;
     })
-    .join('\\n');
-
-  return `[metadata]\\nName=${deckName}\\n\\n[Main]\\n${mainDeck}`;
+    .join('\n');
+  return `[metadata]\nName=${deckName}\n\n[Main]\n${mainDeck}`;
 }
+
 
 export default function MatchRunnerPage() {
   const [profiles, setProfiles] = useState<AiProfile[]>([]);
@@ -47,7 +48,7 @@ export default function MatchRunnerPage() {
       try {
         const fetchedProfiles = await getAiProfiles();
         setProfiles(fetchedProfiles);
-      } catch (err: unknown) { // FIX: Using the error variable
+      } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "An unknown error occurred";
         setError(`Failed to load AI profiles: ${message}`);
       }
@@ -66,8 +67,9 @@ export default function MatchRunnerPage() {
 
     setIsValidating(true);
 
+    // --- THE FIX IS HERE: Use a regex literal in .replace() to correctly strip numbers ---
     const allCardNames = [...player1.decklist.split('\n'), ...player2.decklist.split('\n')]
-      .map(line => line.trim().replace(/^\\d+\\s/, ''));
+      .map(line => line.trim().replace(/^\d+\s/, '')); // e.g., "25 Mountain" becomes "Mountain"
 
     const { valid, invalid } = await validateAndCanonicalizeDeck(allCardNames);
 
@@ -81,23 +83,25 @@ export default function MatchRunnerPage() {
     setIsSimulating(true);
     setStatusMessage('Validation successful. Submitting match...');
 
-    const correctedDeck1 = player1.decklist.split('\n').map(line => {
+    // --- THE SECOND FIX IS HERE: Rebuild decklists using the canonical names ---
+    const buildCorrectedDeck = (decklist: string) => {
+      return decklist.split('\n').map(line => {
         const trimmed = line.trim();
-        const match = trimmed.match(/^(\\d+)\\s(.+)/);
-        const cardName = match ? match[2] : trimmed;
-        const count = match ? match[1] : '1';
-        const canonicalName = valid.get(cardName.toLowerCase());
-        return canonicalName ? `${count} ${canonicalName}` : line;
-    }).join('\n');
+        if (!trimmed) return null; // Skip empty lines
 
-    const correctedDeck2 = player2.decklist.split('\n').map(line => {
-        const trimmed = line.trim();
-        const match = trimmed.match(/^(\\d+)\\s(.+)/);
+        const match = trimmed.match(/^(\d+)\s(.+)/);
         const cardName = match ? match[2] : trimmed;
         const count = match ? match[1] : '1';
+        
+        // Use lowercase for map lookup, as keys are lowercase
         const canonicalName = valid.get(cardName.toLowerCase());
-        return canonicalName ? `${count} ${canonicalName}` : line;
-    }).join('\n');
+
+        return canonicalName ? `${count} ${canonicalName}` : line; // Fallback to original line if something unexpected happens
+      }).filter(Boolean).join('\n');
+    };
+
+    const correctedDeck1 = buildCorrectedDeck(player1.decklist);
+    const correctedDeck2 = buildCorrectedDeck(player2.decklist);
 
     const deck1Filename = player1.deckName.replace(/[^a-z0-9-]/gi, '_').toLowerCase() + ".dck";
     const deck2Filename = player2.deckName.replace(/[^a-z0-9-]/gi, '_').toLowerCase() + ".dck";
@@ -166,7 +170,6 @@ export default function MatchRunnerPage() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-xl"><Swords /> Forge Match Simulator</CardTitle>
-        {/* FIX: Escaped double quotes */}
         <CardDescription>Enter two decklists. You can specify a count (e.g., &quot;25 Mountain&quot;) or enter one card name per line.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
