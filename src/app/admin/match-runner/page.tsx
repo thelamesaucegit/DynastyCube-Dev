@@ -1,4 +1,5 @@
 // src/app/admin/match-runner/page.tsx
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -9,11 +10,21 @@ import { Label } from '@/app/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { Textarea } from '@/app/components/ui/textarea';
 import { Input } from '@/app/components/ui/input';
-import { Swords, Bot, Hourglass } from 'lucide-react';
+import { Swords, Hourglass } from 'lucide-react';
 import { getAiProfiles, AiProfile } from '@/app/actions/adminActions';
 
+// --- THE FIX IS HERE ---
+// This function now correctly formats the raw decklist text into the
+// "Count Card Name" format expected by the Java DeckSerializer.
 function formatDecklistToDck(decklist: string, deckName: string): string {
-  return `[metadata]\nName=${deckName}\n\n[Main]\n${decklist}`;
+  const mainDeck = decklist
+    .split('\\n')
+    .map(line => line.trim())
+    .filter(line => line) // Remove empty lines
+    .map(cardName => `1 ${cardName}`) // Assume each line is one copy of a card
+    .join('\\n');
+
+  return `[metadata]\\nName=${deckName}\\n\\n[Main]\\n${mainDeck}`;
 }
 
 export default function MatchRunnerPage() {
@@ -59,23 +70,37 @@ export default function MatchRunnerPage() {
         })
       });
 
-      if (!response.ok) throw new Error('Failed to start simulation on the server.');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to start simulation on the server.');
+      }
       
       const { matchId } = await response.json();
-      setStatusMessage(`Simulation started with ID: ${matchId}. Waiting for completion...`);
+      if (!matchId) {
+        throw new Error("API did not return a valid match ID.");
+      }
 
+      setStatusMessage(`Simulation started with ID: ${matchId}. Waiting for completion...`);
+      
       const poll = setInterval(async () => {
-        const statusRes = await fetch(`/api/match-runner/${matchId}`);
-        const { winner } = await statusRes.json();
-        
-        if (winner) {
-          clearInterval(poll);
-          setStatusMessage(`Match complete! Winner: ${winner}. Redirecting to replay...`);
-          router.push(`/admin/match-viewer/${matchId}`);
+        try {
+          const statusRes = await fetch(`/api/match-runner/${matchId}`);
+          if (!statusRes.ok) return; // Continue polling on transient errors
+
+          const { winner } = await statusRes.json();
+          
+          if (winner) {
+            clearInterval(poll);
+            setStatusMessage(`Match complete! Winner: ${winner}. Redirecting to replay...`);
+            router.push(`/admin/match-viewer/${matchId}`);
+          }
+        } catch (pollError) {
+          // Log polling errors but don't stop the polling process
+          console.error("Polling error:", pollError);
         }
       }, 5000);
 
-    } catch (err: unknown) { // FIX: Use 'unknown' instead of 'any'
+    } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
       } else {
@@ -105,9 +130,7 @@ export default function MatchRunnerPage() {
         <CardDescription>Create a match and record the results to the database for later viewing.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Simplified form structure */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Player 1 */}
             <div>
                 <Label>Player 1 Deck Name</Label>
                 <Input value={player1.deckName} onChange={(e) => setPlayer1({ ...player1, deckName: e.target.value })} />
@@ -117,9 +140,8 @@ export default function MatchRunnerPage() {
                     <SelectContent>{profiles.map(p => <SelectItem key={p.id} value={p.profile_name}>{p.profile_name}</SelectItem>)}</SelectContent>
                 </Select>
                 <Label>Player 1 Decklist</Label>
-                <Textarea value={player1.decklist} onChange={(e) => setPlayer1({ ...player1, decklist: e.target.value })} />
+                <Textarea placeholder="One card name per line..." value={player1.decklist} onChange={(e) => setPlayer1({ ...player1, decklist: e.target.value })} />
             </div>
-            {/* Player 2 */}
             <div>
                 <Label>Player 2 Deck Name</Label>
                 <Input value={player2.deckName} onChange={(e) => setPlayer2({ ...player2, deckName: e.target.value })} />
@@ -129,7 +151,7 @@ export default function MatchRunnerPage() {
                     <SelectContent>{profiles.map(p => <SelectItem key={p.id} value={p.profile_name}>{p.profile_name}</SelectItem>)}</SelectContent>
                 </Select>
                 <Label>Player 2 Decklist</Label>
-                <Textarea value={player2.decklist} onChange={(e) => setPlayer2({ ...player2, decklist: e.target.value })} />
+                <Textarea placeholder="One card name per line..." value={player2.decklist} onChange={(e) => setPlayer2({ ...player2, decklist: e.target.value })} />
             </div>
         </div>
         {error && <p className="text-sm text-red-500">{error}</p>}
