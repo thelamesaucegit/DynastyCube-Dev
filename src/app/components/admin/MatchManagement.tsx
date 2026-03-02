@@ -25,7 +25,7 @@ interface BasicTeam {
 export interface AiProfile {
   id: string;
   profile_name: string;
-  description?: string;
+  description: string | null;
 }
 
 // New Simulator Component
