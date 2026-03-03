@@ -1,4 +1,5 @@
 // src/lib/scryfall-client.ts
+
 /**
  * Scryfall API Client
  * https://scryfall.com/docs/api
@@ -20,12 +21,10 @@ let lastRequestTime = 0;
 async function waitForRateLimit(): Promise<void> {
   const now = Date.now();
   const timeSinceLastRequest = now - lastRequestTime;
-
   if (timeSinceLastRequest < REQUEST_DELAY_MS) {
     const waitTime = REQUEST_DELAY_MS - timeSinceLastRequest;
     await new Promise(resolve => setTimeout(resolve, waitTime));
   }
-
   lastRequestTime = Date.now();
 }
 
@@ -60,11 +59,9 @@ export interface ScryfallCard {
  */
 export async function searchCardByName(cardName: string): Promise<ScryfallCard | null> {
   await waitForRateLimit();
-
   try {
     const url = `${SCRYFALL_API_BASE}/cards/named?exact=${encodeURIComponent(cardName)}`;
     const response = await fetch(url);
-
     if (!response.ok) {
       if (response.status === 404) {
         console.warn(`Card not found: ${cardName}`);
@@ -72,11 +69,12 @@ export async function searchCardByName(cardName: string): Promise<ScryfallCard |
       }
       throw new Error(`Scryfall API error: ${response.status} ${response.statusText}`);
     }
-
     const data: ScryfallCard = await response.json();
     return data;
-  } catch (error) {
-    console.error(`Error fetching card "${cardName}":`, error);
+  } catch (error: unknown) { // --- FIX: Use 'unknown' for type safety ---
+    let message = `Error fetching card "${cardName}"`;
+    if (error instanceof Error) message = `${message}: ${error.message}`;
+    console.error(message);
     return null;
   }
 }
@@ -89,13 +87,9 @@ export async function fetchCardCollection(
   cardNames: string[]
 ): Promise<{ data: ScryfallCard[]; not_found: Array<{ name: string }> }> {
   await waitForRateLimit();
-
   try {
-    // Scryfall collection endpoint accepts max 75 cards
     const batch = cardNames.slice(0, 75);
-
     const identifiers = batch.map(name => ({ name }));
-
     const url = `${SCRYFALL_API_BASE}/cards/collection`;
     const response = await fetch(url, {
       method: "POST",
@@ -108,14 +102,15 @@ export async function fetchCardCollection(
     if (!response.ok) {
       throw new Error(`Scryfall API error: ${response.status} ${response.statusText}`);
     }
-
     const result = await response.json();
     return {
       data: result.data || [],
       not_found: result.not_found || [],
     };
-  } catch (error) {
-    console.error("Error fetching card collection:", error);
+  } catch (error: unknown) { // --- FIX: Use 'unknown' for type safety ---
+    let message = "Error fetching card collection";
+    if (error instanceof Error) message = `${message}: ${error.message}`;
+    console.error(message);
     return { data: [], not_found: cardNames.map(name => ({ name })) };
   }
 }
@@ -135,23 +130,19 @@ export async function fetchAllCards(
   const notFoundCards: string[] = [];
   const errors: string[] = [];
 
-  // Process in batches of 75
   for (let i = 0; i < cardNames.length; i += 75) {
     const batch = cardNames.slice(i, i + 75);
-
     try {
       const result = await fetchCardCollection(batch);
       allCards.push(...result.data);
       notFoundCards.push(...result.not_found.map(nf => nf.name));
-
-      console.log(`Processed batch ${Math.floor(i / 75) + 1}: ${result.data.length} found, ${result.not_found.length} not found`);
-    } catch (error) {
-      const errorMsg = `Error processing batch starting at index ${i}: ${error}`;
-      console.error(errorMsg);
-      errors.push(errorMsg);
+    } catch (error: unknown) { // --- FIX: Use 'unknown' for type safety ---
+      let message = `Error processing batch starting at index ${i}`;
+      if (error instanceof Error) message = `${message}: ${error.message}`;
+      console.error(message);
+      errors.push(message);
     }
   }
-
   return {
     cards: allCards,
     notFound: notFoundCards,
@@ -164,11 +155,9 @@ export async function fetchAllCards(
  */
 export async function getCardById(scryfallId: string): Promise<ScryfallCard | null> {
   await waitForRateLimit();
-
   try {
     const url = `${SCRYFALL_API_BASE}/cards/${scryfallId}`;
     const response = await fetch(url);
-
     if (!response.ok) {
       if (response.status === 404) {
         console.warn(`Card not found with ID: ${scryfallId}`);
@@ -176,11 +165,12 @@ export async function getCardById(scryfallId: string): Promise<ScryfallCard | nu
       }
       throw new Error(`Scryfall API error: ${response.status} ${response.statusText}`);
     }
-
     const data: ScryfallCard = await response.json();
     return data;
-  } catch (error) {
-    console.error(`Error fetching card by ID "${scryfallId}":`, error);
+  } catch (error: unknown) { // --- FIX: Use 'unknown' for type safety ---
+    let message = `Error fetching card by ID "${scryfallId}"`;
+    if (error instanceof Error) message = `${message}: ${error.message}`;
+    console.error(message);
     return null;
   }
 }
@@ -192,7 +182,6 @@ export function extractRatingData(card: ScryfallCard) {
   return {
     scryfallId: card.id,
     edhrecRank: card.edhrec_rank || null,
-    // Add more rating sources here in the future
     updatedAt: new Date().toISOString(),
   };
 }
