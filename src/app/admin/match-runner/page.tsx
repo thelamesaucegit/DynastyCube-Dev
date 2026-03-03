@@ -11,27 +11,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/app/components/ui/textarea';
 import { Input } from '@/app/components/ui/input';
 import { Swords, Hourglass, ShieldCheck, ShieldX } from 'lucide-react';
-import { getAiProfiles, AiProfile, validateAndCanonicalizeDeck } from '@/app/actions/adminActions';
+import { getAiProfiles, validateAndCanonicalizeDeck } from '@/app/actions/adminActions';
+import { GameState } from '@/app/types';
 
 function formatDecklistToDck(decklist: string, deckName: string): string {
-  const mainDeck = decklist
-    .split('\n')
-    .map(line => line.trim())
-    .filter(line => line)
-    .map(line => {
-      // This regex correctly checks if a line starts with one or more digits followed by a space
-      if (/^\d+\s/.test(line)) {
-        return line;
-      }
-      return `1 ${line}`;
-    })
-    .join('\n');
-  return `[metadata]\nName=${deckName}\n\n[Main]\n${mainDeck}`;
+  return `[metadata]\nName=${deckName}\n\n[Main]\n${decklist}`;
 }
 
-
 export default function MatchRunnerPage() {
-  const [profiles, setProfiles] = useState<AiProfile[]>([]);
+  const [profiles, setProfiles] = useState<any[]>([]); // Using any[] for profiles to avoid type conflicts
   const [player1, setPlayer1] = useState({ decklist: '', deckName: 'Player 1 Deck', aiProfile: '' });
   const [player2, setPlayer2] = useState({ decklist: '', deckName: 'Player 2 Deck', aiProfile: '' });
   
@@ -49,7 +37,8 @@ export default function MatchRunnerPage() {
         const fetchedProfiles = await getAiProfiles();
         setProfiles(fetchedProfiles);
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "An unknown error occurred";
+        let message = "An unknown error occurred";
+        if (err instanceof Error) message = err.message;
         setError(`Failed to load AI profiles: ${message}`);
       }
     }
@@ -66,10 +55,10 @@ export default function MatchRunnerPage() {
     }
 
     setIsValidating(true);
+    setStatusMessage('Validating decklists...');
 
-    // --- THE FIX IS HERE: Use a regex literal in .replace() to correctly strip numbers ---
     const allCardNames = [...player1.decklist.split('\n'), ...player2.decklist.split('\n')]
-      .map(line => line.trim().replace(/^\d+\s/, '')); // e.g., "25 Mountain" becomes "Mountain"
+      .map(line => line.trim().replace(/^\d+\s/, ''));
 
     const { valid, invalid } = await validateAndCanonicalizeDeck(allCardNames);
 
@@ -83,25 +72,20 @@ export default function MatchRunnerPage() {
     setIsSimulating(true);
     setStatusMessage('Validation successful. Submitting match...');
 
-    // --- THE SECOND FIX IS HERE: Rebuild decklists using the canonical names ---
-    const buildCorrectedDeck = (decklist: string) => {
+    const buildCorrectedDeckList = (decklist: string): string => {
       return decklist.split('\n').map(line => {
         const trimmed = line.trim();
-        if (!trimmed) return null; // Skip empty lines
-
-        const match = trimmed.match(/^(\d+)\s(.+)/);
+        if (!trimmed) return null;
+        const match = trimmed.match(/^(\d+)\s+(.+)/);
         const cardName = match ? match[2] : trimmed;
         const count = match ? match[1] : '1';
-        
-        // Use lowercase for map lookup, as keys are lowercase
         const canonicalName = valid.get(cardName.toLowerCase());
-
-        return canonicalName ? `${count} ${canonicalName}` : line; // Fallback to original line if something unexpected happens
+        return canonicalName ? `${count} ${canonicalName}` : line;
       }).filter(Boolean).join('\n');
     };
-
-    const correctedDeck1 = buildCorrectedDeck(player1.decklist);
-    const correctedDeck2 = buildCorrectedDeck(player2.decklist);
+    
+    const correctedDeck1List = buildCorrectedDeckList(player1.decklist);
+    const correctedDeck2List = buildCorrectedDeckList(player2.decklist);
 
     const deck1Filename = player1.deckName.replace(/[^a-z0-9-]/gi, '_').toLowerCase() + ".dck";
     const deck2Filename = player2.deckName.replace(/[^a-z0-9-]/gi, '_').toLowerCase() + ".dck";
@@ -111,8 +95,8 @@ export default function MatchRunnerPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          deck1: { filename: deck1Filename, content: formatDecklistToDck(correctedDeck1, player1.deckName), aiProfile: player1.aiProfile },
-          deck2: { filename: deck2Filename, content: formatDecklistToDck(correctedDeck2, player2.deckName), aiProfile: player2.aiProfile },
+          deck1: { filename: deck1Filename, content: formatDecklistToDck(correctedDeck1List, player1.deckName), aiProfile: player1.aiProfile },
+          deck2: { filename: deck2Filename, content: formatDecklistToDck(correctedDeck2List, player2.deckName), aiProfile: player2.aiProfile },
         })
       });
 
@@ -131,15 +115,17 @@ export default function MatchRunnerPage() {
           const statusRes = await fetch(`/api/match-runner/${matchId}`);
           if (!statusRes.ok) return;
 
-          const { winner } = await statusRes.json();
+          const { winner, isReplayReady } = await statusRes.json();
           
-          if (winner) {
+          if (winner && isReplayReady) {
             clearInterval(poll);
             setStatusMessage(`Match complete! Winner: ${winner}. Redirecting to replay...`);
             router.push(`/admin/match-viewer/${matchId}`);
           }
-        } catch (pollError) {
-          console.error("Polling error:", pollError);
+        } catch (pollError: unknown) {
+            let message = "An error occurred during polling.";
+            if (pollError instanceof Error) message = pollError.message;
+            console.error("Polling error:", message);
         }
       }, 5000);
 
