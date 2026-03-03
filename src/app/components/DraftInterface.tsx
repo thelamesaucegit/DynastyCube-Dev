@@ -39,7 +39,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
   const [success, setSuccess] = useState<string | null>(null);
   const [cubucksBalance, setCubucksBalance] = useState<number>(0);
   const [draftOrderEntries, setDraftOrderEntries] = useState<DraftOrderEntry[]>([]);
-  const [draftOrderExpanded, setDraftOrderExpanded] = useState(false);
   const [sortBy, setSortBy] = useState<string>("card_name");
   const [sortOrder, setSortOrder] = useState<string>("asc");
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -53,16 +52,13 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
     setLoading(true);
     setError(null);
     try {
-      // Fetch the active session first to get its ID
       const { session } = await getActiveDraftSession();
-      if (session) {
-        setActiveSessionId(session.id);
-      }
+      const sessionId = session?.id || null;
+      setActiveSessionId(sessionId);
 
       const [{ cards }, { picks }, { team }, { order }] = await Promise.all([
         getAvailableCardsForDraft(),
-        // Pass the session ID if available to scope the picks
-        getTeamDraftPicks(teamId, session?.id),
+        getTeamDraftPicks(teamId, sessionId!),
         getTeamBalance(teamId),
         getActiveDraftOrder(),
       ]);
@@ -71,7 +67,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       setDraftedCards(picks);
       if (team) setCubucksBalance(team.cubucks_balance);
       setDraftOrderEntries(order);
-
     } catch (err) {
       console.error("Error loading draft data:", err);
       setError("Failed to load cards");
@@ -81,16 +76,17 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
   };
 
   const handleDraftCard = async (card: CardData) => {
-    if (drafting) return;
-    if (!activeSessionId) {
-      setError("No active draft session found. Cannot complete the draft action.");
+    if (drafting || !activeSessionId) {
+      if (!activeSessionId) {
+        setError("Cannot draft card: No active draft session.");
+      }
       return;
     }
 
     if (draftedCards.some((pick) => pick.card_pool_id === card.id)) {
-        setError("This specific card has already been drafted by your team.");
-        setTimeout(() => setError(null), 3000);
-        return;
+      setError("This specific card has already been drafted by your team.");
+      setTimeout(() => setError(null), 3000);
+      return;
     }
 
     const cardCost = card.cubucks_cost || 1;
@@ -104,14 +100,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
     setError(null);
     setSuccess(null);
 
-    const cubucksResult = await spendCubucksOnDraft(
-      teamId,
-      card.card_id,
-      card.card_name,
-      cardCost,
-      card.id
-    );
-
+    const cubucksResult = await spendCubucksOnDraft(teamId, card.card_id, card.card_name, cardCost, card.id);
     if (!cubucksResult.success) {
       setError(cubucksResult.error || "Failed to spend Çubucks");
       setDrafting(null);
@@ -139,27 +128,23 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
     if (result.success) {
       setSuccess(`Acquired ${card.card_name} for ${cardCost} Cubucks!`);
       await conditionallyCleanupDraftQueues(card.card_id);
-      
-      // This is the fix: pass the session ID to advanceDraft
       await advanceDraft(activeSessionId);
-      
       await loadDraftData();
       onDraftComplete?.();
       setTimeout(() => setSuccess(null), 3000);
     } else {
       setError(result.error || "Failed to acquire card");
-      // Add logic here to refund cubucks if addDraftPick fails
+      // Refund logic would go here
     }
-
     setDrafting(null);
   };
-  
+
   const draftedCardCounts = new Map<string, number>();
   draftedCards.forEach(pick => {
-      draftedCardCounts.set(pick.card_id, (draftedCardCounts.get(pick.card_id) || 0) + 1);
+    draftedCardCounts.set(pick.card_id, (draftedCardCounts.get(pick.card_id) || 0) + 1);
   });
 
- const filteredCards = availableCards.filter((card) => {
+  const filteredCards = availableCards.filter((card) => {
     if (searchQuery && !card.card_name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     if (colorFilter !== "all") {
       if (colorFilter === "colorless") {
@@ -188,33 +173,32 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
     }
     return true;
   });
-  
+
   const sortedAndFilteredCards = filteredCards.sort((a, b) => {
     let valA, valB;
-    
     switch (sortBy) {
-        case 'cmc':
-            valA = a.cmc ?? 0;
-            valB = b.cmc ?? 0;
-            break;
-        case 'cubucks_cost':
-            valA = a.cubucks_cost ?? 1;
-            valB = b.cubucks_cost ?? 1;
-            break;
-        case 'elo':
-            valA = a.cubecobra_elo ?? 0;
-            valB = b.cubecobra_elo ?? 0;
-            break;
-        default: // Default to card name
-            valA = a.card_name.toLowerCase();
-            valB = b.card_name.toLowerCase();
+      case 'cmc':
+        valA = a.cmc ?? 0;
+        valB = b.cmc ?? 0;
+        break;
+      case 'cubucks_cost':
+        valA = a.cubucks_cost ?? 1;
+        valB = b.cubucks_cost ?? 1;
+        break;
+      case 'elo':
+        valA = a.cubecobra_elo ?? 0;
+        valB = b.cubecobra_elo ?? 0;
+        break;
+      default:
+        valA = a.card_name.toLowerCase();
+        valB = b.card_name.toLowerCase();
     }
     if (typeof valA === 'string' && typeof valB === 'string') {
-        return sortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      return sortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
     } else {
-        const numA = typeof valA === 'number' ? valA : 0;
-        const numB = typeof valB === 'number' ? valB : 0;
-        return sortOrder === 'asc' ? numA - numB : numB - numA;
+      const numA = typeof valA === 'number' ? valA : 0;
+      const numB = typeof valB === 'number' ? valB : 0;
+      return sortOrder === 'asc' ? numA - numB : numB - numA;
     }
   });
 
@@ -363,45 +347,45 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-             <div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Sort By
+              </label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="card_name">Card Name</option>
+                <option value="cmc">Mana Cost (CMC)</option>
+                <option value="cubucks_cost">Çubucks Cost</option>
+                <option value="elo">ELO</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Order
+              </label>
+              <select
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="asc">Ascending</option>
+                <option value="desc">Descending</option>
+              </select>
+            </div>
+            {isUserTeamMember && (
+              <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Sort By
+                  Your Balance
                 </label>
-                <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                    <option value="card_name">Card Name</option>
-                    <option value="cmc">Mana Cost (CMC)</option>
-                    <option value="cubucks_cost">Çubucks Cost</option>
-                    <option value="elo">ELO</option>
-                </select>
-             </div>
-             <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Order
-                </label>
-                <select
-                    value={sortOrder}
-                    onChange={(e) => setSortOrder(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                    <option value="asc">Ascending</option>
-                    <option value="desc">Descending</option>
-                </select>
-             </div>
-              {isUserTeamMember && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Your Balance
-                  </label>
-                  <div className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex items-center gap-2 font-semibold">
-                    <span className="text-lg font-bold">Ç</span>
-                    <span>{cubucksBalance.toLocaleString()}</span>
-                  </div>
+                <div className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex items-center gap-2 font-semibold">
+                  <span className="text-lg font-bold">Ç</span>
+                  <span>{cubucksBalance.toLocaleString()}</span>
                 </div>
-              )}
+              </div>
+            )}
           </div>
         </div>
         <div className="text-sm text-gray-600 dark:text-gray-400">
@@ -452,7 +436,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
                       </p>
                     )}
                   </div>
-                  
                   <div className="absolute top-2 left-2 bg-yellow-500 text-gray-900 text-xs font-bold px-2 py-1 rounded shadow-lg flex items-center gap-1">
                     <span className="font-bold">Ç</span>
                     <span>{card.cubucks_cost || 1}</span>
@@ -484,7 +467,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
                       </span>
                     </button>
                   )}
-                  
                   {isThisInstanceDrafted && (
                     <div className="absolute top-2 right-2 bg-green-600 text-white text-xs font-bold px-2 py-1 rounded shadow-lg">
                       ✓ DRAFTED
