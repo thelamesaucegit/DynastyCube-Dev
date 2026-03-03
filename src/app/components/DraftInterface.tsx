@@ -3,22 +3,20 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { getAvailableCardsForDraft } from "@/app/actions/cardActions";
+import { getAvailableCardsForDraft, type CardData } from "@/app/actions/cardActions";
 import { getTeamDraftPicks, addDraftPick } from "@/app/actions/draftActions";
 import { getTeamBalance, spendCubucksOnDraft } from "@/app/actions/cubucksActions";
 import { getActiveDraftOrder, type DraftOrderEntry } from "@/app/actions/draftOrderActions";
 import { conditionallyCleanupDraftQueues } from "@/app/actions/autoDraftActions";
-import { advanceDraft } from "@/app/actions/draftSessionActions";
-import type { CardData } from "@/app/actions/cardActions";
+import { advanceDraft, getActiveDraftSession } from "@/app/actions/draftSessionActions";
 import type { DraftPick } from "@/app/actions/draftActions";
 
-// --- MODIFICATION 1 of 5: Add the new `isFreeAgencyEnabled` prop ---
 interface DraftInterfaceProps {
   teamId: string;
   teamName?: string;
   isUserTeamMember?: boolean;
   onDraftComplete?: () => void;
-  isFreeAgencyEnabled: boolean; // This prop controls if the button is active
+  isFreeAgencyEnabled: boolean;
 }
 
 export const DraftInterface: React.FC<DraftInterfaceProps> = ({
@@ -26,7 +24,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
   teamName = "This team",
   isUserTeamMember = true,
   onDraftComplete,
-  isFreeAgencyEnabled, // Destructure the new prop
+  isFreeAgencyEnabled,
 }) => {
   const [availableCards, setAvailableCards] = useState<CardData[]>([]);
   const [draftedCards, setDraftedCards] = useState<DraftPick[]>([]);
@@ -36,14 +34,15 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [cmcFilter, setCmcFilter] = useState<string>("all");
   const [cubucksFilter, setCubucksFilter] = useState<string>("all");
-  const [drafting, setDrafting] = useState<string | null>(null); // FIX: Will now hold the unique DB `id`
+  const [drafting, setDrafting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [cubucksBalance, setCubucksBalance] = useState<number>(0);
   const [draftOrderEntries, setDraftOrderEntries] = useState<DraftOrderEntry[]>([]);
   const [draftOrderExpanded, setDraftOrderExpanded] = useState(false);
-    const [sortBy, setSortBy] = useState<string>("card_name");
+  const [sortBy, setSortBy] = useState<string>("card_name");
   const [sortOrder, setSortOrder] = useState<string>("asc");
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     loadDraftData();
@@ -54,16 +53,24 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
     setLoading(true);
     setError(null);
     try {
-      const [{ cards }, { picks }, { team }, { order }] = await Promise.all([
+      const [{ cards }, { picks }, { team }, { order, seasonId }] = await Promise.all([
         getAvailableCardsForDraft(),
         getTeamDraftPicks(teamId),
         getTeamBalance(teamId),
         getActiveDraftOrder(),
       ]);
+
       setAvailableCards(cards);
       setDraftedCards(picks);
       if (team) setCubucksBalance(team.cubucks_balance);
       setDraftOrderEntries(order);
+
+      // New functionality: Store the active session ID in state
+      const { session } = await getActiveDraftSession();
+      if (session) {
+        setActiveSessionId(session.id);
+      }
+
     } catch (err) {
       console.error("Error loading draft data:", err);
       setError("Failed to load cards");
@@ -74,40 +81,47 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
 
   const handleDraftCard = async (card: CardData) => {
     if (drafting) return;
-    // --- ENTIRE LOGIC REPLACEMENT ---
-    // Check if this specific card INSTANCE has already been drafted by looking at the card_pool_id
+    if (!activeSessionId) {
+      setError("No active draft session found. Cannot draft card.");
+      return;
+    }
+
     if (draftedCards.some((pick) => pick.card_pool_id === card.id)) {
         setError("This specific card has already been drafted by your team.");
         setTimeout(() => setError(null), 3000);
         return;
     }
+
     const cardCost = card.cubucks_cost || 1;
     if (cubucksBalance < cardCost) {
       setError(`Insufficient Çubucks! Need ${cardCost}, you have ${cubucksBalance}`);
       setTimeout(() => setError(null), 5000);
       return;
     }
-    setDrafting(card.id!); // Use unique DB ID for drafting state
+
+    setDrafting(card.id!);
     setError(null);
     setSuccess(null);
-    // Spend cubucks first
+
     const cubucksResult = await spendCubucksOnDraft(
       teamId,
       card.card_id,
       card.card_name,
       cardCost,
-      card.id // card_pool_id
+      card.id
     );
+
     if (!cubucksResult.success) {
       setError(cubucksResult.error || "Failed to spend Çubucks");
       setDrafting(null);
       return;
     }
-    // Then, add the draft pick using the unique ID
+
     const pick: DraftPick = {
       team_id: teamId,
-      card_pool_id: card.id, // <-- CRITICAL: Pass the unique instance ID
-      card_id: card.card_id, // Still pass the general ID for data purposes
+      card_pool_id: card.id,
+      draft_session_id: activeSessionId, // Use the stored session ID
+      card_id: card.card_id,
       card_name: card.card_name,
       card_set: card.card_set,
       card_type: card.card_type,
@@ -118,12 +132,16 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       cmc: card.cmc,
       pick_number: draftedCards.length + 1,
     };
+
     const result = await addDraftPick(pick);
+
     if (result.success) {
       setSuccess(`Acquired ${card.card_name} for ${cardCost} Cubucks!`);
-      // Cleanup can still use the general card_id if it's meant to remove all copies from queues
       await conditionallyCleanupDraftQueues(card.card_id);
-      await advanceDraft();
+      
+      // This is the fix: pass the session ID to advanceDraft
+      await advanceDraft(activeSessionId);
+      
       await loadDraftData();
       onDraftComplete?.();
       setTimeout(() => setSuccess(null), 3000);
@@ -131,14 +149,16 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       setError(result.error || "Failed to acquire card");
       // Add logic here to refund cubucks if addDraftPick fails
     }
+
     setDrafting(null);
   };
   
-  // Create a map to count how many of each card (by scryfall_id) this team has drafted
+
   const draftedCardCounts = new Map<string, number>();
   draftedCards.forEach(pick => {
       draftedCardCounts.set(pick.card_id, (draftedCardCounts.get(pick.card_id) || 0) + 1);
   });
+
  const filteredCards = availableCards.filter((card) => {
     if (searchQuery && !card.card_name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     if (colorFilter !== "all") {
@@ -189,11 +209,9 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
             valA = a.card_name.toLowerCase();
             valB = b.card_name.toLowerCase();
     }
-
     if (typeof valA === 'string' && typeof valB === 'string') {
         return sortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
     } else {
-        // Ensure valA and valB are numbers for subtraction
         const numA = typeof valA === 'number' ? valA : 0;
         const numB = typeof valB === 'number' ? valB : 0;
         return sortOrder === 'asc' ? numA - numB : numB - numA;
@@ -259,7 +277,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
           ✗ {error}
         </div>
       )}
-
       {!isUserTeamMember && (
         <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg p-4">
           <p className="text-yellow-800 dark:text-yellow-200 text-sm">
@@ -267,7 +284,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
           </p>
         </div>
       )}
-
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -281,7 +297,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
             className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
-
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -303,7 +318,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
               ))}
             </div>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -348,7 +362,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
               </select>
             </div>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
              <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -391,12 +404,10 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
               )}
           </div>
         </div>
-
         <div className="text-sm text-gray-600 dark:text-gray-400">
           Showing {sortedAndFilteredCards.length} of {availableCards.length} cards
         </div>
       </div>
-
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
         <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
           Card Pool
@@ -412,7 +423,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
               const isThisInstanceDrafted = draftedCards.some(p => p.card_pool_id === card.id);
               const isDrafting = drafting === card.id;
               const notEnoughCubucks = cubucksBalance < (card.cubucks_cost || 1);
-
               return (
                 <div
                   key={card.id}
@@ -447,7 +457,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
                     <span className="font-bold">Ç</span>
                     <span>{card.cubucks_cost || 1}</span>
                   </div>
-
                   {!isThisInstanceDrafted && isUserTeamMember && (
                     <button
                       onClick={() => handleDraftCard(card)}
@@ -490,4 +499,3 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
     </div>
   );
 };
-
