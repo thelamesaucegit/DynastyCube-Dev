@@ -5,7 +5,7 @@
 import { createServerClient } from "@/lib/supabase";
 import { getDraftStatus, type DraftStatus } from "@/app/actions/draftOrderActions";
 import { executeAutoDraft } from "@/app/actions/autoDraftActions";
-import { addSkippedPick } from "@/app/actions/draftActions";
+import { addSkippedPick, getTeamDraftPicks } from "@/app/actions/draftActions";
 
 // ============================================================================
 // TYPES
@@ -193,7 +193,6 @@ export async function getActiveDraftSession(): Promise<{
       return { session: null };
     }
 
-    // Pass session ID to get status scoped to this draft
     const { status: draftStatus } = await getDraftStatus(session.id);
 
     return {
@@ -384,7 +383,6 @@ export async function activateDraft(
       return { success: false, error: `Cannot activate a draft with status: ${session.status}` };
     }
 
-    // Pass session ID to get status scoped to this draft
     const { status: draftStatus } = await getDraftStatus(sessionId);
 
     if (!draftStatus) {
@@ -435,8 +433,7 @@ export async function activateDraft(
 
 /**
  * Advance the draft after a pick has been made.
- * Resets the pick deadline for the next team and sends notifications.
- * Checks if the draft is complete.
+ * This version must be passed the session ID.
  */
 export async function advanceDraft(
   sessionId: string
@@ -461,7 +458,6 @@ export async function advanceDraft(
       return { success: true }; // Not an active draft, do nothing.
     }
 
-    // Pass session ID to get status scoped to this draft
     const { status: draftStatus } = await getDraftStatus(sessionId);
     if (!draftStatus) {
       return { success: false, error: "Could not determine draft status" };
@@ -670,7 +666,6 @@ export async function checkDraftTimer(): Promise<{
     let teamId = session.current_on_clock_team_id;
 
     if (!teamId) {
-      // Pass session ID to get status scoped to this draft
       const { status: draftStatus } = await getDraftStatus(session.id);
       if (!draftStatus) {
         return { action: "error", error: "No team on clock and could not determine draft status." };
@@ -705,7 +700,6 @@ export async function checkDraftTimer(): Promise<{
       `Pick skipped/failed for team ${teamId}: ${autoDraftResult.error || "no affordable card available"}`
     );
 
-    // Pass session ID to get status scoped to this draft
     const { status: draftStatus } = await getDraftStatus(session.id);
     if (!draftStatus) {
       return { action: "error", error: "Could not get draft status after skip/failure." };
@@ -730,7 +724,7 @@ export async function checkDraftTimer(): Promise<{
       .eq("id", session.id);
 
     if (!autoDraftResult.success) {
-      const { picks: existingPicks } = await getTeamDraftPicks(teamId); // This function is not in the file, assuming it exists
+      const { picks: existingPicks } = await getTeamDraftPicks(teamId, session.id);
       const skippedResult = await addSkippedPick(teamId, existingPicks.length + 1, session.id);
       if (!skippedResult.success) {
         return { action: "error", error: `Auto-draft failed and could not log skipped pick: ${skippedResult.error}` };
