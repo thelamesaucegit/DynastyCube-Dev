@@ -1,19 +1,41 @@
 // src/app/admin/match-viewer/[matchId]/page.tsx
 
-import React, { use } from "react";
-import MatchReplayClient from "@/app/components/MatchReplayClient";
+import React from 'react';
+import { getMatchReplay } from '@/app/actions/adminActions';
+import ReplayViewer from '@/app/components/admin/ReplayViewer';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/card';
+import { AlertTriangle } from 'lucide-react';
 
-// This is a Server Component. Its only job is to get the matchId from the URL
-// and pass it to the Client Component that will do the heavy lifting.
-// It uses the `use` hook to handle promise-based params from Next.js 15.
-export default function MatchViewerPage({ params }: { params: Promise<{ matchId: string }> }) {
-  // The `use` hook unwraps the Promise-like object for the route parameters.
-  const { matchId } = use(params);
+// This is now a React Server Component, which is more efficient for data fetching.
+export default async function MatchViewerPage({ params }: { params: { matchId: string } }) {
+  
+  const { matchId } = params;
+  const gameStates = await getMatchReplay(matchId);
+
+  if (!gameStates || gameStates.length === 0) {
+    return (
+      <Card className="max-w-2xl mx-auto mt-10">
+        <CardHeader className="text-center">
+          <AlertTriangle className="mx-auto h-12 w-12 text-destructive" />
+          <CardTitle>Replay Data Not Found</CardTitle>
+          <CardDescription>
+            Could not load the replay for match ID: {matchId}. The match may still be in progress, or an error might have occurred.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
 
   return (
-    <div className="container mx-auto p-4 md:p-8">
-      {/* Pass the matchId as a simple string prop to the Client Component */}
-      <MatchReplayClient matchId={matchId} />
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>Match Replay: {matchId}</CardTitle>
+        <CardDescription>Review the turn-by-turn events of the simulated match.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {/* The ReplayViewer is a Client Component that receives the data as a prop */}
+        <ReplayViewer gameStates={gameStates} />
+      </CardContent>
+    </Card>
   );
 }
