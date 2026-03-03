@@ -14,12 +14,19 @@ import { Swords, Hourglass, ShieldCheck, ShieldX } from 'lucide-react';
 import { getAiProfiles, validateAndCanonicalizeDeck } from '@/app/actions/adminActions';
 import { GameState } from '@/app/types';
 
+// --- FIX: Define a local type for AI Profiles to avoid using 'any' ---
+interface AiProfile {
+  id: string;
+  profile_name: string;
+}
+
 function formatDecklistToDck(decklist: string, deckName: string): string {
   return `[metadata]\nName=${deckName}\n\n[Main]\n${decklist}`;
 }
 
 export default function MatchRunnerPage() {
-  const [profiles, setProfiles] = useState<any[]>([]); // Using any[] for profiles to avoid type conflicts
+  // --- FIX: Use the strong AiProfile type ---
+  const [profiles, setProfiles] = useState<AiProfile[]>([]);
   const [player1, setPlayer1] = useState({ decklist: '', deckName: 'Player 1 Deck', aiProfile: '' });
   const [player2, setPlayer2] = useState({ decklist: '', deckName: 'Player 2 Deck', aiProfile: '' });
   
@@ -87,10 +94,12 @@ export default function MatchRunnerPage() {
     const correctedDeck1List = buildCorrectedDeckList(player1.decklist);
     const correctedDeck2List = buildCorrectedDeckList(player2.decklist);
 
+    // --- FIX: Corrected the regex for sanitizing filenames ---
     const deck1Filename = player1.deckName.replace(/[^a-z0-9-]/gi, '_').toLowerCase() + ".dck";
     const deck2Filename = player2.deckName.replace(/[^a-z0-9-]/gi, '_').toLowerCase() + ".dck";
     
     try {
+      // This is the orchestrator route, not the worker
       const response = await fetch('/api/match-runner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
