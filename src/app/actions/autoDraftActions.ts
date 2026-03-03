@@ -67,22 +67,18 @@ async function verifyTeamMembership(
 ): Promise<{ authorized: boolean; userId?: string; error?: string }> {
   const supabase = await createServerClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
-
   if (authError || !user) {
     return { authorized: false, error: "You must be logged in to perform this action" };
   }
-
   const { data: membership, error: membershipError } = await supabase
     .from("team_members")
     .select("id")
     .eq("team_id", teamId)
     .eq("user_id", user.id)
     .single();
-
   if (membershipError || !membership) {
     return { authorized: false, userId: user.id, error: "You must be a member of this team" };
   }
-
   return { authorized: true, userId: user.id };
 }
 
@@ -115,7 +111,6 @@ async function getTeamMemberCount(teamId: string): Promise<number> {
     .from("team_members")
     .select("*", { count: 'exact', head: true })
     .eq("team_id", teamId);
-
   if (error) {
     console.error("Error fetching team member count:", error);
     return 1; // Fallback to 1 to prevent division/math errors
@@ -145,9 +140,7 @@ export async function toggleQueuePickVote(
     if (!auth.authorized || !auth.userId) {
       return { success: false, pickExecuted: false, error: auth.error };
     }
-
     const supabase = await createServerClient();
-
     const { data: queueEntry, error: fetchError } = await supabase
       .from("team_draft_queue")
       .select("id, votes, position")
@@ -161,13 +154,11 @@ export async function toggleQueuePickVote(
 
     let currentVotes: string[] = queueEntry.votes || [];
     const hasVoted = currentVotes.includes(auth.userId);
-
     if (hasVoted) {
       currentVotes = currentVotes.filter(id => id !== auth.userId);
     } else {
       currentVotes.push(auth.userId);
     }
-
     const { error: updateError } = await supabase
       .from("team_draft_queue")
       .update({ votes: currentVotes })
@@ -181,11 +172,9 @@ export async function toggleQueuePickVote(
     const threshold = calculateVoteThreshold(memberCount);
 
     if (currentVotes.length >= threshold && queueEntry.position === 1) {
-      const { status: draftStatus } = await getDraftStatus();
-
+      const { status: draftStatus } = await getDraftStatus(draftSessionId);
       if (draftStatus?.onTheClock?.teamId === teamId) {
         const pickResult = await executeConfirmedTeamPick(teamId, cardPoolId, draftSessionId, auth.userId);
-
         if (!pickResult.success) {
            return { success: true, pickExecuted: false, error: pickResult.error };
         }
@@ -193,7 +182,6 @@ export async function toggleQueuePickVote(
         return { success: true, pickExecuted: true };
       }
     }
-
     return { success: true, pickExecuted: false };
   } catch (error) {
     console.error("Error toggling vote:", error);
@@ -218,7 +206,7 @@ async function executeConfirmedTeamPick(
     return { success: false, error: "Card is no longer available to be drafted." };
   }
 
-  const { picks: existingPicks } = await getTeamDraftPicks(teamId);
+  const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId);
 
   const { data, error } = await supabase.rpc("execute_atomic_draft_pick", {
     p_team_id: teamId,
@@ -244,9 +232,7 @@ async function executeConfirmedTeamPick(
     return { success: false, error: error.message };
   }
   
-  // FIX: Use the 'as' keyword for a strong type assertion.
   const newPick = data as DraftPick;
-
   if (!newPick) {
     return { success: false, error: "Draft pick could not be confirmed in the database." };
   }
@@ -273,7 +259,8 @@ async function executeConfirmedTeamPick(
  * Compute the auto-draft pick for a team using an ELO/color affinity algorithm.
  */
 export async function computeAutoDraftPick(
-  teamId: string
+  teamId: string,
+  draftSessionId: string
 ): Promise<{
   card: CardData | null;
   algorithmDetails: AlgorithmDetails | null;
@@ -284,16 +271,16 @@ export async function computeAutoDraftPick(
     if (cardsError) return { card: null, algorithmDetails: null, error: cardsError };
     if (availableCards.length === 0) return { card: null, algorithmDetails: null, error: "No available cards in the pool" };
 
-    const { picks: teamPicks } = await getTeamDraftPicks(teamId);
+    const { picks: teamPicks } = await getTeamDraftPicks(teamId, draftSessionId);
     const { team: teamBalance } = await getTeamBalance(teamId);
     const balance = teamBalance?.cubucks_balance ?? 0;
 
     const LAND_ELO_MODIFIER = 0.8;
     const AFFINITY_BONUS_PER_PICK = 0.1;
     const ANTI_AFFINITY_PENALTY_PER_PICK = 0.05;
-
     const colorModifiers: Record<string, number> = { W: 1.0, U: 1.0, B: 1.0, R: 1.0, G: 1.0 };
     const allColors = ["W", "U", "B", "R", "G"];
+
     for (const pick of teamPicks) {
       const pickColors = new Set(pick.colors || []);
       if (pickColors.size === 0) continue;
@@ -326,7 +313,6 @@ export async function computeAutoDraftPick(
       : [...availableCards].sort((a, b) => a.card_name.localeCompare(b.card_name));
       
     const top50 = candidatePool.slice(0, 50);
-
     const colorTotals: Record<string, number> = { W: 0, U: 0, B: 0, R: 0, G: 0 };
     for (const card of top50) {
       const elo = card.cubecobra_elo || 0;
@@ -360,7 +346,6 @@ export async function computeAutoDraftPick(
       .filter((c) => !c.colors || c.colors.length === 0)
       .sort((a, b) => (b.cubecobra_elo || 0) - (a.cubecobra_elo || 0));
     const bestColorlessCard = colorlessCards[0] || null;
-
     let selectedSource: "colored" | "colorless" | "none" = "none";
     let selectedCard: CardData | null = null;
 
@@ -389,6 +374,7 @@ export async function computeAutoDraftPick(
     }
 
     const draftedColorCounts = countDraftedColors(teamPicks);
+
     const algorithmDetails: AlgorithmDetails = {
       top50CardIds: top50.map((c) => c.card_id),
       colorTotals,
@@ -416,7 +402,8 @@ export async function computeAutoDraftPick(
  * Checks manual queue first, then falls back to algorithm.
  */
 export async function getAutoDraftPreview(
-  teamId: string
+  teamId: string,
+  draftSessionId: string
 ): Promise<AutoDraftPreviewResult> {
   try {
     const supabase = await createServerClient();
@@ -450,7 +437,7 @@ export async function getAutoDraftPreview(
       }
     }
 
-    const { card, algorithmDetails, error } = await computeAutoDraftPick(teamId);
+    const { card, algorithmDetails, error } = await computeAutoDraftPick(teamId, draftSessionId);
     
     if (card) {
         const { team: teamBalance } = await getTeamBalance(teamId);
@@ -492,6 +479,7 @@ export async function getAutoDraftPreview(
  */
 export async function getTeamDraftQueue(
   teamId: string,
+  draftSessionId: string,
   limit: number = 20
 ): Promise<{ queue: QueueEntry[]; error?: string }> {
   try {
@@ -525,7 +513,6 @@ export async function getTeamDraftQueue(
 
     const queue: QueueEntry[] = [];
     const usedInstanceIds = new Set<string>();
-
     for (const entry of manualEntries || []) {
       if (entry.card_pool_id) {
           const cardData = availableMap.get(entry.card_pool_id);
@@ -556,7 +543,7 @@ export async function getTeamDraftQueue(
     }
 
     if (queue.length < limit) {
-      const { picks: teamPicks } = await getTeamDraftPicks(teamId);
+      const { picks: teamPicks } = await getTeamDraftPicks(teamId, draftSessionId);
       const draftedColorCounts = countDraftedColors(teamPicks);
       
       const remainingCards = availableCards
@@ -591,7 +578,6 @@ export async function getTeamDraftQueue(
         });
       }
     }
-
     return { queue };
   } catch (error) {
     console.error("Error getting team draft queue:", error);
@@ -617,9 +603,7 @@ export async function setTeamDraftQueue(
     if (!auth.authorized || !auth.userId) {
       return { success: false, error: auth.error };
     }
-
     const supabase = await createServerClient();
-
     const { data: existingQueue } = await supabase
       .from("team_draft_queue")
       .select("card_pool_id, votes")
@@ -632,7 +616,6 @@ export async function setTeamDraftQueue(
       .from("team_draft_queue")
       .delete()
       .eq("team_id", teamId);
-
     if (deleteError) {
       console.error("Error clearing draft queue:", deleteError);
       return { success: false, error: deleteError.message };
@@ -649,17 +632,14 @@ export async function setTeamDraftQueue(
         added_by: auth.userId,
         votes: voteMap.get(entry.cardPoolId) || [],
       }));
-
       const { error: insertError } = await supabase
         .from("team_draft_queue")
         .insert(rows);
-
       if (insertError) {
         console.error("Error setting draft queue:", insertError);
         return { success: false, error: insertError.message };
       }
     }
-
     return { success: true };
   } catch (error) {
     console.error("Error setting team draft queue:", error);
@@ -720,7 +700,6 @@ export async function pinCardToQueue(
       console.error("Error pinning card to queue:", insertError);
       return { success: false, error: insertError.message };
     }
-
     return { success: true };
   } catch (error) {
     console.error("Error pinning card to queue:", error);
@@ -741,7 +720,6 @@ export async function removeFromQueue(
       return { success: false, error: auth.error };
     }
     const supabase = await createServerClient();
-
     const { data: entry } = await supabase
       .from("team_draft_queue")
       .select("position")
@@ -799,7 +777,6 @@ export async function clearTeamDraftQueue(
       .from("team_draft_queue")
       .delete()
       .eq("team_id", teamId);
-
     if (error) {
       return { success: false, error: error.message };
     }
@@ -823,7 +800,6 @@ export async function conditionallyCleanupDraftQueues(
   try {
     const supabase = await createServerClient();
     const duplicateSet = await getDuplicateCardIdSet();
-
     if (!duplicateSet.has(draftedCardId)) {
       const { error } = await supabase.from("team_draft_queue").delete().eq("card_id", draftedCardId);
       if (error) return { success: false, cleaned: false, error: error.message };
@@ -859,8 +835,8 @@ export async function executeAutoDraft(
 }> {
   try {
     const supabase = await createServerClient();
-    const { status: draftStatus, error: statusError } = await getDraftStatus();
-
+    // This is the fix: pass the draftSessionId to get a correctly scoped status
+    const { status: draftStatus, error: statusError } = await getDraftStatus(draftSessionId);
     if (statusError || !draftStatus || !draftSessionId) {
       return { success: false, error: statusError || "No active draft or draft ID is missing" };
     }
@@ -869,10 +845,9 @@ export async function executeAutoDraft(
       return { success: false, error: "This team is not on the clock" };
     }
 
-    const { picks: existingPicks } = await getTeamDraftPicks(teamId);
+    const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId);
     const pickNumber = existingPicks.length + 1;
-
-    const preview = await getAutoDraftPreview(teamId);
+    const preview = await getAutoDraftPreview(teamId, draftSessionId);
     const card = preview.nextPick;
 
     if (!card) {
@@ -880,7 +855,6 @@ export async function executeAutoDraft(
       if (skipError) {
         return { success: false, source: "skipped", error: `Failed to record skipped pick: ${skipError}` };
       }
-
       const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
       const channel = supabase.channel(`draft-updates-${draftSessionId}`);
       await channel.send({
@@ -888,7 +862,6 @@ export async function executeAutoDraft(
         event: 'new_pick',
         payload: { ...skippedPick, team_name: teamData?.name || 'Unknown Team' },
       });
-
       return { success: true, source: "skipped", pick: { cardId: "skipped", cardName: "SKIPPED", cost: 0 } };
     }
 
@@ -916,9 +889,7 @@ export async function executeAutoDraft(
       return { success: false, error: `Draft failed: ${rpcError.message}` };
     }
     
-    // FIX: Use the 'as' keyword for a strong type assertion.
     const newPick = data as DraftPick;
-
     if (!newPick) {
       return { success: false, error: "Draft pick could not be confirmed in the database." };
     }
