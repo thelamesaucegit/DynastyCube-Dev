@@ -1,4 +1,5 @@
 // src/app/teams/[teamId]/page.tsx
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -22,7 +23,7 @@ import { getCurrentSeason } from "@/app/actions/seasonPhaseActions";
 import { getCurrentUserRolesForTeam, getTeamMembersWithRoles, type TeamMemberWithRoles } from "@/app/actions/roleActions";
 import { getRoleEmoji, getRoleDisplayName } from "@/app/utils/roleUtils";
 import { getAutoDraftPreview, toggleQueuePickVote, type AutoDraftPreviewResult } from "@/app/actions/autoDraftActions";
-import { getDraftStatus } from "@/app/actions/draftOrderActions";
+import { getActiveDraftSession } from "@/app/actions/draftSessionActions";
 import type { DraftPick, Deck } from "@/app/actions/draftActions";
 import Link from "next/link";
 import { Card, CardContent } from "@/app/components/ui/card";
@@ -83,7 +84,6 @@ export default function TeamPage({ params }: TeamPageProps) {
   const [cubucksRefreshKey, setCubucksRefreshKey] = useState(0);
   const [seasonPhase, setSeasonPhase] = useState<string | null>(null);
   const isFreeAgencyActive = seasonPhase === "season";
-
   const [draftPreview, setDraftPreview] = useState<AutoDraftPreviewResult | null>(null);
   const [activeDraftSessionId, setActiveDraftSessionId] = useState<string | null>(null);
   const [isVoting, setIsVoting] = useState(false);
@@ -100,54 +100,43 @@ export default function TeamPage({ params }: TeamPageProps) {
   const loadTeamData = async () => {
     setLoading(true);
     try {
-      const teams = await getTeamsWithMembers();
+      // First, fetch the active session to get its ID
+      const { session: activeSession } = await getActiveDraftSession();
+      const sessionId = activeSession?.id || null;
+      setActiveDraftSessionId(sessionId);
+
+      // Now, run all other data fetches, passing the session ID where needed
+      const [teams, picksResult, decksResult, rolesResult, membersResult, seasonResult, previewResult] = await Promise.all([
+        getTeamsWithMembers(),
+        getTeamDraftPicks(teamId, sessionId!),
+        getTeamDecks(teamId),
+        getCurrentUserRolesForTeam(teamId),
+        getTeamMembersWithRoles(teamId),
+        getCurrentSeason(),
+        getAutoDraftPreview(teamId, sessionId!),
+      ]);
+
       const foundTeam = teams.find((t) => t.id === teamId);
       setTeam(foundTeam || null);
+      setDraftPicks(picksResult.picks);
+      setDecks(decksResult.decks);
+      setUserRoles(rolesResult.roles);
+      setMembersWithRoles(membersResult.members);
+      setDraftPreview(previewResult);
 
-      const { picks } = await getTeamDraftPicks(teamId);
-      setDraftPicks(picks);
-
-      const { decks: teamDecks } = await getTeamDecks(teamId);
-      setDecks(teamDecks);
-
-      const { roles, error: rolesError } = await getCurrentUserRolesForTeam(teamId);
-      setUserRoles(roles);
-
-      const { members: allMembersWithRoles } = await getTeamMembersWithRoles(teamId);
-      setMembersWithRoles(allMembersWithRoles);
-
-      const { season, error: seasonError } = await getCurrentSeason();
-      if (seasonError) {
-        console.error("Could not fetch season status:", seasonError);
-      }
-      const fetchedPhase = season?.phase || null;
+      const fetchedPhase = seasonResult.season?.phase || null;
       setSeasonPhase(fetchedPhase);
 
-      // --- NEW VOTING LOGIC ---
-      const { seasonId } = await getDraftStatus();
-      if (seasonId) {
-        setActiveDraftSessionId(seasonId);
-      }
-      
-      const preview = await getAutoDraftPreview(teamId);
-      setDraftPreview(preview);
-
-      // --- NEW DEFAULT TAB LOGIC ---
-      // Determine the default tab based on the active season phase.
-      // If the user is not a team member, restrict access to member-only tabs.
-      const isMember = foundTeam?.members?.some((m) => m.user_id === user?.id) || roles.length > 0;
+      const isMember = foundTeam?.members?.some((m) => m.user_id === user?.id) || rolesResult.roles.length > 0;
       let defaultTab: TabType = "picks";
-      
       if (fetchedPhase === "preseason" || fetchedPhase === "draft") {
         defaultTab = isMember ? "draft" : "picks";
       } else if (fetchedPhase === "season" || fetchedPhase === "playoffs") {
-        defaultTab = "picks"; // Re-labeled as "Team Pool"
+        defaultTab = "picks";
       } else if (fetchedPhase === "postseason") {
         defaultTab = isMember ? "votes" : "picks";
       }
-      
       setActiveTab(defaultTab);
-
     } catch (error) {
       console.error("Error loading team data:", error);
     } finally {
@@ -183,34 +172,29 @@ export default function TeamPage({ params }: TeamPageProps) {
   }
 
   const handleDraftComplete = async () => {
-    const { picks } = await getTeamDraftPicks(teamId);
+    if (!activeDraftSessionId) return;
+    const { picks } = await getTeamDraftPicks(teamId, activeDraftSessionId);
     setDraftPicks(picks);
     setCubucksRefreshKey((prev) => prev + 1);
     
-    // Refresh the preview block to get updated vote counts after a pick
-    const preview = await getAutoDraftPreview(teamId);
+    const preview = await getAutoDraftPreview(teamId, activeDraftSessionId);
     setDraftPreview(preview);
   };
 
-  // NEW HANDLER FOR TOGGLING VOTES
   const handleToggleVote = async () => {
     if (!draftPreview?.nextPick?.id || !activeDraftSessionId) return;
     setIsVoting(true);
-
     try {
       const result = await toggleQueuePickVote(
         teamId,
         draftPreview.nextPick.id,
         activeDraftSessionId
       );
-
       if (result.success) {
         if (result.pickExecuted) {
-          // If the vote triggered the final pick, refresh the whole UI
           await handleDraftComplete();
         } else {
-          // Otherwise, just refresh the preview block to get updated vote counts
-          const updatedPreview = await getAutoDraftPreview(teamId);
+          const updatedPreview = await getAutoDraftPreview(teamId, activeDraftSessionId);
           setDraftPreview(updatedPreview);
         }
       } else {
@@ -224,7 +208,8 @@ export default function TeamPage({ params }: TeamPageProps) {
   };
 
   const handleUndraftCard = async (pick: DraftPick) => {
-    if (!pick.id || undrafting) return;
+    if (!pick.id || undrafting || !activeDraftSessionId) return;
+
     const confirmed = window.confirm(
       `Are you sure you want to undraft "${pick.card_name}"? The Çubucks spent will be refunded to the team.`
     );
@@ -232,15 +217,13 @@ export default function TeamPage({ params }: TeamPageProps) {
 
     setUndrafting(pick.id);
     setUndraftMessage(null);
-
     const result = await refundDraftPick(teamId, pick.id, pick.card_id, pick.card_name);
-
     if (result.success) {
       setUndraftMessage({
         type: "success",
         text: `Undrafted ${pick.card_name}! Refunded ${result.refundAmount} Çubucks.`,
       });
-      const { picks } = await getTeamDraftPicks(teamId);
+      const { picks } = await getTeamDraftPicks(teamId, activeDraftSessionId);
       setDraftPicks(picks);
       setCubucksRefreshKey((prev) => prev + 1);
     } else {
@@ -249,12 +232,9 @@ export default function TeamPage({ params }: TeamPageProps) {
         text: result.error || "Failed to undraft card",
       });
     }
-
     setUndrafting(null);
     setTimeout(() => setUndraftMessage(null), 5000);
   };
-
-  const isDraftingEnabled = seasonPhase === "season";
 
   const tabs: { id: TabType; label: string; icon: React.ReactNode; count?: number, disabled?: boolean }[] = [
     ...(isUserTeamMember ? [{
@@ -276,7 +256,6 @@ export default function TeamPage({ params }: TeamPageProps) {
 
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8">
-      {/* Team Header */}
       <Card className="mb-6">
         <CardContent className="pt-6">
           <div className="flex items-center gap-6">
@@ -306,15 +285,12 @@ export default function TeamPage({ params }: TeamPageProps) {
         </CardContent>
       </Card>
 
-      {/* Draft Status */}
       <DraftStatusWidget variant="team" teamId={teamId} />
 
-      {/* Team Çubucks Balance */}
       <div className="mb-6">
         <TeamCubucksDisplay teamId={teamId} showTransactions={true} refreshKey={cubucksRefreshKey} isUserTeamMember={isUserTeamMember} />
       </div>
 
-      {/* Tabs */}
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabType)}>
         <TabsList className="flex-wrap h-auto gap-1 mb-6">
           {tabs.map((tab) => (
@@ -330,19 +306,15 @@ export default function TeamPage({ params }: TeamPageProps) {
           ))}
         </TabsList>
 
-        {/* Tab Content */}
         <Card>
           <CardContent className="pt-6">
             <TabsContent value="draft">
               {activeTab === "draft" && isUserTeamMember && (
                 <div className="space-y-8">
-                  {/* NEW SECTION: MANUAL DRAFT VOTING BANNER */}
                   {draftPreview?.source === "manual_queue" && draftPreview.nextPick && (
                     <Card className="border-primary/50 bg-primary/5 shadow-sm">
                       <CardContent className="pt-6">
                         <div className="flex flex-col md:flex-row items-center gap-6">
-                          
-                          {/* Card Image Thumbnail */}
                           <div className="w-24 h-36 shrink-0 rounded-md overflow-hidden shadow-md bg-muted">
                             {draftPreview.nextPick.image_url && (
                               <img 
@@ -352,20 +324,16 @@ export default function TeamPage({ params }: TeamPageProps) {
                               />
                             )}
                           </div>
-                          
-                          {/* Voting Details */}
                           <div className="flex-1 text-center md:text-left">
                             <Badge className="mb-2 bg-primary">Up Next in Queue</Badge>
                             <h3 className="text-xl font-bold mb-2">{draftPreview.nextPick.card_name}</h3>
                             <p className="text-sm text-muted-foreground mb-4 max-w-2xl">
                               This card is at the top of your team&apos;s manual queue. Vote to confirm it for immediate submission. If the vote threshold is met while your team is on the clock, the pick will be processed instantly.
                             </p>
-                            
                             {(() => {
                               const currentVotes = draftPreview.votes?.length || 0;
                               const threshold = draftPreview.voteThreshold || 1;
                               const isVoted = user?.id ? draftPreview.votes?.includes(user.id) : false;
-                              
                               return (
                                 <Button 
                                   onClick={handleToggleVote} 
@@ -381,7 +349,6 @@ export default function TeamPage({ params }: TeamPageProps) {
                                 </Button>
                               );
                             })()}
-                            
                             {!activeDraftSessionId && (
                               <p className="text-xs text-destructive mt-2">Cannot vote: No active draft session found.</p>
                             )}
@@ -390,8 +357,6 @@ export default function TeamPage({ params }: TeamPageProps) {
                       </CardContent>
                     </Card>
                   )}
-
-                  {/* SECTION 1: DRAFT QUEUE */}
                   <div>
                     <div className="mb-4">
                       <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">Draft Priority Queue</h2>
@@ -399,8 +364,6 @@ export default function TeamPage({ params }: TeamPageProps) {
                     </div>
                     <DraftQueueManager teamId={teamId} isUserTeamMember={isUserTeamMember} />
                   </div>
-
-                  {/* SECTION 2: DRAFT PROGRESS & PICK ORDER */}
                   <div>
                     <div className="mb-4">
                       <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">Draft Progress & Pick Order</h2>
@@ -408,8 +371,6 @@ export default function TeamPage({ params }: TeamPageProps) {
                     </div>
                     <DraftStatusWidget variant="team" teamId={teamId} />
                   </div>
-
-                  {/* SECTION 3: FREE AGENCY POOL */}
                   <div>
                     <div className="mb-4">
                       <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">Free Agent Pool</h2>
@@ -426,7 +387,6 @@ export default function TeamPage({ params }: TeamPageProps) {
                 </div>
               )}
             </TabsContent>
-
             <TabsContent value="picks">
               {activeTab === "picks" && (
                 <div>
@@ -436,8 +396,6 @@ export default function TeamPage({ params }: TeamPageProps) {
                       Team Pool
                     </h2>
                   </div>
-
-                  {/* Success & Error Messages */}
                   {undraftMessage && (
                     <div
                       className={`mb-4 p-4 rounded-lg border flex items-center gap-2 ${
@@ -450,7 +408,6 @@ export default function TeamPage({ params }: TeamPageProps) {
                       {undraftMessage.text}
                     </div>
                   )}
-
                   {draftPicks.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground">
                       <Layers className="size-10 mx-auto mb-3 opacity-50" />
@@ -504,7 +461,6 @@ export default function TeamPage({ params }: TeamPageProps) {
                 </div>
               )}
             </TabsContent>
-
             <TabsContent value="decks">
               {activeTab === "decks" && (
                 <div>
@@ -523,7 +479,6 @@ export default function TeamPage({ params }: TeamPageProps) {
                 </div>
               )}
             </TabsContent>
-
             <TabsContent value="trades">
               {activeTab === "trades" && (
                 <div>
@@ -550,7 +505,6 @@ export default function TeamPage({ params }: TeamPageProps) {
                 </div>
               )}
             </TabsContent>
-
             <TabsContent value="matches">
               {activeTab === "matches" && (
                 <div className="space-y-6">
@@ -569,7 +523,6 @@ export default function TeamPage({ params }: TeamPageProps) {
                 </div>
               )}
             </TabsContent>
-
             <TabsContent value="votes">
               {activeTab === "votes" && isUserTeamMember && (
                 <div>
@@ -584,7 +537,6 @@ export default function TeamPage({ params }: TeamPageProps) {
                 </div>
               )}
             </TabsContent>
-
             <TabsContent value="stats">
               {activeTab === "stats" && (
                 <div>
@@ -599,7 +551,6 @@ export default function TeamPage({ params }: TeamPageProps) {
                 </div>
               )}
             </TabsContent>
-
             <TabsContent value="roles">
               {activeTab === "roles" && isUserTeamMember && (
                 <div>
@@ -614,7 +565,6 @@ export default function TeamPage({ params }: TeamPageProps) {
                 </div>
               )}
             </TabsContent>
-
             <TabsContent value="members">
               {activeTab === "members" && (
                 <div>
