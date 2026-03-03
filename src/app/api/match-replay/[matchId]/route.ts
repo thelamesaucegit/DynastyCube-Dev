@@ -3,7 +3,10 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
+// --- FIX: Use the required Promise-based params type for Next.js 15 compatibility ---
 export async function GET(request: Request, { params }: { params: Promise<{ matchId: string }> }) {
+  
+  // --- FIX: Await the promise as required by the syntax ---
   const { matchId } = await params;
 
   if (!matchId || matchId === 'undefined') {
