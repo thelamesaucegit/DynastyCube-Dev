@@ -33,6 +33,35 @@ async function createClient() {
 }
 
 /**
+ * Fetches the replay data (an array of game states) for a single match.
+ * @param matchId The UUID of the match.
+ * @returns A promise that resolves to an array of GameState objects or null.
+ */
+export async function getMatchReplay(matchId: string): Promise<any[] | null> {
+  // Uses the service role client for direct, secure access.
+  const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+
+  if (!matchId) {
+    console.error("getMatchReplay called with invalid matchId");
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('sim_matches')
+    .select('game_states')
+    .eq('id', matchId)
+    .single();
+
+  if (error) {
+    console.error(`Error fetching replay for match ${matchId}:`, error);
+    return null;
+  }
+
+  // The game_states column contains the array directly.
+  return data?.game_states || null;
+}
+
+/**
  * Validates a list of card names against the database, case-insensitively,
  * while also whitelisting basic lands.
  * @param cardNames - An array of card names entered by the user.
