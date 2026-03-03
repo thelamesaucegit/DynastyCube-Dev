@@ -39,8 +39,10 @@ export async function POST(request: Request) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...body, matchId }), // Pass the new matchId
-    }).catch(e => {
-        console.error("[FORGESIM_FETCH_ERROR]", e);
+    }).catch((e: unknown) => { // --- FIX: Use 'unknown' for type safety ---
+        let message = "An unknown error occurred while contacting the simulation server.";
+        if (e instanceof Error) message = e.message;
+        console.error("[FORGESIM_FETCH_ERROR]", message);
     });
 
     // Step 3: Immediately return the matchId to the frontend.
