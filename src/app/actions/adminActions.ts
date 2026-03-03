@@ -38,7 +38,6 @@ async function createClient() {
  * @returns A promise that resolves to an array of GameState objects or null.
  */
 export async function getMatchReplay(matchId: string): Promise<any[] | null> {
-  // Uses the service role client for direct, secure access.
   const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 
   if (!matchId) {
@@ -57,7 +56,6 @@ export async function getMatchReplay(matchId: string): Promise<any[] | null> {
     return null;
   }
 
-  // The game_states column contains the array directly.
   return data?.game_states || null;
 }
 
@@ -72,7 +70,6 @@ export async function validateAndCanonicalizeDeck(cardNames: string[]): Promise<
   invalid: string[];
 }> {
   const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
-
   const BASIC_LANDS = new Map<string, string>([
     ["mountain", "Mountain"],
     ["forest", "Forest"],
@@ -102,7 +99,6 @@ export async function validateAndCanonicalizeDeck(cardNames: string[]): Promise<
       return { valid: validCanonicalMap, invalid: invalidNames };
     }
 
-    // --- THE FIX IS HERE: Explicitly type the 'item' parameter ---
     dbData.forEach((item: { canonical_name: string }) => {
       validCanonicalMap.set(item.canonical_name.toLowerCase(), item.canonical_name);
     });
@@ -113,7 +109,6 @@ export async function validateAndCanonicalizeDeck(cardNames: string[]): Promise<
   return { valid: validCanonicalMap, invalid: invalidNames };
 }
 
-// All other functions in this file remain unchanged.
 export async function backfillColorIdentity(): Promise<{
   success: boolean;
   updated: number;
@@ -124,7 +119,6 @@ export async function backfillColorIdentity(): Promise<{
   let updatedCount = 0;
   let failedCount = 0;
   const errors: string[] = [];
-
   try {
     const { data: cards, error: fetchError } = await supabase
       .from("card_pools")
@@ -141,7 +135,6 @@ export async function backfillColorIdentity(): Promise<{
     const cardNames = [...new Set(cards.map((c) => c.card_name))];
     console.log(`Fetching color identity data for ${cardNames.length} unique cards from Scryfall...`);
     const { cards: scryfallCards, notFound } = await fetchAllCards(cardNames);
-
     const identityMap = new Map<string, string[]>();
     scryfallCards.forEach((card) => {
       if (card.color_identity) {
@@ -152,7 +145,6 @@ export async function backfillColorIdentity(): Promise<{
     if (notFound.length > 0) {
       errors.push(`Cards not found in Scryfall: ${notFound.join(", ")}`);
     }
-
     for (const card of cards) {
       const identity = identityMap.get(card.card_name);
       if (identity !== undefined) {
@@ -215,7 +207,6 @@ export async function backfillCMCForDraftPicks(): Promise<{
     const cardNames = [...new Set(picks.map((p) => p.card_name))];
     console.log(`Fetching CMC data for ${cardNames.length} unique cards from Scryfall...`);
     const { cards: scryfallCards, notFound } = await fetchAllCards(cardNames);
-
     const cmcMap = new Map<string, number>();
     scryfallCards.forEach((card) => {
       cmcMap.set(card.name, card.cmc);
@@ -225,7 +216,6 @@ export async function backfillCMCForDraftPicks(): Promise<{
       console.warn(`Could not find ${notFound.length} cards:`, notFound);
       errors.push(`Cards not found in Scryfall: ${notFound.join(", ")}`);
     }
-
     for (const pick of picks) {
       const cmc = cmcMap.get(pick.card_name);
       if (cmc !== undefined) {
@@ -308,7 +298,6 @@ export async function backfillCMCForCardPools(): Promise<{
       console.warn(`Could not find ${notFound.length} cards:`, notFound);
       errors.push(`Cards not found in Scryfall: ${notFound.join(", ")}`);
     }
-
     for (const card of cards) {
       const cmc = cmcMap.get(card.card_name);
       if (cmc !== undefined) {
@@ -365,7 +354,7 @@ export async function backfillAllCMCData(): Promise<{
   };
 }
 
-export async function getAiProfiles(): Promise<AiProfile[]> {
+export async function getAiProfiles(): Promise<any[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('ai_profiles')
@@ -377,11 +366,4 @@ export async function getAiProfiles(): Promise<AiProfile[]> {
     return [];
   }
   return data || [];
-}
-
-export interface AiProfile {
-  id: string;
-  created_at: string;
-  profile_name: string;
-  description: string | null;
 }
