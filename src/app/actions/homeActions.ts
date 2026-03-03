@@ -215,7 +215,7 @@ export async function getCurrentSeason(): Promise<{
     const { data, error } = await supabase
       .from("seasons")
       .select("*")
-      .eq("status", "active")
+      .eq("is_active", "TRUE")
       .single();
 
     if (error) {
