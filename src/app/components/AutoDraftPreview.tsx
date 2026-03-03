@@ -1,8 +1,10 @@
 // src/app/components/AutoDraftPreview.tsx
+
 "use client";
 
 import React, { useState, useEffect } from "react";
 import { getAutoDraftPreview, type AutoDraftPreviewResult, type AlgorithmDetails } from "@/app/actions/autoDraftActions";
+import { getActiveDraftSession } from "@/app/actions/draftSessionActions";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
 import { Button } from "@/app/components/ui/button";
@@ -42,7 +44,14 @@ export function AutoDraftPreview({
   const loadPreview = async () => {
     setLoading(true);
     try {
-      const result = await getAutoDraftPreview(teamId);
+      // First, get the active draft session to find its ID
+      const { session } = await getActiveDraftSession();
+      if (!session) {
+        setPreview(null);
+        return;
+      }
+      // Now, call getAutoDraftPreview with both the teamId and the fetched sessionId
+      const result = await getAutoDraftPreview(teamId, session.id);
       setPreview(result);
     } catch (error) {
       console.error("Error loading auto-draft preview:", error);
@@ -112,7 +121,6 @@ export function AutoDraftPreview({
             {preview.source === "manual_queue" ? "📌 From Queue" : "🧠 Algorithm"}
           </Badge>
         </div>
-
         <div className="flex gap-4">
           {/* Card Image */}
           {card.image_url && (
@@ -123,7 +131,6 @@ export function AutoDraftPreview({
               className="w-32 h-44 object-cover rounded-lg shadow-md flex-shrink-0"
             />
           )}
-
           {/* Card Details */}
           <div className="flex-1 min-w-0">
             <h4 className="text-xl font-bold mb-1">{card.card_name}</h4>
@@ -144,7 +151,6 @@ export function AutoDraftPreview({
                 </Badge>
               )}
             </div>
-
             {/* Color Badges */}
             <div className="flex gap-1 mb-3">
               {card.colors && card.colors.length > 0 ? (
@@ -165,13 +171,11 @@ export function AutoDraftPreview({
                 </span>
               )}
             </div>
-
             {preview.queueDepth > 0 && (
               <p className="text-xs text-muted-foreground">
                 {preview.queueDepth} card{preview.queueDepth !== 1 ? "s" : ""} in manual queue
               </p>
             )}
-
             {onManageQueue && (
               <Button variant="outline" size="sm" onClick={onManageQueue} className="mt-2">
                 <Palette className="size-3 mr-1" />
@@ -180,7 +184,6 @@ export function AutoDraftPreview({
             )}
           </div>
         </div>
-
         {/* Algorithm Details (collapsible) */}
         {preview.algorithmDetails && (
           <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
