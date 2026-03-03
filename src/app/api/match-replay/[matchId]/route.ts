@@ -1,40 +1,39 @@
 // src/app/api/match-replay/[matchId]/route.ts
 
-import { createClient } from "@supabase/supabase-js";
-import { NextResponse, type NextRequest } from "next/server";
+import { createClient } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
 
-// Reverting to the Promise-based params type to match your specific Next.js 15 build environment.
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ matchId: string }> },
-) {
-  // Awaiting the promise as required by your build configuration.
-  const { matchId } = await context.params;
+// --- FIX: Use the required Promise-based params type for Next.js 15 compatibility ---
+export async function GET(request: Request, { params }: { params: Promise<{ matchId: string }> }) {
+  
+  // --- FIX: Await the promise as required by the syntax ---
+  const { matchId } = await params;
 
   if (!matchId || matchId === 'undefined') {
-    return NextResponse.json({ error: "Invalid or missing match ID provided for replay." }, { status: 400 });
+    return NextResponse.json({ error: "Invalid or missing match ID provided." }, { status: 400 });
   }
 
+  // Use the service key for secure, direct access to the data.
   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 
   try {
     const { data, error } = await supabase
-      .from("sim_match_states")
-      .select("state_data")
-      .eq("match_id", matchId)
-      .order("created_at", { ascending: true });
+      .from('sim_matches')
+      .select('game_states')
+      .eq('id', matchId)
+      .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error(`Error fetching replay for match ${matchId}:`, error);
+      return NextResponse.json({ error: 'Replay not found or database error.' }, { status: 404 });
+    }
 
-    const states = data ? data.map((row) => row.state_data).filter(Boolean) : [];
-    
-    return NextResponse.json(states);
+    // Return the array of game states directly.
+    return NextResponse.json(data?.game_states || []);
 
   } catch (error: unknown) {
-    const errorMessage =
-      error instanceof Error ? error.message : "An unknown error occurred while fetching replay data.";
-    
-    console.error(`[REPLAY_ERROR] for matchId ${matchId}:`, errorMessage);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+    console.error(`[REPLAY_API_ERROR] for matchId ${matchId}:`, errorMessage);
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

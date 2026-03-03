@@ -20,4 +20,5 @@ export interface GameState {
   activePlayer: string;
   players: Record<string, PlayerState>;
   winner?: string;
+  phase?: string; // --- FIX: Added optional phase property to match parser output ---
 }

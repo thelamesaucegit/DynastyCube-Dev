@@ -6,6 +6,13 @@ import { createClient as createServiceRoleClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { fetchAllCards } from "@/lib/scryfall-client";
+import { GameState } from "@/app/types"; // Import strong type for GameState
+
+// Define AiProfile locally to avoid conflicts and 'any' type
+interface AiProfile {
+  id: string;
+  profile_name: string;
+}
 
 // This function creates a client authenticated as the CURRENT USER.
 async function createClient() {
@@ -33,6 +40,34 @@ async function createClient() {
 }
 
 /**
+ * Fetches the replay data (an array of game states) for a single match.
+ * @param matchId The UUID of the match.
+ * @returns A promise that resolves to an array of GameState objects or null.
+ */
+// --- FIX: Use strong GameState[] type instead of any[] ---
+export async function getMatchReplay(matchId: string): Promise<GameState[] | null> {
+  const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+
+  if (!matchId) {
+    console.error("getMatchReplay called with invalid matchId");
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('sim_matches')
+    .select('game_states')
+    .eq('id', matchId)
+    .single();
+
+  if (error) {
+    console.error(`Error fetching replay for match ${matchId}:`, error);
+    return null;
+  }
+
+  return data?.game_states || null;
+}
+
+/**
  * Validates a list of card names against the database, case-insensitively,
  * while also whitelisting basic lands.
  * @param cardNames - An array of card names entered by the user.
@@ -43,7 +78,6 @@ export async function validateAndCanonicalizeDeck(cardNames: string[]): Promise<
   invalid: string[];
 }> {
   const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
-
   const BASIC_LANDS = new Map<string, string>([
     ["mountain", "Mountain"],
     ["forest", "Forest"],
@@ -73,7 +107,6 @@ export async function validateAndCanonicalizeDeck(cardNames: string[]): Promise<
       return { valid: validCanonicalMap, invalid: invalidNames };
     }
 
-    // --- THE FIX IS HERE: Explicitly type the 'item' parameter ---
     dbData.forEach((item: { canonical_name: string }) => {
       validCanonicalMap.set(item.canonical_name.toLowerCase(), item.canonical_name);
     });
@@ -84,7 +117,6 @@ export async function validateAndCanonicalizeDeck(cardNames: string[]): Promise<
   return { valid: validCanonicalMap, invalid: invalidNames };
 }
 
-// All other functions in this file remain unchanged.
 export async function backfillColorIdentity(): Promise<{
   success: boolean;
   updated: number;
@@ -95,7 +127,6 @@ export async function backfillColorIdentity(): Promise<{
   let updatedCount = 0;
   let failedCount = 0;
   const errors: string[] = [];
-
   try {
     const { data: cards, error: fetchError } = await supabase
       .from("card_pools")
@@ -107,10 +138,8 @@ export async function backfillColorIdentity(): Promise<{
     if (!cards || cards.length === 0) {
       return { success: true, updated: 0, failed: 0, errors: ["No cards found missing color identity."] };
     }
-    console.log(`Found ${cards.length} cards missing color identity.`);
     
     const cardNames = [...new Set(cards.map((c) => c.card_name))];
-    console.log(`Fetching color identity data for ${cardNames.length} unique cards from Scryfall...`);
     const { cards: scryfallCards, notFound } = await fetchAllCards(cardNames);
 
     const identityMap = new Map<string, string[]>();
@@ -119,11 +148,9 @@ export async function backfillColorIdentity(): Promise<{
         identityMap.set(card.name, card.color_identity);
       }
     });
-    console.log(`Successfully fetched ${scryfallCards.length} cards from Scryfall.`);
     if (notFound.length > 0) {
       errors.push(`Cards not found in Scryfall: ${notFound.join(", ")}`);
     }
-
     for (const card of cards) {
       const identity = identityMap.get(card.card_name);
       if (identity !== undefined) {
@@ -141,10 +168,9 @@ export async function backfillColorIdentity(): Promise<{
         failedCount++;
       }
     }
-    console.log(`Color identity backfill complete: ${updatedCount} updated, ${failedCount} failed.`);
     return { success: true, updated: updatedCount, failed: failedCount, errors };
     
-  } catch (error) {
+  } catch (error: unknown) { // --- FIX: Use 'unknown' type ---
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error("Unexpected error during color identity backfill:", error);
     return { success: false, updated: updatedCount, failed: failedCount, errors: [`Unexpected error: ${errorMessage}`] };
@@ -167,36 +193,20 @@ export async function backfillCMCForDraftPicks(): Promise<{
       .select("id, card_name, cmc")
       .or("cmc.is.null,cmc.eq.0");
     if (fetchError) {
-      return {
-        success: false,
-        updated: 0,
-        failed: 0,
-        errors: [`Failed to fetch draft picks: ${fetchError.message}`],
-      };
+      return { success: false, updated: 0, failed: 0, errors: [`Failed to fetch draft picks: ${fetchError.message}`] };
     }
     if (!picks || picks.length === 0) {
-      return {
-        success: true,
-        updated: 0,
-        failed: 0,
-        errors: ["No draft picks found missing CMC data"],
-      };
+      return { success: true, updated: 0, failed: 0, errors: ["No draft picks found missing CMC data"] };
     }
-    console.log(`Found ${picks.length} draft picks missing CMC data`);
     const cardNames = [...new Set(picks.map((p) => p.card_name))];
-    console.log(`Fetching CMC data for ${cardNames.length} unique cards from Scryfall...`);
     const { cards: scryfallCards, notFound } = await fetchAllCards(cardNames);
-
     const cmcMap = new Map<string, number>();
     scryfallCards.forEach((card) => {
       cmcMap.set(card.name, card.cmc);
     });
-    console.log(`Successfully fetched ${scryfallCards.length} cards from Scryfall`);
     if (notFound.length > 0) {
-      console.warn(`Could not find ${notFound.length} cards:`, notFound);
       errors.push(`Cards not found in Scryfall: ${notFound.join(", ")}`);
     }
-
     for (const pick of picks) {
       const cmc = cmcMap.get(pick.card_name);
       if (cmc !== undefined) {
@@ -205,32 +215,20 @@ export async function backfillCMCForDraftPicks(): Promise<{
           .update({ cmc })
           .eq("id", pick.id);
         if (updateError) {
-          console.error(`Failed to update ${pick.card_name}:`, updateError);
           errors.push(`Failed to update ${pick.card_name}: ${updateError.message}`);
           failedCount++;
         } else {
           updatedCount++;
         }
       } else {
-        console.warn(`No CMC data found for ${pick.card_name}`);
         failedCount++;
       }
     }
-    console.log(`CMC backfill complete: ${updatedCount} updated, ${failedCount} failed`);
-    return {
-      success: true,
-      updated: updatedCount,
-      failed: failedCount,
-      errors,
-    };
-  } catch (error) {
+    return { success: true, updated: updatedCount, failed: failedCount, errors };
+  } catch (error: unknown) { // --- FIX: Use 'unknown' type ---
+    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error("Unexpected error during CMC backfill:", error);
-    return {
-      success: false,
-      updated: updatedCount,
-      failed: failedCount,
-      errors: [`Unexpected error: ${error instanceof Error ? error.message : String(error)}`],
-    };
+    return { success: false, updated: updatedCount, failed: failedCount, errors: [`Unexpected error: ${errorMessage}`] };
   }
 }
 
@@ -250,36 +248,20 @@ export async function backfillCMCForCardPools(): Promise<{
       .select("id, card_name, cmc")
       .or("cmc.is.null,cmc.eq.0");
     if (fetchError) {
-      return {
-        success: false,
-        updated: 0,
-        failed: 0,
-        errors: [`Failed to fetch card pools: ${fetchError.message}`],
-      };
+      return { success: false, updated: 0, failed: 0, errors: [`Failed to fetch card pools: ${fetchError.message}`] };
     }
     if (!cards || cards.length === 0) {
-      return {
-        success: true,
-        updated: 0,
-        failed: 0,
-        errors: ["No card pool entries found missing CMC data"],
-      };
+      return { success: true, updated: 0, failed: 0, errors: ["No card pool entries found missing CMC data"] };
     }
-    console.log(`Found ${cards.length} card pool entries missing CMC data`);
     const cardNames = [...new Set(cards.map((c) => c.card_name))];
-    console.log(`Fetching CMC data for ${cardNames.length} unique cards from Scryfall...`);
     const { cards: scryfallCards, notFound } = await fetchAllCards(cardNames);
-    
     const cmcMap = new Map<string, number>();
     scryfallCards.forEach((card) => {
       cmcMap.set(card.name, card.cmc);
     });
-    console.log(`Successfully fetched ${scryfallCards.length} cards from Scryfall`);
     if (notFound.length > 0) {
-      console.warn(`Could not find ${notFound.length} cards:`, notFound);
       errors.push(`Cards not found in Scryfall: ${notFound.join(", ")}`);
     }
-
     for (const card of cards) {
       const cmc = cmcMap.get(card.card_name);
       if (cmc !== undefined) {
@@ -288,32 +270,20 @@ export async function backfillCMCForCardPools(): Promise<{
           .update({ cmc })
           .eq("id", card.id);
         if (updateError) {
-          console.error(`Failed to update ${card.card_name}:`, updateError);
           errors.push(`Failed to update ${card.card_name}: ${updateError.message}`);
           failedCount++;
         } else {
           updatedCount++;
         }
       } else {
-        console.warn(`No CMC data found for ${card.card_name}`);
         failedCount++;
       }
     }
-    console.log(`CMC backfill complete: ${updatedCount} updated, ${failedCount} failed`);
-    return {
-      success: true,
-      updated: updatedCount,
-      failed: failedCount,
-      errors,
-    };
-  } catch (error) {
+    return { success: true, updated: updatedCount, failed: failedCount, errors };
+  } catch (error: unknown) { // --- FIX: Use 'unknown' type ---
+    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error("Unexpected error during CMC backfill:", error);
-    return {
-      success: false,
-      updated: updatedCount,
-      failed: failedCount,
-      errors: [`Unexpected error: ${error instanceof Error ? error.message : String(error)}`],
-    };
+    return { success: false, updated: updatedCount, failed: failedCount, errors: [`Unexpected error: ${errorMessage}`] };
   }
 }
 
@@ -336,11 +306,12 @@ export async function backfillAllCMCData(): Promise<{
   };
 }
 
+// --- FIX: Use strong AiProfile[] type instead of any[] ---
 export async function getAiProfiles(): Promise<AiProfile[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('ai_profiles')
-    .select('*')
+    .select('id, profile_name') // Only select fields needed by the runner page
     .order('profile_name', { ascending: true });
 
   if (error) {
@@ -348,11 +319,4 @@ export async function getAiProfiles(): Promise<AiProfile[]> {
     return [];
   }
   return data || [];
-}
-
-export interface AiProfile {
-  id: string;
-  created_at: string;
-  profile_name: string;
-  description: string | null;
 }
