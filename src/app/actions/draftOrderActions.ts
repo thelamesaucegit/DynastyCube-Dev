@@ -1,4 +1,5 @@
 // src/app/actions/draftOrderActions.ts
+
 "use server";
 
 import { createServerClient } from "@/lib/supabase";
@@ -101,7 +102,6 @@ export async function getDraftSettings(): Promise<{
 }> {
   try {
     const supabase = await createServerClient();
-
     const { data, error } = await supabase
       .from("draft_settings")
       .select("setting_key, setting_value");
@@ -132,7 +132,6 @@ export async function updateDraftSetting(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = await createServerClient();
-
     const admin = await verifyAdmin(supabase);
     if (!admin.authorized) {
       return { success: false, error: admin.error };
@@ -185,7 +184,6 @@ export async function getSeasonStandings(
       console.error("Error fetching schedule weeks:", weeksError);
       return { standings: [], error: weeksError.message };
     }
-
     const weekIds = (weeks || []).map((w: { id: string }) => w.id);
 
     // Get all teams
@@ -259,7 +257,6 @@ export async function getSeasonStandings(
       const stats = teamStats.get(team.id) || { wins: 0, losses: 0 };
       const totalGames = stats.wins + stats.losses;
       const winPct = totalGames > 0 ? (stats.wins / totalGames) * 100 : 0;
-
       return {
         team_id: team.id,
         team_name: team.name,
@@ -299,7 +296,6 @@ export async function generateDraftOrder(
 }> {
   try {
     const supabase = await createServerClient();
-
     const admin = await verifyAdmin(supabase);
     if (!admin.authorized) {
       return { success: false, error: admin.error };
@@ -387,7 +383,6 @@ export async function generateDraftOrder(
         losses: 0,
         win_pct: 0,
       };
-
       return {
         team_id: team.id,
         team_name: team.name,
@@ -468,7 +463,6 @@ export async function regenerateDraftOrder(
 }> {
   try {
     const supabase = await createServerClient();
-
     const admin = await verifyAdmin(supabase);
     if (!admin.authorized) {
       return { success: false, error: admin.error };
@@ -505,7 +499,6 @@ export async function getDraftOrder(
 ): Promise<{ order: DraftOrderEntry[]; error?: string }> {
   try {
     const supabase = await createServerClient();
-
     const { data, error } = await supabase
       .from("draft_order")
       .select(`
@@ -519,7 +512,6 @@ export async function getDraftOrder(
       console.error("Error fetching draft order:", error);
       return { order: [], error: error.message };
     }
-
     return { order: data || [] };
   } catch (error) {
     console.error("Unexpected error fetching draft order:", error);
@@ -555,7 +547,6 @@ export async function getActiveDraftOrder(): Promise<{
     }
 
     const { order, error } = await getDraftOrder(activeSeason.id);
-
     return {
       order,
       seasonId: activeSeason.id,
@@ -593,7 +584,9 @@ export interface DraftStatus {
  * Get the current draft status: who's on the clock, on deck, round, and progress.
  * Uses round-robin logic based on draft_order pick positions.
  */
-export async function getDraftStatus(): Promise<{
+export async function getDraftStatus(
+  sessionId?: string
+): Promise<{
   status: DraftStatus | null;
   seasonId?: string;
   error?: string;
@@ -627,10 +620,21 @@ export async function getDraftStatus(): Promise<{
       return { status: null };
     }
 
-    // Get pick counts per team
+    // Get pick counts per team for the specific draft session
+    const pickQuery = supabase
+      .from("team_draft_picks")
+      .select("team_id", { count: "exact", head: true });
+
+    // This is the fix: scope picks to the current session if an ID is provided
+    if (sessionId) {
+      pickQuery.eq("draft_session_id", sessionId);
+    }
+
     const { data: pickData, error: pickError } = await supabase
       .from("team_draft_picks")
-      .select("team_id");
+      .select("team_id")
+      .eq("draft_session_id", sessionId);
+
 
     if (pickError) {
       return { status: null, error: pickError.message };
@@ -698,7 +702,7 @@ export async function getDraftStatus(): Promise<{
         seasonName: activeSeason.season_name,
         draftOrder,
       },
-            seasonId: activeSeason.id, 
+      seasonId: activeSeason.id,
     };
   } catch (error) {
     console.error("Unexpected error fetching draft status:", error);
