@@ -53,9 +53,16 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
     setLoading(true);
     setError(null);
     try {
-      const [{ cards }, { picks }, { team }, { order, seasonId }] = await Promise.all([
+      // Fetch the active session first to get its ID
+      const { session } = await getActiveDraftSession();
+      if (session) {
+        setActiveSessionId(session.id);
+      }
+
+      const [{ cards }, { picks }, { team }, { order }] = await Promise.all([
         getAvailableCardsForDraft(),
-        getTeamDraftPicks(teamId),
+        // Pass the session ID if available to scope the picks
+        getTeamDraftPicks(teamId, session?.id),
         getTeamBalance(teamId),
         getActiveDraftOrder(),
       ]);
@@ -64,12 +71,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       setDraftedCards(picks);
       if (team) setCubucksBalance(team.cubucks_balance);
       setDraftOrderEntries(order);
-
-      // New functionality: Store the active session ID in state
-      const { session } = await getActiveDraftSession();
-      if (session) {
-        setActiveSessionId(session.id);
-      }
 
     } catch (err) {
       console.error("Error loading draft data:", err);
@@ -82,7 +83,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
   const handleDraftCard = async (card: CardData) => {
     if (drafting) return;
     if (!activeSessionId) {
-      setError("No active draft session found. Cannot draft card.");
+      setError("No active draft session found. Cannot complete the draft action.");
       return;
     }
 
@@ -120,7 +121,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
     const pick: DraftPick = {
       team_id: teamId,
       card_pool_id: card.id,
-      draft_session_id: activeSessionId, // Use the stored session ID
+      draft_session_id: activeSessionId,
       card_id: card.card_id,
       card_name: card.card_name,
       card_set: card.card_set,
@@ -153,7 +154,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
     setDrafting(null);
   };
   
-
   const draftedCardCounts = new Map<string, number>();
   draftedCards.forEach(pick => {
       draftedCardCounts.set(pick.card_id, (draftedCardCounts.get(pick.card_id) || 0) + 1);
