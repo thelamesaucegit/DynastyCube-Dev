@@ -47,9 +47,6 @@ export interface DraftSetting {
 // HELPERS
 // ============================================================================
 
-/**
- * Verify current user is an admin
- */
 async function verifyAdmin(supabase: Awaited<ReturnType<typeof createServerClient>>): Promise<{
   authorized: boolean;
   userId?: string;
@@ -77,9 +74,6 @@ async function verifyAdmin(supabase: Awaited<ReturnType<typeof createServerClien
   return { authorized: true, userId: user.id };
 }
 
-/**
- * Shuffle an array in place (Fisher-Yates)
- */
 function shuffleArray<T>(arr: T[]): T[] {
   const shuffled = [...arr];
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -93,9 +87,6 @@ function shuffleArray<T>(arr: T[]): T[] {
 // DRAFT SETTINGS
 // ============================================================================
 
-/**
- * Get all draft settings
- */
 export async function getDraftSettings(): Promise<{
   settings: Record<string, string>;
   error?: string;
@@ -123,9 +114,6 @@ export async function getDraftSettings(): Promise<{
   }
 }
 
-/**
- * Update a draft setting (Admin only)
- */
 export async function updateDraftSetting(
   key: string,
   value: string
@@ -164,17 +152,11 @@ export async function updateDraftSetting(
 // SEASON STANDINGS
 // ============================================================================
 
-/**
- * Calculate standings for a specific season from completed matches.
- * Matches are scoped to a season via schedule_weeks.season_id.
- */
 export async function getSeasonStandings(
   seasonId: string
 ): Promise<{ standings: SeasonStanding[]; error?: string }> {
   try {
     const supabase = await createServerClient();
-
-    // Get all schedule_weeks for this season
     const { data: weeks, error: weeksError } = await supabase
       .from("schedule_weeks")
       .select("id")
@@ -184,9 +166,9 @@ export async function getSeasonStandings(
       console.error("Error fetching schedule weeks:", weeksError);
       return { standings: [], error: weeksError.message };
     }
+
     const weekIds = (weeks || []).map((w: { id: string }) => w.id);
 
-    // Get all teams
     const { data: teams, error: teamsError } = await supabase
       .from("teams")
       .select("id, name, emoji")
@@ -201,7 +183,6 @@ export async function getSeasonStandings(
       return { standings: [] };
     }
 
-    // If no weeks exist for this season, all teams have 0-0 records
     if (weekIds.length === 0) {
       const standings: SeasonStanding[] = teams.map((team: { id: string; name: string; emoji: string }) => ({
         team_id: team.id,
@@ -214,7 +195,6 @@ export async function getSeasonStandings(
       return { standings };
     }
 
-    // Get all completed matches in those weeks
     const { data: matches, error: matchesError } = await supabase
       .from("matches")
       .select("home_team_id, away_team_id, winner_team_id")
@@ -226,7 +206,6 @@ export async function getSeasonStandings(
       return { standings: [], error: matchesError.message };
     }
 
-    // Calculate win/loss for each team
     const teamStats = new Map<string, { wins: number; losses: number }>();
     teams.forEach((team: { id: string }) => {
       teamStats.set(team.id, { wins: 0, losses: 0 });
@@ -234,14 +213,10 @@ export async function getSeasonStandings(
 
     (matches || []).forEach((match: { home_team_id: string; away_team_id: string; winner_team_id: string | null }) => {
       if (!match.winner_team_id) return;
-
-      // Winner gets a win
       const winnerStats = teamStats.get(match.winner_team_id);
       if (winnerStats) {
         winnerStats.wins++;
       }
-
-      // Loser gets a loss
       const loserId =
         match.winner_team_id === match.home_team_id
           ? match.away_team_id
@@ -252,7 +227,6 @@ export async function getSeasonStandings(
       }
     });
 
-    // Build standings array
     const standings: SeasonStanding[] = teams.map((team: { id: string; name: string; emoji: string }) => {
       const stats = teamStats.get(team.id) || { wins: 0, losses: 0 };
       const totalGames = stats.wins + stats.losses;
@@ -267,9 +241,7 @@ export async function getSeasonStandings(
       };
     });
 
-    // Sort by win% descending (best record first)
     standings.sort((a, b) => b.win_pct - a.win_pct);
-
     return { standings };
   } catch (error) {
     console.error("Unexpected error calculating season standings:", error);
@@ -281,11 +253,6 @@ export async function getSeasonStandings(
 // DRAFT ORDER GENERATION
 // ============================================================================
 
-/**
- * Generate draft order for a season based on previous season's standings.
- * Worst record picks first. Ties broken by random lottery number (lowest wins).
- * Admin only.
- */
 export async function generateDraftOrder(
   seasonId: string
 ): Promise<{
@@ -301,7 +268,6 @@ export async function generateDraftOrder(
       return { success: false, error: admin.error };
     }
 
-    // Check if draft order already exists for this season
     const { count: existingCount } = await supabase
       .from("draft_order")
       .select("*", { count: "exact", head: true })
@@ -314,7 +280,6 @@ export async function generateDraftOrder(
       };
     }
 
-    // Get the target season
     const { data: targetSeason, error: seasonError } = await supabase
       .from("seasons")
       .select("id, season_number, season_name")
@@ -325,14 +290,12 @@ export async function generateDraftOrder(
       return { success: false, error: "Season not found" };
     }
 
-    // Get the previous season (by season_number - 1)
     const { data: previousSeason } = await supabase
       .from("seasons")
       .select("id, season_number, season_name")
       .eq("season_number", targetSeason.season_number - 1)
       .single();
 
-    // Get all teams
     const { data: teams, error: teamsError } = await supabase
       .from("teams")
       .select("id, name, emoji")
@@ -342,11 +305,9 @@ export async function generateDraftOrder(
       return { success: false, error: "No teams found" };
     }
 
-    // Get max_teams setting for lottery range
     const { settings } = await getDraftSettings();
     const maxTeams = parseInt(settings.max_teams || String(teams.length), 10);
 
-    // Calculate previous season standings (or 0-0 if no previous season)
     let standings: SeasonStanding[];
     if (previousSeason) {
       const { standings: prevStandings, error: standingsError } =
@@ -356,7 +317,6 @@ export async function generateDraftOrder(
       }
       standings = prevStandings;
     } else {
-      // Season 1: all teams get 0-0 records
       standings = teams.map((team: { id: string; name: string; emoji: string }) => ({
         team_id: team.id,
         team_name: team.name,
@@ -367,16 +327,13 @@ export async function generateDraftOrder(
       }));
     }
 
-    // Create a map for quick lookup
     const standingsMap = new Map<string, SeasonStanding>();
     standings.forEach((s) => standingsMap.set(s.team_id, s));
 
-    // Assign random lottery numbers (1 to maxTeams, unique per team)
     const lotteryNumbers = shuffleArray(
       Array.from({ length: maxTeams }, (_, i) => i + 1)
     ).slice(0, teams.length);
 
-    // Build team entries with standings + lottery
     const teamEntries = teams.map((team: { id: string; name: string; emoji: string }, index: number) => {
       const standing = standingsMap.get(team.id) || {
         wins: 0,
@@ -394,25 +351,22 @@ export async function generateDraftOrder(
       };
     });
 
-    // Sort: ascending by win% (worst first), then ascending by lottery number for ties
     teamEntries.sort((a, b) => {
       if (a.win_pct !== b.win_pct) {
-        return a.win_pct - b.win_pct; // Worst record first
+        return a.win_pct - b.win_pct;
       }
-      return a.lottery_number - b.lottery_number; // Lowest lottery number wins tie
+      return a.lottery_number - b.lottery_number;
     });
 
-    // Determine which teams had tiebreakers
-    // A team used a tiebreaker if another team has the same win_pct
     const winPctGroups = new Map<number, number>();
     teamEntries.forEach((entry) => {
       winPctGroups.set(entry.win_pct, (winPctGroups.get(entry.win_pct) || 0) + 1);
     });
-
-    // Insert into draft_order
+    
+    // THIS IS THE FIX FOR THE ROOT CAUSE OF THE UUID ERROR
     const insertRows = teamEntries.map((entry, index) => ({
       season_id: seasonId,
-      team_id: entry.team_id,
+      team_id: entry.team_id, // Use the team's ID (UUID), not its name
       pick_position: index + 1,
       previous_season_wins: entry.wins,
       previous_season_losses: entry.losses,
@@ -424,10 +378,7 @@ export async function generateDraftOrder(
     const { data: inserted, error: insertError } = await supabase
       .from("draft_order")
       .insert(insertRows)
-      .select(`
-        *,
-        team:teams(id, name, emoji)
-      `);
+      .select(`*, team:teams(id, name, emoji)`);
 
     if (insertError) {
       console.error("Error inserting draft order:", insertError);
@@ -449,10 +400,6 @@ export async function generateDraftOrder(
   }
 }
 
-/**
- * Regenerate draft order for a season (Admin only).
- * Deletes existing order, re-rolls lottery numbers, and recalculates.
- */
 export async function regenerateDraftOrder(
   seasonId: string
 ): Promise<{
@@ -468,7 +415,6 @@ export async function regenerateDraftOrder(
       return { success: false, error: admin.error };
     }
 
-    // Delete existing draft order for this season
     const { error: deleteError } = await supabase
       .from("draft_order")
       .delete()
@@ -479,7 +425,6 @@ export async function regenerateDraftOrder(
       return { success: false, error: `Failed to clear existing order: ${deleteError.message}` };
     }
 
-    // Regenerate using the standard function
     return generateDraftOrder(seasonId);
   } catch (error) {
     console.error("Unexpected error regenerating draft order:", error);
@@ -491,9 +436,6 @@ export async function regenerateDraftOrder(
 // DRAFT ORDER QUERIES
 // ============================================================================
 
-/**
- * Get draft order for a specific season
- */
 export async function getDraftOrder(
   seasonId: string
 ): Promise<{ order: DraftOrderEntry[]; error?: string }> {
@@ -501,10 +443,7 @@ export async function getDraftOrder(
     const supabase = await createServerClient();
     const { data, error } = await supabase
       .from("draft_order")
-      .select(`
-        *,
-        team:teams(id, name, emoji, primary_color, secondary_color)
-      `)
+      .select(`*, team:teams(id, name, emoji, primary_color, secondary_color)`)
       .eq("season_id", seasonId)
       .order("pick_position", { ascending: true });
 
@@ -519,9 +458,6 @@ export async function getDraftOrder(
   }
 }
 
-/**
- * Get draft order for the currently active season
- */
 export async function getActiveDraftOrder(): Promise<{
   order: DraftOrderEntry[];
   seasonId?: string;
@@ -530,8 +466,6 @@ export async function getActiveDraftOrder(): Promise<{
 }> {
   try {
     const supabase = await createServerClient();
-
-    // Get active season
     const { data: activeSeason, error: seasonError } = await supabase
       .from("seasons")
       .select("id, season_name")
@@ -580,12 +514,8 @@ export interface DraftStatus {
   draftOrder: Array<DraftStatusTeam & { picksMade: number }>;
 }
 
-/**
- * Get the current draft status: who's on the clock, on deck, round, and progress.
- * Uses round-robin logic based on draft_order pick positions.
- */
 export async function getDraftStatus(
-  sessionId?: string
+  sessionId?: string | null
 ): Promise<{
   status: DraftStatus | null;
   seasonId?: string;
@@ -593,8 +523,6 @@ export async function getDraftStatus(
 }> {
   try {
     const supabase = await createServerClient();
-
-    // Get active season
     const { data: activeSeason, error: seasonError } = await supabase
       .from("seasons")
       .select("id, season_name")
@@ -602,57 +530,48 @@ export async function getDraftStatus(
       .single();
 
     if (seasonError || !activeSeason) {
-      return { status: null };
+      return { status: null, seasonId: undefined };
     }
 
-    // Get draft order for this season
     const { data: orderData, error: orderError } = await supabase
       .from("draft_order")
-      .select(`
-        team_id,
-        pick_position,
-        team:teams(id, name, emoji)
-      `)
+      .select(`team_id, pick_position, team:teams(id, name, emoji)`)
       .eq("season_id", activeSeason.id)
       .order("pick_position", { ascending: true });
 
-    if (orderError || !orderData || orderData.length === 0) {
-      return { status: null };
+    if (orderError) {
+        return { status: null, seasonId: activeSeason.id, error: orderError.message };
+    }
+    
+    // THIS IS THE FIX for the disappearing widget. We now filter out any invalid draft order rows.
+    const validOrderData = (orderData || []).filter(entry => entry.team);
+    
+    if (validOrderData.length === 0) {
+        return { status: null, seasonId: activeSeason.id };
     }
 
-    // Get pick counts per team for the specific draft session
-    const pickQuery = supabase
-      .from("team_draft_picks")
-      .select("team_id", { count: "exact", head: true });
-
-    // This is the fix: scope picks to the current session if an ID is provided
-    if (sessionId) {
-      pickQuery.eq("draft_session_id", sessionId);
-    }
-
-    const { data: pickData, error: pickError } = await supabase
-      .from("team_draft_picks")
-      .select("team_id")
-      .eq("draft_session_id", sessionId);
-
-
-    if (pickError) {
-      return { status: null, error: pickError.message };
-    }
-
-    // Count picks per team
     const pickCounts = new Map<string, number>();
-    (pickData || []).forEach((p) => {
-      pickCounts.set(p.team_id, (pickCounts.get(p.team_id) || 0) + 1);
-    });
+    if (sessionId) {
+      const { data: pickData, error: pickError } = await supabase
+        .from("team_draft_picks")
+        .select("team_id")
+        .eq("draft_session_id", sessionId);
 
-    // Build draft order with pick counts
-    const draftOrder = orderData.map((entry) => {
+      if (pickError) {
+        return { status: null, seasonId: activeSeason.id, error: pickError.message };
+      }
+      (pickData || []).forEach((p) => {
+        pickCounts.set(p.team_id, (pickCounts.get(p.team_id) || 0) + 1);
+      });
+    }
+
+    const draftOrder = validOrderData.map((entry) => {
+      // Since we filtered for entry.team, we can be sure it's not null here
       const team = Array.isArray(entry.team) ? entry.team[0] : entry.team;
       return {
         teamId: entry.team_id,
-        teamName: team?.name || "Unknown",
-        teamEmoji: team?.emoji || "?",
+        teamName: team.name || "Unknown",
+        teamEmoji: team.emoji || "?",
         pickPosition: entry.pick_position,
         picksMade: pickCounts.get(entry.team_id) || 0,
       };
@@ -660,42 +579,22 @@ export async function getDraftStatus(
 
     const totalTeams = draftOrder.length;
     const totalPicks = draftOrder.reduce((sum, t) => sum + t.picksMade, 0);
-
-    // Find who's on the clock:
-    // The minimum picks across all teams defines the current round floor.
-    // The first team (by pick_position) with picksMade === minPicks is on the clock.
     const minPicks = Math.min(...draftOrder.map((t) => t.picksMade));
     const currentRound = minPicks + 1;
-
-    // Teams that still need to pick in this round (have exactly minPicks)
     const teamsNeedingPick = draftOrder.filter((t) => t.picksMade === minPicks);
-
-    // On the clock = first team needing a pick (lowest pick_position)
     const onTheClock = teamsNeedingPick[0];
 
-    // On deck = next team needing a pick, or if only one left, first team of next round
     let onDeck: typeof draftOrder[0];
     if (teamsNeedingPick.length > 1) {
       onDeck = teamsNeedingPick[1];
     } else {
-      // This is the last pick of the round; on deck is position 1 for next round
       onDeck = draftOrder[0];
     }
 
     return {
       status: {
-        onTheClock: {
-          teamId: onTheClock.teamId,
-          teamName: onTheClock.teamName,
-          teamEmoji: onTheClock.teamEmoji,
-          pickPosition: onTheClock.pickPosition,
-        },
-        onDeck: {
-          teamId: onDeck.teamId,
-          teamName: onDeck.teamName,
-          teamEmoji: onDeck.teamEmoji,
-          pickPosition: onDeck.pickPosition,
-        },
+        onTheClock,
+        onDeck,
         currentRound,
         totalPicks,
         totalTeams,

@@ -14,7 +14,6 @@ import { Swords, Hourglass, ShieldCheck, ShieldX } from 'lucide-react';
 import { getAiProfiles, validateAndCanonicalizeDeck } from '@/app/actions/adminActions';
 import { GameState } from '@/app/types';
 
-// Define a local type for AI Profiles to avoid using 'any'
 interface AiProfile {
   id: string;
   profile_name: string;
@@ -34,8 +33,18 @@ export default function MatchRunnerPage() {
   const [error, setError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState('');
+  
+  // --- FIX: State to control the redirect safely ---
+  const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
 
   const router = useRouter();
+
+  // --- FIX: useEffect to handle the redirect after state has updated ---
+  useEffect(() => {
+    if (redirectUrl) {
+      router.push(redirectUrl);
+    }
+  }, [redirectUrl, router]);
 
   useEffect(() => {
     async function loadProfiles() {
@@ -93,7 +102,6 @@ export default function MatchRunnerPage() {
     const correctedDeck1List = buildCorrectedDeckList(player1.decklist);
     const correctedDeck2List = buildCorrectedDeckList(player2.decklist);
 
-    // --- FIX: Corrected the regex for sanitizing filenames ---
     const deck1Filename = player1.deckName.replace(/[^a-z0-9-]/gi, '_').toLowerCase() + ".dck";
     const deck2Filename = player2.deckName.replace(/[^a-z0-9-]/gi, '_').toLowerCase() + ".dck";
     
@@ -127,7 +135,8 @@ export default function MatchRunnerPage() {
           if (winner && isReplayReady) {
             clearInterval(poll);
             setStatusMessage(`Match complete! Winner: ${winner}. Redirecting to replay...`);
-            router.push(`/admin/match-viewer/${matchId}`);
+            // --- FIX: Set state to trigger the redirect effect, instead of calling router.push directly ---
+            setRedirectUrl(`/admin/match-viewer/${matchId}`);
           }
         } catch (pollError: unknown) {
             let message = "An error occurred during polling.";
