@@ -204,6 +204,24 @@ export const DraftSessionManagement: React.FC = () => {
     }
   };
 
+  const handleResumeCompleted = async (sessionId: string) => {
+    if (!confirm("Resume this completed draft? The timer will restart from the current pick position.")) return;
+    setActionLoading(true);
+    try {
+      const result = await resumeDraft(sessionId);
+      if (result.success) {
+        setMessage({ type: "success", text: "Draft resumed from completed state! Timer restarted." });
+        loadData();
+      } else {
+        setMessage({ type: "error", text: result.error || "Failed to resume draft" });
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: String(error) });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleComplete = async (sessionId: string) => {
     if (!confirm("End the draft early? This cannot be undone.")) return;
     setActionLoading(true);
@@ -778,6 +796,7 @@ export const DraftSessionManagement: React.FC = () => {
                     <th className="px-4 py-3 text-center font-semibold text-gray-900 dark:text-gray-100">Rounds</th>
                     <th className="px-4 py-3 text-center font-semibold text-gray-900 dark:text-gray-100">Hours/Pick</th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-900 dark:text-gray-100">Created</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-900 dark:text-gray-100">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -798,6 +817,18 @@ export const DraftSessionManagement: React.FC = () => {
                       </td>
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">
                         {formatDateTime(session.created_at)}
+                      </td>
+                      <td className="px-4 py-3">
+                        {session.status === "completed" && (
+                          <button
+                            onClick={() => handleResumeCompleted(session.id)}
+                            disabled={actionLoading}
+                            title="Resume this draft from where it left off"
+                            className="admin-btn admin-btn-secondary text-xs py-1 px-2"
+                          >
+                            Resume Draft
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
