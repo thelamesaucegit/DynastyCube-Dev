@@ -11,9 +11,7 @@ import { GameState } from "@/app/types"; // Import strong type for GameState
 // Define AiProfile locally to avoid conflicts and 'any' type
 interface AiProfile {
   id: string;
-  created_at: string;
   profile_name: string;
-  description: string | null;
 }
 
 // This function creates a client authenticated as the CURRENT USER.
