@@ -28,6 +28,7 @@ import {
   clearTeamDraftQueue,
   type QueueEntry,
 } from "@/app/actions/autoDraftActions";
+import { getActiveDraftSession } from "@/app/actions/draftSessionActions";
 import { getAvailableCardsForDraft, type CardData } from "@/app/actions/cardActions";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
@@ -121,7 +122,6 @@ function SortableQueueItem({
       >
         <GripVertical className="size-4" />
       </button>
-
       <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
         entry.position <= 3
           ? "bg-purple-500/15 text-purple-600 dark:text-purple-400"
@@ -129,17 +129,13 @@ function SortableQueueItem({
       }`}>
         {entry.position}
       </div>
-
-      {/* FIX: Use entry.imageUrl (camelCase) for QueueEntry */}
       {entry.imageUrl && (
-        /* eslint-disable-next-line @next/next/no-img-element */
         <img
           src={entry.imageUrl}
           alt={entry.cardName}
           className="w-10 h-14 object-cover rounded flex-shrink-0"
         />
       )}
-
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-semibold text-sm truncate">{entry.cardName}</span>
@@ -160,13 +156,11 @@ function SortableQueueItem({
               <span className="text-xs text-muted-foreground">◇</span>
             )}
           </div>
-          {/* FIX: Use entry.cubecobraElo (camelCase) for QueueEntry */}
           {entry.cubecobraElo != null && (
             <span className="text-xs text-purple-600 dark:text-purple-400">
               ELO {entry.cubecobraElo.toLocaleString()}
             </span>
           )}
-          {/* FIX: Use entry.cubucksCost (camelCase) for QueueEntry */}
           {entry.cubucksCost != null && (
             <span className="text-xs text-yellow-600 dark:text-yellow-400">
               💰 {entry.cubucksCost || 1}
@@ -177,7 +171,6 @@ function SortableQueueItem({
           </Badge>
         </div>
       </div>
-
       <div className="flex items-center gap-1 flex-shrink-0">
         <Button
           variant="ghost"
@@ -219,9 +212,7 @@ function DragOverlayItem({ entry }: { entry: QueueEntry }) {
       <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold bg-purple-500/15 text-purple-600 dark:text-purple-400 flex-shrink-0">
         {entry.position}
       </div>
-      {/* FIX: Use entry.imageUrl (camelCase) for QueueEntry */}
       {entry.imageUrl && (
-        /* eslint-disable-next-line @next/next/no-img-element */
         <img
           src={entry.imageUrl}
           alt={entry.cardName}
@@ -273,7 +264,6 @@ function AddToQueueDialog({
 
   const filteredAndSortedCards = useMemo(() => {
     const availableForQueue = allAvailable.filter((card) => !existingCardPoolIds.has(card.id!));
-
     const filtered = availableForQueue.filter((card) => {
       const searchMatch = search
         ? typeof card.card_name === "string" && card.card_name.toLowerCase().includes(search.toLowerCase())
@@ -288,7 +278,7 @@ function AddToQueueDialog({
         return card.colors?.includes(colorFilter) ?? false;
       })();
       if (!colorMatch) return false;
-
+      
       return true;
     });
 
@@ -365,9 +355,7 @@ function AddToQueueDialog({
                   }}
                   className="w-full flex items-center gap-3 p-2 rounded-lg border border-border hover:border-purple-500/40 hover:bg-accent transition-colors text-left"
                 >
-                  {/* Correct: Use image_url (snake_case) for CardData */}
                   {card.image_url && (
-                    /* eslint-disable-next-line @next/next/no-img-element */
                     <img
                       src={card.image_url}
                       alt={card.card_name}
@@ -386,13 +374,11 @@ function AddToQueueDialog({
                           <span>◇</span>
                         )}
                       </span>
-                      {/* Correct: Use cubecobra_elo (snake_case) for CardData */}
                       {card.cubecobra_elo != null && (
                         <span className="text-purple-600 dark:text-purple-400">
                           ELO {card.cubecobra_elo.toLocaleString()}
                         </span>
                       )}
-                      {/* Correct: Use cubucks_cost (snake_case) for CardData */}
                       <span className="text-yellow-600 dark:text-yellow-400">
                         💰 {card.cubucks_cost || 1}
                       </span>
@@ -414,7 +400,6 @@ function AddToQueueDialog({
   );
 }
 
-
 // ============================================================================
 // Main DraftQueueManager
 // ============================================================================
@@ -426,6 +411,7 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
   const [expanded, setExpanded] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -437,7 +423,11 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
   const loadQueue = useCallback(async () => {
     setLoading(true);
     try {
-      const { queue: queueData, error } = await getTeamDraftQueue(teamId, 20);
+      const { session } = await getActiveDraftSession();
+      const sessionId = session?.id || null;
+      setActiveSessionId(sessionId);
+      
+      const { queue: queueData, error } = await getTeamDraftQueue(teamId, sessionId!, 20);
       if (error) {
         console.error("Error loading queue:", error);
       }
@@ -461,17 +451,17 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
     setActiveId(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-
+    
     const oldIndex = queue.findIndex((e) => e.cardPoolId === active.id);
     const newIndex = queue.findIndex((e) => e.cardPoolId === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
-
+    
     const newQueue = arrayMove(queue, oldIndex, newIndex).map((entry, index) => ({
       ...entry,
       position: index + 1,
     }));
+    
     setQueue(newQueue);
-
     await saveManualQueue(newQueue);
   };
 
@@ -574,7 +564,6 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
             <ChevronDown className="size-4 text-muted-foreground" />
           )}
         </button>
-
         {expanded && (
           <CardContent className="pt-0 pb-4">
             {isUserTeamMember && (
@@ -660,9 +649,7 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
                     }`}>
                       {entry.position}
                     </div>
-                    {/* FIX: Use entry.imageUrl (camelCase) for QueueEntry */}
                     {entry.imageUrl && (
-                      /* eslint-disable-next-line @next/next/no-img-element */
                       <img
                         src={entry.imageUrl}
                         alt={entry.cardName}
@@ -685,7 +672,6 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
                             <span className="text-xs text-muted-foreground">◇</span>
                           )}
                         </div>
-                        {/* FIX: Use entry.cubecobraElo (camelCase) for QueueEntry */}
                         {entry.cubecobraElo != null && (
                           <span className="text-xs text-purple-600 dark:text-purple-400">
                             ELO {entry.cubecobraElo.toLocaleString()}
