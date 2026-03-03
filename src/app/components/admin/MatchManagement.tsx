@@ -269,7 +269,7 @@ export function MatchManagement() {
             </div>
             <div className="space-y-4">
               <div className="text-center">
-                <div className="text-4xl font-bold">{selectedMatch..home_team_wins} - {selectedMatch.away_team_wins}</div>
+                <div className="text-4xl font-bold">{selectedMatch.home_team_wins} - {selectedMatch.away_team_wins}</div>
                 <div className="text-sm text-muted-foreground">Best of {selectedMatch.best_of}</div>
               </div>
               {matchGames.length > 0 && (
