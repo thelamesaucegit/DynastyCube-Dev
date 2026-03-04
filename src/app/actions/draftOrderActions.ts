@@ -362,11 +362,10 @@ export async function generateDraftOrder(
     teamEntries.forEach((entry) => {
       winPctGroups.set(entry.win_pct, (winPctGroups.get(entry.win_pct) || 0) + 1);
     });
-    
-    // THIS IS THE FIX FOR THE ROOT CAUSE OF THE UUID ERROR
+
     const insertRows = teamEntries.map((entry, index) => ({
       season_id: seasonId,
-      team_id: entry.team_id, // Use the team's ID (UUID), not its name
+      team_id: entry.team_id,
       pick_position: index + 1,
       previous_season_wins: entry.wins,
       previous_season_losses: entry.losses,
@@ -540,33 +539,31 @@ export async function getDraftStatus(
       .order("pick_position", { ascending: true });
 
     if (orderError) {
-        return { status: null, seasonId: activeSeason.id, error: orderError.message };
+      return { status: null, seasonId: activeSeason.id, error: orderError.message };
     }
     
-    // THIS IS THE FIX for the disappearing widget. We now filter out any invalid draft order rows.
     const validOrderData = (orderData || []).filter(entry => entry.team);
     
     if (validOrderData.length === 0) {
-        return { status: null, seasonId: activeSeason.id };
+      return { status: null, seasonId: activeSeason.id };
     }
 
     const pickCounts = new Map<string, number>();
     if (sessionId) {
-      const { data: pickData, error: pickError } = await supabase
-        .from("team_draft_picks")
-        .select("team_id")
-        .eq("draft_session_id", sessionId);
+      // THIS IS THE FIX: Call the new RPC function instead of fetching all rows.
+      const { data: pickData, error: rpcError } = await supabase
+        .rpc('get_pick_counts_for_session', { p_session_id: sessionId });
 
-      if (pickError) {
-        return { status: null, seasonId: activeSeason.id, error: pickError.message };
+      if (rpcError) {
+        console.error("Error counting drafted cards:", rpcError);
+        return { status: null, seasonId: activeSeason.id, error: rpcError.message };
       }
-      (pickData || []).forEach((p) => {
-        pickCounts.set(p.team_id, (pickCounts.get(p.team_id) || 0) + 1);
+      (pickData || []).forEach((row) => {
+        pickCounts.set(row.team_id, Number(row.pick_count)); // Ensure count is a number
       });
     }
 
     const draftOrder = validOrderData.map((entry) => {
-      // Since we filtered for entry.team, we can be sure it's not null here
       const team = Array.isArray(entry.team) ? entry.team[0] : entry.team;
       return {
         teamId: entry.team_id,
