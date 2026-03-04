@@ -11,7 +11,6 @@ import { Textarea } from '@/app/components/ui/textarea';
 import { Input } from '@/app/components/ui/input';
 import { Swords, Hourglass, ShieldCheck, ShieldX } from 'lucide-react';
 import { getAiProfiles, validateAndCanonicalizeDeck } from '@/app/actions/adminActions';
-import { GameState } from '@/app/types';
 
 interface AiProfile {
   id: string;
@@ -32,7 +31,7 @@ export default function MatchRunnerPage() {
   const [error, setError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState('');
-  
+
   useEffect(() => {
     async function loadProfiles() {
       try {
@@ -50,30 +49,23 @@ export default function MatchRunnerPage() {
   const handleSimulate = async () => {
     setError(null);
     setValidationError(null);
-
     if (!player1.aiProfile || !player2.aiProfile || !player1.decklist || !player2.decklist) {
       setError('Please provide a decklist and AI profile for both players.');
       return;
     }
-
     setIsValidating(true);
     setStatusMessage('Validating decklists...');
-
     const allCardNames = [...player1.decklist.split('\n'), ...player2.decklist.split('\n')]
       .map(line => line.trim().replace(/^\d+\s/, ''));
-
     const { valid, invalid } = await validateAndCanonicalizeDeck(allCardNames);
-
     if (invalid.length > 0) {
       setValidationError(`The following card names were not found: ${invalid.join(', ')}. Please correct them.`);
       setIsValidating(false);
       return;
     }
-
     setIsValidating(false);
     setIsSimulating(true);
     setStatusMessage('Validation successful. Submitting match...');
-
     const buildCorrectedDeckList = (decklist: string): string => {
       return decklist.split('\n').map(line => {
         const trimmed = line.trim();
@@ -88,7 +80,6 @@ export default function MatchRunnerPage() {
     
     const correctedDeck1List = buildCorrectedDeckList(player1.decklist);
     const correctedDeck2List = buildCorrectedDeckList(player2.decklist);
-
     const deck1Filename = player1.deckName.replace(/[^a-z0-9-]/gi, '_').toLowerCase() + ".dck";
     const deck2Filename = player2.deckName.replace(/[^a-z0-9-]/gi, '_').toLowerCase() + ".dck";
     
@@ -101,7 +92,6 @@ export default function MatchRunnerPage() {
           deck2: { filename: deck2Filename, content: formatDecklistToDck(correctedDeck2List, player2.deckName), aiProfile: player2.aiProfile },
         })
       });
-
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to start simulation.');
@@ -109,19 +99,18 @@ export default function MatchRunnerPage() {
       
       const { matchId } = await response.json();
       if (!matchId) throw new Error("API did not return a valid match ID.");
-
       setStatusMessage(`Simulation started with ID: ${matchId}. Waiting for completion...`);
       
       const poll = setInterval(async () => {
         try {
           const statusRes = await fetch(`/api/match-runner/${matchId}`);
           if (!statusRes.ok) return;
-
           const { winner, isReplayReady } = await statusRes.json();
           
           if (winner && isReplayReady) {
             clearInterval(poll);
             setStatusMessage(`Match complete! Winner: ${winner}. Redirecting to replay...`);
+            // --- FIX: Use direct assignment for robust, hard navigation ---
             window.location.href = `/admin/match-viewer/${matchId}`;
           }
         } catch (pollError: unknown) {
@@ -132,11 +121,8 @@ export default function MatchRunnerPage() {
       }, 5000);
 
     } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("An unknown error occurred.");
-      }
+      if (err instanceof Error) setError(err.message);
+      else setError("An unknown error occurred.");
       setIsSimulating(false);
     }
   };
