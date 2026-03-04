@@ -3,7 +3,6 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Label } from '@/app/components/ui/label';
@@ -34,18 +33,6 @@ export default function MatchRunnerPage() {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState('');
   
-  // --- FIX: State to control the redirect safely ---
-  const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
-
-  const router = useRouter();
-
-  // --- FIX: useEffect to handle the redirect after state has updated ---
-  useEffect(() => {
-    if (redirectUrl) {
-      router.push(redirectUrl);
-    }
-  }, [redirectUrl, router]);
-
   useEffect(() => {
     async function loadProfiles() {
       try {
@@ -135,8 +122,7 @@ export default function MatchRunnerPage() {
           if (winner && isReplayReady) {
             clearInterval(poll);
             setStatusMessage(`Match complete! Winner: ${winner}. Redirecting to replay...`);
-            // --- FIX: Set state to trigger the redirect effect, instead of calling router.push directly ---
-            setRedirectUrl(`/admin/match-viewer/${matchId}`);
+            window.location.href = `/admin/match-viewer/${matchId}`;
           }
         } catch (pollError: unknown) {
             let message = "An error occurred during polling.";
