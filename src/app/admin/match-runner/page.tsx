@@ -3,8 +3,6 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-// --- FIX: useRouter is no longer needed ---
-// import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Label } from '@/app/components/ui/label';
