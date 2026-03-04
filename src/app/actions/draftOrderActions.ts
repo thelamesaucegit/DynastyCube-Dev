@@ -43,6 +43,13 @@ export interface DraftSetting {
   updated_at: string;
 }
 
+// THIS IS THE FIX: Define the shape of the RPC response
+interface PickCount {
+  team_id: string;
+  pick_count: number;
+}
+
+
 // ============================================================================
 // HELPERS
 // ============================================================================
@@ -550,7 +557,6 @@ export async function getDraftStatus(
 
     const pickCounts = new Map<string, number>();
     if (sessionId) {
-      // THIS IS THE FIX: Call the new RPC function instead of fetching all rows.
       const { data: pickData, error: rpcError } = await supabase
         .rpc('get_pick_counts_for_session', { p_session_id: sessionId });
 
@@ -558,8 +564,10 @@ export async function getDraftStatus(
         console.error("Error counting drafted cards:", rpcError);
         return { status: null, seasonId: activeSeason.id, error: rpcError.message };
       }
-      (pickData || []).forEach((row) => {
-        pickCounts.set(row.team_id, Number(row.pick_count)); // Ensure count is a number
+      
+      // THIS IS THE FIX: Apply the 'PickCount' type to the row parameter.
+      (pickData || []).forEach((row: PickCount) => {
+        pickCounts.set(row.team_id, Number(row.pick_count));
       });
     }
 
