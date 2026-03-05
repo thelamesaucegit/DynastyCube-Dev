@@ -1,4 +1,5 @@
 // src/app/components/Navigation.tsx
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -45,10 +46,12 @@ import {
   History,
   Info,
 } from "lucide-react";
+import { getAllDraftSessions, type DraftSessionInfo } from "@/app/actions/draftSessionActions";
 
 export default function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [draftSessions, setDraftSessions] = useState<DraftSessionInfo[]>([]);
   const pathname = usePathname();
   const { user, loading, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -56,6 +59,11 @@ export default function Navigation() {
 
   useEffect(() => {
     setMounted(true);
+    async function loadDrafts() {
+      const { sessions } = await getAllDraftSessions();
+      setDraftSessions(sessions);
+    }
+    loadDrafts();
   }, []);
 
   const handleSignOut = async () => {
@@ -90,7 +98,6 @@ export default function Navigation() {
             href="/"
             className="flex items-center gap-2 transition-opacity hover:opacity-80 shrink-0"
           >
-            {/* Replaced Sparkle icon with actual logo */}
             <Image
               src="/images/logo/logo.jpg"
               alt="Dynasty Cube Logo"
@@ -98,7 +105,6 @@ export default function Navigation() {
               height={32}
               className="size-8 rounded-md"
             />
-            {/* Removed gradient from text */}
             <span className="font-bold text-xl text-foreground hidden sm:inline-block">
               Dynasty Cube
             </span>
@@ -117,6 +123,34 @@ export default function Navigation() {
                       Home
                     </NavigationMenuLink>
                   </Link>
+                </NavigationMenuItem>
+
+                {/* Drafts Dropdown */}
+                <NavigationMenuItem>
+                  <NavigationMenuTrigger className={`bg-transparent ${isActive("/draft") ? "bg-accent/50 text-accent-foreground font-medium" : ""}`}>
+                    Draft
+                  </NavigationMenuTrigger>
+                  <NavigationMenuContent>
+                    <ul className="grid w-[300px] gap-2 p-3">
+                      {draftSessions.map((session) => (
+                        <li key={session.id}>
+                          <Link href={`/draft/${session.id}/live`} legacyBehavior passHref>
+                            <NavigationMenuLink className="block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground">
+                              <div className="text-sm font-medium leading-none">{session.name || `Draft from ${new Date(session.created_at).toLocaleDateString()}`}</div>
+                              <p className="line-clamp-2 text-xs leading-snug text-muted-foreground mt-1.5">
+                                View live draft board and results.
+                              </p>
+                            </NavigationMenuLink>
+                          </Link>
+                        </li>
+                      ))}
+                      {draftSessions.length === 0 && (
+                         <li>
+                            <div className="text-sm text-muted-foreground p-3 text-center">No drafts found.</div>
+                         </li>
+                      )}
+                    </ul>
+                  </NavigationMenuContent>
                 </NavigationMenuItem>
 
                 {/* Pools Dropdown */}
@@ -341,6 +375,21 @@ export default function Navigation() {
                 >
                   Home
                 </Link>
+
+                <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                  Draft
+                </div>
+                {draftSessions.map((session) => (
+                  <Link
+                    key={session.id}
+                    href={`/draft/${session.id}/live`}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive(`/draft/${session.id}`) ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}
+                  >
+                    {session.name || `Draft from ${new Date(session.created_at).toLocaleDateString()}`}
+                  </Link>
+                ))}
+
                 <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                   Pools
                 </div>
@@ -351,6 +400,7 @@ export default function Navigation() {
                 >
                   Draft Pool
                 </Link>
+
                 <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                   League
                 </div>
@@ -377,6 +427,7 @@ export default function Navigation() {
                     Vote
                   </Link>
                 )}
+
                 <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                   Info
                 </div>
@@ -408,6 +459,7 @@ export default function Navigation() {
                 >
                   Glossary
                 </Link>
+
                 {user && isAdmin && (
                   <>
                     <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
@@ -423,6 +475,7 @@ export default function Navigation() {
                     </Link>
                   </>
                 )}
+
                 {user && (
                   <div className="flex items-center gap-3 px-4 py-2 border-t mt-4 pt-6">
                     <ReportButton />
