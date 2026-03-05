@@ -6,7 +6,6 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { invalidateDraftCache } from '@/lib/draftCache';
 
-// This is the merged, definitive version of this file.
 async function createClient() {
   const cookieStore = await cookies();
   return createServerClient(
@@ -27,7 +26,7 @@ async function createClient() {
   );
 }
 
-// This interface serves all functions in this file.
+// --- MODIFIED: Added hidden and oracle_id ---
 export interface CardData {
   id?: string;
   card_id: string;
@@ -37,8 +36,10 @@ export interface CardData {
   rarity?: string;
   colors?: string[];
   color_identity?: string[];
-  image_url?: string;
-  oldest_image_url?: string;
+  image_url?: string | null;
+  oldest_image_url?: string | null;
+  oracle_id?: string | null;
+  hidden?: boolean;
   mana_cost?: string;
   cmc?: number;
   pool_name?: string;
@@ -51,63 +52,42 @@ export interface CardData {
 export interface ReplayCardData {
   name: string;
   card_type: string;
-  image_url: string;
-  oldest_image_url: string;
+  image_url: string | null;
+  oldest_image_url: string | null;
 }
 
-// NEWLY ADDED FUNCTION FOR REPLAY VIEWER
 export async function getCardDataForReplay(cardNames: string[]): Promise<Map<string, ReplayCardData>> {
-  if (!cardNames || cardNames.length === 0) {
-    return new Map();
-  }
-  const supabase = await createClient();
-  try {
-    const { data, error } = await supabase
-      .from('card_pools')
-      .select('card_name, card_type, image_url, oldest_image_url')
-      .in('card_name', cardNames);
-
-    if (error) {
-      console.error("Error fetching card data for replay:", error);
-      return new Map();
-    }
-    const cardDataMap = new Map<string, ReplayCardData>();
-    if (data) {
-      for (const card of data) {
-        if (card.card_name && card.card_type && card.image_url && card.oldest_image_url) {
-            cardDataMap.set(card.card_name, {
-                name: card.card_name,
-                card_type: card.card_type,
-                image_url: card.image_url,
-                oldest_image_url: card.oldest_image_url,
-            });
+    const supabase = await createClient();
+    try {
+        const { data, error } = await supabase.from('card_pools').select('card_name, card_type, image_url, oldest_image_url').in('card_name', cardNames);
+        if (error) { throw error; }
+        const cardDataMap = new Map<string, ReplayCardData>();
+        if (data) {
+            for (const card of data) {
+                if (card.card_name && card.card_type) {
+                    cardDataMap.set(card.card_name, {
+                        name: card.card_name,
+                        card_type: card.card_type,
+                        image_url: card.image_url || null,
+                        oldest_image_url: card.oldest_image_url || null,
+                    });
+                }
+            }
         }
-      }
+        return cardDataMap;
+    } catch (err) {
+        console.error("Unexpected error in getCardDataForReplay:", err);
+        return new Map();
     }
-    return cardDataMap;
-  } catch (err) {
-    console.error("Unexpected error in getCardDataForReplay:", err);
-    return new Map();
-  }
 }
 
-// ALL ORIGINAL FUNCTIONS BELOW, NOW WITH LINTER WARNINGS FIXED
 export async function undraftAllCards(): Promise<{ success: boolean; updatedCount?: number; error?: string }> {
   const supabase = await createClient();
   try {
-    const { data, error: updateError, count } = await supabase
-      .from("card_pools")
-      .update({ was_drafted: false, times_drafted: 0 }) 
-      .eq("was_drafted", true)
-      .select();
+    const { data, error: updateError, count } = await supabase.from("card_pools").update({ was_drafted: false, times_drafted: 0 }).eq("was_drafted", true).select();
     if (updateError) throw updateError;
-
-    const { error: deleteError } = await supabase
-      .from("team_draft_picks")
-      .delete()
-      .not("id", "is", null);
+    const { error: deleteError } = await supabase.from("team_draft_picks").delete().not("id", "is", null);
     if (deleteError) throw deleteError;
-
     return { success: true, updatedCount: count || data?.length || 0 };
   } catch (error) { 
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -118,13 +98,8 @@ export async function undraftAllCards(): Promise<{ success: boolean; updatedCoun
 export async function getCardPool(poolName: string = "default"): Promise<{ cards: CardData[]; error?: string }> {
   const supabase = await createClient();
   try {
-    const { data, error } = await supabase
-      .from("card_pools")
-      .select("*")
-      .eq("pool_name", poolName)
-      .order("created_at", { ascending: false });
+    const { data, error } = await supabase.from("card_pools").select("*").eq("pool_name", poolName).eq('hidden', false).order("created_at", { ascending: false });
     if (error) {
-      console.error("Error fetching card pool:", error.message);
       return { cards: [], error: error.message };
     }
     return { cards: data || [] };
@@ -136,25 +111,14 @@ export async function getCardPool(poolName: string = "default"): Promise<{ cards
 export async function getAvailableCardsForDraft(poolName: string = "default"): Promise<{ cards: CardData[]; error?: string }> {
   const supabase = await createClient();
   try {
-    const { data: allCards, error: poolError } = await supabase
-      .from("card_pools")
-      .select("*")
-      .eq("pool_name", poolName)
-      .order("card_name", { ascending: true });
+    const { data: allCards, error: poolError } = await supabase.from("card_pools").select("*").eq("pool_name", poolName).eq('hidden', false).order("card_name", { ascending: true });
     if (poolError) {
-      console.error("Error fetching card pool:", poolError.message);
       return { cards: [], error: poolError.message };
     }
-
-    const { data: draftedPicks, error: draftError } = await supabase
-      .from("team_draft_picks")
-      .select("card_pool_id")
-      .not("card_pool_id", "is", null);
+    const { data: draftedPicks, error: draftError } = await supabase.from("team_draft_picks").select("card_pool_id").not("card_pool_id", "is", null);
     if (draftError) {
-      console.error("Error fetching drafted picks:", draftError.message);
       return { cards: [], error: draftError.message };
     }
-
     const draftedInstanceIds = new Set((draftedPicks || []).map(p => p.card_pool_id));
     const availableCards = (allCards || []).filter(card => !draftedInstanceIds.has(card.id!));
     return { cards: availableCards };
@@ -177,14 +141,14 @@ export async function addCardToPool(card: CardData, poolName: string = "default"
       color_identity: card.color_identity || [],
       image_url: card.image_url,
       oldest_image_url: card.oldest_image_url,
+      oracle_id: card.oracle_id,
+      hidden: card.hidden || false,
       mana_cost: card.mana_cost,
       cmc: card.cmc || 0,
       pool_name: poolName,
       created_by: user?.id || null,
     });
-    if (error) {
-      return { success: false, error: error.message };
-    }
+    if (error) { return { success: false, error: error.message }; }
     invalidateDraftCache();
     return { success: true };
   } catch (error) {
@@ -206,15 +170,15 @@ export async function addCardsToPool(cards: CardData[], poolName: string = "defa
             color_identity: card.color_identity || [],
             image_url: card.image_url,
             oldest_image_url: card.oldest_image_url,
+            oracle_id: card.oracle_id,
+            hidden: card.hidden || false,
             mana_cost: card.mana_cost,
             cmc: card.cmc || 0,
             pool_name: poolName,
             created_by: user?.id || null,
         }));
         const { data, error } = await supabase.from("card_pools").insert(cardsToInsert).select();
-        if (error) {
-            return { success: false, error: error.message };
-        }
+        if (error) { return { success: false, error: error.message }; }
         invalidateDraftCache();
         return { success: true, count: data?.length || 0 };
     } catch (error) {
@@ -226,21 +190,16 @@ export async function bulkImportCards(lines: string[], defaultCubucksCost: numbe
     const supabase = await createClient();
     try {
         const { data: existingCards, error: existingError } = await supabase.from("card_pools").select("card_id").eq("pool_name", poolName);
-        if (existingError) {
-            return { success: false, added: 0, skipped: 0, failed: [], error: existingError.message };
-        }
+        if (existingError) { return { success: false, added: 0, skipped: 0, failed: [], error: existingError.message }; }
         const existingCardIds = new Set((existingCards || []).map(c => c.card_id));
         let skipped = 0;
         const failed: string[] = [];
-        
         const cardsToInsert: Array<Omit<CardData, 'id' | 'created_at' | 'rating_updated_at'>> = [];
         for (const line of lines) {
             const trimmed = line.trim();
             if (!trimmed) continue;
-
             let cardName = trimmed;
             let cubucksCost = defaultCubucksCost;
-
             const lastCommaIndex = trimmed.lastIndexOf(",");
             if (lastCommaIndex !== -1) {
                 const possibleCost = trimmed.substring(lastCommaIndex + 1).trim();
@@ -264,17 +223,15 @@ export async function bulkImportCards(lines: string[], defaultCubucksCost: numbe
                     continue;
                 }
                 existingCardIds.add(card.id);
-
                 let oldestImageUrl: string | undefined;
                 if (card.oracle_id) {
-                    await new Promise(r => setTimeout(r, 100)); // Rate limit
+                    await new Promise(r => setTimeout(r, 100));
                     const oldestPrintingResponse = await fetch(`https://api.scryfall.com/cards/search?q=oracleid%3A${card.oracle_id}&order=released&dir=asc&unique=prints`);
                     if (oldestPrintingResponse.ok) {
                         const oldestPrintingData = await oldestPrintingResponse.json();
                         oldestImageUrl = oldestPrintingData?.data?.[0]?.image_uris?.normal;
                     }
                 }
-
                 cardsToInsert.push({
                     card_id: card.id,
                     card_name: card.name,
@@ -285,6 +242,8 @@ export async function bulkImportCards(lines: string[], defaultCubucksCost: numbe
                     color_identity: card.color_identity || [],
                     image_url: card.image_uris?.normal || card.image_uris?.small || undefined,
                     oldest_image_url: oldestImageUrl || card.image_uris?.normal || card.image_uris?.small || undefined,
+                    oracle_id: card.oracle_id,
+                    hidden: card.type_line.toLowerCase().includes('basic land'),
                     mana_cost: card.mana_cost,
                     cmc: card.cmc || 0,
                     cubucks_cost: cubucksCost,
@@ -296,9 +255,7 @@ export async function bulkImportCards(lines: string[], defaultCubucksCost: numbe
         }
         if (cardsToInsert.length > 0) {
             const { error: insertError } = await supabase.from("card_pools").insert(cardsToInsert);
-            if (insertError) {
-                return { success: false, added: 0, skipped: 0, failed, error: insertError.message };
-            }
+            if (insertError) { return { success: false, added: 0, skipped: 0, failed, error: insertError.message }; }
             invalidateDraftCache();
         }
         return { success: true, added: cardsToInsert.length, skipped, failed };
@@ -341,14 +298,11 @@ export async function removeFilteredCards(filter: "all" | "undrafted" | "drafted
       if (deleteError) throw deleteError;
       return { success: true, removedCount: count || 0 };
     }
-
     const { data: poolCards, error: poolError } = await supabase.from("card_pools").select("id, card_id").eq("pool_name", poolName);
     if (poolError) throw poolError;
     if (!poolCards || poolCards.length === 0) { return { success: true, removedCount: 0 }; }
-
     const { data: draftPicks, error: draftError } = await supabase.from("team_draft_picks").select("card_id");
     if (draftError) throw draftError;
-
     const draftedCardIds = new Set((draftPicks || []).map((p) => p.card_id));
     let idsToDelete: string[];
     if (filter === "undrafted") {
@@ -356,9 +310,7 @@ export async function removeFilteredCards(filter: "all" | "undrafted" | "drafted
     } else {
       idsToDelete = poolCards.filter((c) => draftedCardIds.has(c.card_id)).map((c) => c.id);
     }
-
     if (idsToDelete.length === 0) { return { success: true, removedCount: 0 }; }
-
     const { error: deleteError } = await supabase.from("card_pools").delete().in("id", idsToDelete);
     if (deleteError) throw deleteError;
     return { success: true, removedCount: idsToDelete.length };
