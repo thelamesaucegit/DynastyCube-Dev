@@ -47,6 +47,8 @@ import {
   XCircle,
   Vote,
 } from "lucide-react";
+import { useSettings } from "@/contexts/SettingsContext";
+import { getCardImageUrl } from "@/app/utils/cardUtils";
 
 interface TeamMember {
   id: string;
@@ -72,6 +74,7 @@ type TabType = "picks" | "decks" | "members" | "draft" | "stats" | "roles" | "tr
 export default function TeamPage({ params }: TeamPageProps) {
   const { teamId } = use(params);
   const { user } = useAuth();
+  const { useOldestArt } = useSettings();
   const [team, setTeam] = useState<Team | null>(null);
   const [draftPicks, setDraftPicks] = useState<DraftPick[]>([]);
   const [decks, setDecks] = useState<Deck[]>([]);
@@ -95,17 +98,15 @@ export default function TeamPage({ params }: TeamPageProps) {
   useEffect(() => {
     loadTeamData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teamId]);
+  }, [teamId, user?.id]);
 
   const loadTeamData = async () => {
     setLoading(true);
     try {
-      // First, fetch the active session to get its ID
       const { session: activeSession } = await getActiveDraftSession();
       const sessionId = activeSession?.id || null;
       setActiveDraftSessionId(sessionId);
 
-      // Now, run all other data fetches, passing the session ID where needed
       const [teams, picksResult, decksResult, rolesResult, membersResult, seasonResult, previewResult] = await Promise.all([
         getTeamsWithMembers(),
         getTeamDraftPicks(teamId, sessionId!),
@@ -123,11 +124,11 @@ export default function TeamPage({ params }: TeamPageProps) {
       setUserRoles(rolesResult.roles);
       setMembersWithRoles(membersResult.members);
       setDraftPreview(previewResult);
-
       const fetchedPhase = seasonResult.season?.phase || null;
       setSeasonPhase(fetchedPhase);
 
       const isMember = foundTeam?.members?.some((m) => m.user_id === user?.id) || rolesResult.roles.length > 0;
+
       let defaultTab: TabType = "picks";
       if (fetchedPhase === "preseason" || fetchedPhase === "draft") {
         defaultTab = isMember ? "draft" : "picks";
@@ -209,12 +210,10 @@ export default function TeamPage({ params }: TeamPageProps) {
 
   const handleUndraftCard = async (pick: DraftPick) => {
     if (!pick.id || undrafting || !activeDraftSessionId) return;
-
     const confirmed = window.confirm(
       `Are you sure you want to undraft "${pick.card_name}"? The Çubucks spent will be refunded to the team.`
     );
     if (!confirmed) return;
-
     setUndrafting(pick.id);
     setUndraftMessage(null);
     const result = await refundDraftPick(teamId, pick.id, pick.card_id, pick.card_name);
@@ -316,13 +315,16 @@ export default function TeamPage({ params }: TeamPageProps) {
                       <CardContent className="pt-6">
                         <div className="flex flex-col md:flex-row items-center gap-6">
                           <div className="w-24 h-36 shrink-0 rounded-md overflow-hidden shadow-md bg-muted">
-                            {draftPreview.nextPick.image_url && (
-                              <img 
-                                src={draftPreview.nextPick.image_url} 
-                                alt={draftPreview.nextPick.card_name} 
-                                className="w-full h-full object-cover" 
-                              />
-                            )}
+                            {(() => {
+                              const imageUrl = getCardImageUrl(draftPreview.nextPick!, useOldestArt);
+                              return imageUrl && (
+                                <img 
+                                  src={imageUrl} 
+                                  alt={draftPreview.nextPick!.card_name} 
+                                  className="w-full h-full object-cover" 
+                                />
+                              );
+                            })()}
                           </div>
                           <div className="flex-1 text-center md:text-left">
                             <Badge className="mb-2 bg-primary">Up Next in Queue</Badge>
@@ -422,11 +424,12 @@ export default function TeamPage({ params }: TeamPageProps) {
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                       {draftPicks.map((pick) => {
                         const isUndrafting = undrafting === pick.id;
+                        const imageUrl = getCardImageUrl(pick, useOldestArt);
                         return (
-                          <CardPreview key={pick.id} imageUrl={pick.image_url || ""} cardName={pick.card_name}>
+                          <CardPreview key={pick.id} card={pick}>
                             <div className="group relative bg-muted rounded-lg overflow-hidden border hover:border-primary/50 transition-all hover:shadow-md">
-                              {pick.image_url && (
-                                <img src={pick.image_url} alt={pick.card_name} className="w-full h-64 object-cover" />
+                              {imageUrl && (
+                                <img src={imageUrl} alt={pick.card_name} className="w-full h-64 object-cover" />
                               )}
                               <div className="p-2">
                                 <h4 className="font-semibold text-sm truncate">{pick.card_name}</h4>
