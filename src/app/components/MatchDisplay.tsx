@@ -5,24 +5,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/card';
 import { Separator } from '@/app/components/ui/separator';
 import { GameState, PlayerState } from '@/app/types'; // FIX: Removed unused 'GameCard' import
-interface MyCardComponentProps {
-  card: {
-    image_url?: string | null;
-    oldest_image_url?: string | null;
-    card_name: string;
-  };
-}
 
-// --- FIX: Apply the strong type to the component's props ---
-function MyCardComponent({ card }: MyCardComponentProps) {
-  const { useOldestArt } = useSettings();
-
-  // Conditionally choose the image source based on the user's setting
-  const imageUrl = useOldestArt ? card.oldest_image_url : card.image_url;
-
-  // Render your component, for example:
-  return <img src={imageUrl || undefined} alt={card.card_name} />;
-}
 function PlayerDisplay({ player, isActive }: { player: PlayerState, isActive: boolean }) {
   return (
     <div className={`p-4 border rounded-lg ${isActive ? 'border-blue-500 shadow-lg' : 'border-gray-200'}`}>
