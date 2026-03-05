@@ -59,16 +59,23 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { AutoDraftPreview } from "@/app/components/AutoDraftPreview";
-// Example usage in a component like ReplayPlayer.tsx or MatchDisplay.tsx
-import { useSettings } from '@/contexts/SettingsContext';
+interface MyCardComponentProps {
+  card: {
+    image_url?: string | null;
+    oldest_image_url?: string | null;
+    card_name: string;
+  };
+}
 
-function MyCardComponent({ card }) {
+// --- FIX: Apply the strong type to the component's props ---
+function MyCardComponent({ card }: MyCardComponentProps) {
   const { useOldestArt } = useSettings();
 
   // Conditionally choose the image source based on the user's setting
   const imageUrl = useOldestArt ? card.oldest_image_url : card.image_url;
 
-  return <img src={imageUrl} alt={card.name} />;
+  // Render your component, for example:
+  return <img src={imageUrl || undefined} alt={card.card_name} />;
 }
 const COLOR_LABELS: Record<string, { label: string; emoji: string; className: string }> = {
   W: { label: "White", emoji: "⚪", className: "bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200" },
