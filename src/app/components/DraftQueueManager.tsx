@@ -414,6 +414,7 @@ function AddToQueueDialog({
 // ============================================================================
 
 export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueueManagerProps) {
+  const { useOldestArt } = useSettings(); // MOVED HOOK TO TOP LEVEL
   const [queue, setQueue] = useState<QueueEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
