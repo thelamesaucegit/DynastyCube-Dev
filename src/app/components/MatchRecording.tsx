@@ -1,4 +1,5 @@
 // src/app/components/MatchRecording.tsx
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -11,6 +12,11 @@ import {
   type Match as MatchType,
 } from "@/app/actions/matchActions";
 import { getUserTeamRoles } from "@/app/actions/roleActions";
+
+interface MatchRecordingProps {
+  teamId: string;
+}
+
 export function MatchRecording({ teamId }: MatchRecordingProps) {
   const { user } = useAuth();
   const [matches, setMatches] = useState<MatchType[]>([]);
@@ -44,11 +50,9 @@ export function MatchRecording({ teamId }: MatchRecordingProps) {
     try {
       const matchResult = await getTeamMatches(teamId);
       const statsResult = await getTeamMatchStats(teamId);
-
       if (!matchResult.error && matchResult.matches) {
         setMatches(matchResult.matches);
       }
-
       if (statsResult.success && statsResult.stats) {
         setStats(statsResult.stats);
       }
@@ -61,7 +65,6 @@ export function MatchRecording({ teamId }: MatchRecordingProps) {
 
   const checkUserRoles = async () => {
     if (!user) return;
-
     // Check if user has Pilot or Captain role
     const result = await getUserTeamRoles(user.id, teamId);
     if (result.roles) {
@@ -75,21 +78,18 @@ export function MatchRecording({ teamId }: MatchRecordingProps) {
     // use the match we already have - DO NOT re-fetch
     setSelectedMatch(match);
     setWinnerTeamId(match.home_team_id); // default to home team
-
     // load games for this match 
     const gamesResult = await getMatchGames(match.id);
     if (!gamesResult.error && gamesResult.games) {
       setGameNumber((gamesResult.games.length || 0) + 1);
     
     }
-};
+  };
 
   const handleRecordGame = async () => {
     if (!selectedMatch || !user || !winnerTeamId) return;
-
     console.log("[MatchRecording] Recording game for match:", selectedMatch.id);
     console.log("[MatchRecording] Current displayed wins:", selectedMatch.home_team_wins, "-", selectedMatch.away_team_wins);
-
     setRecordingGame(true);
     try {
       const result = await reportMatchGame({
@@ -106,7 +106,6 @@ export function MatchRecording({ teamId }: MatchRecordingProps) {
         setGameNumber(gameNumber + 1);
         setNotes("");
         setDurationMinutes(undefined);
-
         // Update the selected match with the stats returned from the RPC function
         if (result.updatedStats) {
           console.log("[MatchRecording] Updating match with RPC stats:", result.updatedStats);
@@ -117,7 +116,6 @@ export function MatchRecording({ teamId }: MatchRecordingProps) {
             status: result.updatedStats.match_status as "scheduled" | "in_progress" | "completed" | "cancelled",
           });
         }
-
         // Reload all match data in the background (for stats and match list)
         loadMatchData();
       } else {
@@ -198,7 +196,6 @@ export function MatchRecording({ teamId }: MatchRecordingProps) {
           <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
             🎮 Record Game Result
           </h3>
-
           <div className="space-y-4">
             {/* Select Match */}
             <div>
@@ -243,7 +240,6 @@ export function MatchRecording({ teamId }: MatchRecordingProps) {
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                   />
                 </div>
-
                 {/* Winner */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
@@ -266,7 +262,6 @@ export function MatchRecording({ teamId }: MatchRecordingProps) {
                         {selectedMatch.home_team_wins} wins
                       </div>
                     </button>
-
                     <button
                       onClick={() => setWinnerTeamId(selectedMatch.away_team_id)}
                       className={`flex-1 p-4 rounded-lg border-2 transition-all ${
@@ -285,7 +280,6 @@ export function MatchRecording({ teamId }: MatchRecordingProps) {
                     </button>
                   </div>
                 </div>
-
                 {/* Duration (optional) */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
@@ -301,7 +295,6 @@ export function MatchRecording({ teamId }: MatchRecordingProps) {
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                   />
                 </div>
-
                 {/* Notes (optional) */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
@@ -315,7 +308,6 @@ export function MatchRecording({ teamId }: MatchRecordingProps) {
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                   />
                 </div>
-
                 {/* Submit Button */}
                 <button
                   onClick={handleRecordGame}
@@ -329,13 +321,11 @@ export function MatchRecording({ teamId }: MatchRecordingProps) {
           </div>
         </div>
       )}
-
       {/* Match History */}
       <div>
         <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
           📜 Match History
         </h3>
-
         {matches.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-12 text-center">
             <div className="text-6xl mb-4">🏆</div>
@@ -362,7 +352,6 @@ export function MatchRecording({ teamId }: MatchRecordingProps) {
                         {match.home_team?.name}
                       </div>
                     </div>
-
                     <div className="text-center">
                       <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                         {match.home_team_wins} - {match.away_team_wins}
@@ -371,7 +360,6 @@ export function MatchRecording({ teamId }: MatchRecordingProps) {
                         Best of {match.best_of}
                       </div>
                     </div>
-
                     <div className="text-center">
                       <div className="text-2xl">{match.away_team?.emoji}</div>
                       <div className="text-xs font-semibold text-gray-900 dark:text-gray-100">
@@ -379,7 +367,6 @@ export function MatchRecording({ teamId }: MatchRecordingProps) {
                       </div>
                     </div>
                   </div>
-
                   <div className="text-right">
                     <span
                       className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
