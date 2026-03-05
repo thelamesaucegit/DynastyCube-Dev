@@ -39,6 +39,7 @@ export interface CardData {
   colors?: string[];
   color_identity?: string[];
   image_url?: string;
+  oldest_image_url?: string;
   mana_cost?: string;
   cmc?: number;
   pool_name?: string;
@@ -51,6 +52,7 @@ export interface ReplayCardData {
   name: string;
   card_type: string;
   image_url: string;
+  oldest_image_url;
 }
 
 // NEWLY ADDED FUNCTION FOR REPLAY VIEWER
@@ -62,7 +64,7 @@ export async function getCardDataForReplay(cardNames: string[]): Promise<Map<str
   try {
     const { data, error } = await supabase
       .from('card_pools')
-      .select('card_name, card_type, image_url')
+      .select('card_name, card_type, image_url, oldest_image_url')
       .in('card_name', cardNames);
     if (error) {
       console.error("Error fetching card data for replay:", error);
@@ -71,11 +73,12 @@ export async function getCardDataForReplay(cardNames: string[]): Promise<Map<str
     const cardDataMap = new Map<string, ReplayCardData>();
     if (data) {
       for (const card of data) {
-        if (card.card_name && card.card_type && card.image_url) {
+        if (card.card_name && card.card_type && card.image_url && card.oldest_image_url) {
             cardDataMap.set(card.card_name, {
                 name: card.card_name,
                 card_type: card.card_type,
                 image_url: card.image_url,
+              oldest_image_url: card.oldest_image_url,
             });
         }
       }
@@ -169,6 +172,7 @@ export async function addCardToPool(card: CardData, poolName: string = "default"
       colors: card.colors || [],
       color_identity: card.color_identity || [],
       image_url: card.image_url,
+      oldest_image_url: card.oldest_image_url,
       mana_cost: card.mana_cost,
       cmc: card.cmc || 0,
       pool_name: poolName,
@@ -197,6 +201,7 @@ export async function addCardsToPool(cards: CardData[], poolName: string = "defa
             colors: card.colors || [],
             color_identity: card.color_identity || [],
             image_url: card.image_url,
+          oldest_image_url: card.oldest_image_url,
             mana_cost: card.mana_cost,
             cmc: card.cmc || 0,
             pool_name: poolName,
@@ -265,6 +270,7 @@ export async function bulkImportCards(lines: string[], defaultCubucksCost: numbe
                     colors: card.colors || [],
                     color_identity: card.color_identity || [],
                     image_url: card.image_uris?.normal || card.image_uris?.small || undefined,
+                  oldest_image_url: card.image_uris?.normal || card.image_uris?.small || undefined,
                     mana_cost: card.mana_cost,
                     cmc: card.cmc || 0,
                     cubucks_cost: cubucksCost,
