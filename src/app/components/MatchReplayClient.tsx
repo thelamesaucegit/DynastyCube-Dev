@@ -6,24 +6,7 @@ import MatchDisplay from '@/app/components/MatchDisplay';
 import { Button } from '@/app/components/ui/button';
 import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
 import { GameState } from '@/app/types';
-interface MyCardComponentProps {
-  card: {
-    image_url?: string | null;
-    oldest_image_url?: string | null;
-    card_name: string;
-  };
-}
 
-// --- FIX: Apply the strong type to the component's props ---
-function MyCardComponent({ card }: MyCardComponentProps) {
-  const { useOldestArt } = useSettings();
-
-  // Conditionally choose the image source based on the user's setting
-  const imageUrl = useOldestArt ? card.oldest_image_url : card.image_url;
-
-  // Render your component, for example:
-  return <img src={imageUrl || undefined} alt={card.card_name} />;
-}
 
 // This component receives the matchId as a prop and handles all client-side logic.
 export default function MatchReplayClient({ matchId }: { matchId: string }) {
