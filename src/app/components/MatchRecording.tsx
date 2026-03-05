@@ -11,28 +11,6 @@ import {
   type Match as MatchType,
 } from "@/app/actions/matchActions";
 import { getUserTeamRoles } from "@/app/actions/roleActions";
-interface MyCardComponentProps {
-  card: {
-    image_url?: string | null;
-    oldest_image_url?: string | null;
-    card_name: string;
-  };
-}
-
-// --- FIX: Apply the strong type to the component's props ---
-function MyCardComponent({ card }: MyCardComponentProps) {
-  const { useOldestArt } = useSettings();
-
-  // Conditionally choose the image source based on the user's setting
-  const imageUrl = useOldestArt ? card.oldest_image_url : card.image_url;
-
-  // Render your component, for example:
-  return <img src={imageUrl || undefined} alt={card.card_name} />;
-}
-interface MatchRecordingProps {
-  teamId: string;
-}
-
 export function MatchRecording({ teamId }: MatchRecordingProps) {
   const { user } = useAuth();
   const [matches, setMatches] = useState<MatchType[]>([]);
