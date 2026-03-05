@@ -13,16 +13,23 @@ import {
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
 import { Clock, ChevronRight, Timer, CalendarClock, PartyPopper } from "lucide-react";
-// Example usage in a component like ReplayPlayer.tsx or MatchDisplay.tsx
-import { useSettings } from '@/contexts/SettingsContext';
+interface MyCardComponentProps {
+  card: {
+    image_url?: string | null;
+    oldest_image_url?: string | null;
+    card_name: string;
+  };
+}
 
-function MyCardComponent({ card }) {
+// --- FIX: Apply the strong type to the component's props ---
+function MyCardComponent({ card }: MyCardComponentProps) {
   const { useOldestArt } = useSettings();
 
   // Conditionally choose the image source based on the user's setting
   const imageUrl = useOldestArt ? card.oldest_image_url : card.image_url;
 
-  return <img src={imageUrl} alt={card.name} />;
+  // Render your component, for example:
+  return <img src={imageUrl || undefined} alt={card.card_name} />;
 }
 interface DraftStatusWidgetProps {
   variant: "full" | "compact" | "team";
