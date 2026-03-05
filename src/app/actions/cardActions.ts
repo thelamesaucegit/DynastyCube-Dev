@@ -52,7 +52,7 @@ export interface ReplayCardData {
   name: string;
   card_type: string;
   image_url: string;
-  oldest_image_url;
+  oldest_image_url: string;
 }
 
 // NEWLY ADDED FUNCTION FOR REPLAY VIEWER
