@@ -10,24 +10,9 @@ import { Badge } from "@/app/components/ui/badge";
 import { Button } from "@/app/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/app/components/ui/collapsible";
 import { Zap, ChevronDown, ChevronUp, Brain, Palette } from "lucide-react";
-interface MyCardComponentProps {
-  card: {
-    image_url?: string | null;
-    oldest_image_url?: string | null;
-    card_name: string;
-  };
-}
+import { useSettings } from "@/contexts/SettingsContext";
+import { getCardImageUrl } from "@/app/utils/cardUtils";
 
-// --- FIX: Apply the strong type to the component's props ---
-function MyCardComponent({ card }: MyCardComponentProps) {
-  const { useOldestArt } = useSettings();
-
-  // Conditionally choose the image source based on the user's setting
-  const imageUrl = useOldestArt ? card.oldest_image_url : card.image_url;
-
-  // Render your component, for example:
-  return <img src={imageUrl || undefined} alt={card.card_name} />;
-}
 const COLOR_LABELS: Record<string, { label: string; emoji: string; className: string }> = {
   W: { label: "White", emoji: "⚪", className: "bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200" },
   U: { label: "Blue", emoji: "🔵", className: "bg-blue-100 text-blue-900 dark:bg-blue-900/30 dark:text-blue-200" },
@@ -49,6 +34,7 @@ export function AutoDraftPreview({
   onManageQueue,
   refreshKey = 0,
 }: AutoDraftPreviewProps) {
+  const { useOldestArt } = useSettings();
   const [preview, setPreview] = useState<AutoDraftPreviewResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -95,6 +81,7 @@ export function AutoDraftPreview({
   }
 
   const card = preview.nextPick;
+  const imageUrl = getCardImageUrl(card, useOldestArt);
 
   if (compact) {
     return (
@@ -140,10 +127,10 @@ export function AutoDraftPreview({
         </div>
         <div className="flex gap-4">
           {/* Card Image */}
-          {card.image_url && (
+          {imageUrl && (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img
-              src={card.image_url}
+              src={imageUrl}
               alt={card.card_name}
               className="w-32 h-44 object-cover rounded-lg shadow-md flex-shrink-0"
             />
@@ -223,7 +210,6 @@ export function AutoDraftPreview({
 
 function AlgorithmDetailsPanel({ details }: { details: AlgorithmDetails }) {
   const maxTotal = Math.max(...Object.values(details.colorTotals), 1);
-
   return (
     <div className="mt-3 space-y-4 text-sm">
       {/* Color ELO Totals */}
@@ -238,7 +224,6 @@ function AlgorithmDetailsPanel({ details }: { details: AlgorithmDetails }) {
             const isDominant = color === details.dominantColor;
             const colorInfo = COLOR_LABELS[color];
             const barWidth = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
-
             return (
               <div key={color} className={`rounded p-2 ${isDominant ? "bg-accent" : ""}`}>
                 <div className="flex items-center justify-between mb-1">
@@ -273,7 +258,6 @@ function AlgorithmDetailsPanel({ details }: { details: AlgorithmDetails }) {
           })}
         </div>
       </div>
-
       {/* Team Color Affinity */}
       <div>
         <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-2">
@@ -294,7 +278,6 @@ function AlgorithmDetailsPanel({ details }: { details: AlgorithmDetails }) {
           })}
         </div>
       </div>
-
       {/* Best Picks Comparison */}
       <div>
         <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-2">
@@ -331,7 +314,6 @@ function AlgorithmDetailsPanel({ details }: { details: AlgorithmDetails }) {
           )}
         </div>
       </div>
-
       <p className="text-xs text-muted-foreground">
         Analyzed {details.top50CardIds.length} top ELO cards. Color modifier: ×1.01 per drafted card in that color.
       </p>
