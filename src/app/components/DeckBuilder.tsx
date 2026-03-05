@@ -28,7 +28,17 @@ import {
   removeCardFromDeck,
 } from "@/app/actions/draftActions";
 import type { DraftPick, Deck, DeckCard } from "@/app/actions/draftActions";
+// Example usage in a component like ReplayPlayer.tsx or MatchDisplay.tsx
+import { useSettings } from '@/contexts/SettingsContext';
 
+function MyCardComponent({ card }) {
+  const { useOldestArt } = useSettings();
+
+  // Conditionally choose the image source based on the user's setting
+  const imageUrl = useOldestArt ? card.oldest_image_url : card.image_url;
+
+  return <img src={imageUrl} alt={card.name} />;
+}
 interface DeckBuilderProps {
   teamId: string;
   teamName?: string;
