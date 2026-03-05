@@ -4,22 +4,24 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
+  // --- MODIFIED: Destructure the new team IDs from the request body ---
   const body = await request.json();
-  const { deck1, deck2 } = body;
+  const { deck1, deck2, team1Id, team2Id } = body;
 
-  // Initialize a Supabase client for this server-side operation
   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 
-  let matchId: string; // Use string for UUID
+  let matchId: string;
 
   try {
-    // Step 1: Create the initial match entry in the database to get an ID.
-    const player1Info = `${deck1.filename} (AI: ${deck1.aiProfile})`;
-    const player2Info = `${deck2.filename} (AI: ${deck2.aiProfile})`;
-
+    // --- MODIFIED: The insert operation now includes team1_id and team2_id ---
     const { data: matchData, error: matchError } = await supabase
       .from('sim_matches')
-      .insert({ player1_info: player1Info, player2_info: player2Info })
+      .insert({ 
+        player1_info: `${deck1.filename} (AI: ${deck1.aiProfile})`, 
+        player2_info: `${deck2.filename} (AI: ${deck2.aiProfile})`,
+        team1_id: team1Id,
+        team2_id: team2Id,
+      })
       .select('id')
       .single();
 
@@ -29,7 +31,8 @@ export async function POST(request: Request) {
 
     matchId = matchData.id;
 
-    // Step 2: Forward the request to the forgesim server in a "fire-and-forget" manner.
+    // The rest of the logic for forwarding to forgesim remains the same.
+    // The forgesim worker does not need to know about the teams, only the orchestrator does.
     const simServerUrl = process.env.SIMULATION_SERVER_URL;
     if (!simServerUrl) {
       throw new Error("Simulation server URL is not configured.");
@@ -38,14 +41,14 @@ export async function POST(request: Request) {
     fetch(`${simServerUrl}/start-match`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...body, matchId }), // Pass the new matchId
-    }).catch((e: unknown) => { // --- FIX: Use 'unknown' for type safety ---
+      // We only forward the original body, not the team IDs
+      body: JSON.stringify({ deck1, deck2, matchId }),
+    }).catch((e: unknown) => {
         let message = "An unknown error occurred while contacting the simulation server.";
         if (e instanceof Error) message = e.message;
         console.error("[FORGESIM_FETCH_ERROR]", message);
     });
 
-    // Step 3: Immediately return the matchId to the frontend.
     return NextResponse.json({ matchId: matchId });
 
   } catch (error: unknown) {
