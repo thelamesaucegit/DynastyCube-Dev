@@ -3,9 +3,9 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { useSettings } from "@/contexts/SettingsContext"; // 1. Import the useSettings hook
+import { useSettings } from "@/contexts/SettingsContext";
+import { getCardImageUrl } from "@/app/utils/cardUtils";
 
-// --- FIX: This is the updated, correct prop interface for the component ---
 interface CardPreviewProps {
   card: {
     image_url?: string | null;
@@ -21,31 +21,28 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
   children,
   className = "",
 }) => {
-  // 2. Use the hook to get the user's art preference
   const { useOldestArt } = useSettings();
-
   const [isHovering, setIsHovering] = useState(false);
   const [position, setPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
-  // 3. Conditionally choose the image URL based on the setting and availability
-  // If the user wants the oldest art AND it exists, use it. Otherwise, fall back to the default.
-  const imageUrl = useOldestArt && card.oldest_image_url 
-    ? card.oldest_image_url 
-    : card.image_url;
+  // Use the utility function to get the correct image URL
+  const imageUrl = getCardImageUrl(card, useOldestArt);
 
   useEffect(() => {
     if (!isHovering || !containerRef.current) return;
-
     const updatePosition = () => {
       if (!containerRef.current || !previewRef.current) return;
+
       const rect = containerRef.current.getBoundingClientRect();
       const previewWidth = 300;
       const previewHeight = 420;
       const padding = 16;
+
       let x = rect.right + padding;
       let y = rect.top;
+
       if (x + previewWidth > window.innerWidth - padding) {
         x = rect.left - previewWidth - padding;
       }
@@ -58,12 +55,14 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
       if (y < padding) {
         y = padding;
       }
+
       setPosition({ x, y });
     };
 
     updatePosition();
     window.addEventListener("scroll", updatePosition);
     window.addEventListener("resize", updatePosition);
+
     return () => {
       window.removeEventListener("scroll", updatePosition);
       window.removeEventListener("resize", updatePosition);
