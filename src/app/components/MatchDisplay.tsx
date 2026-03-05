@@ -5,7 +5,17 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/card';
 import { Separator } from '@/app/components/ui/separator';
 import { GameState, PlayerState } from '@/app/types'; // FIX: Removed unused 'GameCard' import
+// Example usage in a component like ReplayPlayer.tsx or MatchDisplay.tsx
+import { useSettings } from '@/contexts/SettingsContext';
 
+function MyCardComponent({ card }) {
+  const { useOldestArt } = useSettings();
+
+  // Conditionally choose the image source based on the user's setting
+  const imageUrl = useOldestArt ? card.oldest_image_url : card.image_url;
+
+  return <img src={imageUrl} alt={card.name} />;
+}
 function PlayerDisplay({ player, isActive }: { player: PlayerState, isActive: boolean }) {
   return (
     <div className={`p-4 border rounded-lg ${isActive ? 'border-blue-500 shadow-lg' : 'border-gray-200'}`}>
