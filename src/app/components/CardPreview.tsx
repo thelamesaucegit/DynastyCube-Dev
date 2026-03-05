@@ -2,7 +2,17 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+// Example usage in a component like ReplayPlayer.tsx or MatchDisplay.tsx
+import { useSettings } from '@/contexts/SettingsContext';
 
+function MyCardComponent({ card }) {
+  const { useOldestArt } = useSettings();
+
+  // Conditionally choose the image source based on the user's setting
+  const imageUrl = useOldestArt ? card.oldest_image_url : card.image_url;
+
+  return <img src={imageUrl} alt={card.name} />;
+}
 interface CardPreviewProps {
   imageUrl: string;
   cardName: string;

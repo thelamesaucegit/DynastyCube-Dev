@@ -46,6 +46,95 @@ async function createClient() {
     }
   );
 }
+/**
+ * --- NEW FUNCTION ---
+ * Backfills oracle_id and oldest_image_url for cards in card_pools.
+ */
+export async function backfillOracleData(): Promise<{ success: boolean; updated: number; failed: number; errors: string[] }> {
+  const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+  const errors: string[] = [];
+  let updatedCount = 0;
+  let failedCount = 0;
+
+  try {
+    // Phase A: Backfill missing oracle_id values
+    const { data: cardsMissingOracleId, error: fetchError1 } = await supabase
+      .from('card_pools')
+      .select('id, card_id')
+      .is('oracle_id', null);
+
+    if (fetchError1) throw new Error(`Failed to fetch cards missing oracle_id: ${fetchError1.message}`);
+
+    for (const card of cardsMissingOracleId) {
+      try {
+        await new Promise(r => setTimeout(r, 100)); // Rate limit
+        const response = await fetch(`https://api.scryfall.com/cards/${card.card_id}`);
+        if (!response.ok) throw new Error(`Scryfall API error for card ${card.card_id}: ${response.statusText}`);
+        const scryfallData = await response.json();
+        
+        if (scryfallData.oracle_id) {
+          const { error: updateError } = await supabase
+            .from('card_pools')
+            .update({ oracle_id: scryfallData.oracle_id })
+            .eq('id', card.id);
+          if (updateError) throw new Error(`DB update error for card ${card.id}: ${updateError.message}`);
+        } else {
+            failedCount++;
+            errors.push(`No oracle_id found for card_id ${card.card_id}`);
+        }
+      } catch (e) {
+        failedCount++;
+        errors.push(e instanceof Error ? e.message : String(e));
+      }
+    }
+
+    // Phase B: Backfill missing oldest_image_url using the now-populated oracle_ids
+    const { data: distinctOracleIds, error: fetchError2 } = await supabase
+        .from('card_pools')
+        .select('oracle_id')
+        .is('oldest_image_url', null)
+        .not('oracle_id', 'is', null);
+    
+    if (fetchError2) throw new Error(`Failed to fetch distinct oracle_ids: ${fetchError2.message}`);
+    
+    const uniqueOracleIds = [...new Set(distinctOracleIds.map(o => o.oracle_id))];
+
+    for (const oracleId of uniqueOracleIds) {
+         try {
+            await new Promise(r => setTimeout(r, 100)); // Rate limit
+            const response = await fetch(`https://api.scryfall.com/cards/search?q=oracleid%3A${oracleId}&order=released&dir=asc&unique=prints`);
+            if (!response.ok) throw new Error(`Scryfall search error for oracle_id ${oracleId}: ${response.statusText}`);
+            const scryfallData = await response.json();
+
+            const oldestImage = scryfallData?.data?.[0]?.image_uris?.normal;
+
+            if (oldestImage) {
+                const { error: updateError, count } = await supabase
+                    .from('card_pools')
+                    .update({ oldest_image_url: oldestImage })
+                    .eq('oracle_id', oracleId)
+                    .select('*', { count: 'exact', head: true });
+                
+                if (updateError) throw new Error(`DB update error for oracle_id ${oracleId}: ${updateError.message}`);
+                updatedCount += count || 0;
+            } else {
+                failedCount++;
+                errors.push(`No image found for oracle_id ${oracleId}`);
+            }
+         } catch(e) {
+            failedCount++;
+            errors.push(e instanceof Error ? e.message : String(e));
+         }
+    }
+    
+    return { success: true, updated: updatedCount, failed: failedCount, errors };
+
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "An unknown error occurred.";
+    errors.push(message);
+    return { success: false, updated: updatedCount, failed: failedCount, errors };
+  }
+}
 
 /**
  * Fetches the replay data for a single match, now also including the

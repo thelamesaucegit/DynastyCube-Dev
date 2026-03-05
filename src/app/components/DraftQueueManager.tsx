@@ -59,7 +59,17 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { AutoDraftPreview } from "@/app/components/AutoDraftPreview";
+// Example usage in a component like ReplayPlayer.tsx or MatchDisplay.tsx
+import { useSettings } from '@/contexts/SettingsContext';
 
+function MyCardComponent({ card }) {
+  const { useOldestArt } = useSettings();
+
+  // Conditionally choose the image source based on the user's setting
+  const imageUrl = useOldestArt ? card.oldest_image_url : card.image_url;
+
+  return <img src={imageUrl} alt={card.name} />;
+}
 const COLOR_LABELS: Record<string, { label: string; emoji: string; className: string }> = {
   W: { label: "White", emoji: "⚪", className: "bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200" },
   U: { label: "Blue", emoji: "🔵", className: "bg-blue-100 text-blue-900 dark:bg-blue-900/30 dark:text-blue-200" },

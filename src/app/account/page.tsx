@@ -1,4 +1,5 @@
 // src/app/account/page.tsx
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -11,6 +12,8 @@ import AccountLinking from "../components/AccountLinking";
 import { TeamSelection } from "../components/TeamSelection";
 import { DisplayNameEditor } from "../components/DisplayNameEditor";
 import { TimezoneSelector } from "../components/TimezoneSelector";
+// --- MODIFIED: Import the new UserSettings component ---
+import { UserSettings } from "../components/UserSettings";
 import { getUserTeam } from "../actions/teamActions";
 import { getUserEssenceBalance, type EssenceBalance } from "../actions/essenceActions";
 import { useUserTimezone } from "../hooks/useUserTimezone";
@@ -49,7 +52,6 @@ export default function AccountPage() {
 
     const loadUserTeam = async () => {
         if (!user?.email) return;
-
         setLoadingTeam(true);
         try {
             const { team } = await getUserTeam(user.email);
@@ -189,6 +191,9 @@ export default function AccountPage() {
             {/* Timezone Settings */}
             <TimezoneSelector />
 
+            {/* --- MODIFIED: Added the new user settings component here --- */}
+            <UserSettings />
+
             {/* Team Section */}
             <Card>
                 <CardHeader>
@@ -209,15 +214,10 @@ export default function AccountPage() {
                                 <div className="flex items-center gap-4">
                                     <span className="text-5xl">{userTeam.emoji}</span>
                                     <div className="flex-1">
-                                        <h4 className="text-2xl font-bold">
-                                            {userTeam.name}
-                                        </h4>
-                                        <p className="text-muted-foreground italic mt-1">
-                                            &quot;{userTeam.motto}&quot;
-                                        </p>
+                                        <h4 className="text-2xl font-bold">{userTeam.name}</h4>
+                                        <p className="text-muted-foreground italic mt-1">&quot;{userTeam.motto}&quot;</p>
                                         <p className="text-sm text-primary mt-2 font-medium flex items-center gap-1 group-hover:gap-2 transition-all">
-                                            View Team Page
-                                            <ChevronRight className="h-4 w-4" />
+                                            View Team Page <ChevronRight className="h-4 w-4" />
                                         </p>
                                     </div>
                                 </div>
@@ -238,13 +238,8 @@ export default function AccountPage() {
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <p className="text-muted-foreground mb-4">
-                        Link additional sign-in methods to your account for easier access.
-                    </p>
-                    <Button
-                        variant="secondary"
-                        onClick={() => setShowLinking(!showLinking)}
-                    >
+                    <p className="text-muted-foreground mb-4">Link additional sign-in methods to your account for easier access.</p>
+                    <Button variant="secondary" onClick={() => setShowLinking(!showLinking)}>
                         {showLinking ? "Hide Account Linking" : "Manage Linked Accounts"}
                     </Button>
                 </CardContent>
@@ -253,20 +248,13 @@ export default function AccountPage() {
             {/* Account Linking Section */}
             {showLinking && (
                 <Card>
-                    <CardContent className="pt-6">
-                        <AccountLinking />
-                    </CardContent>
+                    <CardContent className="pt-6"><AccountLinking /></CardContent>
                 </Card>
             )}
 
             <div className="flex justify-center">
-                <Button
-                    variant="destructive"
-                    onClick={handleSignOut}
-                    className="gap-2"
-                >
-                    <LogOut className="h-4 w-4" />
-                    Sign Out
+                <Button variant="destructive" onClick={handleSignOut} className="gap-2">
+                    <LogOut className="h-4 w-4" /> Sign Out
                 </Button>
             </div>
 
@@ -274,33 +262,21 @@ export default function AccountPage() {
             <Card className="border-destructive/50">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-destructive">
-                        <Trash2 className="h-5 w-5" />
-                        Danger Zone
+                        <Trash2 className="h-5 w-5" /> Danger Zone
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
                     {!showDeleteConfirm ? (
                         <div className="space-y-3">
-                            <p className="text-sm text-muted-foreground">
-                                Permanently delete your account and all associated data. This action cannot be undone.
-                            </p>
-                            <Button
-                                variant="outline"
-                                className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground gap-2"
-                                onClick={() => setShowDeleteConfirm(true)}
-                            >
-                                <Trash2 className="h-4 w-4" />
-                                Delete My Account
+                            <p className="text-sm text-muted-foreground">Permanently delete your account and all associated data. This action cannot be undone.</p>
+                            <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground gap-2" onClick={() => setShowDeleteConfirm(true)}>
+                                <Trash2 className="h-4 w-4" /> Delete My Account
                             </Button>
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            <p className="text-sm font-medium text-destructive">
-                                This will permanently delete your account, profile, and remove you from any teams. This cannot be undone.
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                                Type <strong>DELETE</strong> to confirm:
-                            </p>
+                            <p className="text-sm font-medium text-destructive">This will permanently delete your account, profile, and remove you from any teams. This cannot be undone.</p>
+                            <p className="text-sm text-muted-foreground">Type <strong>DELETE</strong> to confirm:</p>
                             <input
                                 type="text"
                                 value={deleteConfirmText}
@@ -309,32 +285,13 @@ export default function AccountPage() {
                                 className="w-full px-4 py-2 border border-destructive rounded-lg bg-background text-foreground focus:ring-2 focus:ring-destructive focus:border-transparent"
                                 disabled={deletingAccount}
                             />
-                            {deleteError && (
-                                <p className="text-sm text-destructive">{deleteError}</p>
-                            )}
+                            {deleteError && (<p className="text-sm text-destructive">{deleteError}</p>)}
                             <div className="flex gap-3">
-                                <Button
-                                    variant="destructive"
-                                    onClick={handleDeleteAccount}
-                                    disabled={deleteConfirmText !== "DELETE" || deletingAccount}
-                                    className="gap-2"
-                                >
-                                    {deletingAccount ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                        <Trash2 className="h-4 w-4" />
-                                    )}
+                                <Button variant="destructive" onClick={handleDeleteAccount} disabled={deleteConfirmText !== "DELETE" || deletingAccount} className="gap-2">
+                                    {deletingAccount ? (<Loader2 className="h-4 w-4 animate-spin" />) : (<Trash2 className="h-4 w-4" />)}
                                     {deletingAccount ? "Deleting..." : "Confirm Delete"}
                                 </Button>
-                                <Button
-                                    variant="outline"
-                                    onClick={() => {
-                                        setShowDeleteConfirm(false);
-                                        setDeleteConfirmText("");
-                                        setDeleteError(null);
-                                    }}
-                                    disabled={deletingAccount}
-                                >
+                                <Button variant="outline" onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(""); setDeleteError(null); }} disabled={deletingAccount}>
                                     Cancel
                                 </Button>
                             </div>
