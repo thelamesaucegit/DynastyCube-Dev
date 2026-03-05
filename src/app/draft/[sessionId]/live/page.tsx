@@ -11,7 +11,8 @@ export interface DraftPick {
   card_set: string | null;
   rarity: string | null;
   image_url: string | null;
-  oldest_image_url: string | null; // Added field
+  oldest_image_url: string | null;
+  drafted_at: string; // Added field
   team_name: string;
   team_id: string;
 }
@@ -23,7 +24,8 @@ interface SupabasePick {
   card_set: string | null;
   rarity: string | null;
   image_url: string | null;
-  oldest_image_url: string | null; // Added field
+  oldest_image_url: string | null;
+  drafted_at: string; // Added field
   team_id: string;
   teams: {
     name: string;
@@ -43,6 +45,7 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
       rarity,
       image_url,
       oldest_image_url,
+      drafted_at,
       team_id, 
       teams ( name )
     `)
@@ -61,13 +64,13 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
     card_set: pick.card_set,
     rarity: pick.rarity,
     image_url: pick.image_url,
-    oldest_image_url: pick.oldest_image_url, // Pass the oldest_image_url through
+    oldest_image_url: pick.oldest_image_url,
+    drafted_at: pick.drafted_at,
     team_id: pick.team_id,
     team_name: pick.teams?.name || 'Unknown Team',
   }));
 }
 
-// The rest of the file remains the same
 export default async function LiveDraftPage({ params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params;
   

@@ -1,4 +1,5 @@
 // src/app/pools/page.tsx
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -15,8 +16,11 @@ import {
   SelectValue,
 } from "@/app/components/ui/select";
 import { Search, Layers, CheckCircle2, CircleDashed, BarChart3, Loader2 } from "lucide-react";
+import { useSettings } from "@/contexts/SettingsContext"; // Added import
+import { getCardImageUrl } from "@/app/utils/cardUtils"; // Added import
 
 export default function PoolsPage() {
+  const { useOldestArt } = useSettings(); // Added hook usage
   const [cards, setCards] = useState<PoolCard[]>([]);
   const [filteredCards, setFilteredCards] = useState<PoolCard[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,7 +56,6 @@ export default function PoolsPage() {
       } else {
         setCards(poolCards);
       }
-
       const { stats: poolStats, error: statsError } = await getPoolStatistics();
       if (!statsError && poolStats) {
         setStats(poolStats);
@@ -67,35 +70,30 @@ export default function PoolsPage() {
 
   const filterCards = () => {
     let filtered = [...cards];
-
     // Search filter
     if (searchTerm) {
       filtered = filtered.filter((card) =>
         card.card_name.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
-
     // Status filter
     if (filterStatus === "available") {
       filtered = filtered.filter((card) => !card.is_drafted);
     } else if (filterStatus === "drafted") {
       filtered = filtered.filter((card) => card.is_drafted);
     }
-
     // Color filter
     if (filterColor !== "all") {
       filtered = filtered.filter((card) =>
         card.colors && card.colors.includes(filterColor)
       );
     }
-
     // Type filter
     if (filterType !== "all") {
       filtered = filtered.filter((card) =>
         card.card_type && card.card_type.toLowerCase().includes(filterType.toLowerCase())
       );
     }
-
     // CMC filter
     if (filterCmc !== "all") {
       filtered = filtered.filter((card) => {
@@ -107,7 +105,6 @@ export default function PoolsPage() {
         return true;
       });
     }
-
     // Cubucks filter
     if (filterCubucks !== "all") {
       filtered = filtered.filter((card) => {
@@ -119,7 +116,6 @@ export default function PoolsPage() {
         return true;
       });
     }
-
     setFilteredCards(filtered);
   };
 
@@ -137,7 +133,7 @@ export default function PoolsPage() {
     const types = new Set<string>();
     cards.forEach((card) => {
       if (card.card_type) {
-        const mainType = card.card_type.split(/[\s\u2014-]/)[0];
+        const mainType = card.card_type.split(/[\s—-]+/)[0]; // Corrected regex for splitting
         types.add(mainType);
       }
     });
@@ -145,11 +141,11 @@ export default function PoolsPage() {
   };
 
   const colorMap: { [key: string]: { name: string; emoji: string } } = {
-    W: { name: "White", emoji: "\u2600\uFE0F" },
-    U: { name: "Blue", emoji: "\uD83D\uDCA7" },
-    B: { name: "Black", emoji: "\uD83D\uDC80" },
-    R: { name: "Red", emoji: "\uD83D\uDD25" },
-    G: { name: "Green", emoji: "\uD83C\uDF32" },
+    W: { name: "White", emoji: "⚪" }, // Changed unicode to actual emoji for consistency
+    U: { name: "Blue", emoji: "🔵" },
+    B: { name: "Black", emoji: "⚫" },
+    R: { name: "Red", emoji: "🔴" },
+    G: { name: "Green", emoji: "🟢" },
   };
 
   if (loading) {
@@ -202,7 +198,6 @@ export default function PoolsPage() {
               <div className="text-sm text-muted-foreground">Total Cards</div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="pt-6 text-center">
               <CircleDashed className="h-5 w-5 text-emerald-500 mx-auto mb-2" />
@@ -212,7 +207,6 @@ export default function PoolsPage() {
               <div className="text-sm text-muted-foreground">Available</div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="pt-6 text-center">
               <CheckCircle2 className="h-5 w-5 text-orange-500 mx-auto mb-2" />
@@ -222,7 +216,6 @@ export default function PoolsPage() {
               <div className="text-sm text-muted-foreground">Drafted</div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="pt-6 text-center">
               <BarChart3 className="h-5 w-5 text-violet-500 mx-auto mb-2" />
@@ -373,76 +366,79 @@ export default function PoolsPage() {
         </Card>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
-          {filteredCards.map((card) => (
-            <div
-              key={card.id}
-              className={`relative group rounded-lg overflow-hidden border-2 transition-all duration-200 ${
-                card.is_drafted
-                  ? "border-muted opacity-60 hover:opacity-80"
-                  : "border-border hover:border-primary hover:shadow-xl hover:-translate-y-1"
-              }`}
-            >
-              {/* Card Image */}
-              {card.image_url ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={card.image_url}
-                  alt={card.card_name}
-                  className="w-full h-auto"
-                />
-              ) : (
-                <div className="w-full aspect-[5/7] bg-muted flex items-center justify-center">
-                  <span className="text-muted-foreground text-xs text-center px-2">
-                    {card.card_name}
-                  </span>
-                </div>
-              )}
+          {filteredCards.map((card) => {
+            const imageUrl = getCardImageUrl(card, useOldestArt); // Use the utility function
+            return (
+              <div
+                key={card.id}
+                className={`relative group rounded-lg overflow-hidden border-2 transition-all duration-200 ${
+                  card.is_drafted
+                    ? "border-muted opacity-60 hover:opacity-80"
+                    : "border-border hover:border-primary hover:shadow-xl hover:-translate-y-1"
+                }`}
+              >
+                {/* Card Image */}
+                {imageUrl ? ( // Use the selected imageUrl
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={imageUrl}
+                    alt={card.card_name}
+                    className="w-full h-auto"
+                  />
+                ) : (
+                  <div className="w-full aspect-[5/7] bg-muted flex items-center justify-center">
+                    <span className="text-muted-foreground text-xs text-center px-2">
+                      {card.card_name}
+                    </span>
+                  </div>
+                )}
 
-              {/* Drafted Badge */}
-              {card.is_drafted && card.drafted_by_team && (
-                <div className="absolute top-2 right-2">
-                  <Badge
-                    variant="secondary"
-                    className="bg-background/90 backdrop-blur-sm shadow-lg gap-1"
-                    title={`Drafted by ${card.drafted_by_team.name}`}
-                  >
-                    <span className="text-base">{card.drafted_by_team.emoji}</span>
-                    <span>DRAFTED</span>
-                  </Badge>
-                </div>
-              )}
+                {/* Drafted Badge */}
+                {card.is_drafted && card.drafted_by_team && (
+                  <div className="absolute top-2 right-2">
+                    <Badge
+                      variant="secondary"
+                      className="bg-background/90 backdrop-blur-sm shadow-lg gap-1"
+                      title={`Drafted by ${card.drafted_by_team.name}`}
+                    >
+                      <span className="text-base">{card.drafted_by_team.emoji}</span>
+                      <span>DRAFTED</span>
+                    </Badge>
+                  </div>
+                )}
 
-              {/* Hover Overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-3">
-                <div className="text-white">
-                  <p className="font-bold text-sm mb-1">{card.card_name}</p>
-                  <p className="text-xs opacity-90">{card.card_type}</p>
-                  {card.card_set && (
-                    <p className="text-xs opacity-75 mt-1">{card.card_set}</p>
-                  )}
-                  {card.cubecobra_elo != null && (
-                    <p className="text-xs mt-1">
-                      <span className="bg-purple-500/80 px-1.5 py-0.5 rounded text-white font-medium">
-                        ELO: {card.cubecobra_elo.toLocaleString()}
-                      </span>
-                    </p>
-                  )}
-                  {card.is_drafted && card.drafted_by_team && (
-                    <div className="mt-2 pt-2 border-t border-white/20">
-                      <p className="text-xs">
-                        {card.drafted_by_team.emoji} {card.drafted_by_team.name}
+                {/* Hover Overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-3">
+                  <div className="text-white">
+                    <p className="font-bold text-sm mb-1">{card.card_name}</p>
+                    <p className="text-xs opacity-90">{card.card_type}</p>
+                    {card.card_set && (
+                      <p className="text-xs opacity-75 mt-1">{card.card_set}</p>
+                    )}
+                    {card.cubecobra_elo != null && (
+                      <p className="text-xs mt-1">
+                        <span className="bg-purple-500/80 px-1.5 py-0.5 rounded text-white font-medium">
+                          ELO: {card.cubecobra_elo.toLocaleString()}
+                        </span>
                       </p>
-                      {card.drafted_at && (
-                        <p className="text-xs opacity-75">
-                          {new Date(card.drafted_at).toLocaleDateString()}
+                    )}
+                    {card.is_drafted && card.drafted_by_team && (
+                      <div className="mt-2 pt-2 border-t border-white/20">
+                        <p className="text-xs">
+                          {card.drafted_by_team.emoji} {card.drafted_by_team.name}
                         </p>
-                      )}
-                    </div>
-                  )}
+                        {card.drafted_at && (
+                          <p className="text-xs opacity-75">
+                            {new Date(card.drafted_at).toLocaleDateString()}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

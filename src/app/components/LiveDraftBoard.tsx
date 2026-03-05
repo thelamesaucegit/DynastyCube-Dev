@@ -22,7 +22,7 @@ const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small
     return (
       <div className={`
         bg-gray-800 border border-gray-700 rounded-lg shadow-lg p-3 ${cardClasses}
-        ${isNewest ? "col-span-full animate-fade-in-down border-green-500/50 ring-2 ring-green-500/50" : "transform hover:scale-105"}
+        ${isNewest ? "animate-fade-in-down" : "transform hover:scale-105"}
       `}>
         <div className="flex justify-between items-center mb-2 text-xs">
           <span className="font-bold text-white bg-blue-600 px-2 py-1 rounded">#{pick.pick_number}</span>
@@ -34,6 +34,7 @@ const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small
     );
   }
 
+  // Small card for team view
   return (
     <div className={`
       bg-gray-800/80 border border-gray-700/50 rounded-md p-1.5 ${cardClasses}
@@ -45,13 +46,43 @@ const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small
   );
 };
 
-const ListView: FC<{ picks: DraftPick[], newestPickId: number | null }> = ({ picks, newestPickId }) => (
-  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-    {picks.map((pick) => (
-      <DraftCard key={pick.id} pick={pick} isNewest={pick.id === newestPickId} size="large" />
-    ))}
-  </div>
-);
+const ListView: FC<{ picks: DraftPick[], newestPickId: number | null }> = ({ picks, newestPickId }) => {
+  const newestPick = picks.length > 0 ? picks[0] : null;
+  const historicalPicks = picks.slice(1);
+
+  return (
+    <div className="space-y-8">
+      {newestPick && (
+        <div className="max-w-xs mx-auto">
+          <DraftCard
+            key={newestPick.id}
+            pick={newestPick}
+            isNewest={newestPick.id === newestPickId}
+            size="large"
+          />
+        </div>
+      )}
+
+      {historicalPicks.length > 0 && (
+         <>
+          <div className="relative text-center">
+            <div className="absolute inset-0 flex items-center" aria-hidden="true">
+              <div className="w-full border-t border-gray-700" />
+            </div>
+            <div className="relative flex justify-center">
+              <span className="bg-background px-2 text-sm text-muted-foreground">Draft History</span>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+            {historicalPicks.map((pick) => (
+              <DraftCard key={pick.id} pick={pick} isNewest={false} size="large" />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
 
 const TeamView: FC<{ picks: DraftPick[], draftOrder: DraftOrderTeam[], newestPickId: number | null }> = ({ picks, draftOrder, newestPickId }) => {
   const picksByTeam = useMemo(() => {
@@ -64,6 +95,7 @@ const TeamView: FC<{ picks: DraftPick[], draftOrder: DraftOrderTeam[], newestPic
         grouped[pick.team_id].push(pick);
       }
     }
+    // This sorting remains by pick_number, as requested.
     for (const teamId in grouped) {
       grouped[teamId].sort((a, b) => a.pick_number - b.pick_number);
     }
@@ -112,8 +144,6 @@ export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoar
 
   useEffect(() => {
     const fetchDraftOrder = async () => {
-      // --- THIS IS THE FIX ---
-      // We must pass the 'sessionId' prop to the server action.
       const { draftOrder: fetchedOrder, error } = await getDraftBoardData(sessionId);
       if (error) {
         console.error("Failed to fetch draft order:", error);
@@ -140,7 +170,8 @@ export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoar
           card_set: payload.card_set,
           rarity: payload.rarity,
           image_url: payload.image_url,
-          oldest_image_url: payload.oldest_image_url, // Added field
+          oldest_image_url: payload.oldest_image_url,
+          drafted_at: payload.drafted_at, // Add drafted_at from payload
           team_name: payload.team_name || 'Unknown Team',
           team_id: payload.team_id,
         };
@@ -165,7 +196,11 @@ export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoar
     };
   }, [sessionId]);
 
-  const sortedPicks = useMemo(() => [...picks].sort((a, b) => b.pick_number - a.pick_number), [picks]);
+  // This is the main sorting logic change for the List View.
+  // It now sorts by the 'drafted_at' timestamp in descending order.
+  const sortedPicks = useMemo(() => {
+    return [...picks].sort((a, b) => new Date(b.drafted_at).getTime() - new Date(a.drafted_at).getTime());
+  }, [picks]);
 
   return (
     <div>
