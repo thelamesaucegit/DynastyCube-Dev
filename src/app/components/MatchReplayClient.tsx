@@ -6,6 +6,17 @@ import MatchDisplay from '@/app/components/MatchDisplay';
 import { Button } from '@/app/components/ui/button';
 import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
 import { GameState } from '@/app/types';
+// Example usage in a component like ReplayPlayer.tsx or MatchDisplay.tsx
+import { useSettings } from '@/contexts/SettingsContext';
+
+function MyCardComponent({ card }) {
+  const { useOldestArt } = useSettings();
+
+  // Conditionally choose the image source based on the user's setting
+  const imageUrl = useOldestArt ? card.oldest_image_url : card.image_url;
+
+  return <img src={imageUrl} alt={card.name} />;
+}
 
 // This component receives the matchId as a prop and handles all client-side logic.
 export default function MatchReplayClient({ matchId }: { matchId: string }) {
