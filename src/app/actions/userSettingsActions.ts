@@ -29,6 +29,58 @@ async function createClient() {
     }
   );
 }
+/**
+ * Gets the user's preference for using oldest card art.
+ */
+export async function getUserArtPreference(): Promise<{ use_oldest_art: boolean; error?: string; }> {
+    const supabase = await createClient();
+    try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { use_oldest_art: false, error: "Not authenticated" };
+
+        const { data, error } = await supabase
+            .from("users")
+            .select("use_oldest_card_art")
+            .eq("id", user.id)
+            .single();
+        
+        if (error) throw error;
+
+        return { use_oldest_art: data?.use_oldest_card_art || false };
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "An unexpected error occurred.";
+        console.error("Error fetching art preference:", message);
+        return { use_oldest_art: false, error: message };
+    }
+}
+
+// --- NEW FUNCTION ---
+/**
+ * Updates the user's preference for using oldest card art.
+ */
+export async function updateUserArtPreference(useOldestArt: boolean): Promise<{ success: boolean; error?: string; }> {
+    const supabase = await createClient();
+    try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { success: false, error: "Not authenticated" };
+
+        const { error } = await supabase
+            .from("users")
+            .update({ use_oldest_card_art: useOldestArt })
+            .eq("id", user.id);
+
+        if (error) throw error;
+
+        return { success: true };
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "An unexpected error occurred.";
+        console.error("Error updating art preference:", message);
+        return { success: false, error: message };
+    }
+}
+
 
 /**
  * Get user's timezone preference
