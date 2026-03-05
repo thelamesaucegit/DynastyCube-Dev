@@ -6,12 +6,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/app/components/ui/button';
 import { Card, CardContent } from '@/app/components/ui/card';
 import { GameState, PlayerState as PlayerStateType, Card as CardType } from '@/app/types';
-// --- FIX: Import the new, specific interface for this component's needs. ---
 import { ReplayCardData } from '@/app/actions/cardActions';
 import { Play, Pause, SkipBack, Rewind, FastForward } from 'lucide-react';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 
-// --- Type Definitions ---
 interface Team {
   id: string;
   name: string;
@@ -23,16 +21,13 @@ interface ReplayPlayerProps {
   matchId: string;
   team1: Team | null;
   team2: Team | null;
-  // --- FIX: Use the new, specific interface for the cardDataMap prop. ---
   cardDataMap: Map<string, ReplayCardData>;
 }
 
 interface BattlefieldCard extends CardType {
-  imageUrl?: string;
+  imageUrl?: string | null; // Allow null
 }
 
-// --- Helper Functions ---
-// --- FIX: Update the function to accept the new interface. ---
 function getCardCategory(cardName: string, cardDataMap: Map<string, ReplayCardData>): 'front' | 'back' {
   const cardInfo = cardDataMap.get(cardName);
   if (!cardInfo) return 'front';
@@ -71,7 +66,6 @@ function generateLogMessage(prevState: GameState | null, nextState: GameState): 
     return null;
 }
 
-// --- Main Replay Component ---
 export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDataMap }: ReplayPlayerProps) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -94,8 +88,8 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
 
   const p1Name = currentState?.players ? Object.keys(currentState.players)[0] : '';
   const p2Name = currentState?.players ? Object.keys(currentState.players)[1] : '';
-  const p1Team = teamMap.get(p1Name);
-  const p2Team = teamMap.get(p2Name);
+  const p1Team = p1Name ? teamMap.get(p1Name) : undefined;
+  const p2Team = p2Name ? teamMap.get(p2Name) : undefined;
 
   useEffect(() => {
     if (!isPlaying || currentStepIndex >= initialGameStates.length - 1) {
@@ -112,9 +106,10 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
 
   useEffect(() => {
     const prevState = currentStepIndex > 0 ? initialGameStates[currentStepIndex - 1] : null;
+    if (!currentState) return;
     const logMessage = generateLogMessage(prevState, currentState);
     if (logMessage) setEventLog(prev => [...prev, logMessage].slice(-10));
-    if (!prevState) return;
+    if (!prevState || !p1Name || !p2Name) return;
     const prevCards = new Set([...prevState.players[p1Name].battlefield.map(c => c.id), ...prevState.players[p2Name].battlefield.map(c => c.id)]);
     const nextCards = new Set([...currentState.players[p1Name].battlefield.map(c => c.id), ...currentState.players[p2Name].battlefield.map(c => c.id)]);
     const cardPlayed = [...currentState.players[p1Name].battlefield, ...currentState.players[p2Name].battlefield].find(c => !prevCards.has(c.id));
@@ -141,6 +136,7 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     }
   }, [currentStepIndex, initialGameStates, cardDataMap, p1Name, p2Name, p1Team, p2Team]);
 
+  // --- FIX: Add strong types to the arguments to prevent implicit 'any' ---
   const renderBattlefield = (playerState: PlayerStateType | undefined, playerTeam: Team | undefined) => {
     if (!playerState || !playerTeam) return <div className="w-full h-1/2 bg-gray-700/50 p-4"></div>;
     const battlefieldCards: BattlefieldCard[] = playerState.battlefield.map(c => ({...c, imageUrl: cardDataMap.get(c.name)?.image_url }));
@@ -198,11 +194,10 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
             </div>
             <div className="col-span-1 flex flex-col items-end justify-center text-right">
                 <p className="font-bold">Step {currentStepIndex + 1} / {initialGameStates.length}</p>
-                <p className="text-sm text-gray-400">{currentState.phase}</p>
-                 {currentState.winner && <p className="text-lg font-bold text-yellow-400">Winner: {teamMap.get(currentState.winner)?.name || currentState.winner}</p>}
+                <p className="text-sm text-gray-400">{currentState?.phase}</p>
+                 {currentState?.winner && <p className="text-lg font-bold text-yellow-400">Winner: {teamMap.get(currentState.winner)?.name || currentState.winner}</p>}
             </div>
         </div>
     </div>
   );
 }
-
