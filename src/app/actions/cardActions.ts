@@ -47,9 +47,14 @@ export interface CardData {
   cubecobra_elo?: number;
   rating_updated_at?: string;
 }
+export interface ReplayCardData {
+  name: string;
+  card_type: string;
+  image_url: string;
+}
 
 // NEWLY ADDED FUNCTION FOR REPLAY VIEWER
-export async function getCardDataForReplay(cardNames: string[]): Promise<Map<string, { name: string; card_type: string; image_url: string; }>> {
+export async function getCardDataForReplay(cardNames: string[]): Promise<Map<string, ReplayCardData>> {
   if (!cardNames || cardNames.length === 0) {
     return new Map();
   }
@@ -63,10 +68,9 @@ export async function getCardDataForReplay(cardNames: string[]): Promise<Map<str
       console.error("Error fetching card data for replay:", error);
       return new Map();
     }
-    const cardDataMap = new Map<string, { name: string; card_type: string; image_url: string; }>();
+    const cardDataMap = new Map<string, ReplayCardData>();
     if (data) {
       for (const card of data) {
-        // Ensure properties exist before setting
         if (card.card_name && card.card_type && card.image_url) {
             cardDataMap.set(card.card_name, {
                 name: card.card_name,
