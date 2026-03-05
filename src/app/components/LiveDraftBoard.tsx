@@ -1,35 +1,23 @@
 // src/app/components/LiveDraftBoard.tsx
 
-'use client';
+"use client";
 
-import { useEffect, useState, useMemo, FC } from 'react';
-import { getDraftBoardData } from '@/app/actions/liveDraftActions';
-import type { DraftOrderTeam } from '@/app/actions/liveDraftActions';
-import type { DraftPick } from '@/app/draft/[sessionId]/live/page';
-import { Button } from '@/app/components/ui/button';
-import { List, Columns } from 'lucide-react';
-interface MyCardComponentProps {
-  card: {
-    image_url?: string | null;
-    oldest_image_url?: string | null;
-    card_name: string;
-  };
-}
+import { useEffect, useState, useMemo, FC } from "react";
+import { getDraftBoardData } from "@/app/actions/liveDraftActions";
+import type { DraftOrderTeam } from "@/app/actions/liveDraftActions";
+import type { DraftPick } from "@/app/draft/[sessionId]/live/page";
+import { Button } from "@/app/components/ui/button";
+import { List, Columns } from "lucide-react";
+import { useSettings } from "@/contexts/SettingsContext";
+import { getCardImageUrl } from "@/app/utils/cardUtils";
 
-// --- FIX: Apply the strong type to the component's props ---
-function MyCardComponent({ card }: MyCardComponentProps) {
-  const { useOldestArt } = useSettings();
-
-  // Conditionally choose the image source based on the user's setting
-  const imageUrl = useOldestArt ? card.oldest_image_url : card.image_url;
-
-  // Render your component, for example:
-  return <img src={imageUrl || undefined} alt={card.card_name} />;
-}
 type ViewMode = 'list' | 'team';
 
 const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small' }> = ({ pick, isNewest, size }) => {
+  const { useOldestArt } = useSettings();
+  const imageUrl = getCardImageUrl(pick, useOldestArt);
   const cardClasses = "transition-all duration-500";
+
   if (size === 'large') {
     return (
       <div className={`
@@ -40,11 +28,12 @@ const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small
           <span className="font-bold text-white bg-blue-600 px-2 py-1 rounded">#{pick.pick_number}</span>
           <span className="font-semibold text-gray-300 truncate">{pick.team_name}</span>
         </div>
-        <img src={pick.image_url || '/placeholder-card.png'} alt={pick.card_name} className="w-full rounded-md shadow-md" loading="lazy" />
+        <img src={imageUrl || '/placeholder-card.png'} alt={pick.card_name} className="w-full rounded-md shadow-md" loading="lazy" />
         <h3 className="font-semibold text-center text-sm text-gray-100 mt-2 truncate">{pick.card_name}</h3>
       </div>
     );
   }
+
   return (
     <div className={`
       bg-gray-800/80 border border-gray-700/50 rounded-md p-1.5 ${cardClasses}
@@ -151,6 +140,7 @@ export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoar
           card_set: payload.card_set,
           rarity: payload.rarity,
           image_url: payload.image_url,
+          oldest_image_url: payload.oldest_image_url, // Added field
           team_name: payload.team_name || 'Unknown Team',
           team_id: payload.team_id,
         };
