@@ -59,17 +59,9 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { AutoDraftPreview } from "@/app/components/AutoDraftPreview";
-// Example usage in a component like ReplayPlayer.tsx or MatchDisplay.tsx
-import { useSettings } from '@/contexts/SettingsContext';
+import { useSettings } from "@/contexts/SettingsContext";
+import { getCardImageUrl } from "@/app/utils/cardUtils";
 
-function MyCardComponent({ card }) {
-  const { useOldestArt } = useSettings();
-
-  // Conditionally choose the image source based on the user's setting
-  const imageUrl = useOldestArt ? card.oldest_image_url : card.image_url;
-
-  return <img src={imageUrl} alt={card.name} />;
-}
 const COLOR_LABELS: Record<string, { label: string; emoji: string; className: string }> = {
   W: { label: "White", emoji: "⚪", className: "bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200" },
   U: { label: "Blue", emoji: "🔵", className: "bg-blue-100 text-blue-900 dark:bg-blue-900/30 dark:text-blue-200" },
@@ -98,6 +90,8 @@ function SortableQueueItem({
   onRemove: (entry: QueueEntry) => void;
   isManual: boolean;
 }) {
+  const { useOldestArt } = useSettings();
+  const imageUrl = getCardImageUrl(entry, useOldestArt);
   const {
     attributes,
     listeners,
@@ -106,7 +100,6 @@ function SortableQueueItem({
     transition,
     isDragging,
   } = useSortable({ id: entry.cardPoolId });
-
   const style: React.CSSProperties = {
     transform: transform
       ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
@@ -139,9 +132,9 @@ function SortableQueueItem({
       }`}>
         {entry.position}
       </div>
-      {entry.imageUrl && (
+      {imageUrl && (
         <img
-          src={entry.imageUrl}
+          src={imageUrl}
           alt={entry.cardName}
           className="w-10 h-14 object-cover rounded flex-shrink-0"
         />
@@ -216,15 +209,18 @@ function SortableQueueItem({
 // ============================================================================
 
 function DragOverlayItem({ entry }: { entry: QueueEntry }) {
+  const { useOldestArt } = useSettings();
+  const imageUrl = getCardImageUrl(entry, useOldestArt);
+
   return (
     <div className="flex items-center gap-3 p-3 rounded-lg border bg-card shadow-xl ring-2 ring-purple-500/30">
       <GripVertical className="size-4 text-muted-foreground" />
       <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold bg-purple-500/15 text-purple-600 dark:text-purple-400 flex-shrink-0">
         {entry.position}
       </div>
-      {entry.imageUrl && (
+      {imageUrl && (
         <img
-          src={entry.imageUrl}
+          src={imageUrl}
           alt={entry.cardName}
           className="w-10 h-14 object-cover rounded flex-shrink-0"
         />
@@ -247,6 +243,7 @@ function AddToQueueDialog({
   existingCardPoolIds: Set<string>;
   onAdd: (card: CardData) => void;
 }) {
+  const { useOldestArt } = useSettings();
   const [open, setOpen] = useState(false);
   const [allAvailable, setAllAvailable] = useState<CardData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -291,7 +288,6 @@ function AddToQueueDialog({
       
       return true;
     });
-
     return filtered.sort((a, b) => (b.cubecobra_elo || 0) - (a.cubecobra_elo || 0));
   }, [allAvailable, existingCardPoolIds, search, colorFilter]);
 
@@ -356,47 +352,50 @@ function AddToQueueDialog({
             </div>
           ) : (
             <div className="space-y-2 pr-4">
-              {filteredAndSortedCards.slice(0, 50).map((card) => (
-                <button
-                  key={card.id}
-                  onClick={() => {
-                    onAdd(card);
-                    setOpen(false);
-                  }}
-                  className="w-full flex items-center gap-3 p-2 rounded-lg border border-border hover:border-purple-500/40 hover:bg-accent transition-colors text-left"
-                >
-                  {card.image_url && (
-                    <img
-                      src={card.image_url}
-                      alt={card.card_name}
-                      className="w-8 h-11 object-cover rounded flex-shrink-0"
-                    />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm truncate">{card.card_name}</div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span className="flex gap-0.5">
-                        {card.colors && card.colors.length > 0 ? (
-                          card.colors.map((c) => (
-                            <span key={c}>{COLOR_LABELS[c]?.emoji}</span>
-                          ))
-                        ) : (
-                          <span>◇</span>
-                        )}
-                      </span>
-                      {card.cubecobra_elo != null && (
-                        <span className="text-purple-600 dark:text-purple-400">
-                          ELO {card.cubecobra_elo.toLocaleString()}
+              {filteredAndSortedCards.slice(0, 50).map((card) => {
+                const imageUrl = getCardImageUrl(card, useOldestArt);
+                return (
+                  <button
+                    key={card.id}
+                    onClick={() => {
+                      onAdd(card);
+                      setOpen(false);
+                    }}
+                    className="w-full flex items-center gap-3 p-2 rounded-lg border border-border hover:border-purple-500/40 hover:bg-accent transition-colors text-left"
+                  >
+                    {imageUrl && (
+                      <img
+                        src={imageUrl}
+                        alt={card.card_name}
+                        className="w-8 h-11 object-cover rounded flex-shrink-0"
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm truncate">{card.card_name}</div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span className="flex gap-0.5">
+                          {card.colors && card.colors.length > 0 ? (
+                            card.colors.map((c) => (
+                              <span key={c}>{COLOR_LABELS[c]?.emoji}</span>
+                            ))
+                          ) : (
+                            <span>◇</span>
+                          )}
                         </span>
-                      )}
-                      <span className="text-yellow-600 dark:text-yellow-400">
-                        💰 {card.cubucks_cost || 1}
-                      </span>
+                        {card.cubecobra_elo != null && (
+                          <span className="text-purple-600 dark:text-purple-400">
+                            ELO {card.cubecobra_elo.toLocaleString()}
+                          </span>
+                        )}
+                        <span className="text-yellow-600 dark:text-yellow-400">
+                          💰 {card.cubucks_cost || 1}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                  <Plus className="size-4 text-muted-foreground flex-shrink-0" />
-                </button>
-              ))}
+                    <Plus className="size-4 text-muted-foreground flex-shrink-0" />
+                  </button>
+                );
+              })}
               {filteredAndSortedCards.length > 50 && (
                 <p className="text-xs text-center text-muted-foreground py-2">
                   Showing 50 of {filteredAndSortedCards.length} cards. Use search to narrow results.
@@ -643,57 +642,60 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
               </DndContext>
             ) : (
               <div className="space-y-2">
-                {queue.map((entry) => (
-                  <div
-                    key={entry.cardPoolId}
-                    className={`flex items-center gap-3 p-3 rounded-lg border ${
-                      entry.source === "manual_queue"
-                        ? "bg-card border-purple-500/20"
-                        : "bg-muted/50 border-border/50"
-                    }`}
-                  >
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                      entry.position <= 3
-                        ? "bg-purple-500/15 text-purple-600 dark:text-purple-400"
-                        : "bg-muted text-muted-foreground"
-                    }`}>
-                      {entry.position}
-                    </div>
-                    {entry.imageUrl && (
-                      <img
-                        src={entry.imageUrl}
-                        alt={entry.cardName}
-                        className="w-10 h-14 object-cover rounded flex-shrink-0"
-                      />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-sm truncate">{entry.cardName}</span>
-                        {entry.pinned && <Pin className="size-3 text-purple-500 flex-shrink-0" />}
+                {queue.map((entry) => {
+                  const imageUrl = getCardImageUrl(entry, useOldestArt);
+                  return (
+                    <div
+                      key={entry.cardPoolId}
+                      className={`flex items-center gap-3 p-3 rounded-lg border ${
+                        entry.source === "manual_queue"
+                          ? "bg-card border-purple-500/20"
+                          : "bg-muted/50 border-border/50"
+                      }`}
+                    >
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                        entry.position <= 3
+                          ? "bg-purple-500/15 text-purple-600 dark:text-purple-400"
+                          : "bg-muted text-muted-foreground"
+                      }`}>
+                        {entry.position}
                       </div>
-                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        <div className="flex gap-0.5">
-                          {entry.colors && entry.colors.length > 0 ? (
-                            entry.colors.map((color) => {
-                              const info = COLOR_LABELS[color];
-                              return info ? <span key={color} className="text-xs">{info.emoji}</span> : null;
-                            })
-                          ) : (
-                            <span className="text-xs text-muted-foreground">◇</span>
-                          )}
+                      {imageUrl && (
+                        <img
+                          src={imageUrl}
+                          alt={entry.cardName}
+                          className="w-10 h-14 object-cover rounded flex-shrink-0"
+                        />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-sm truncate">{entry.cardName}</span>
+                          {entry.pinned && <Pin className="size-3 text-purple-500 flex-shrink-0" />}
                         </div>
-                        {entry.cubecobraElo != null && (
-                          <span className="text-xs text-purple-600 dark:text-purple-400">
-                            ELO {entry.cubecobraElo.toLocaleString()}
-                          </span>
-                        )}
-                        <Badge variant="outline" className="text-[10px] px-1 py-0">
-                          {entry.source === "manual_queue" ? "📌 Manual" : "🧠 Auto"}
-                        </Badge>
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          <div className="flex gap-0.5">
+                            {entry.colors && entry.colors.length > 0 ? (
+                              entry.colors.map((color) => {
+                                const info = COLOR_LABELS[color];
+                                return info ? <span key={color} className="text-xs">{info.emoji}</span> : null;
+                              })
+                            ) : (
+                              <span className="text-xs text-muted-foreground">◇</span>
+                            )}
+                          </div>
+                          {entry.cubecobraElo != null && (
+                            <span className="text-xs text-purple-600 dark:text-purple-400">
+                              ELO {entry.cubecobraElo.toLocaleString()}
+                            </span>
+                          )}
+                          <Badge variant="outline" className="text-[10px] px-1 py-0">
+                            {entry.source === "manual_queue" ? "📌 Manual" : "🧠 Auto"}
+                          </Badge>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
             <div className="flex items-center gap-4 mt-4 pt-4 border-t text-xs text-muted-foreground">

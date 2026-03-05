@@ -10,17 +10,9 @@ import { getActiveDraftOrder, type DraftOrderEntry } from "@/app/actions/draftOr
 import { conditionallyCleanupDraftQueues } from "@/app/actions/autoDraftActions";
 import { advanceDraft, getActiveDraftSession } from "@/app/actions/draftSessionActions";
 import type { DraftPick } from "@/app/actions/draftActions";
-// Example usage in a component like ReplayPlayer.tsx or MatchDisplay.tsx
-import { useSettings } from '@/contexts/SettingsContext';
+import { useSettings } from "@/contexts/SettingsContext";
+import { getCardImageUrl } from "@/app/utils/cardUtils";
 
-function MyCardComponent({ card }) {
-  const { useOldestArt } = useSettings();
-
-  // Conditionally choose the image source based on the user's setting
-  const imageUrl = useOldestArt ? card.oldest_image_url : card.image_url;
-
-  return <img src={imageUrl} alt={card.name} />;
-}
 interface DraftInterfaceProps {
   teamId: string;
   teamName?: string;
@@ -36,6 +28,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
   onDraftComplete,
   isFreeAgencyEnabled,
 }) => {
+  const { useOldestArt } = useSettings();
   const [availableCards, setAvailableCards] = useState<CardData[]>([]);
   const [draftedCards, setDraftedCards] = useState<DraftPick[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,14 +58,12 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       const { session } = await getActiveDraftSession();
       const sessionId = session?.id || null;
       setActiveSessionId(sessionId);
-
       const [{ cards }, { picks }, { team }, { order }] = await Promise.all([
         getAvailableCardsForDraft(),
         getTeamDraftPicks(teamId, sessionId!),
         getTeamBalance(teamId),
         getActiveDraftOrder(),
       ]);
-
       setAvailableCards(cards);
       setDraftedCards(picks);
       if (team) setCubucksBalance(team.cubucks_balance);
@@ -92,31 +83,26 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       }
       return;
     }
-
     if (draftedCards.some((pick) => pick.card_pool_id === card.id)) {
       setError("This specific card has already been drafted by your team.");
       setTimeout(() => setError(null), 3000);
       return;
     }
-
     const cardCost = card.cubucks_cost || 1;
     if (cubucksBalance < cardCost) {
       setError(`Insufficient Çubucks! Need ${cardCost}, you have ${cubucksBalance}`);
       setTimeout(() => setError(null), 5000);
       return;
     }
-
     setDrafting(card.id!);
     setError(null);
     setSuccess(null);
-
     const cubucksResult = await spendCubucksOnDraft(teamId, card.card_id, card.card_name, cardCost, card.id);
     if (!cubucksResult.success) {
       setError(cubucksResult.error || "Failed to spend Çubucks");
       setDrafting(null);
       return;
     }
-
     const pick: DraftPick = {
       team_id: teamId,
       card_pool_id: card.id,
@@ -128,13 +114,12 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       rarity: card.rarity,
       colors: card.colors,
       image_url: card.image_url,
+      oldest_image_url: card.oldest_image_url,
       mana_cost: card.mana_cost,
       cmc: card.cmc,
       pick_number: draftedCards.length + 1,
     };
-
     const result = await addDraftPick(pick);
-
     if (result.success) {
       setSuccess(`Acquired ${card.card_name} for ${cardCost} Cubucks!`);
       await conditionallyCleanupDraftQueues(card.card_id);
@@ -203,6 +188,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
         valA = a.card_name.toLowerCase();
         valB = b.card_name.toLowerCase();
     }
+
     if (typeof valA === 'string' && typeof valB === 'string') {
       return sortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
     } else {
@@ -417,6 +403,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
               const isThisInstanceDrafted = draftedCards.some(p => p.card_pool_id === card.id);
               const isDrafting = drafting === card.id;
               const notEnoughCubucks = cubucksBalance < (card.cubucks_cost || 1);
+              const imageUrl = getCardImageUrl(card, useOldestArt);
               return (
                 <div
                   key={card.id}
@@ -426,9 +413,9 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
                       : "border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:shadow-lg"
                   }`}
                 >
-                  {card.image_url && (
+                  {imageUrl && (
                     <img
-                      src={card.image_url}
+                      src={imageUrl}
                       alt={card.card_name}
                       className="w-full h-64 object-cover"
                     />

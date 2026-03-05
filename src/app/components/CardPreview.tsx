@@ -1,39 +1,37 @@
 // src/app/components/CardPreview.tsx
+
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-// Example usage in a component like ReplayPlayer.tsx or MatchDisplay.tsx
-import { useSettings } from '@/contexts/SettingsContext';
+import { useSettings } from "@/contexts/SettingsContext";
+import { getCardImageUrl } from "@/app/utils/cardUtils";
 
-function MyCardComponent({ card }) {
-  const { useOldestArt } = useSettings();
-
-  // Conditionally choose the image source based on the user's setting
-  const imageUrl = useOldestArt ? card.oldest_image_url : card.image_url;
-
-  return <img src={imageUrl} alt={card.name} />;
-}
 interface CardPreviewProps {
-  imageUrl: string;
-  cardName: string;
+  card: {
+    image_url?: string | null;
+    oldest_image_url?: string | null;
+    card_name: string;
+  };
   children: React.ReactNode;
   className?: string;
 }
 
 export const CardPreview: React.FC<CardPreviewProps> = ({
-  imageUrl,
-  cardName,
+  card,
   children,
   className = "",
 }) => {
+  const { useOldestArt } = useSettings();
   const [isHovering, setIsHovering] = useState(false);
   const [position, setPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
+  // Use the utility function to get the correct image URL
+  const imageUrl = getCardImageUrl(card, useOldestArt);
+
   useEffect(() => {
     if (!isHovering || !containerRef.current) return;
-
     const updatePosition = () => {
       if (!containerRef.current || !previewRef.current) return;
 
@@ -42,26 +40,18 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
       const previewHeight = 420;
       const padding = 16;
 
-      // Default: show to the right of the card
       let x = rect.right + padding;
       let y = rect.top;
 
-      // If preview would go off the right edge, show on the left
       if (x + previewWidth > window.innerWidth - padding) {
         x = rect.left - previewWidth - padding;
       }
-
-      // If preview would go off the left edge too, center it above/below
       if (x < padding) {
         x = Math.max(padding, (rect.left + rect.right) / 2 - previewWidth / 2);
       }
-
-      // If preview would go off the bottom, adjust upward
       if (y + previewHeight > window.innerHeight - padding) {
         y = window.innerHeight - previewHeight - padding;
       }
-
-      // If preview would go off the top, adjust downward
       if (y < padding) {
         y = padding;
       }
@@ -89,27 +79,23 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
       >
         {children}
       </div>
-
-      {/* Preview Portal */}
+      
       {isHovering && imageUrl && (
         <div
           ref={previewRef}
           className="fixed z-50 pointer-events-none"
-          style={{
-            left: position.x,
-            top: position.y,
-          }}
+          style={{ left: position.x, top: position.y }}
         >
           <div className="bg-black/90 rounded-xl p-2 shadow-2xl border border-gray-600">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={imageUrl}
-              alt={cardName}
+              alt={card.card_name}
               className="w-[300px] h-auto rounded-lg"
               style={{ maxHeight: "420px", objectFit: "contain" }}
             />
             <div className="text-center text-white text-sm font-semibold mt-2 px-2 truncate">
-              {cardName}
+              {card.card_name}
             </div>
           </div>
         </div>

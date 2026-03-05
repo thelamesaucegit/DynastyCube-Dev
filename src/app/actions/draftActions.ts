@@ -42,6 +42,7 @@ export interface DraftPick {
   draft_session_id?: string;
   colors?: string[];
   image_url?: string;
+  oldest_image_url?: string; // Added field
   mana_cost?: string;
   cmc?: number;
   drafted_at?: string;
@@ -98,12 +99,10 @@ export async function addSkippedPick(
       .insert(skippedPickData)
       .select()
       .single();
-
     if (error) {
       console.error("Error adding skipped pick:", error);
       return { success: false, error: error.message };
     }
-
     return { success: true, pick: newPick };
   } catch (error) {
     console.error("Unexpected error adding skipped pick:", error);
@@ -124,19 +123,16 @@ export async function addDraftPick(
     if (!authCheck.authorized) {
       return { success: false, error: authCheck.error };
     }
-
     if (pick.card_pool_id) {
         const { data: existingPick, error: checkError } = await supabase
             .from("team_draft_picks")
             .select("id")
             .eq("card_pool_id", pick.card_pool_id)
             .single();
-
-        if (checkError && checkError.code !== 'PGRST116') { // Ignore "not found" error
+        if (checkError && checkError.code !== "PGRST116") { // Ignore "not found" error
             console.error("Error checking for existing draft pick:", checkError);
             return { success: false, error: "Database error checking card availability." };
         }
-
         if (existingPick) {
             return { success: false, error: "This specific card has already been drafted." };
         }
@@ -153,6 +149,7 @@ export async function addDraftPick(
       rarity: pick.rarity,
       colors: pick.colors || [],
       image_url: pick.image_url,
+      oldest_image_url: pick.oldest_image_url, // Added field
       mana_cost: pick.mana_cost,
       cmc: pick.cmc,
       pick_number: pick.pick_number,
@@ -188,7 +185,6 @@ async function verifyTeamMembership(
     .eq("team_id", teamId)
     .eq("user_id", user.id)
     .single();
-
   if (membershipError || !membership) {
     return { authorized: false, userId: user.id, error: "You must be a member of this team to perform this action" };
   }
@@ -252,14 +248,11 @@ export async function getTeamDraftPicks(
       .from("team_draft_picks")
       .select("*")
       .eq("team_id", teamId);
-
     // This is the fix: only filter by session if the ID is provided
     if (draftSessionId) {
       query = query.eq("draft_session_id", draftSessionId);
     }
-
     const { data, error } = await query.order("pick_number", { ascending: true });
-
     if (error) {
       console.error("Error fetching draft picks:", error);
       return { picks: [], error: error.message };
@@ -287,8 +280,7 @@ export async function addDraftPickInternal(
             .select("id")
             .eq("card_pool_id", pick.card_pool_id)
             .single();
-
-        if (checkError && checkError.code !== 'PGRST116') { // Ignore "not found" error
+        if (checkError && checkError.code !== "PGRST116") { // Ignore "not found" error
             console.error("Error checking for existing auto-draft pick:", checkError);
             return { success: false, error: "Database error checking card availability for auto-draft." };
         }
@@ -296,7 +288,6 @@ export async function addDraftPickInternal(
             return { success: false, error: "This specific card has already been drafted by another process." };
         }
     }
-
     const { data: newPick, error } = await supabase
       .from("team_draft_picks")
       .insert({
@@ -310,6 +301,7 @@ export async function addDraftPickInternal(
         rarity: pick.rarity,
         colors: pick.colors || [],
         image_url: pick.image_url,
+        oldest_image_url: pick.oldest_image_url, // Added field
         mana_cost: pick.mana_cost,
         cmc: pick.cmc,
         pick_number: pick.pick_number,
@@ -317,12 +309,10 @@ export async function addDraftPickInternal(
       })
       .select()
       .single();
-
     if (error) {
       console.error("Error adding auto-draft pick:", error);
       return { success: false, error: error.message };
     }
-
     return { success: true, pick: newPick };
     
   } catch (error) {
@@ -351,7 +341,6 @@ export async function removeDraftPick(
       .from("team_draft_picks")
       .delete()
       .eq("id", pickId);
-
     if (error) {
       console.error("Error removing draft pick:", error);
       return { success: false, error: error.message };
@@ -376,18 +365,14 @@ export async function getTeamDecks(
       .select("*")
       .eq("team_id", teamId)
       .order("updated_at", { ascending: false });
-
     if (error) {
       console.error("Error fetching decks:", error);
       return { decks: [], error: error.message };
     }
-
     if (!data || data.length === 0) {
       return { decks: [] };
     }
-
     const creatorIds = [...new Set(data.map((d) => d.created_by).filter(Boolean))];
-
     let creatorMap: Record<string, string> = {};
     if (creatorIds.length > 0) {
       const { data: profiles } = await supabase
@@ -401,7 +386,6 @@ export async function getTeamDecks(
         }, {} as Record<string, string>);
       }
     }
-
     const decks: Deck[] = data.map((deck) => ({
       id: deck.id,
       team_id: deck.team_id,
@@ -433,7 +417,6 @@ export async function createDeck(
     if (!authCheck.authorized) {
       return { success: false, error: authCheck.error };
     }
-
     const { data, error } = await supabase
       .from("team_decks")
       .insert({
@@ -446,7 +429,6 @@ export async function createDeck(
       })
       .select()
       .single();
-
     if (error) {
       console.error("Error creating deck:", {
         message: error.message,
@@ -459,7 +441,6 @@ export async function createDeck(
         error: `Database error: ${error.message}${error.hint ? ` (${error.hint})` : ''}`
       };
     }
-
     return { success: true, deckId: data.id };
   } catch (error) {
     console.error("Unexpected error creating deck:", error);
@@ -482,17 +463,14 @@ export async function deleteDeck(
     if (!teamId) {
       return { success: false, error: "Deck not found" };
     }
-
     const authCheck = await verifyTeamMembership(teamId);
     if (!authCheck.authorized) {
       return { success: false, error: authCheck.error };
     }
-
     const { error } = await supabase
       .from("team_decks")
       .delete()
       .eq("id", deckId);
-
     if (error) {
       console.error("Error deleting deck:", error);
       return { success: false, error: error.message };
@@ -517,7 +495,6 @@ export async function getDeckCards(
       .select("*")
       .eq("deck_id", deckId)
       .order("category", { ascending: true });
-
     if (error) {
       console.error("Error fetching deck cards:", error);
       return { cards: [], error: error.message };
@@ -541,7 +518,6 @@ export async function addCardToDeck(
     if (!teamId) return { success: false, error: "Deck not found" };
     const authCheck = await verifyTeamMembership(teamId);
     if (!authCheck.authorized) return { success: false, error: authCheck.error };
-
     if (deckCard.draft_pick_id) {
         const { data: existingCard, error: checkError } = await supabase
             .from("deck_cards")
@@ -549,14 +525,13 @@ export async function addCardToDeck(
             .eq("deck_id", deckCard.deck_id)
             .eq("draft_pick_id", deckCard.draft_pick_id)
             .single();
-        if (checkError && checkError.code !== 'PGRST116') {
+        if (checkError && checkError.code !== "PGRST116") {
             return { success: false, error: "Database error checking for card." };
         }
         if (existingCard) {
             return { success: false, error: "This specific drafted card is already in the deck." };
         }
     }
-
     const { error } = await supabase.from("deck_cards").insert({
       deck_id: deckCard.deck_id,
       draft_pick_id: deckCard.draft_pick_id,
@@ -566,7 +541,6 @@ export async function addCardToDeck(
       is_commander: deckCard.is_commander || false,
       category: deckCard.category || "mainboard",
     });
-
     if (error) {
       console.error("Error adding card to deck:", error);
       return { success: false, error: error.message };
@@ -591,17 +565,14 @@ export async function updateDeckCardQuantity(
     if (!teamId) {
       return { success: false, error: "Card not found" };
     }
-
     const authCheck = await verifyTeamMembership(teamId);
     if (!authCheck.authorized) {
       return { success: false, error: authCheck.error };
     }
-
     const { error } = await supabase
       .from("deck_cards")
       .update({ quantity: newQuantity })
       .eq("id", cardId);
-
     if (error) {
       console.error("Error updating deck card quantity:", error);
       return { success: false, error: error.message };
@@ -629,12 +600,10 @@ export async function removeCardFromDeck(
     if (!authCheck.authorized) {
       return { success: false, error: authCheck.error };
     }
-
     const { error } = await supabase
       .from("deck_cards")
       .delete()
       .eq("id", cardId);
-
     if (error) {
       console.error("Error removing card from deck:", error);
       return { success: false, error: error.message };

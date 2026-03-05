@@ -3,10 +3,15 @@
 "use server";
 
 import { createServerClient } from "@/lib/supabase";
+
 import { getAvailableCardsForDraft, type CardData } from "@/app/actions/cardActions";
+
 import { getTeamDraftPicks, addSkippedPick, type DraftPick } from "@/app/actions/draftActions";
+
 import { getTeamBalance } from "@/app/actions/cubucksActions";
+
 import { getDraftStatus } from "@/app/actions/draftOrderActions";
+
 import { getDuplicateCardIdSet } from "@/lib/draftCache";
 
 // ============================================================================
@@ -37,6 +42,7 @@ export interface QueueEntry {
   rarity?: string;
   colors?: string[];
   imageUrl?: string;
+  oldest_image_url?: string;
   manaCost?: string;
   cmc?: number;
   cubucksCost?: number;
@@ -147,11 +153,9 @@ export async function toggleQueuePickVote(
       .eq("team_id", teamId)
       .eq("card_pool_id", cardPoolId)
       .single();
-
     if (fetchError || !queueEntry) {
       return { success: false, pickExecuted: false, error: "Queue entry not found" };
     }
-
     let currentVotes: string[] = queueEntry.votes || [];
     const hasVoted = currentVotes.includes(auth.userId);
     if (hasVoted) {
@@ -163,14 +167,11 @@ export async function toggleQueuePickVote(
       .from("team_draft_queue")
       .update({ votes: currentVotes })
       .eq("id", queueEntry.id);
-
     if (updateError) {
       return { success: false, pickExecuted: false, error: "Failed to record vote" };
     }
-
     const memberCount = await getTeamMemberCount(teamId);
     const threshold = calculateVoteThreshold(memberCount);
-
     if (currentVotes.length >= threshold && queueEntry.position === 1) {
       const { status: draftStatus } = await getDraftStatus(draftSessionId);
       if (draftStatus?.onTheClock?.teamId === teamId) {
@@ -201,13 +202,10 @@ async function executeConfirmedTeamPick(
   const supabase = await createServerClient();
   const { cards: availableCards } = await getAvailableCardsForDraft();
   const card = availableCards.find(c => c.id === cardPoolId);
-
   if (!card) {
     return { success: false, error: "Card is no longer available to be drafted." };
   }
-
   const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId);
-
   const { data, error } = await supabase.rpc("execute_atomic_draft_pick", {
     p_team_id: teamId,
     p_draft_session_id: draftSessionId,
@@ -219,6 +217,7 @@ async function executeConfirmedTeamPick(
     p_rarity: card.rarity,
     p_colors: card.colors,
     p_image_url: card.image_url,
+    p_oldest_image_url: card.oldest_image_url,
     p_mana_cost: card.mana_cost,
     p_cmc: card.cmc,
     p_pick_number: existingPicks.length + 1,
@@ -247,7 +246,6 @@ async function executeConfirmedTeamPick(
     event: 'new_pick',
     payload: { ...newPick, team_name: teamData?.name || 'Unknown Team' },
   });
-
   return { success: true, pick: newPick };
 }
 
@@ -278,12 +276,14 @@ export async function computeAutoDraftPick(
     const LAND_ELO_MODIFIER = 0.8;
     const AFFINITY_BONUS_PER_PICK = 0.1;
     const ANTI_AFFINITY_PENALTY_PER_PICK = 0.05;
+
     const colorModifiers: Record<string, number> = { W: 1.0, U: 1.0, B: 1.0, R: 1.0, G: 1.0 };
     const allColors = ["W", "U", "B", "R", "G"];
 
     for (const pick of teamPicks) {
       const pickColors = new Set(pick.colors || []);
       if (pickColors.size === 0) continue;
+
       for (const color of allColors) {
         if (pickColors.has(color)) {
           colorModifiers[color] += AFFINITY_BONUS_PER_PICK;
@@ -313,6 +313,7 @@ export async function computeAutoDraftPick(
       : [...availableCards].sort((a, b) => a.card_name.localeCompare(b.card_name));
       
     const top50 = candidatePool.slice(0, 50);
+
     const colorTotals: Record<string, number> = { W: 0, U: 0, B: 0, R: 0, G: 0 };
     for (const card of top50) {
       const elo = card.cubecobra_elo || 0;
@@ -346,6 +347,7 @@ export async function computeAutoDraftPick(
       .filter((c) => !c.colors || c.colors.length === 0)
       .sort((a, b) => (b.cubecobra_elo || 0) - (a.cubecobra_elo || 0));
     const bestColorlessCard = colorlessCards[0] || null;
+
     let selectedSource: "colored" | "colorless" | "none" = "none";
     let selectedCard: CardData | null = null;
 
@@ -416,12 +418,13 @@ export async function getAutoDraftPreview(
     if (queueError) {
       console.error("Error fetching draft queue:", queueError);
     }
-
     const queueDepth = (queueEntries || []).length;
+
     if (queueEntries && queueEntries.length > 0) {
       const { cards: availableCards } = await getAvailableCardsForDraft();
       
       const availableInstanceIds = new Set(availableCards.map((c) => c.id));
+
       for (const entry of queueEntries) {
         if (entry.card_pool_id && availableInstanceIds.has(entry.card_pool_id)) {
           const card = availableCards.find((c) => c.id === entry.card_pool_id) || null;
@@ -484,12 +487,13 @@ export async function getTeamDraftQueue(
 ): Promise<{ queue: QueueEntry[]; error?: string }> {
   try {
     const supabase = await createServerClient();
+
     const { data: manualEntries, error: queueError } = await supabase
       .from("team_draft_queue")
       .select("id, card_pool_id, card_id, card_name, position, pinned, votes")
       .eq("team_id", teamId)
       .order("position", { ascending: true });
-
+    
     const memberCount = await getTeamMemberCount(teamId);
     const voteThreshold = calculateVoteThreshold(memberCount);
 
@@ -513,6 +517,7 @@ export async function getTeamDraftQueue(
 
     const queue: QueueEntry[] = [];
     const usedInstanceIds = new Set<string>();
+
     for (const entry of manualEntries || []) {
       if (entry.card_pool_id) {
           const cardData = availableMap.get(entry.card_pool_id);
@@ -530,6 +535,7 @@ export async function getTeamDraftQueue(
               rarity: cardData.rarity,
               colors: cardData.colors,
               imageUrl: cardData.image_url,
+              oldest_image_url: cardData.oldest_image_url,
               manaCost: cardData.mana_cost,
               cmc: cardData.cmc,
               cubucksCost: cardData.cubucks_cost,
@@ -571,6 +577,7 @@ export async function getTeamDraftQueue(
           rarity: card.rarity,
           colors: card.colors,
           imageUrl: card.image_url,
+          oldest_image_url: card.oldest_image_url,
           manaCost: card.mana_cost,
           cmc: card.cmc,
           cubucksCost: card.cubucks_cost,
@@ -578,6 +585,7 @@ export async function getTeamDraftQueue(
         });
       }
     }
+
     return { queue };
   } catch (error) {
     console.error("Error getting team draft queue:", error);
@@ -604,6 +612,7 @@ export async function setTeamDraftQueue(
       return { success: false, error: auth.error };
     }
     const supabase = await createServerClient();
+    
     const { data: existingQueue } = await supabase
       .from("team_draft_queue")
       .select("card_pool_id, votes")
@@ -616,6 +625,7 @@ export async function setTeamDraftQueue(
       .from("team_draft_queue")
       .delete()
       .eq("team_id", teamId);
+
     if (deleteError) {
       console.error("Error clearing draft queue:", deleteError);
       return { success: false, error: deleteError.message };
@@ -726,28 +736,23 @@ export async function removeFromQueue(
       .eq("team_id", teamId)
       .eq("card_pool_id", cardPoolId)
       .single();
-
     if (!entry) {
       return { success: true }; // Already not in queue
     }
-
     const { error: deleteError } = await supabase
       .from("team_draft_queue")
       .delete()
       .eq("team_id", teamId)
       .eq("card_pool_id", cardPoolId);
-
     if (deleteError) {
       return { success: false, error: deleteError.message };
     }
-
     const { data: remaining } = await supabase
       .from("team_draft_queue")
       .select("id, position")
       .eq("team_id", teamId)
       .gt("position", entry.position)
       .order("position", { ascending: true });
-
     for (const item of remaining || []) {
       await supabase
         .from("team_draft_queue")
@@ -805,14 +810,12 @@ export async function conditionallyCleanupDraftQueues(
       if (error) return { success: false, cleaned: false, error: error.message };
       return { success: true, cleaned: true };
     }
-
     const { cards: availableCards } = await getAvailableCardsForDraft();
     if (!availableCards.some(card => card.card_id === draftedCardId)) {
       const { error } = await supabase.from("team_draft_queue").delete().eq("card_id", draftedCardId);
       if (error) return { success: false, cleaned: false, error: error.message };
       return { success: true, cleaned: true };
     }
-
     return { success: true, cleaned: false };
   } catch (error) {
     console.error("Unexpected error in conditional queue cleanup:", error);
@@ -840,16 +843,13 @@ export async function executeAutoDraft(
     if (statusError || !draftStatus || !draftSessionId) {
       return { success: false, error: statusError || "No active draft or draft ID is missing" };
     }
-
     if (draftStatus.onTheClock.teamId !== teamId) {
       return { success: false, error: "This team is not on the clock" };
     }
-
     const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId);
     const pickNumber = existingPicks.length + 1;
     const preview = await getAutoDraftPreview(teamId, draftSessionId);
     const card = preview.nextPick;
-
     if (!card) {
       const { pick: skippedPick, error: skipError } = await addSkippedPick(teamId, pickNumber, draftSessionId);
       if (skipError) {
@@ -864,7 +864,6 @@ export async function executeAutoDraft(
       });
       return { success: true, source: "skipped", pick: { cardId: "skipped", cardName: "SKIPPED", cost: 0 } };
     }
-
     const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
         p_team_id: teamId,
         p_draft_session_id: draftSessionId,
@@ -876,6 +875,7 @@ export async function executeAutoDraft(
         p_rarity: card.rarity,
         p_colors: card.colors,
         p_image_url: card.image_url,
+        p_oldest_image_url: card.oldest_image_url,
         p_mana_cost: card.mana_cost,
         p_cmc: card.cmc,
         p_pick_number: pickNumber,

@@ -1,4 +1,5 @@
 // src/app/components/DeckBuilder.tsx
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -28,17 +29,9 @@ import {
   removeCardFromDeck,
 } from "@/app/actions/draftActions";
 import type { DraftPick, Deck, DeckCard } from "@/app/actions/draftActions";
-// Example usage in a component like ReplayPlayer.tsx or MatchDisplay.tsx
-import { useSettings } from '@/contexts/SettingsContext';
+import { useSettings } from "@/contexts/SettingsContext";
+import { getCardImageUrl } from "@/app/utils/cardUtils";
 
-function MyCardComponent({ card }) {
-  const { useOldestArt } = useSettings();
-
-  // Conditionally choose the image source based on the user's setting
-  const imageUrl = useOldestArt ? card.oldest_image_url : card.image_url;
-
-  return <img src={imageUrl} alt={card.name} />;
-}
 interface DeckBuilderProps {
   teamId: string;
   teamName?: string;
@@ -47,11 +40,12 @@ interface DeckBuilderProps {
 
 // Draggable Card Component
 function DraggableCard({ pick }: { pick: DraftPick }) {
+  const { useOldestArt } = useSettings();
+  const imageUrl = getCardImageUrl(pick, useOldestArt);
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `pick-${pick.id}`,
     data: { pick },
   });
-
   const style = transform
     ? {
         transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
@@ -70,10 +64,10 @@ function DraggableCard({ pick }: { pick: DraftPick }) {
       }`}
     >
       <div className="flex items-center gap-2">
-        {pick.image_url && (
+        {imageUrl && (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
-            src={pick.image_url}
+            src={imageUrl}
             alt={pick.card_name}
             className="w-12 h-16 object-cover rounded"
           />
@@ -107,7 +101,6 @@ function DroppableZone({
   const { setNodeRef, isOver } = useDroppable({
     id,
   });
-
   return (
     <div
       ref={setNodeRef}
@@ -130,6 +123,7 @@ const BASIC_LANDS = [
 ];
 
 export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "This team", isUserTeamMember = true }) => {
+  const { useOldestArt } = useSettings();
   const [draftPicks, setDraftPicks] = useState<DraftPick[]>([]);
   const [decks, setDecks] = useState<Deck[]>([]);
   const [selectedDeck, setSelectedDeck] = useState<Deck | null>(null);
@@ -170,15 +164,12 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
     try {
       const { picks } = await getTeamDraftPicks(teamId);
       setDraftPicks(picks);
-
       const { decks: teamDecks } = await getTeamDecks(teamId);
       setDecks(teamDecks);
-
       // Auto-select the first deck (most recent) - especially important for non-members
       if (teamDecks.length > 0 && !selectedDeck) {
         setSelectedDeck(teamDecks[0]);
       }
-
       // For non-members, always show the first (most recent) deck
       if (!isUserTeamMember && teamDecks.length > 0) {
         setSelectedDeck(teamDecks[0]);
@@ -205,7 +196,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
       setError("Deck name is required");
       return;
     }
-
     const result = await createDeck({
       team_id: teamId,
       deck_name: newDeckName,
@@ -213,7 +203,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
       format: newDeckFormat,
       is_public: false,
     });
-
     if (result.success) {
       setSuccess("Deck created successfully!");
       setShowNewDeckModal(false);
@@ -229,9 +218,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
 
   const handleDeleteDeck = async (deckId: string) => {
     if (!confirm("Are you sure you want to delete this deck?")) return;
-
     const result = await deleteDeck(deckId);
-
     if (result.success) {
       setSuccess("Deck deleted successfully!");
       setSelectedDeck(null);
@@ -247,14 +234,12 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
       setError("Please select a deck first");
       return;
     }
-
     // Check if card is already in deck
     if (deckCards.some((dc) => dc.draft_pick_id === pick.id)) {
       setError("Card is already in this section");
       setTimeout(() => setError(null), 3000);
       return;
     }
-
     const result = await addCardToDeck({
       deck_id: selectedDeck.id!,
       draft_pick_id: pick.id,
@@ -263,7 +248,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
       quantity: 1,
       category: activeCategory,
     });
-
     if (result.success) {
       setSuccess(`Added ${pick.card_name} to ${activeCategory}!`);
       await loadDeckCards(selectedDeck.id!);
@@ -275,7 +259,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
 
   const handleRemoveCardFromDeck = async (cardId: string, cardName: string) => {
     const result = await removeCardFromDeck(cardId);
-
     if (result.success) {
       setSuccess(`Removed ${cardName} from deck!`);
       if (selectedDeck) {
@@ -293,17 +276,14 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
       setError("Please select a deck first");
       return;
     }
-
     // Check if this basic land is already in the deck
     const existingLand = deckCards.find(
       (dc) => dc.card_name === landName && dc.category === activeCategory
     );
-
     if (existingLand && existingLand.id) {
       // Update existing land quantity
       const newQuantity = (existingLand.quantity || 1) + 1;
       const result = await updateDeckCardQuantity(existingLand.id, newQuantity);
-
       if (result.success) {
         setSuccess(`Added ${landName} to ${activeCategory}!`);
         await loadDeckCards(selectedDeck.id!);
@@ -321,7 +301,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
         quantity: 1,
         category: activeCategory,
       });
-
       if (result.success) {
         setSuccess(`Added ${landName} to ${activeCategory}!`);
         await loadDeckCards(selectedDeck.id!);
@@ -335,20 +314,16 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
   // Update basic land quantity
   const handleUpdateBasicLandQuantity = async (landName: string, newQuantity: number) => {
     if (!selectedDeck) return;
-
     const existingLand = deckCards.find(
       (dc) => dc.card_name === landName && dc.category === activeCategory
     );
-
     if (!existingLand) return;
-
     if (newQuantity <= 0) {
       // Remove the land
       await handleRemoveCardFromDeck(existingLand.id!, landName);
     } else if (existingLand.id) {
       // Update quantity
       const result = await updateDeckCardQuantity(existingLand.id, newQuantity);
-
       if (result.success) {
         await loadDeckCards(selectedDeck.id!);
       }
@@ -361,11 +336,9 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
       setError("No deck selected");
       return;
     }
-
     // Get cards by category
     const mainboard = getCardsByCategory("mainboard");
     const sideboard = getCardsByCategory("sideboard");
-
     // Build Cockatrice deck format
     let deckText = `// Deck: ${selectedDeck.deck_name}\n`;
     deckText += `// Format: ${selectedDeck.format || 'Unknown'}\n`;
@@ -374,7 +347,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
     }
     deckText += `// Exported from Dynasty Cube\n`;
     deckText += `\n`;
-
     // Add mainboard
     if (mainboard.length > 0) {
       deckText += `// Mainboard (${mainboard.reduce((sum, card) => sum + (card.quantity || 1), 0)} cards)\n`;
@@ -383,7 +355,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
       });
       deckText += `\n`;
     }
-
     // Add sideboard
     if (sideboard.length > 0) {
       deckText += `// Sideboard (${sideboard.reduce((sum, card) => sum + (card.quantity || 1), 0)} cards)\n`;
@@ -391,7 +362,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
         deckText += `SB: ${card.quantity || 1} ${card.card_name}\n`;
       });
     }
-
     // Create and download file
     const blob = new Blob([deckText], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -402,7 +372,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-
     setSuccess(`Exported ${selectedDeck.deck_name} to Cockatrice format!`);
     setTimeout(() => setSuccess(null), 3000);
   };
@@ -413,25 +382,20 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
       setError("No deck selected");
       return;
     }
-
     // Get cards by category
     const mainboard = getCardsByCategory("mainboard");
     const sideboard = getCardsByCategory("sideboard");
-
     // Build Arena deck format (simpler format)
     let deckText = `Deck\n`;
-
     mainboard.forEach((card) => {
       deckText += `${card.quantity || 1} ${card.card_name}\n`;
     });
-
     if (sideboard.length > 0) {
       deckText += `\nSideboard\n`;
       sideboard.forEach((card) => {
         deckText += `${card.quantity || 1} ${card.card_name}\n`;
       });
     }
-
     // Create and download file
     const blob = new Blob([deckText], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -442,7 +406,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-
     setSuccess(`Exported ${selectedDeck.deck_name} to Arena format!`);
     setTimeout(() => setSuccess(null), 3000);
   };
@@ -457,23 +420,18 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveDragPick(null);
-
     if (!over || !selectedDeck) return;
-
     // Check if dropped on a category zone
     if (over.id.toString().startsWith('category-')) {
       const category = over.id.toString().replace('category-', '') as "mainboard" | "sideboard" | "maybeboard";
       const pick = active.data.current?.pick as DraftPick;
-
       if (!pick) return;
-
       // Check if card is already in this category
       if (deckCards.some((dc) => dc.draft_pick_id === pick.id)) {
         setError(`${pick.card_name} is already in ${category}`);
         setTimeout(() => setError(null), 3000);
         return;
       }
-
       // Add card to the deck in the dropped category
       const result = await addCardToDeck({
         deck_id: selectedDeck.id!,
@@ -483,7 +441,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
         quantity: 1,
         category: category,
       });
-
       if (result.success) {
         setSuccess(`Added ${pick.card_name} to ${category}!`);
         await loadDeckCards(selectedDeck.id!);
@@ -505,10 +462,11 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
 
   // Get available picks (not in current deck yet)
   const availablePicks = draftPicks.filter(
-  // A pick is available if its unique ID is not found in the list of cards already in the deck.
-  (pick) => !deckCards.some((dc) => dc.draft_pick_id === pick.id)
-);
+    // A pick is available if its unique ID is not found in the list of cards already in the deck.
+    (pick) => !deckCards.some((dc) => dc.draft_pick_id === pick.id)
+  );
 
+  const activeDragPickImageUrl = activeDragPick ? getCardImageUrl(activeDragPick, useOldestArt) : null;
 
   if (loading) {
     return (
@@ -533,13 +491,11 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
             ✓ {success}
           </div>
         )}
-
         {error && (
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg p-4 text-red-800 dark:text-red-200">
             ✗ {error}
           </div>
         )}
-
       {/* Deck Selection / Creation */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
         <div className="flex items-center justify-between mb-4">
@@ -555,7 +511,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
             </button>
           )}
         </div>
-
         {decks.length === 0 ? (
           <div className="text-center py-8 text-gray-500 dark:text-gray-500">
             <p className="text-lg mb-2">No decks yet</p>
@@ -638,7 +593,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
             <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">
               Create New Deck
             </h3>
-
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -652,7 +606,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Description
@@ -665,7 +618,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Format
@@ -684,7 +636,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                   <option value="draft">Draft</option>
                 </select>
               </div>
-
               <div className="flex gap-2 pt-4">
                 <button
                   onClick={handleCreateDeck}
@@ -724,14 +675,12 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                   Unlimited
                 </span>
               </div>
-
               <div className="space-y-2">
                 {BASIC_LANDS.map((land) => {
                   const landInDeck = deckCards.find(
                     (dc) => dc.card_name === land.name && dc.category === activeCategory
                   );
                   const quantity = landInDeck?.quantity || 0;
-
                   return (
                     <div
                       key={land.name}
@@ -774,7 +723,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                 })}
               </div>
             </div>
-
             {/* Available Drafted Cards */}
             <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
               <div className="flex items-center justify-between mb-4">
@@ -785,7 +733,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                   {availablePicks.length} cards
                 </span>
               </div>
-
               <div className="space-y-2 max-h-[400px] overflow-y-auto">
                 {availablePicks.length === 0 ? (
                   <p className="text-sm text-gray-500 dark:text-gray-500 text-center py-8">
@@ -801,7 +748,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
               </div>
             </div>
           </div>
-
           {/* Right: Deck Contents */}
           <div className="lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
             <div className="flex items-center justify-between mb-4">
@@ -845,7 +791,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                 </button>
               </div>
             </div>
-
             {/* Category Tabs */}
             <div className="flex gap-2 mb-4 border-b border-gray-200 dark:border-gray-700">
               {[
@@ -872,7 +817,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                 </button>
               ))}
             </div>
-
             {/* Current Category Cards */}
             <DroppableZone
               id={`category-${activeCategory}`}
@@ -907,7 +851,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                 ))
               )}
             </DroppableZone>
-
             {/* Deck Stats */}
             <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center mb-4">
@@ -965,7 +908,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                   <div className="text-xs text-gray-600 dark:text-gray-400">Colors</div>
                 </div>
               </div>
-
               {/* Mini Mana Curve */}
               <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3">
                 <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -982,12 +924,10 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                       }
                     });
                     const maxCount = Math.max(...Object.values(cmcDist), 1);
-
                     return Array.from({ length: 8 }, (_, i) => {
                       const cmc = i.toString();
                       const count = cmcDist[cmc] || 0;
                       const height = (count / maxCount) * 100;
-
                       return (
                         <div key={cmc} className="flex flex-col items-center gap-0.5 flex-1">
                           <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -1010,7 +950,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
           </div>
         </div>
       )}
-
       {/* Read-only Deck View for Non-Members */}
       {selectedDeck && !isUserTeamMember && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
@@ -1029,13 +968,11 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
               {deckCards.length} cards
             </span>
           </div>
-
           {selectedDeck.description && (
             <p className="text-gray-600 dark:text-gray-400 mb-4">
               {selectedDeck.description}
             </p>
           )}
-
           {/* Category Tabs - Read Only */}
           <div className="flex gap-2 mb-4 border-b border-gray-200 dark:border-gray-700">
             {[
@@ -1062,7 +999,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
               </button>
             ))}
           </div>
-
           {/* Card List - Read Only */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {deckCards
@@ -1083,13 +1019,11 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                 </div>
               ))}
           </div>
-
           {deckCards.filter((card) => card.category === activeCategory).length === 0 && (
             <div className="text-center py-8 text-gray-500 dark:text-gray-400">
               No cards in {activeCategory}
             </div>
           )}
-
           <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
             <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
               This is a read-only view. Join {teamName} to edit decks.
@@ -1097,7 +1031,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
           </div>
         </div>
       )}
-
       {/* No Deck Selected */}
       {!selectedDeck && decks.length > 0 && isUserTeamMember && (
         <div className="text-center py-12 text-gray-500 dark:text-gray-500">
@@ -1106,20 +1039,16 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
         </div>
       )}
       </div>
-
       {/* Drag Overlay */}
       <DragOverlay>
-        {activeDragPick ? (
+        {activeDragPick && activeDragPickImageUrl ? (
           <div className="w-64 p-3 bg-white dark:bg-gray-800 rounded-lg border-2 border-blue-400 shadow-2xl opacity-90">
             <div className="flex items-center gap-2">
-              {activeDragPick.image_url && (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={activeDragPick.image_url}
-                  alt={activeDragPick.card_name}
-                  className="w-12 h-16 object-cover rounded"
-                />
-              )}
+              <img
+                src={activeDragPickImageUrl}
+                alt={activeDragPick.card_name}
+                className="w-12 h-16 object-cover rounded"
+              />
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
                   {activeDragPick.card_name}

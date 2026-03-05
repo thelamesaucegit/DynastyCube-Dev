@@ -7,7 +7,6 @@ import { cookies } from "next/headers";
 import { invalidateDraftCache } from '@/lib/draftCache';
 
 // This is the merged, definitive version of this file.
-
 async function createClient() {
   const cookieStore = await cookies();
   return createServerClient(
@@ -48,6 +47,7 @@ export interface CardData {
   cubecobra_elo?: number;
   rating_updated_at?: string;
 }
+
 export interface ReplayCardData {
   name: string;
   card_type: string;
@@ -66,6 +66,7 @@ export async function getCardDataForReplay(cardNames: string[]): Promise<Map<str
       .from('card_pools')
       .select('card_name, card_type, image_url, oldest_image_url')
       .in('card_name', cardNames);
+
     if (error) {
       console.error("Error fetching card data for replay:", error);
       return new Map();
@@ -78,7 +79,7 @@ export async function getCardDataForReplay(cardNames: string[]): Promise<Map<str
                 name: card.card_name,
                 card_type: card.card_type,
                 image_url: card.image_url,
-              oldest_image_url: card.oldest_image_url,
+                oldest_image_url: card.oldest_image_url,
             });
         }
       }
@@ -91,7 +92,6 @@ export async function getCardDataForReplay(cardNames: string[]): Promise<Map<str
 }
 
 // ALL ORIGINAL FUNCTIONS BELOW, NOW WITH LINTER WARNINGS FIXED
-
 export async function undraftAllCards(): Promise<{ success: boolean; updatedCount?: number; error?: string }> {
   const supabase = await createClient();
   try {
@@ -101,11 +101,13 @@ export async function undraftAllCards(): Promise<{ success: boolean; updatedCoun
       .eq("was_drafted", true)
       .select();
     if (updateError) throw updateError;
+
     const { error: deleteError } = await supabase
       .from("team_draft_picks")
       .delete()
       .not("id", "is", null);
     if (deleteError) throw deleteError;
+
     return { success: true, updatedCount: count || data?.length || 0 };
   } catch (error) { 
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -143,6 +145,7 @@ export async function getAvailableCardsForDraft(poolName: string = "default"): P
       console.error("Error fetching card pool:", poolError.message);
       return { cards: [], error: poolError.message };
     }
+
     const { data: draftedPicks, error: draftError } = await supabase
       .from("team_draft_picks")
       .select("card_pool_id")
@@ -151,6 +154,7 @@ export async function getAvailableCardsForDraft(poolName: string = "default"): P
       console.error("Error fetching drafted picks:", draftError.message);
       return { cards: [], error: draftError.message };
     }
+
     const draftedInstanceIds = new Set((draftedPicks || []).map(p => p.card_pool_id));
     const availableCards = (allCards || []).filter(card => !draftedInstanceIds.has(card.id!));
     return { cards: availableCards };
@@ -201,7 +205,7 @@ export async function addCardsToPool(cards: CardData[], poolName: string = "defa
             colors: card.colors || [],
             color_identity: card.color_identity || [],
             image_url: card.image_url,
-          oldest_image_url: card.oldest_image_url,
+            oldest_image_url: card.oldest_image_url,
             mana_cost: card.mana_cost,
             cmc: card.cmc || 0,
             pool_name: poolName,
@@ -227,17 +231,16 @@ export async function bulkImportCards(lines: string[], defaultCubucksCost: numbe
         }
         const existingCardIds = new Set((existingCards || []).map(c => c.card_id));
         let skipped = 0;
-        // --- FIX: Removed unused user variable ---
         const failed: string[] = [];
         
-        // --- FIX: Create a strongly-typed array for insertion ---
         const cardsToInsert: Array<Omit<CardData, 'id' | 'created_at' | 'rating_updated_at'>> = [];
-
         for (const line of lines) {
             const trimmed = line.trim();
             if (!trimmed) continue;
+
             let cardName = trimmed;
             let cubucksCost = defaultCubucksCost;
+
             const lastCommaIndex = trimmed.lastIndexOf(",");
             if (lastCommaIndex !== -1) {
                 const possibleCost = trimmed.substring(lastCommaIndex + 1).trim();
@@ -261,6 +264,17 @@ export async function bulkImportCards(lines: string[], defaultCubucksCost: numbe
                     continue;
                 }
                 existingCardIds.add(card.id);
+
+                let oldestImageUrl: string | undefined;
+                if (card.oracle_id) {
+                    await new Promise(r => setTimeout(r, 100)); // Rate limit
+                    const oldestPrintingResponse = await fetch(`https://api.scryfall.com/cards/search?q=oracleid%3A${card.oracle_id}&order=released&dir=asc&unique=prints`);
+                    if (oldestPrintingResponse.ok) {
+                        const oldestPrintingData = await oldestPrintingResponse.json();
+                        oldestImageUrl = oldestPrintingData?.data?.[0]?.image_uris?.normal;
+                    }
+                }
+
                 cardsToInsert.push({
                     card_id: card.id,
                     card_name: card.name,
@@ -270,7 +284,7 @@ export async function bulkImportCards(lines: string[], defaultCubucksCost: numbe
                     colors: card.colors || [],
                     color_identity: card.color_identity || [],
                     image_url: card.image_uris?.normal || card.image_uris?.small || undefined,
-                  oldest_image_url: card.image_uris?.normal || card.image_uris?.small || undefined,
+                    oldest_image_url: oldestImageUrl || card.image_uris?.normal || card.image_uris?.small || undefined,
                     mana_cost: card.mana_cost,
                     cmc: card.cmc || 0,
                     cubucks_cost: cubucksCost,
@@ -281,7 +295,6 @@ export async function bulkImportCards(lines: string[], defaultCubucksCost: numbe
             }
         }
         if (cardsToInsert.length > 0) {
-            // --- FIX: Removed 'as any' ---
             const { error: insertError } = await supabase.from("card_pools").insert(cardsToInsert);
             if (insertError) {
                 return { success: false, added: 0, skipped: 0, failed, error: insertError.message };
@@ -328,11 +341,14 @@ export async function removeFilteredCards(filter: "all" | "undrafted" | "drafted
       if (deleteError) throw deleteError;
       return { success: true, removedCount: count || 0 };
     }
+
     const { data: poolCards, error: poolError } = await supabase.from("card_pools").select("id, card_id").eq("pool_name", poolName);
     if (poolError) throw poolError;
     if (!poolCards || poolCards.length === 0) { return { success: true, removedCount: 0 }; }
+
     const { data: draftPicks, error: draftError } = await supabase.from("team_draft_picks").select("card_id");
     if (draftError) throw draftError;
+
     const draftedCardIds = new Set((draftPicks || []).map((p) => p.card_id));
     let idsToDelete: string[];
     if (filter === "undrafted") {
@@ -340,7 +356,9 @@ export async function removeFilteredCards(filter: "all" | "undrafted" | "drafted
     } else {
       idsToDelete = poolCards.filter((c) => draftedCardIds.has(c.card_id)).map((c) => c.id);
     }
+
     if (idsToDelete.length === 0) { return { success: true, removedCount: 0 }; }
+
     const { error: deleteError } = await supabase.from("card_pools").delete().in("id", idsToDelete);
     if (deleteError) throw deleteError;
     return { success: true, removedCount: idsToDelete.length };
