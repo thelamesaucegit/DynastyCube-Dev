@@ -3,6 +3,7 @@
 import "./globals.css";
 import { Metadata } from "next";
 import Providers from "./components/Providers";
+import { SettingsProvider } from '@/contexts/SettingsContext'; // 1. Import the provider
 
 export const metadata: Metadata = {
   title: "The Dynasty Cube",
@@ -49,7 +50,10 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <Providers>{children}</Providers>
+        {/* --- FIX: SettingsProvider now wraps the Providers component --- */}
+        <SettingsProvider>
+          <Providers>{children}</Providers>
+        </SettingsProvider>
       </body>
     </html>
   );
