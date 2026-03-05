@@ -1,8 +1,10 @@
 // src/app/components/admin/DataBackfillManagement.tsx
+
 "use client";
 
 import React, { useState } from "react";
-import { backfillAllCMCData, backfillColorIdentity } from "@/app/actions/adminActions";
+// --- MODIFIED: Import the new backfill function ---
+import { backfillAllCMCData, backfillColorIdentity, backfillOracleData } from "@/app/actions/adminActions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 
@@ -44,6 +46,24 @@ export const DataBackfillManagement: React.FC = () => {
     }
   };
 
+  // --- MODIFIED: New handler for the Oracle Data backfill ---
+  const handleBackfillOracle = async () => {
+    setLoading(true);
+    setResult("Starting Oracle ID and Oldest Image backfill. This may take a very long time...");
+    try {
+      const result = await backfillOracleData();
+      if (result.success) {
+        setResult(`✅ Oracle Data Backfill Complete!\nCards Updated: ${result.updated}\nFailed: ${result.failed}\nErrors: ${result.errors.join(", ")}`);
+      } else {
+        setResult(`❌ Oracle Data Backfill Failed.\nErrors: ${result.errors.join(", ")}`);
+      }
+    } catch (err) {
+      setResult(`❌ An unexpected error occurred: ${String(err)}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -56,10 +76,21 @@ export const DataBackfillManagement: React.FC = () => {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* --- MODIFIED: New button and description for the Oracle backfill --- */}
+        <div className="p-4 border rounded-lg bg-background">
+          <h4 className="font-semibold mb-2">Backfill Oracle & Oldest Images</h4>
+          <p className="text-sm text-muted-foreground mb-4">
+            Scans all cards in `card_pools` and populates the `oracle_id` and `oldest_image_url` fields from Scryfall. This is a slow, one-time process.
+          </p>
+          <Button onClick={handleBackfillOracle} disabled={loading} variant="destructive">
+            {loading ? "Running..." : "Run Oracle & Image Backfill"}
+          </Button>
+        </div>
+
         <div className="p-4 border rounded-lg bg-background">
           <h4 className="font-semibold mb-2">Backfill CMC Data</h4>
           <p className="text-sm text-muted-foreground mb-4">
-            Scans all cards in `card_pools` and `team_draft_picks` and fetches their Converted Mana Cost (CMC) from Scryfall if it&apos;s missing.
+            Scans `card_pools` and `team_draft_picks` and fetches their Converted Mana Cost (CMC) from Scryfall if it's missing.
           </p>
           <Button onClick={handleBackfillCMC} disabled={loading}>
             {loading ? "Running..." : "Run CMC Backfill"}
@@ -69,7 +100,7 @@ export const DataBackfillManagement: React.FC = () => {
         <div className="p-4 border rounded-lg bg-background">
           <h4 className="font-semibold mb-2">Backfill Color Identity Data</h4>
           <p className="text-sm text-muted-foreground mb-4">
-            Scans all cards in `card_pools` and populates the `color_identity` field from Scryfall. This is required for the enhanced autodraft algorithm.
+            Scans `card_pools` and populates the `color_identity` field from Scryfall. Required for the autodraft algorithm.
           </p>
           <Button onClick={handleBackfillIdentity} disabled={loading}>
             {loading ? "Running..." : "Run Color Identity Backfill"}
