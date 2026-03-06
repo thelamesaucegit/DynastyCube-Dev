@@ -11,6 +11,8 @@ import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { useSettings } from '@/contexts/SettingsContext';
 import { getCardImageUrl } from '@/app/utils/cardUtils';
 
+// --- TYPE DEFINITIONS ---
+
 interface Team {
   id: string;
   name: string;
@@ -25,14 +27,24 @@ interface ReplayPlayerProps {
   cardDataMap: Map<string, ReplayCardData>;
 }
 
+// BattlefieldCard now includes its final destination row
 interface BattlefieldCard extends CardType {
-  imageUrl?: string | null;
+  row: 'front' | 'back';
+  imageUrl: string | null;
 }
 
-function getCardCategory(cardName: string, cardDataMap: Map<string, ReplayCardData>): 'front' | 'back' {
-  const cardInfo = cardDataMap.get(cardName);
-  if (!cardInfo) return 'front';
-  const type = cardInfo.card_type.toLowerCase();
+// AnimatedCard handles the 3-second "enlarge" effect
+interface AnimatedCard {
+  name: string;
+  imageUrl: string;
+  // If 'transient', it disappears after animation. If 'permanent', it's added to the battlefield.
+  type: 'transient' | 'permanent';
+}
+
+// --- HELPER FUNCTIONS ---
+
+function getCardCategory(cardTypeLine: string): 'front' | 'back' {
+  const type = cardTypeLine.toLowerCase();
   if (type.includes('land') || (type.includes('artifact') && !type.includes('creature'))) {
     return 'back';
   }
@@ -40,65 +52,139 @@ function getCardCategory(cardName: string, cardDataMap: Map<string, ReplayCardDa
 }
 
 function generateLogMessage(prevState: GameState | null, nextState: GameState): string | null {
-    if (!prevState) return `Match starts. Turn ${nextState.turn}. Active player: ${nextState.activePlayer}.`;
-    if (prevState.turn !== nextState.turn) return `Turn ${nextState.turn}: ${nextState.activePlayer} begins their turn.`;
-    if(prevState.phase !== nextState.phase) return `${nextState.activePlayer} enters the ${nextState.phase} phase.`;
+  if (!prevState) return `Match starts. Turn ${nextState.turn}. Active player: ${nextState.activePlayer}.`;
+  if (prevState.turn !== nextState.turn) return `Turn ${nextState.turn}: ${nextState.activePlayer} begins their turn.`;
+  if (prevState.phase !== nextState.phase) return `${nextState.activePlayer} enters the ${nextState.phase} phase.`;
 
-    const prevPlayers = prevState.players;
-    const nextPlayers = nextState.players;
+  for (const playerName in nextState.players) {
+    const prevPlayer = prevState.players[playerName];
+    const nextPlayer = nextState.players[playerName];
+    if (!prevPlayer) continue;
 
-    for (const playerName in nextPlayers) {
-        const prevPlayer = prevPlayers[playerName];
-        const nextPlayer = nextPlayers[playerName];
-        if (!prevPlayer) continue;
-
-        if (prevPlayer.life !== nextPlayer.life) {
-            const diff = nextPlayer.life - prevPlayer.life;
-            return `${playerName} ${diff > 0 ? 'gains' : 'loses'} ${Math.abs(diff)} life. (Now at ${nextPlayer.life})`;
-        }
-
-        if (prevPlayer.battlefield.length < nextPlayer.battlefield.length) {
-            const newCard = nextPlayer.battlefield.find(c => !prevPlayer.battlefield.some(pc => pc.id === c.id));
-            if (newCard) return `${playerName} plays ${newCard.name}.`;
-        }
-
-        if (prevPlayer.battlefield.length > nextPlayer.battlefield.length) {
-            const removedCard = prevPlayer.battlefield.find(c => !nextPlayer.battlefield.some(nc => nc.id === nc.id));
-            if (removedCard) return `${removedCard.name} leaves the battlefield.`;
-        }
-
-        const newAttacker = nextPlayer.battlefield.find(c => c.isAttacking && !prevPlayer.battlefield.find(pc => pc.id === c.id)?.isAttacking);
-        if (newAttacker) return `${playerName} attacks with ${newAttacker.name}.`;
+    if (prevPlayer.life !== nextPlayer.life) {
+      const diff = nextPlayer.life - prevPlayer.life;
+      return `${playerName} ${diff > 0 ? 'gains' : 'loses'} ${Math.abs(diff)} life. (Now at ${nextPlayer.life})`;
     }
-    return null;
+
+    const prevBf = new Set(prevPlayer.battlefield.map(c => c.id));
+    const newCard = nextPlayer.battlefield.find(c => !prevBf.has(c.id));
+    if (newCard) return `${playerName} plays ${newCard.name}.`;
+    
+    // FIX: Corrected the bug in this logic block
+    const nextBf = new Set(nextPlayer.battlefield.map(c => c.id));
+    const removedCard = prevPlayer.battlefield.find(c => !nextBf.has(c.id));
+    if (removedCard) return `${removedCard.name} leaves the battlefield.`;
+
+    const newAttacker = nextPlayer.battlefield.find(c => c.isAttacking && !prevPlayer.battlefield.find(pc => pc.id === c.id)?.isAttacking);
+    if (newAttacker) return `${playerName} attacks with ${newAttacker.name}.`;
+  }
+  return null;
 }
+
+// --- MAIN COMPONENT ---
 
 export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDataMap }: ReplayPlayerProps) {
   const { useOldestArt } = useSettings();
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [eventLog, setEventLog] = useState<string[]>([]);
-  const [lastPlayedCard, setLastPlayedCard] = useState<{ name: string; imageUrl: string } | null>(null);
-  const [lifeChange, setLifeChange] = useState<{ teamId: string; type: 'gain' | 'loss' } | null>(null);
+  const [animatedCard, setAnimatedCard] = useState<AnimatedCard | null>(null);
+  const [lifeChange, setLifeChange] = useState<{ player: string; type: 'gain' | 'loss' } | null>(null);
+
+  // FIX: This is the new, persistent state for the cards on the battlefield.
+  const [battlefieldState, setBattlefieldState] = useState<Record<string, BattlefieldCard[]>>({});
 
   const currentState = initialGameStates[currentStepIndex];
-  
-  const teamMap = useMemo(() => {
-    const map = new Map<string, Team>();
-    if (team1 && initialGameStates[0]?.players && Object.values(initialGameStates[0].players)[0]) {
-      map.set(Object.values(initialGameStates[0].players)[0].name, team1);
-    }
-    if (team2 && initialGameStates[0]?.players && Object.values(initialGameStates[0].players)[1]) {
-      map.set(Object.values(initialGameStates[0].players)[1].name, team2);
-    }
-    return map;
-  }, [team1, team2, initialGameStates]);
 
-  const p1Name = currentState?.players ? Object.keys(currentState.players)[0] : '';
-  const p2Name = currentState?.players ? Object.keys(currentState.players)[1] : '';
-  const p1Team = p1Name ? teamMap.get(p1Name) : undefined;
-  const p2Team = p2Name ? teamMap.get(p2Name) : undefined;
+  // FIX: Robustly map players to teams, regardless of order.
+  const { player1, player2, teamMap } = useMemo(() => {
+    if (!initialGameStates[0]?.players || !team1 || !team2) {
+      return { player1: null, player2: null, teamMap: new Map() };
+    }
+    const playerNames = Object.keys(initialGameStates[0].players);
+    const p1 = { name: playerNames[0], team: team1 };
+    const p2 = { name: playerNames[1], team: team2 };
+    const newTeamMap = new Map<string, Team>();
+    newTeamMap.set(p1.name, p1.team);
+    newTeamMap.set(p2.name, p2.team);
 
+    // Determine who is top and bottom based on active player in turn 1
+    // The convention is the first active player is on the bottom (Player 1)
+    if (initialGameStates[0].activePlayer === p2.name) {
+      return { player1: p2, player2: p1, teamMap: newTeamMap }; // Swap
+    }
+    return { player1: p1, player2: p2, teamMap: newTeamMap };
+  }, [initialGameStates, team1, team2]);
+
+  // Main Game Loop for state transitions
+  useEffect(() => {
+    const prevState = currentStepIndex > 0 ? initialGameStates[currentStepIndex - 1] : null;
+    const state = initialGameStates[currentStepIndex];
+    if (!state || !player1 || !player2) return;
+
+    // --- LOGIC FOR UPDATING BATTLEFIELD, ANIMATIONS, AND LOG ---
+
+    // 1. Update Persistent Battlefield State
+    const newBattlefieldState: Record<string, BattlefieldCard[]> = { [player1.name]: [], [player2.name]: [] };
+    for (const pName of [player1.name, player2.name]) {
+      newBattlefieldState[pName] = state.players[pName].battlefield.map(card => {
+        const cardInfo = cardDataMap.get(card.name);
+        return {
+          ...card,
+          row: getCardCategory(cardInfo?.card_type || ''),
+          imageUrl: cardInfo ? getCardImageUrl(cardInfo, useOldestArt) : null
+        };
+      });
+    }
+    setBattlefieldState(newBattlefieldState);
+
+    // 2. Handle Animations and Transient Cards
+    if (prevState) {
+      const prevBfCards = new Set([...prevState.players[player1.name].battlefield.map(c => c.id), ...prevState.players[player2.name].battlefield.map(c => c.id)]);
+      const nextBfCards = new Set([...state.players[player1.name].battlefield.map(c => c.id), ...state.players[player2.name].battlefield.map(c => c.id)]);
+      
+      const cardPlayed = [...state.players[player1.name].battlefield, ...state.players[player2.name].battlefield].find(c => !prevBfCards.has(c.id));
+      const cardRemoved = [...prevState.players[player1.name].battlefield, ...prevState.players[player2.name].battlefield].find(c => !nextBfCards.has(c.id));
+      
+      const cardInAction = cardPlayed || cardRemoved;
+
+      if (cardInAction) {
+        const cardInfo = cardDataMap.get(cardInAction.name);
+        const imageUrl = cardInfo ? getCardImageUrl(cardInfo, useOldestArt) : null;
+        if (imageUrl) {
+          const cardType = cardInfo?.card_type.toLowerCase() || '';
+          const isPermanent = !cardType.includes('instant') && !cardType.includes('sorcery');
+          
+          setAnimatedCard({
+            name: cardInAction.name,
+            imageUrl: imageUrl,
+            type: cardRemoved || !isPermanent ? 'transient' : 'permanent'
+          });
+
+          setTimeout(() => setAnimatedCard(null), 2900); // Slightly less than the auto-play timer
+        }
+      }
+
+      // Handle life changes
+      if (state.players[player1.name].life !== prevState.players[player1.name].life) {
+        const type = state.players[player1.name].life > prevState.players[player1.name].life ? 'gain' : 'loss';
+        setLifeChange({ player: player1.name, type });
+        setTimeout(() => setLifeChange(null), 1000);
+      }
+      if (state.players[player2.name].life !== prevState.players[player2.name].life) {
+        const type = state.players[player2.name].life > prevState.players[player2.name].life ? 'gain' : 'loss';
+        setLifeChange({ player: player2.name, type });
+        setTimeout(() => setLifeChange(null), 1000);
+      }
+    }
+
+    // 3. Update Event Log
+    const logMessage = generateLogMessage(prevState, state);
+    if (logMessage) setEventLog(prev => [logMessage, ...prev].slice(0, 20));
+
+  }, [currentStepIndex, initialGameStates, cardDataMap, useOldestArt, player1, player2]);
+
+  // Auto-playback timer
   useEffect(() => {
     if (!isPlaying || currentStepIndex >= initialGameStates.length - 1) {
       setIsPlaying(false);
@@ -112,100 +198,66 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     return () => clearTimeout(timer);
   }, [isPlaying, currentStepIndex, initialGameStates]);
 
-  useEffect(() => {
-    const prevState = currentStepIndex > 0 ? initialGameStates[currentStepIndex - 1] : null;
-    if (!currentState) return;
-    const logMessage = generateLogMessage(prevState, currentState);
-    if (logMessage) setEventLog(prev => [...prev, logMessage].slice(-10));
-    if (!prevState || !p1Name || !p2Name) return;
+  const renderBattlefieldForPlayer = (playerName: string) => {
+    if (!playerName) return <div className="h-1/2 w-full" />;
 
-    const prevCards = new Set([...prevState.players[p1Name].battlefield.map(c => c.id), ...prevState.players[p2Name].battlefield.map(c => c.id)]);
-    const nextCards = new Set([...currentState.players[p1Name].battlefield.map(c => c.id), ...currentState.players[p2Name].battlefield.map(c => c.id)]);
-    const cardPlayed = [...currentState.players[p1Name].battlefield, ...currentState.players[p2Name].battlefield].find(c => !prevCards.has(c.id));
-    const cardRemoved = [...prevState.players[p1Name].battlefield, ...prevState.players[p2Name].battlefield].find(c => !nextCards.has(c.id));
-    const cardToShow = cardPlayed || cardRemoved;
-
-    if (cardToShow) {
-        const cardInfo = cardDataMap.get(cardToShow.name);
-        if (cardInfo) {
-            const imageUrl = getCardImageUrl(cardInfo, useOldestArt);
-            if (imageUrl) {
-                setLastPlayedCard({ name: cardToShow.name, imageUrl });
-                setTimeout(() => setLastPlayedCard(null), 3000);
-            }
-        }
-    }
-
-    const p1LifeChange = currentState.players[p1Name]?.life !== prevState.players[p1Name]?.life;
-    const p2LifeChange = currentState.players[p2Name]?.life !== prevState.players[p2Name]?.life;
-
-    if (p1LifeChange && p1Team) {
-        const type = currentState.players[p1Name].life > prevState.players[p1Name].life ? 'gain' : 'loss';
-        setLifeChange({ teamId: p1Team.id, type });
-        setTimeout(() => setLifeChange(null), 1000);
-    }
-    if (p2LifeChange && p2Team) {
-        const type = currentState.players[p2Name].life > prevState.players[p2Name].life ? 'gain' : 'loss';
-        setLifeChange({ teamId: p2Team.id, type });
-        setTimeout(() => setLifeChange(null), 1000);
-    }
-  }, [currentStepIndex, initialGameStates, cardDataMap, p1Name, p2Name, p1Team, p2Team, useOldestArt]);
-  
-  const renderBattlefield = (playerState: PlayerStateType | undefined, playerTeam: Team | undefined) => {
-    if (!playerState || !playerTeam) return <div className="w-full h-1/2 bg-gray-700/50 p-4"></div>;
-
-    const battlefieldCards: BattlefieldCard[] = playerState.battlefield.map(c => {
-        const cardInfo = cardDataMap.get(c.name);
-        return { ...c, imageUrl: cardInfo ? getCardImageUrl(cardInfo, useOldestArt) : null };
-    });
-
-    const backRow = battlefieldCards.filter(c => getCardCategory(c.name, cardDataMap) === 'back');
-    const frontRow = battlefieldCards.filter(c => getCardCategory(c.name, cardDataMap) === 'front');
-
-    const renderRow = (cards: BattlefieldCard[]) => (
-        <div className="flex justify-center items-end gap-[-20px] min-h-[100px]">
-            {cards.map((card, index) => (
-                <div key={card.id} className="relative transition-transform duration-500 hover:scale-150 hover:z-10">
-                    {card.imageUrl && <img src={card.imageUrl} alt={card.name} className="h-24 object-contain drop-shadow-lg" style={{ transform: `translateX(${index * -20}px)`}} />}
-                </div>
-            ))}
-        </div>
+    const playerState = currentState.players[playerName];
+    const team = teamMap.get(playerName);
+    const cards = battlefieldState[playerName] || [];
+    
+    const backRow = cards.filter(c => c.row === 'back');
+    const frontRow = cards.filter(c => c.row === 'front');
+    
+    const renderRow = (rowCards: BattlefieldCard[]) => (
+      <div className="flex-grow flex justify-center items-center gap-[-30px] px-24">
+          {rowCards.map((card, index) => (
+              <div key={card.id} className="relative transition-transform duration-300 hover:scale-150 hover:z-20" style={{ transform: `translateX(${index * -15}px)`}}>
+                  {card.imageUrl && <img src={card.imageUrl} alt={card.name} className="h-28 object-contain drop-shadow-lg rounded-lg" />}
+                  {card.isTapped && <div className="absolute inset-0 bg-black/30 rounded-lg -rotate-12"></div>}
+              </div>
+          ))}
+      </div>
     );
-
+    
     return (
-        <div className="relative w-full h-1/2 bg-gray-700/50 p-4 flex flex-col justify-between">
-            <div className={`absolute top-4 left-4 flex items-center gap-4 z-10 transition-all duration-500 ${lifeChange?.teamId === playerTeam?.id && lifeChange.type === 'loss' ? 'animate-ping' : ''} ${lifeChange?.teamId === playerTeam?.id && lifeChange.type === 'gain' ? 'animate-ping' : ''}`}>
-                <div className="relative">
-                    <div className="text-5xl">{playerTeam?.emoji}</div>
-                    {currentState.activePlayer === playerState.name && <div className="absolute inset-0 rounded-full ring-4 ring-blue-400 ring-offset-4 ring-offset-gray-800 animate-pulse"></div>}
-                </div>
-                <div className={`text-6xl font-bold ${lifeChange?.teamId === playerTeam?.id && lifeChange.type === 'loss' ? 'text-red-500' : ''} ${lifeChange?.teamId === playerTeam?.id && lifeChange.type === 'gain' ? 'text-green-500' : ''}`}>{playerState.life}</div>
-            </div>
-            <div className="flex flex-col gap-2">
-                {renderRow(frontRow)}
-                {renderRow(backRow)}
-            </div>
-        </div>
+      <div className="relative w-full h-1/2 bg-gray-700/50 p-4 flex flex-col-reverse">
+          <div className="flex flex-col gap-2 h-full">
+              {renderRow(backRow)}
+              {renderRow(frontRow)}
+          </div>
+          <div className={`absolute top-4 left-4 flex items-center gap-4 z-10`}>
+              <div className="relative">
+                  <div className="text-5xl">{team?.emoji}</div>
+                  {currentState.activePlayer === playerName && <div className="absolute -inset-2 rounded-full ring-4 ring-blue-400 ring-offset-4 ring-offset-gray-800 animate-pulse"></div>}
+              </div>
+              <div className={`text-6xl font-bold transition-colors duration-300 ${lifeChange?.player === playerName && lifeChange.type === 'loss' ? 'text-red-500' : ''} ${lifeChange?.player === playerName && lifeChange.type === 'gain' ? 'text-green-500' : ''}`}>
+                  {playerState.life}
+              </div>
+          </div>
+      </div>
     );
   };
-  
+
   return (
-    <div className="bg-gray-800 text-white rounded-lg overflow-hidden">
+    <div className="bg-gray-800 text-white rounded-lg overflow-hidden select-none">
         <div className="relative h-[80vh] flex flex-col">
-            {renderBattlefield(currentState?.players[p2Name], p2Team)}
-            {renderBattlefield(currentState?.players[p1Name], p1Team)}
-            {lastPlayedCard && (
-                <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/50 backdrop-blur-sm">
+            {renderBattlefieldForPlayer(player2?.name || '')}
+            {renderBattlefieldForPlayer(player1?.name || '')}
+
+            {animatedCard && (
+                <div className="absolute inset-0 flex items-center justify-center z-50 bg-black/60 backdrop-blur-sm">
                     <div className="text-center animate-in fade-in zoom-in-75 duration-500">
-                        <p className="text-2xl font-bold mb-2 drop-shadow-lg">{lastPlayedCard.name}</p>
-                        <img src={lastPlayedCard.imageUrl} alt={lastPlayedCard.name} className="h-96 object-contain rounded-lg shadow-2xl"/>
+                        <p className="text-2xl font-bold mb-2 drop-shadow-lg">{animatedCard.name}</p>
+                        <img src={animatedCard.imageUrl} alt={animatedCard.name} className="h-96 object-contain rounded-lg shadow-2xl"/>
                     </div>
                 </div>
             )}
         </div>
         <div className="grid grid-cols-3 gap-4 p-4 border-t border-gray-700 bg-gray-900">
             <ScrollArea className="h-24 col-span-1 rounded-md bg-black/20 p-2">
-                {eventLog.map((msg, i) => <p key={i} className="text-xs text-gray-400 font-mono animate-in fade-in">{`> ${msg}`}</p>)}
+                <div className="flex flex-col-reverse">
+                    {eventLog.map((msg, i) => <p key={i} className="text-xs text-gray-400 font-mono animate-in fade-in">{`> ${msg}`}</p>)}
+                </div>
             </ScrollArea>
             <div className="col-span-1 flex items-center justify-center gap-2">
                 <Button onClick={() => setCurrentStepIndex(0)} variant="ghost" size="icon" disabled={isPlaying}><SkipBack /></Button>
