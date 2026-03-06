@@ -11,6 +11,8 @@ import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { useSettings } from '@/contexts/SettingsContext';
 import { getCardImageUrl } from '@/app/utils/cardUtils';
 
+// --- TYPE DEFINITIONS ---
+
 interface Team {
   id: string;
   name: string;
@@ -40,6 +42,8 @@ interface PlayerInfo {
     logName: string;
     team: Team;
 }
+
+// --- HELPER FUNCTIONS ---
 
 function getCardCategory(cardTypeLine: string): 'front' | 'back' {
   const type = cardTypeLine.toLowerCase();
@@ -76,6 +80,8 @@ function generateLogMessage(prevState: GameState | null, nextState: GameState, t
     return null;
 }
 
+// --- MAIN COMPONENT ---
+
 export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDataMap }: ReplayPlayerProps) {
   const { useOldestArt } = useSettings();
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -86,17 +92,22 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
   const [battlefieldState, setBattlefieldState] = useState<Record<string, BattlefieldCard[]>>({});
   const currentState = initialGameStates[currentStepIndex];
 
+  // This is the mapping logic for players and teams.
   const { player1, player2, teamMap } = useMemo(() => {
     const newTeamMap = new Map<string, Team>();
     let p1Info: PlayerInfo | null = null;
     let p2Info: PlayerInfo | null = null;
 
+    // The keys from the game log, e.g., "Ai(1)-[The Titans] (AI: [Constructed])"
     const logPlayerNames = Object.keys(initialGameStates[0].players);
 
     if (team1 && team2) {
-      // Find the player log name that STARTS WITH the unique team name.
-      const logName1 = logPlayerNames.find(name => name.startsWith(team1.name));
-      const logName2 = logPlayerNames.find(name => name.startsWith(team2.name));
+      // ---
+      // FIX: Use `includes()` for robust matching, per your recommendation.
+      // This finds the team name anywhere within the log string.
+      // ---
+      const logName1 = logPlayerNames.find(name => name.includes(team1.name));
+      const logName2 = logPlayerNames.find(name => name.includes(team2.name));
 
       if (logName1) {
         p1Info = { logName: logName1, team: team1 };
@@ -108,24 +119,28 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
       }
     }
     
+    // This check will now pass, but it remains as a safeguard.
     if (!p1Info || !p2Info) {
       return { player1: null, player2: null, teamMap: newTeamMap };
     }
 
+    // The player on the bottom is conventionally the first active player of the game.
     if (initialGameStates[0].activePlayer === p2Info.logName) {
-      return { player1: p2Info, player2: p1Info, teamMap: newTeamMap };
+      return { player1: p2Info, player2: p1Info, teamMap: newTeamMap }; // Swap them
     }
 
     return { player1: p1Info, player2: p2Info, teamMap: newTeamMap };
 
   }, [initialGameStates, team1, team2]);
 
+  // Main Game Loop
   useEffect(() => {
     const prevState = currentStepIndex > 0 ? initialGameStates[currentStepIndex - 1] : null;
     const state = initialGameStates[currentStepIndex];
 
     if (!state || !player1 || !player2) return;
 
+    // 1. Update Battlefield State
     const newBattlefieldState: Record<string, BattlefieldCard[]> = { [player1.logName]: [], [player2.logName]: [] };
     for (const pName of [player1.logName, player2.logName]) {
       const playerState = state.players[pName];
@@ -142,6 +157,7 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     }
     setBattlefieldState(newBattlefieldState);
 
+    // 2. Handle Animations
     if (prevState) {
       const allPrevBfIds = new Set([...(prevState.players[player1.logName]?.battlefield.map(c => c.id) || []), ...(prevState.players[player2.logName]?.battlefield.map(c => c.id) || [])]);
       const allNextCards = [...(state.players[player1.logName]?.battlefield || []), ...(state.players[player2.logName]?.battlefield || [])];
@@ -161,6 +177,7 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
         }
       }
 
+      // Handle life changes
       if (state.players[player1.logName] && prevState.players[player1.logName] && state.players[player1.logName].life !== prevState.players[player1.logName].life) {
         setLifeChange({ logName: player1.logName, type: state.players[player1.logName].life > prevState.players[player1.logName].life ? 'gain' : 'loss' });
         setTimeout(() => setLifeChange(null), 1000);
@@ -171,11 +188,13 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
       }
     }
 
+    // 3. Update Event Log
     const logMessage = generateLogMessage(prevState, state, teamMap);
     if (logMessage) setEventLog(prev => [logMessage, ...prev].slice(0, 20));
 
   }, [currentStepIndex, initialGameStates, cardDataMap, useOldestArt, player1, player2, teamMap]);
 
+  // Auto-playback timer
   useEffect(() => {
     if (!isPlaying || currentStepIndex >= initialGameStates.length - 1) {
       setIsPlaying(false);
@@ -189,7 +208,9 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     return () => clearTimeout(timer);
   }, [isPlaying, currentStepIndex, initialGameStates]);
 
+  // This is the component that renders one player's half of the screen
   const renderPlayerArea = (playerInfo: PlayerInfo | null, area: 'top' | 'bottom') => {
+    // This check is now the primary indicator of a problem.
     if (!playerInfo) return <div className="h-1/2 w-full bg-gray-800 flex items-center justify-center"><p className="text-gray-500">Waiting for team data...</p></div>;
     
     const playerState = currentState.players[playerInfo.logName];
