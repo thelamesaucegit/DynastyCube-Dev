@@ -24,6 +24,7 @@ interface AiProfile {
   profile_name: string;
 }
 
+// This helper function is now only used to format the string for the simulation.
 function formatDecklistToDck(decklist: string, deckName: string): string {
   return `[metadata]\nName=${deckName}\n\n[Main]\n${decklist}`;
 }
@@ -33,8 +34,8 @@ export default function MatchRunnerPage() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [team1Id, setTeam1Id] = useState('');
   const [team2Id, setTeam2Id] = useState('');
-  const [player1, setPlayer1] = useState({ decklist: '', deckName: '', aiProfile: '' });
-  const [player2, setPlayer2] = useState({ decklist: '', deckName: '', aiProfile: '' });
+  const [player1, setPlayer1] = useState({ decklist: '', aiProfile: '' });
+  const [player2, setPlayer2] = useState({ decklist: '', aiProfile: '' });
   const [isSimulating, setIsSimulating] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,9 +59,6 @@ export default function MatchRunnerPage() {
     setError(null);
     setValidationError(null);
 
-    // --- FIX: Trim all user inputs before validation ---
-    const trimmedP1DeckName = player1.deckName.trim();
-    const trimmedP2DeckName = player2.deckName.trim();
     const trimmedP1Decklist = player1.decklist.trim();
     const trimmedP2Decklist = player2.decklist.trim();
 
@@ -68,18 +66,15 @@ export default function MatchRunnerPage() {
       setError('Please select a team for both players.');
       return;
     }
-    if (!trimmedP1DeckName || !trimmedP2DeckName) {
-        setError('Please provide a deck name for both players.');
+    
+    const team1 = teams.find(t => t.id === team1Id);
+    const team2 = teams.find(t => t.id === team2Id);
+
+    if (!team1 || !team2) {
+        setError('Could not find the selected team data. Please refresh and try again.');
         return;
     }
-    if (/\s/.test(trimmedP1DeckName) || /\s/.test(trimmedP2DeckName)) {
-        setError('Deck names must be a single word (no spaces).');
-        return;
-    }
-    if (trimmedP1DeckName.toLowerCase() === trimmedP2DeckName.toLowerCase()) {
-        setError('Deck names must be unique for the match.');
-        return;
-    }
+    
     if (!player1.aiProfile || !player2.aiProfile || !trimmedP1Decklist || !trimmedP2Decklist) {
       setError('Please provide a decklist and AI profile for both players.');
       return;
@@ -87,8 +82,10 @@ export default function MatchRunnerPage() {
 
     setIsValidating(true);
     setStatusMessage('Validating decklists...');
+
     const allCardNames = [...trimmedP1Decklist.split('\n'), ...trimmedP2Decklist.split('\n')].map(line => line.trim().replace(/^\d+\s/, ''));
     const { valid, invalid } = await validateAndCanonicalizeDeck(allCardNames);
+
     if (invalid.length > 0) {
       setValidationError(`The following card names were not found: ${invalid.join(', ')}. Please correct them.`);
       setIsValidating(false);
@@ -97,6 +94,7 @@ export default function MatchRunnerPage() {
     setIsValidating(false);
     setIsSimulating(true);
     setStatusMessage('Validation successful. Submitting match...');
+
     const buildCorrectedDeckList = (decklist: string): string => {
       return decklist.split('\n').map(line => {
         const trimmed = line.trim();
@@ -111,20 +109,24 @@ export default function MatchRunnerPage() {
     
     const correctedDeck1List = buildCorrectedDeckList(trimmedP1Decklist);
     const correctedDeck2List = buildCorrectedDeckList(trimmedP2Decklist);
-    const deck1Filename = trimmedP1DeckName.replace(/[^a-z0-9-]/gi, '_').toLowerCase() + ".dck";
-    const deck2Filename = trimmedP2DeckName.replace(/[^a-z0-9-]/gi, '_').toLowerCase() + ".dck";
+
+    // The team name is now the key identifier for the simulation deck name.
+    const deck1NameForSim = team1.name;
+    const deck2NameForSim = team2.name;
     
     try {
       const response = await fetch('/api/match-runner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          deck1: { filename: deck1Filename, content: formatDecklistToDck(correctedDeck1List, trimmedP1DeckName), aiProfile: player1.aiProfile },
-          deck2: { filename: deck2Filename, content: formatDecklistToDck(correctedDeck2List, trimmedP2DeckName), aiProfile: player2.aiProfile },
+          // The 'deck' payload contains the raw list and the AI profile. The name is added for the .dck format.
+          deck1: { content: formatDecklistToDck(correctedDeck1List, deck1NameForSim), aiProfile: player1.aiProfile },
+          deck2: { content: formatDecklistToDck(correctedDeck2List, deck2NameForSim), aiProfile: player2.aiProfile },
           team1Id: team1Id,
           team2Id: team2Id,
         })
       });
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to start simulation.');
@@ -132,6 +134,7 @@ export default function MatchRunnerPage() {
       
       const { matchId } = await response.json();
       if (!matchId) throw new Error("API did not return a valid match ID.");
+
       setStatusMessage(`Simulation started with ID: ${matchId}. Waiting for completion...`);
       
       const poll = setInterval(async () => {
@@ -148,6 +151,7 @@ export default function MatchRunnerPage() {
           console.error("Polling error:", pollError instanceof Error ? pollError.message : "Unknown polling error");
         }
       }, 5000);
+
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "An unknown error occurred.");
       setIsSimulating(false);
@@ -181,8 +185,6 @@ export default function MatchRunnerPage() {
                     <SelectTrigger id="p1_team"><SelectValue placeholder={<span className="flex items-center gap-2"><Trophy className="size-4" /> Select Team...</span>} /></SelectTrigger>
                     <SelectContent>{teams.map(t => <SelectItem key={t.id} value={t.id} disabled={t.id === team2Id}>{t.emoji} {t.name}</SelectItem>)}</SelectContent>
                 </Select>
-                <Label htmlFor="p1_deck_name">Player 1 Deck Name</Label>
-                <Input id="p1_deck_name" value={player1.deckName} onChange={(e) => setPlayer1({ ...player1, deckName: e.target.value })} placeholder="OneWordDeckName" />
                 <Label className="mt-2 block">Player 1 AI Profile</Label>
                 <Select onValueChange={(value) => setPlayer1({ ...player1, aiProfile: value })}>
                     <SelectTrigger><SelectValue placeholder="Select AI..." /></SelectTrigger>
@@ -197,8 +199,6 @@ export default function MatchRunnerPage() {
                     <SelectTrigger id="p2_team"><SelectValue placeholder={<span className="flex items-center gap-2"><Trophy className="size-4" /> Select Team...</span>} /></SelectTrigger>
                     <SelectContent>{teams.map(t => <SelectItem key={t.id} value={t.id} disabled={t.id === team1Id}>{t.emoji} {t.name}</SelectItem>)}</SelectContent>
                 </Select>
-                <Label htmlFor="p2_deck_name">Player 2 Deck Name</Label>
-                <Input id="p2_deck_name" value={player2.deckName} onChange={(e) => setPlayer2({ ...player2, deckName: e.target.value })} placeholder="AnotherUniqueName" />
                 <Label className="mt-2 block">Player 2 AI Profile</Label>
                 <Select onValueChange={(value) => setPlayer2({ ...player2, aiProfile: value })}>
                     <SelectTrigger><SelectValue placeholder="Select AI..." /></SelectTrigger>
