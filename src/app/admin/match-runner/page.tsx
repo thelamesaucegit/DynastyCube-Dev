@@ -24,7 +24,6 @@ interface AiProfile {
   profile_name: string;
 }
 
-// This helper function is now only used to format the string for the simulation.
 function formatDecklistToDck(decklist: string, deckName: string): string {
   return `[metadata]\nName=${deckName}\n\n[Main]\n${decklist}`;
 }
@@ -110,16 +109,18 @@ export default function MatchRunnerPage() {
     const correctedDeck1List = buildCorrectedDeckList(trimmedP1Decklist);
     const correctedDeck2List = buildCorrectedDeckList(trimmedP2Decklist);
 
-    // The team name is now the key identifier for the simulation deck name.
-    const deck1NameForSim = team1.name;
-    const deck2NameForSim = team2.name;
+    // ---
+    // FIX: The team `id` (e.g., "shards") is now used as the deck name for the simulation.
+    // This is the root fix that corrects the entire downstream data flow.
+    // ---
+    const deck1NameForSim = team1.id;
+    const deck2NameForSim = team2.id;
     
     try {
       const response = await fetch('/api/match-runner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          // The 'deck' payload contains the raw list and the AI profile. The name is added for the .dck format.
           deck1: { content: formatDecklistToDck(correctedDeck1List, deck1NameForSim), aiProfile: player1.aiProfile },
           deck2: { content: formatDecklistToDck(correctedDeck2List, deck2NameForSim), aiProfile: player2.aiProfile },
           team1Id: team1Id,
