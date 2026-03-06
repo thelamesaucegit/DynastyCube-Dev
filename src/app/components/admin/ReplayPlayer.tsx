@@ -98,16 +98,15 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     let p1Info: PlayerInfo | null = null;
     let p2Info: PlayerInfo | null = null;
 
-    // The keys from the game log, e.g., "Ai(1)-[The Titans] (AI: [Constructed])"
+    // The keys from the game log, e.g., "Ai(1)-Alara Shards"
     const logPlayerNames = Object.keys(initialGameStates[0].players);
 
     if (team1 && team2) {
       // ---
-      // FIX: Use `includes()` for robust matching, per your recommendation.
-      // This finds the team name anywhere within the log string.
+      // FIX: Convert both strings to lower case to ensure a case-insensitive match.
       // ---
-      const logName1 = logPlayerNames.find(name => name.includes(team1.name));
-      const logName2 = logPlayerNames.find(name => name.includes(team2.name));
+      const logName1 = logPlayerNames.find(name => name.toLowerCase().includes(team1.name.toLowerCase()));
+      const logName2 = logPlayerNames.find(name => name.toLowerCase().includes(team2.name.toLowerCase()));
 
       if (logName1) {
         p1Info = { logName: logName1, team: team1 };
@@ -125,7 +124,7 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     }
 
     // The player on the bottom is conventionally the first active player of the game.
-    if (initialGameStates[0].activePlayer === p2Info.logName) {
+    if (initialGameStates[0].activePlayer.toLowerCase().includes(p2Info.team.name.toLowerCase())) {
       return { player1: p2Info, player2: p1Info, teamMap: newTeamMap }; // Swap them
     }
 
@@ -242,7 +241,7 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
           <div className={`absolute top-4 left-4 flex items-center gap-4 z-10`}>
               <div className="relative">
                   <div className="text-5xl">{playerInfo.team.emoji}</div>
-                  {currentState.activePlayer === playerInfo.logName && <div className="absolute -inset-2 rounded-full ring-4 ring-blue-400 ring-offset-4 ring-offset-gray-800 animate-pulse"></div>}
+                  {currentState.activePlayer.toLowerCase().includes(playerInfo.team.name.toLowerCase()) && <div className="absolute -inset-2 rounded-full ring-4 ring-blue-400 ring-offset-4 ring-offset-gray-800 animate-pulse"></div>}
               </div>
               <div className={`text-6xl font-bold transition-colors duration-300 ${lifeChange?.logName === playerInfo.logName && lifeChange.type === 'loss' ? 'text-red-500' : ''} ${lifeChange?.logName === playerInfo.logName && lifeChange.type === 'gain' ? 'text-green-500' : ''}`}>
                   {playerState.life}
