@@ -39,6 +39,49 @@ async function createClient() {
   );
 }
 
+// --- THIS IS THE ONLY MODIFIED FUNCTION IN THIS FILE ---
+export async function getMatchReplay(matchId: string): Promise<{ gameStates: GameState[] | null; team1: Team | null; team2: Team | null; } | null> {
+    const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+    if (!matchId) {
+        console.error("getMatchReplay called with invalid matchId");
+        return null;
+    }
+
+    const { data, error } = await supabase
+        .from('sim_matches')
+        .select(`
+            game_states,
+            team1:team1_id ( id, name, emoji ),
+            team2:team2_id ( id, name, emoji )
+        `)
+        .eq('id', matchId)
+        .single();
+
+    if (error) {
+        console.error(`Error fetching replay for match ${matchId}:`, error);
+        return null;
+    }
+    if (!data) {
+        return null;
+    }
+
+    // --- FIX: Safely handle the array-like response to prevent type errors ---
+    // The Supabase client can return a to-one relationship as an array with one element.
+    // We cast to `unknown` first to bypass incorrect assumptions, then to the expected array type.
+    // Finally, we use optional chaining `?.[0]` to safely get the first element, or null.
+    const team1Data = (data.team1 as unknown as Team[] | null)?.[0] || null;
+    const team2Data = (data.team2 as unknown as Team[] | null)?.[0] || null;
+
+    return {
+        gameStates: data.game_states || null,
+        team1: team1Data,
+        team2: team2Data
+    };
+}
+
+
+// --- ALL OTHER FUNCTIONS REMAIN UNCHANGED AND ARE PRESERVED ---
+
 export async function backfillOracleData(): Promise<{ success: boolean; updated: number; failed: number; errors: string[] }> {
   const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
   const errors: string[] = [];
@@ -94,43 +137,6 @@ export async function backfillOracleData(): Promise<{ success: boolean; updated:
     errors.push(message);
     return { success: false, updated: updatedCount, failed: failedCount, errors };
   }
-}
-
-// --- THIS IS THE DEFINITIVE FIX ---
-export async function getMatchReplay(matchId: string): Promise<{ gameStates: GameState[] | null; team1: Team | null; team2: Team | null; } | null> {
-    const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
-    if (!matchId) {
-        console.error("getMatchReplay called with invalid matchId");
-        return null;
-    }
-
-    // --- FIX: Use the correct syntax for disambiguating multiple foreign keys to the same table.
-    // The format is: table!foreign_key_constraint_name( columns_to_select )
-    const { data, error } = await supabase
-        .from('sim_matches')
-        .select(`
-            game_states,
-            team1:teams!sim_matches_team1_id_fkey ( id, name, emoji ),
-            team2:teams!sim_matches_team2_id_fkey ( id, name, emoji )
-        `)
-        .eq('id', matchId)
-        .single();
-
-    if (error) {
-        console.error(`Error fetching replay for match ${matchId}:`, error);
-        return null;
-    }
-    if (!data) {
-        return null;
-    }
-
-    // With the correct query, the data returned is now a single object per team, not an array.
-    // The unsafe casting is no longer needed.
-    return {
-        gameStates: data.game_states || null,
-        team1: data.team1 as Team | null,
-        team2: data.team2 as Team | null
-    };
 }
 
 export async function validateAndCanonicalizeDeck(cardNames: string[]): Promise<{ valid: Map<string, string>; invalid: string[]; }> {
