@@ -3,7 +3,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from 'next/navigation';
 import { getWeekMatches, createMatch, updateMatch, getMatchGames, type Match, type MatchGame } from "@/app/actions/matchActions";
 import { getTeamsWithMembers } from "@/app/actions/teamActions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/app/components/ui/card";

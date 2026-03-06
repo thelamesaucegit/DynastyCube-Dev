@@ -3,6 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import Image from "next/image";
 import {
   DndContext,
   DragOverlay,
@@ -133,10 +134,12 @@ function SortableQueueItem({
         {entry.position}
       </div>
       {imageUrl && (
-        <img
+        <Image
           src={imageUrl}
           alt={entry.cardName}
-          className="w-10 h-14 object-cover rounded flex-shrink-0"
+          width={40}
+          height={56}
+          className="object-cover rounded flex-shrink-0"
         />
       )}
       <div className="flex-1 min-w-0">
@@ -219,10 +222,12 @@ function DragOverlayItem({ entry }: { entry: QueueEntry }) {
         {entry.position}
       </div>
       {imageUrl && (
-        <img
+        <Image
           src={imageUrl}
           alt={entry.cardName}
-          className="w-10 h-14 object-cover rounded flex-shrink-0"
+          width={40}
+          height={56}
+          className="object-cover rounded flex-shrink-0"
         />
       )}
       <div className="flex-1 min-w-0">
@@ -364,10 +369,12 @@ function AddToQueueDialog({
                     className="w-full flex items-center gap-3 p-2 rounded-lg border border-border hover:border-purple-500/40 hover:bg-accent transition-colors text-left"
                   >
                     {imageUrl && (
-                      <img
+                      <Image
                         src={imageUrl}
                         alt={card.card_name}
-                        className="w-8 h-11 object-cover rounded flex-shrink-0"
+                        width={32}
+                        height={44}
+                        className="object-cover rounded flex-shrink-0"
                       />
                     )}
                     <div className="flex-1 min-w-0">
@@ -421,7 +428,7 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
   const [expanded, setExpanded] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [_activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -662,10 +669,12 @@ export function DraftQueueManager({ teamId, isUserTeamMember = true }: DraftQueu
                         {entry.position}
                       </div>
                       {imageUrl && (
-                        <img
+                        <Image
                           src={imageUrl}
                           alt={entry.cardName}
-                          className="w-10 h-14 object-cover rounded flex-shrink-0"
+                          width={40}
+                          height={56}
+                          className="object-cover rounded flex-shrink-0"
                         />
                       )}
                       <div className="flex-1 min-w-0">

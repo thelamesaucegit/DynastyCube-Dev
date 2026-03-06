@@ -3,10 +3,6 @@
 import { createServerClient } from "@/lib/supabase";
 
 // NEW: Helper interfaces for the S3 data structures
-interface NameToId {
-  [key: string]: string[]; // e.g., "lightning bolt": ["0000579f-7b35-4ed3-b44c-db2a538066fe"]
-}
-
 interface SimpleCard {
   name: string;
   elo?: number;

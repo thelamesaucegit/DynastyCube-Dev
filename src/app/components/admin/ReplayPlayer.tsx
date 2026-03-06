@@ -3,6 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
+import Image from 'next/image';
 import { Button } from '@/app/components/ui/button';
 import { GameState, PlayerState as PlayerStateType, Card as CardType } from '@/app/types';
 import { ReplayCardData } from '@/app/actions/cardActions';
@@ -63,7 +64,7 @@ function generateLogMessage(prevState: GameState | null, nextState: GameState): 
         }
 
         if (prevPlayer.battlefield.length > nextPlayer.battlefield.length) {
-            const removedCard = prevPlayer.battlefield.find(c => !nextPlayer.battlefield.some(nc => nc.id === nc.id));
+            const removedCard = prevPlayer.battlefield.find(_c => !nextPlayer.battlefield.some(nc => nc.id === _c.id));
             if (removedCard) return `${removedCard.name} leaves the battlefield.`;
         }
 
@@ -73,7 +74,7 @@ function generateLogMessage(prevState: GameState | null, nextState: GameState): 
     return null;
 }
 
-export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDataMap }: ReplayPlayerProps) {
+export function ReplayPlayer({ initialGameStates, matchId: _matchId, team1, team2, cardDataMap }: ReplayPlayerProps) {
   const { useOldestArt } = useSettings();
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -149,7 +150,7 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
         setLifeChange({ teamId: p2Team.id, type });
         setTimeout(() => setLifeChange(null), 1000);
     }
-  }, [currentStepIndex, initialGameStates, cardDataMap, p1Name, p2Name, p1Team, p2Team, useOldestArt]);
+  }, [currentStepIndex, initialGameStates, cardDataMap, p1Name, p2Name, p1Team, p2Team, useOldestArt, currentState]);
   
   const renderBattlefield = (playerState: PlayerStateType | undefined, playerTeam: Team | undefined) => {
     if (!playerState || !playerTeam) return <div className="w-full h-1/2 bg-gray-700/50 p-4"></div>;
@@ -166,7 +167,7 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
         <div className="flex justify-center items-end gap-[-20px] min-h-[100px]">
             {cards.map((card, index) => (
                 <div key={card.id} className="relative transition-transform duration-500 hover:scale-150 hover:z-10">
-                    {card.imageUrl && <img src={card.imageUrl} alt={card.name} className="h-24 object-contain drop-shadow-lg" style={{ transform: `translateX(${index * -20}px)`}} />}
+                    {card.imageUrl && <Image src={card.imageUrl} alt={card.name} width={69} height={96} className="object-contain drop-shadow-lg" style={{ transform: `translateX(${index * -20}px)`}} />}
                 </div>
             ))}
         </div>
@@ -198,7 +199,7 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
                 <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/50 backdrop-blur-sm">
                     <div className="text-center animate-in fade-in zoom-in-75 duration-500">
                         <p className="text-2xl font-bold mb-2 drop-shadow-lg">{lastPlayedCard.name}</p>
-                        <img src={lastPlayedCard.imageUrl} alt={lastPlayedCard.name} className="h-96 object-contain rounded-lg shadow-2xl"/>
+                        <Image src={lastPlayedCard.imageUrl} alt={lastPlayedCard.name} width={275} height={384} className="object-contain rounded-lg shadow-2xl"/>
                     </div>
                 </div>
             )}

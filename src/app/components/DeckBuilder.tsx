@@ -3,6 +3,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Image from "next/image";
 import {
   DndContext,
   DragOverlay,
@@ -1044,10 +1045,12 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
         {activeDragPick && activeDragPickImageUrl ? (
           <div className="w-64 p-3 bg-white dark:bg-gray-800 rounded-lg border-2 border-blue-400 shadow-2xl opacity-90">
             <div className="flex items-center gap-2">
-              <img
+              <Image
                 src={activeDragPickImageUrl}
                 alt={activeDragPick.card_name}
-                className="w-12 h-16 object-cover rounded"
+                width={48}
+                height={64}
+                className="object-cover rounded"
               />
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
