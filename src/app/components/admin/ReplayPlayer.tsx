@@ -14,7 +14,9 @@ import { getCardImageUrl } from '@/app/utils/cardUtils';
 // --- TYPE DEFINITIONS ---
 
 interface Team {
+  // This `id` field contains the short name, e.g., "shards"
   id: string;
+  // This `name` field contains the display name, e.g., "Alara Shards"
   name: string;
   emoji: string;
 }
@@ -39,7 +41,9 @@ interface AnimatedCard {
 }
 
 interface PlayerInfo {
-    logName: string;
+    // This is the generic name from the log (e.g., "Ai(1)-Alara Shards")
+    logName: string; 
+    // This is the actual team data from the database
     team: Team;
 }
 
@@ -103,10 +107,11 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
 
     if (team1 && team2) {
       // ---
-      // FIX: Convert both strings to lower case to ensure a case-insensitive match.
+      // FIX: Use the team's `id` field (e.g., "shards") for the matching logic.
+      // This provides the correct key for the case-insensitive comparison.
       // ---
-      const logName1 = logPlayerNames.find(name => name.toLowerCase().includes(team1.name.toLowerCase()));
-      const logName2 = logPlayerNames.find(name => name.toLowerCase().includes(team2.name.toLowerCase()));
+      const logName1 = logPlayerNames.find(name => name.toLowerCase().includes(team1.id.toLowerCase()));
+      const logName2 = logPlayerNames.find(name => name.toLowerCase().includes(team2.id.toLowerCase()));
 
       if (logName1) {
         p1Info = { logName: logName1, team: team1 };
@@ -124,7 +129,8 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     }
 
     // The player on the bottom is conventionally the first active player of the game.
-    if (initialGameStates[0].activePlayer.toLowerCase().includes(p2Info.team.name.toLowerCase())) {
+    // Also update this check to use the reliable team id.
+    if (initialGameStates[0].activePlayer.toLowerCase().includes(p2Info.team.id.toLowerCase())) {
       return { player1: p2Info, player2: p1Info, teamMap: newTeamMap }; // Swap them
     }
 
@@ -241,7 +247,8 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
           <div className={`absolute top-4 left-4 flex items-center gap-4 z-10`}>
               <div className="relative">
                   <div className="text-5xl">{playerInfo.team.emoji}</div>
-                  {currentState.activePlayer.toLowerCase().includes(playerInfo.team.name.toLowerCase()) && <div className="absolute -inset-2 rounded-full ring-4 ring-blue-400 ring-offset-4 ring-offset-gray-800 animate-pulse"></div>}
+                  {/* Also update this check to use the reliable team id */}
+                  {currentState.activePlayer.toLowerCase().includes(playerInfo.team.id.toLowerCase()) && <div className="absolute -inset-2 rounded-full ring-4 ring-blue-400 ring-offset-4 ring-offset-gray-800 animate-pulse"></div>}
               </div>
               <div className={`text-6xl font-bold transition-colors duration-300 ${lifeChange?.logName === playerInfo.logName && lifeChange.type === 'loss' ? 'text-red-500' : ''} ${lifeChange?.logName === playerInfo.logName && lifeChange.type === 'gain' ? 'text-green-500' : ''}`}>
                   {playerState.life}
