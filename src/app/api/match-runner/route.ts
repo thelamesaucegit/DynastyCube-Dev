@@ -6,7 +6,7 @@ import { format } from 'date-fns';
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const { deck1, deck2, team1Id, team2Id, player1DeckName, player2DeckName } = body;
+  const { deck1, deck2, team1Id, team2Id } = body;
 
   if (
     !deck1 || !deck1.content || !deck1.aiProfile ||
@@ -20,9 +20,6 @@ export async function POST(request: Request) {
   let matchId: string;
 
   try {
-    // ---
-    // NEW: Fetch season and generate unique deck names based on your requested syntax.
-    // ---
     const { data: seasonData, error: seasonError } = await supabase
       .from('seasons')
       .select('season_number')
@@ -40,12 +37,8 @@ export async function POST(request: Request) {
     const dateStamp = format(new Date(), 'yyyyMMddHH');
     const team1Trunc = team1Name.substring(0, 4).toUpperCase();
     const team2Trunc = team2Name.substring(0, 4).toUpperCase();
-
     const uniqueId = `${seasonPrefix}-${team1Trunc}-vs-${team2Trunc}-${dateStamp}`;
-    const uniqueFilename1 = `${uniqueId}-p1.dck`;
-    const uniqueFilename2 = `${uniqueId}-p2.dck`;
-    
-    // The insert operation now includes the full decklists for persistence.
+
     const { data: matchData, error: matchError } = await supabase
       .from('sim_matches')
       .insert({
@@ -53,8 +46,8 @@ export async function POST(request: Request) {
         player2_info: `${team2Name} (AI: ${deck2.aiProfile})`,
         team1_id: team1Id,
         team2_id: team2Id,
-        deck1_list: deck1.content, // Persist the decklist
-        deck2_list: deck2.content, // Persist the decklist
+        deck1_list: deck1.content,
+        deck2_list: deck2.content,
       })
       .select('id')
       .single();
@@ -69,12 +62,9 @@ export async function POST(request: Request) {
       throw new Error("Simulation server URL is not configured.");
     }
     
-    // ---
-    // NEW: The payload to the sidecar server now uses the generated unique filenames.
-    // ---
     const sidecarPayload = {
-        deck1: { ...deck1, filename: uniqueFilename1 },
-        deck2: { ...deck2, filename: uniqueFilename2 },
+        deck1: { ...deck1, filename: `${uniqueId}-p1.dck` },
+        deck2: { ...deck2, filename: `${uniqueId}-p2.dck` },
         matchId,
     };
 
