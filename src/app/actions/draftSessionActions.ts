@@ -2,7 +2,7 @@
 
 "use server";
 
-import { createServerClient } from "@/lib/supabase";
+import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 import { getDraftStatus, type DraftStatus } from "@/app/actions/draftOrderActions";
 import { executeAutoDraft } from "@/app/actions/autoDraftActions";
 import { addSkippedPick, getTeamDraftPicks } from "@/app/actions/draftActions";
@@ -42,8 +42,8 @@ export interface DraftSessionInfo {
 // HELPERS
 // ============================================================================
 
-export async function resetSkipCounter(sessionId: string): Promise<void> {
-  const supabase = await createServerClient();
+export async function resetSkipCounter(sessionId: string, adminClient?: AnySupabaseClient): Promise<void> {
+  const supabase = adminClient ?? await createServerClient();
   try {
     await supabase
       .from("draft_sessions")
@@ -355,10 +355,11 @@ export async function deleteDraftSession(
 // ============================================================================
 
 async function completeDraftInternal(
-  sessionId: string
+  sessionId: string,
+  adminClient?: AnySupabaseClient
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const supabase = await createServerClient();
+    const supabase = adminClient ?? await createServerClient();
     const { error } = await supabase
       .from("draft_sessions")
       .update({
@@ -387,10 +388,11 @@ async function completeDraftInternal(
 }
 
 export async function activateDraft(
-  sessionId: string
+  sessionId: string,
+  adminClient?: AnySupabaseClient
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const supabase = await createServerClient();
+    const supabase = adminClient ?? await createServerClient();
     const { data: session, error: sessionError } = await supabase
       .from("draft_sessions")
       .select("*")
@@ -456,14 +458,15 @@ export async function activateDraft(
 }
 
 export async function advanceDraft(
-  sessionId: string
+  sessionId: string,
+  adminClient?: AnySupabaseClient
 ): Promise<{
   success: boolean;
   completed?: boolean;
   error?: string;
 }> {
   try {
-    const supabase = await createServerClient();
+    const supabase = adminClient ?? await createServerClient();
     const { data: session, error: sessionError } = await supabase
       .from("draft_sessions")
       .select("*")
@@ -501,7 +504,7 @@ export async function advanceDraft(
       teamBalances.every((t: { cubucks_balance: number }) => t.cubucks_balance <= 0);
 
     if (allTeamsReachedRounds || pastEndTime || allTeamsOutOfCubucks) {
-      await completeDraftInternal(session.id);
+      await completeDraftInternal(session.id, adminClient);
       return { success: true, completed: true };
     }
 
@@ -625,14 +628,14 @@ export async function completeDraft(
 // AUTO-DRAFT TIMER CHECK
 // ============================================================================
 
-export async function checkDraftTimer(): Promise<{
+export async function checkDraftTimer(adminClient?: AnySupabaseClient): Promise<{
   action: "none" | "activated" | "auto_drafted" | "completed" | "error";
   message?: string;
   error?: string;
   needsReload?: boolean;
 }> {
   try {
-    const supabase = await createServerClient();
+    const supabase = adminClient ?? await createServerClient();
     const now = new Date();
     const { data: session } = await supabase
       .from("draft_sessions")
@@ -644,7 +647,7 @@ export async function checkDraftTimer(): Promise<{
     if (!session) return { action: "none" };
 
     if (session.status === "scheduled" && new Date(session.start_time) <= now) {
-      const result = await activateDraft(session.id);
+      const result = await activateDraft(session.id, adminClient);
       return result.success
         ? { action: "activated", message: "Draft has been activated!" }
         : { action: "error", error: result.error };
@@ -690,10 +693,10 @@ export async function checkDraftTimer(): Promise<{
       return { action: "none" };
     }
 
-    const autoDraftResult = await executeAutoDraft(teamId, session.id);
+    const autoDraftResult = await executeAutoDraft(teamId, session.id, adminClient);
     if (autoDraftResult.success && autoDraftResult.source !== "skipped") {
-      await resetSkipCounter(session.id);
-      const advanceResult = await advanceDraft(session.id);
+      await resetSkipCounter(session.id, adminClient);
+      const advanceResult = await advanceDraft(session.id, adminClient);
       if (!advanceResult.success) {
         return { action: "error", error: `Auto-drafted but failed to advance: ${advanceResult.error}` };
       }
@@ -718,7 +721,7 @@ export async function checkDraftTimer(): Promise<{
       console.log(
         `Stall condition: ${newSkipCount} consecutive skips >= ${draftStatus.totalTeams} teams. Ending draft.`
       );
-      await completeDraftInternal(session.id);
+      await completeDraftInternal(session.id, adminClient);
       return {
         action: "completed",
         message: `The draft has ended automatically after ${newSkipCount} consecutive skipped picks.`,
@@ -732,13 +735,13 @@ export async function checkDraftTimer(): Promise<{
 
     if (!autoDraftResult.success) {
       const { picks: existingPicks } = await getTeamDraftPicks(teamId, session.id);
-      const skippedResult = await addSkippedPick(teamId, existingPicks.length + 1, session.id);
+      const skippedResult = await addSkippedPick(teamId, existingPicks.length + 1, session.id, adminClient);
       if (!skippedResult.success) {
         return { action: "error", error: `Auto-draft failed and could not log skipped pick: ${skippedResult.error}` };
       }
     }
 
-    const advanceResult = await advanceDraft(session.id);
+    const advanceResult = await advanceDraft(session.id, adminClient);
     if (!advanceResult.success) {
       return { action: "error", error: `Skip logged but failed to advance draft: ${advanceResult.error}` };
     }
