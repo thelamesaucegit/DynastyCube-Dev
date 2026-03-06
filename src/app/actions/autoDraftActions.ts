@@ -2,7 +2,7 @@
 
 "use server";
 
-import { createServerClient } from "@/lib/supabase";
+import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 
 import { getAvailableCardsForDraft, type CardData } from "@/app/actions/cardActions";
 
@@ -800,10 +800,11 @@ export async function clearTeamDraftQueue(
  * Cleans up team queues after a card has been drafted.
  */
 export async function conditionallyCleanupDraftQueues(
-  draftedCardId: string
+  draftedCardId: string,
+  adminClient?: AnySupabaseClient
 ): Promise<{ success: boolean; cleaned: boolean; error?: string }> {
   try {
-    const supabase = await createServerClient();
+    const supabase = adminClient ?? await createServerClient();
     const duplicateSet = await getDuplicateCardIdSet();
     if (!duplicateSet.has(draftedCardId)) {
       const { error } = await supabase.from("team_draft_queue").delete().eq("card_id", draftedCardId);
@@ -828,7 +829,8 @@ export async function conditionallyCleanupDraftQueues(
  */
 export async function executeAutoDraft(
   teamId: string,
-  draftSessionId: string
+  draftSessionId: string,
+  adminClient?: AnySupabaseClient
 ): Promise<{
   success: boolean;
   pick?: { cardId: string; cardName: string; cost: number };
@@ -837,7 +839,7 @@ export async function executeAutoDraft(
   staleDeployment?: boolean;
 }> {
   try {
-    const supabase = await createServerClient();
+    const supabase = adminClient ?? await createServerClient();
     // This is the fix: pass the draftSessionId to get a correctly scoped status
     const { status: draftStatus, error: statusError } = await getDraftStatus(draftSessionId);
     if (statusError || !draftStatus || !draftSessionId) {
@@ -851,7 +853,7 @@ export async function executeAutoDraft(
     const preview = await getAutoDraftPreview(teamId, draftSessionId);
     const card = preview.nextPick;
     if (!card) {
-      const { pick: skippedPick, error: skipError } = await addSkippedPick(teamId, pickNumber, draftSessionId);
+      const { pick: skippedPick, error: skipError } = await addSkippedPick(teamId, pickNumber, draftSessionId, adminClient);
       if (skipError) {
         return { success: false, source: "skipped", error: `Failed to record skipped pick: ${skipError}` };
       }
@@ -904,10 +906,10 @@ export async function executeAutoDraft(
       round_number: draftStatus.currentRound,
     });
     
-    await conditionallyCleanupDraftQueues(card.card_id);
-    
+    await conditionallyCleanupDraftQueues(card.card_id, adminClient);
+
     const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
-    
+
     const broadcastPayload = {
       ...newPick,
       team_name: teamData?.name || 'Unknown Team',

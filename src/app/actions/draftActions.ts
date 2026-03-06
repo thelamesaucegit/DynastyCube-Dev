@@ -4,6 +4,7 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import type { AnySupabaseClient } from "@/lib/supabase";
 
 // Create a Supabase client with cookies support
 async function createClient() {
@@ -82,9 +83,10 @@ export interface DeckCard {
 export async function addSkippedPick(
   teamId: string,
   pickNumber: number,
-  draftSessionId: string
+  draftSessionId: string,
+  adminClient?: AnySupabaseClient
 ): Promise<{ success: boolean; pick?: DraftPick; error?: string }> {
-  const supabase = await createClient();
+  const supabase = adminClient ?? await createClient();
   try {
     const skippedPickData = {
       team_id: teamId,
