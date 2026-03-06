@@ -3,6 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
+import Image from 'next/image';
 import { Button } from '@/app/components/ui/button';
 import { GameState, PlayerState as PlayerStateType, Card as CardType } from '@/app/types';
 import { ReplayCardData } from '@/app/actions/cardActions';

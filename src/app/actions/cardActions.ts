@@ -103,7 +103,7 @@ export async function getCardPool(poolName: string = "default"): Promise<{ cards
       return { cards: [], error: error.message };
     }
     return { cards: data || [] };
-  } catch (error) {
+  } catch {
     return { cards: [], error: "An unexpected error occurred" };
   }
 }
@@ -122,7 +122,7 @@ export async function getAvailableCardsForDraft(poolName: string = "default"): P
     const draftedInstanceIds = new Set((draftedPicks || []).map(p => p.card_pool_id));
     const availableCards = (allCards || []).filter(card => !draftedInstanceIds.has(card.id!));
     return { cards: availableCards };
-  } catch (error) {
+  } catch {
     return { cards: [], error: "An unexpected error occurred" };
   }
 }
@@ -151,7 +151,7 @@ export async function addCardToPool(card: CardData, poolName: string = "default"
     if (error) { return { success: false, error: error.message }; }
     invalidateDraftCache();
     return { success: true };
-  } catch (error) {
+  } catch {
     return { success: false, error: "An unexpected error occurred" };
   }
 }
@@ -181,7 +181,7 @@ export async function addCardsToPool(cards: CardData[], poolName: string = "defa
         if (error) { return { success: false, error: error.message }; }
         invalidateDraftCache();
         return { success: true, count: data?.length || 0 };
-    } catch (error) {
+    } catch {
         return { success: false, error: "An unexpected error occurred" };
     }
 }
@@ -271,7 +271,7 @@ export async function removeCardFromPool(dbId: string, poolName: string = "defau
     if (error) { return { success: false, error: error.message }; }
     invalidateDraftCache();
     return { success: true };
-  } catch (error) {
+  } catch {
     return { success: false, error: "An unexpected error occurred" };
   }
 }
@@ -283,7 +283,7 @@ export async function clearCardPool(poolName: string = "default"): Promise<{ suc
     if (error) { return { success: false, error: error.message }; }
     invalidateDraftCache();
     return { success: true };
-  } catch (error) {
+  } catch {
     return { success: false, error: "An unexpected error occurred" };
   }
 }
@@ -329,7 +329,7 @@ export async function getPoolNames(): Promise<{ pools: string[]; error?: string;
     }
     const uniquePools = [...new Set((data || []).map((item) => item.pool_name))];
     return { pools: uniquePools };
-  } catch (error) {
+  } catch {
     return { pools: [], error: "An unexpected error occurred" };
   }
 }

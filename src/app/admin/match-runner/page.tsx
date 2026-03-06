@@ -11,10 +11,8 @@ import { Textarea } from '@/app/components/ui/textarea';
 import { Input } from '@/app/components/ui/input';
 import { Swords, Hourglass, ShieldCheck, ShieldX, Trophy } from 'lucide-react';
 import { getAiProfiles, validateAndCanonicalizeDeck } from '@/app/actions/adminActions';
-// --- MODIFIED: Import action to get all teams ---
 import { getAllTeams } from '@/app/actions/teamActions';
 
-// --- MODIFIED: Added interface for Teams ---
 interface Team {
   id: string;
   name: string;
@@ -32,14 +30,11 @@ function formatDecklistToDck(decklist: string, deckName: string): string {
 
 export default function MatchRunnerPage() {
   const [profiles, setProfiles] = useState<AiProfile[]>([]);
-  // --- MODIFIED: State for teams and selected team IDs ---
   const [teams, setTeams] = useState<Team[]>([]);
   const [team1Id, setTeam1Id] = useState('');
   const [team2Id, setTeam2Id] = useState('');
-
   const [player1, setPlayer1] = useState({ decklist: '', deckName: '', aiProfile: '' });
   const [player2, setPlayer2] = useState({ decklist: '', deckName: '', aiProfile: '' });
-  
   const [isSimulating, setIsSimulating] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,19 +44,11 @@ export default function MatchRunnerPage() {
   useEffect(() => {
     async function loadInitialData() {
       try {
-        // --- MODIFIED: Fetch both AI profiles and teams ---
-        const [aiResult, teamResult] = await Promise.all([
-          getAiProfiles(),
-          getAllTeams()
-        ]);
+        const [aiResult, teamResult] = await Promise.all([ getAiProfiles(), getAllTeams() ]);
         setProfiles(aiResult);
-        if (teamResult.teams) {
-          setTeams(teamResult.teams);
-        }
+        if (teamResult.teams) setTeams(teamResult.teams);
       } catch (err: unknown) {
-        let message = "An unknown error occurred";
-        if (err instanceof Error) message = err.message;
-        setError(`Failed to load initial page data: ${message}`);
+        setError(`Failed to load initial page data: ${err instanceof Error ? err.message : "Unknown error"}`);
       }
     }
     loadInitialData();
@@ -71,32 +58,36 @@ export default function MatchRunnerPage() {
     setError(null);
     setValidationError(null);
 
-    // --- MODIFIED: Added new validation checks ---
+    // --- FIX: Trim all user inputs before validation ---
+    const trimmedP1DeckName = player1.deckName.trim();
+    const trimmedP2DeckName = player2.deckName.trim();
+    const trimmedP1Decklist = player1.decklist.trim();
+    const trimmedP2Decklist = player2.decklist.trim();
+
     if (!team1Id || !team2Id) {
       setError('Please select a team for both players.');
       return;
     }
-    if (!player1.deckName || !player2.deckName) {
+    if (!trimmedP1DeckName || !trimmedP2DeckName) {
         setError('Please provide a deck name for both players.');
         return;
     }
-    if (/\s/.test(player1.deckName) || /\s/.test(player2.deckName)) {
+    if (/\s/.test(trimmedP1DeckName) || /\s/.test(trimmedP2DeckName)) {
         setError('Deck names must be a single word (no spaces).');
         return;
     }
-    if (player1.deckName.toLowerCase() === player2.deckName.toLowerCase()) {
+    if (trimmedP1DeckName.toLowerCase() === trimmedP2DeckName.toLowerCase()) {
         setError('Deck names must be unique for the match.');
         return;
     }
-    if (!player1.aiProfile || !player2.aiProfile || !player1.decklist || !player2.decklist) {
+    if (!player1.aiProfile || !player2.aiProfile || !trimmedP1Decklist || !trimmedP2Decklist) {
       setError('Please provide a decklist and AI profile for both players.');
       return;
     }
 
     setIsValidating(true);
     setStatusMessage('Validating decklists...');
-    const allCardNames = [...player1.decklist.split('\n'), ...player2.decklist.split('\n')]
-      .map(line => line.trim().replace(/^\d+\s/, ''));
+    const allCardNames = [...trimmedP1Decklist.split('\n'), ...trimmedP2Decklist.split('\n')].map(line => line.trim().replace(/^\d+\s/, ''));
     const { valid, invalid } = await validateAndCanonicalizeDeck(allCardNames);
     if (invalid.length > 0) {
       setValidationError(`The following card names were not found: ${invalid.join(', ')}. Please correct them.`);
@@ -118,19 +109,18 @@ export default function MatchRunnerPage() {
       }).filter(Boolean).join('\n');
     };
     
-    const correctedDeck1List = buildCorrectedDeckList(player1.decklist);
-    const correctedDeck2List = buildCorrectedDeckList(player2.decklist);
-    const deck1Filename = player1.deckName.replace(/[^a-z0-9-]/gi, '_').toLowerCase() + ".dck";
-    const deck2Filename = player2.deckName.replace(/[^a-z0-9-]/gi, '_').toLowerCase() + ".dck";
+    const correctedDeck1List = buildCorrectedDeckList(trimmedP1Decklist);
+    const correctedDeck2List = buildCorrectedDeckList(trimmedP2Decklist);
+    const deck1Filename = trimmedP1DeckName.replace(/[^a-z0-9-]/gi, '_').toLowerCase() + ".dck";
+    const deck2Filename = trimmedP2DeckName.replace(/[^a-z0-9-]/gi, '_').toLowerCase() + ".dck";
     
     try {
       const response = await fetch('/api/match-runner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // --- MODIFIED: Pass team IDs in the body ---
         body: JSON.stringify({
-          deck1: { filename: deck1Filename, content: formatDecklistToDck(correctedDeck1List, player1.deckName), aiProfile: player1.aiProfile },
-          deck2: { filename: deck2Filename, content: formatDecklistToDck(correctedDeck2List, player2.deckName), aiProfile: player2.aiProfile },
+          deck1: { filename: deck1Filename, content: formatDecklistToDck(correctedDeck1List, trimmedP1DeckName), aiProfile: player1.aiProfile },
+          deck2: { filename: deck2Filename, content: formatDecklistToDck(correctedDeck2List, trimmedP2DeckName), aiProfile: player2.aiProfile },
           team1Id: team1Id,
           team2Id: team2Id,
         })
@@ -149,22 +139,17 @@ export default function MatchRunnerPage() {
           const statusRes = await fetch(`/api/match-runner/${matchId}`);
           if (!statusRes.ok) return;
           const { winner, isReplayReady } = await statusRes.json();
-          
           if (winner && isReplayReady) {
             clearInterval(poll);
             setStatusMessage(`Match complete! Winner: ${winner}. Redirecting to replay...`);
             window.location.href = `/admin/match-viewer/${matchId}`;
           }
         } catch (pollError: unknown) {
-            let message = "An error occurred during polling.";
-            if (pollError instanceof Error) message = pollError.message;
-            console.error("Polling error:", message);
+          console.error("Polling error:", pollError instanceof Error ? pollError.message : "Unknown polling error");
         }
       }, 5000);
-
     } catch (err: unknown) {
-      if (err instanceof Error) setError(err.message);
-      else setError("An unknown error occurred.");
+      setError(err instanceof Error ? err.message : "An unknown error occurred.");
       setIsSimulating(false);
     }
   };
@@ -191,15 +176,10 @@ export default function MatchRunnerPage() {
       <CardContent className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
-                {/* --- MODIFIED: Team Selection UI --- */}
                 <Label htmlFor="p1_team">Player 1 Team</Label>
                 <Select onValueChange={setTeam1Id}>
-                    <SelectTrigger id="p1_team">
-                        <SelectValue placeholder={<span className="flex items-center gap-2"><Trophy className="size-4" /> Select Team...</span>} />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {teams.map(t => <SelectItem key={t.id} value={t.id} disabled={t.id === team2Id}>{t.emoji} {t.name}</SelectItem>)}
-                    </SelectContent>
+                    <SelectTrigger id="p1_team"><SelectValue placeholder={<span className="flex items-center gap-2"><Trophy className="size-4" /> Select Team...</span>} /></SelectTrigger>
+                    <SelectContent>{teams.map(t => <SelectItem key={t.id} value={t.id} disabled={t.id === team2Id}>{t.emoji} {t.name}</SelectItem>)}</SelectContent>
                 </Select>
                 <Label htmlFor="p1_deck_name">Player 1 Deck Name</Label>
                 <Input id="p1_deck_name" value={player1.deckName} onChange={(e) => setPlayer1({ ...player1, deckName: e.target.value })} placeholder="OneWordDeckName" />
@@ -212,15 +192,10 @@ export default function MatchRunnerPage() {
                 <Textarea id="p1_decklist" placeholder="25 Mountain&#10;15 Lightning Bolt" value={player1.decklist} onChange={(e) => setPlayer1({ ...player1, decklist: e.target.value })} className="h-48"/>
             </div>
             <div className="space-y-4">
-                {/* --- MODIFIED: Team Selection UI --- */}
                 <Label htmlFor="p2_team">Player 2 Team</Label>
                 <Select onValueChange={setTeam2Id}>
-                    <SelectTrigger id="p2_team">
-                        <SelectValue placeholder={<span className="flex items-center gap-2"><Trophy className="size-4" /> Select Team...</span>} />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {teams.map(t => <SelectItem key={t.id} value={t.id} disabled={t.id === team1Id}>{t.emoji} {t.name}</SelectItem>)}
-                    </SelectContent>
+                    <SelectTrigger id="p2_team"><SelectValue placeholder={<span className="flex items-center gap-2"><Trophy className="size-4" /> Select Team...</span>} /></SelectTrigger>
+                    <SelectContent>{teams.map(t => <SelectItem key={t.id} value={t.id} disabled={t.id === team1Id}>{t.emoji} {t.name}</SelectItem>)}</SelectContent>
                 </Select>
                 <Label htmlFor="p2_deck_name">Player 2 Deck Name</Label>
                 <Input id="p2_deck_name" value={player2.deckName} onChange={(e) => setPlayer2({ ...player2, deckName: e.target.value })} placeholder="AnotherUniqueName" />
@@ -233,7 +208,6 @@ export default function MatchRunnerPage() {
                 <Textarea id="p2_decklist" placeholder="25 Plains&#10;15 Savannah Lions" value={player2.decklist} onChange={(e) => setPlayer2({ ...player2, decklist: e.target.value })} className="h-48"/>
             </div>
         </div>
-
         {validationError && (
           <div className="bg-destructive/10 border border-destructive/50 text-destructive p-3 rounded-md flex items-start gap-3">
             <ShieldX className="size-5 mt-0.5 shrink-0" />
@@ -241,7 +215,6 @@ export default function MatchRunnerPage() {
           </div>
         )}
         {error && <p className="text-sm text-red-500">{error}</p>}
-
         <Button onClick={handleSimulate} disabled={isValidating || isSimulating}>
           {isValidating ? <><Hourglass className="size-4 mr-2 animate-spin" /> Validating...</>
           : isSimulating ? <><Hourglass className="size-4 mr-2 animate-spin" /> Simulating...</>

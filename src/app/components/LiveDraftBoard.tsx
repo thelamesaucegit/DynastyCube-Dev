@@ -3,6 +3,8 @@
 "use client";
 
 import { useEffect, useState, useMemo, FC } from "react";
+import Image from "next/image";
+import { createClient } from "@supabase/supabase-js";
 import { getDraftBoardData } from "@/app/actions/liveDraftActions";
 import type { DraftOrderTeam } from "@/app/actions/liveDraftActions";
 import type { DraftPick } from "@/app/draft/[sessionId]/live/page";
@@ -10,6 +12,11 @@ import { Button } from "@/app/components/ui/button";
 import { List, Columns } from "lucide-react";
 import { useSettings } from "@/contexts/SettingsContext";
 import { getCardImageUrl } from "@/app/utils/cardUtils";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 type ViewMode = 'list' | 'team';
 
@@ -28,7 +35,7 @@ const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small
           <span className="font-bold text-white bg-blue-600 px-2 py-1 rounded">#{pick.pick_number}</span>
           <span className="font-semibold text-gray-300 truncate">{pick.team_name}</span>
         </div>
-        <img src={imageUrl || '/placeholder-card.png'} alt={pick.card_name} className="w-full rounded-md shadow-md" loading="lazy" />
+        <Image src={imageUrl || '/placeholder-card.png'} alt={pick.card_name} width={745} height={1040} sizes="100vw" className="w-full h-auto rounded-md shadow-md" />
         <h3 className="font-semibold text-center text-sm text-gray-100 mt-2 truncate">{pick.card_name}</h3>
       </div>
     );
@@ -158,11 +165,10 @@ export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoar
 
   useEffect(() => {
     if (!sessionId) return;
-    
-    const eventSource = new EventSource(`/api/draft-stream/${sessionId}`);
-    eventSource.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data);
+
+    const channel = supabase
+      .channel(`draft-updates-${sessionId}`)
+      .on('broadcast', { event: 'new_pick' }, ({ payload }) => {
         const newPick: DraftPick = {
           id: payload.id,
           pick_number: payload.pick_number,
@@ -171,7 +177,7 @@ export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoar
           rarity: payload.rarity,
           image_url: payload.image_url,
           oldest_image_url: payload.oldest_image_url,
-          drafted_at: payload.drafted_at, // Add drafted_at from payload
+          drafted_at: payload.drafted_at,
           team_name: payload.team_name || 'Unknown Team',
           team_id: payload.team_id,
         };
@@ -185,14 +191,11 @@ export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoar
         });
         setNewestPickId(newPick.id);
         setTimeout(() => setNewestPickId(null), 5000);
-      } catch (error) {
-        console.error('Failed to parse incoming event data:', event.data, error);
-      }
-    };
-    eventSource.onerror = (err) => console.error('EventSource encountered an error:', err);
+      })
+      .subscribe();
+
     return () => {
-      console.log('Closing EventSource connection.');
-      eventSource.close();
+      supabase.removeChannel(channel);
     };
   }, [sessionId]);
 
