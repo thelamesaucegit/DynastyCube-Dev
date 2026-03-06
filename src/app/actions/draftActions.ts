@@ -270,7 +270,7 @@ export async function getTeamDraftPicks(
  */
 export async function addDraftPickInternal(
   pick: DraftPick,
-  isAutoDraft?: boolean
+  _isAutoDraft?: boolean
 ): Promise<{ success: boolean; pick?: DraftPick; error?: string }> {
   const supabase = await createClient();
   try {

@@ -3,6 +3,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
@@ -152,16 +153,20 @@ export default function TeamsPage() {
                         
                         {team.last_pick?.image_url ? (
                           <div className="relative size-12 mx-auto group/pick">
-                            <img
+                            <Image
                               src={team.last_pick.image_url}
                               alt={team.last_pick.card_name}
+                              width={48}
+                              height={48}
                               className="size-12 rounded-sm object-cover shadow-sm relative z-10"
                             />
                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 pointer-events-none opacity-0 group-hover/pick:opacity-100 transition-opacity duration-200 z-[100]">
-                              <img
+                              <Image
                                 src={team.last_pick.image_url}
                                 alt={team.last_pick.card_name}
-                                className="h-72 w-auto max-w-none rounded-lg object-contain shadow-2xl drop-shadow-2xl"
+                                width={206}
+                                height={288}
+                                className="rounded-lg object-contain shadow-2xl drop-shadow-2xl"
                               />
                             </div>
                           </div>

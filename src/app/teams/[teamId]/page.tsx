@@ -3,6 +3,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Image from "next/image";
 import { use } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getTeamsWithMembers } from "@/app/actions/teamActions";
@@ -318,10 +319,12 @@ export default function TeamPage({ params }: TeamPageProps) {
                             {(() => {
                               const imageUrl = getCardImageUrl(draftPreview.nextPick!, useOldestArt);
                               return imageUrl && (
-                                <img 
-                                  src={imageUrl} 
-                                  alt={draftPreview.nextPick!.card_name} 
-                                  className="w-full h-full object-cover" 
+                                <Image
+                                  src={imageUrl}
+                                  alt={draftPreview.nextPick!.card_name}
+                                  width={96}
+                                  height={144}
+                                  className="w-full h-full object-cover"
                                 />
                               );
                             })()}
@@ -429,7 +432,9 @@ export default function TeamPage({ params }: TeamPageProps) {
                           <CardPreview key={pick.id} card={pick}>
                             <div className="group relative bg-muted rounded-lg overflow-hidden border hover:border-primary/50 transition-all hover:shadow-md">
                               {imageUrl && (
-                                <img src={imageUrl} alt={pick.card_name} className="w-full h-64 object-cover" />
+                                <div className="relative h-64">
+                                  <Image src={imageUrl} alt={pick.card_name} fill className="object-cover" />
+                                </div>
                               )}
                               <div className="p-2">
                                 <h4 className="font-semibold text-sm truncate">{pick.card_name}</h4>
