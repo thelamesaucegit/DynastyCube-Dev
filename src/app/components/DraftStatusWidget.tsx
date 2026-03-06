@@ -7,7 +7,6 @@ import { getDraftStatus, type DraftStatus } from "@/app/actions/draftOrderAction
 import { getTeamDraftPicks } from "@/app/actions/draftActions";
 import {
   getActiveDraftSession,
-  checkDraftTimer,
   type DraftSession,
 } from "@/app/actions/draftSessionActions";
 import { Card, CardContent } from "@/app/components/ui/card";
@@ -36,40 +35,31 @@ export function DraftStatusWidget({ variant, teamId }: DraftStatusWidgetProps) {
   const [recentPick, setRecentPick] = useState<RecentPickData | null>(null);
 
   useEffect(() => {
-    // Define the async function inside useEffect
     const loadStatus = async () => {
       try {
-        // First, always get the current draft session
         const sessionResult = await getActiveDraftSession();
         const activeSession = sessionResult.session;
         
-        // THIS IS THE FIX: Pass the session ID to get a correctly-scoped status.
-        // If there's no session, getDraftStatus will correctly return a pre-draft state.
+        // This is the fix: Pass the session ID to get a correctly-scoped status.
         const statusResult = await getDraftStatus(activeSession?.id);
         
         const newStatus = statusResult.status;
 
-        // Detect if a new pick was just made by comparing the total pick count
         if (prevStatusRef.current && newStatus && activeSession) {
           if (newStatus.totalPicks > prevStatusRef.current.totalPicks) {
             const justPickedTeam = prevStatusRef.current.onTheClock;
             
-            // Pass session ID to get picks for this specific draft to find the last one
             const { picks } = await getTeamDraftPicks(justPickedTeam.teamId, activeSession.id);
             const validPicks = picks.filter((p) => p.card_id !== "skipped-pick");
             
             if (validPicks.length > 0) {
               const lastPick = validPicks[validPicks.length - 1];
-              
               setRecentPick({
                 teamName: justPickedTeam.teamName,
                 teamEmoji: justPickedTeam.teamEmoji,
                 cardName: lastPick.card_name,
               });
-
               if (timerRef.current) clearTimeout(timerRef.current);
-              
-              // Hold the "new pick" notification for 10 seconds
               timerRef.current = setTimeout(() => {
                 setRecentPick(null);
               }, 10000);
@@ -77,18 +67,14 @@ export function DraftStatusWidget({ variant, teamId }: DraftStatusWidgetProps) {
           }
         }
 
-        // Update state with the new data
         setStatus(newStatus);
         setSession(activeSession);
         prevStatusRef.current = newStatus;
+        
+        // The client-side trigger is no longer needed. The server cron job handles this now.
 
-        // If there's an active session, check if an auto-draft needs to be triggered
-        if (activeSession) {
-          await checkDraftTimer();
-        }
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        // This handles cases where the server has been redeployed
         if (msg.includes("Failed to find Server Action")) {
           window.location.reload();
           return;
@@ -100,7 +86,6 @@ export function DraftStatusWidget({ variant, teamId }: DraftStatusWidgetProps) {
     };
 
     loadStatus();
-    // Poll every 10 seconds to keep the widget live
     const interval = setInterval(loadStatus, 10000);
 
     return () => {
@@ -141,7 +126,8 @@ function useCountdown(deadline: string | null | undefined): string {
     const update = () => {
       const diff = new Date(deadline).getTime() - Date.now();
       if (diff <= 0) {
-        setDisplay("Auto-drafting...");
+        // The cron job will handle the action, the UI just reports the state.
+        setDisplay("Processing...");
         return;
       }
       const h = Math.floor(diff / (1000 * 60 * 60));
@@ -187,7 +173,7 @@ function useStartCountdown(startTime: string | null | undefined): string {
 }
 
 // ============================================================================
-// SCHEDULED WIDGET (no draft order yet, but session is scheduled)
+// WIDGET VARIANTS
 // ============================================================================
 
 function ScheduledWidget({ session }: { session: DraftSession }) {
@@ -220,10 +206,6 @@ function ScheduledWidget({ session }: { session: DraftSession }) {
   );
 }
 
-// ============================================================================
-// COMPLETED WIDGET
-// ============================================================================
-
 function CompletedWidget() {
   return (
     <section>
@@ -238,10 +220,6 @@ function CompletedWidget() {
     </section>
   );
 }
-
-// ============================================================================
-// FULL VARIANT (Homepage)
-// ============================================================================
 
 function FullWidget({ status, session, recentPick }: { status: DraftStatus; session: DraftSession | null; recentPick: RecentPickData | null }) {
   const pickCountdown = useCountdown(
@@ -377,10 +355,6 @@ function FullWidget({ status, session, recentPick }: { status: DraftStatus; sess
   );
 }
 
-// ============================================================================
-// COMPACT VARIANT (Teams Listing)
-// ============================================================================
-
 function CompactWidget({ status, session, recentPick }: { status: DraftStatus; session: DraftSession | null; recentPick: RecentPickData | null }) {
   const pickCountdown = useCountdown(
     session?.status === "active" ? session.current_pick_deadline : null
@@ -432,10 +406,6 @@ function CompactWidget({ status, session, recentPick }: { status: DraftStatus; s
     </Card>
   );
 }
-
-// ============================================================================
-// TEAM VARIANT (Team Detail Page)
-// ============================================================================
 
 function TeamWidget({ status, session, teamId, recentPick }: { status: DraftStatus; session: DraftSession | null; teamId: string; recentPick: RecentPickData | null }) {
   const isOnClock = status.onTheClock.teamId === teamId;
@@ -526,10 +496,6 @@ function TeamWidget({ status, session, teamId, recentPick }: { status: DraftStat
   );
 }
 
-/**
- * Utility: Get badge data for a team in the teams listing.
- * Returns "clock" | "deck" | null based on team status.
- */
 export function getTeamDraftBadge(
   status: DraftStatus | null,
   teamId: string
