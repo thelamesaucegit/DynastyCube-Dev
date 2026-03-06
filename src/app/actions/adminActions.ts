@@ -44,16 +44,13 @@ export async function backfillOracleData(): Promise<{ success: boolean; updated:
   const errors: string[] = [];
   let updatedCount = 0;
   let failedCount = 0;
-
   try {
     // Phase A: Backfill missing oracle_id values
     const { data: cardsMissingOracleId, error: fetchError1 } = await supabase
       .from('card_pools')
       .select('id, card_id')
       .is('oracle_id', null);
-
     if (fetchError1) throw new Error(`Failed to fetch cards missing oracle_id: ${fetchError1.message}`);
-
     for (const card of cardsMissingOracleId) {
       try {
         await new Promise(r => setTimeout(r, 100)); // Rate limit
@@ -76,7 +73,6 @@ export async function backfillOracleData(): Promise<{ success: boolean; updated:
         errors.push(e instanceof Error ? e.message : String(e));
       }
     }
-
     // Phase B: Backfill missing oldest_image_url using the now-populated oracle_ids
     const { data: distinctOracleIds, error: fetchError2 } = await supabase
         .from('card_pools')
@@ -87,24 +83,19 @@ export async function backfillOracleData(): Promise<{ success: boolean; updated:
     if (fetchError2) throw new Error(`Failed to fetch distinct oracle_ids: ${fetchError2.message}`);
     
     const uniqueOracleIds = [...new Set(distinctOracleIds.map(o => o.oracle_id))];
-
     for (const oracleId of uniqueOracleIds) {
          try {
             await new Promise(r => setTimeout(r, 100)); // Rate limit
             const response = await fetch(`https://api.scryfall.com/cards/search?q=oracleid%3A${oracleId}&order=released&dir=asc&unique=prints`);
             if (!response.ok) throw new Error(`Scryfall search error for oracle_id ${oracleId}: ${response.statusText}`);
             const scryfallData = await response.json();
-
             const oldestImage = scryfallData?.data?.[0]?.image_uris?.normal;
-
             if (oldestImage) {
-                // --- FIX: The .select() method after .update() does not take a count object. ---
-                // We select the data and get the count from the length of the returned array.
                 const { data: updatedData, error: updateError } = await supabase
                     .from('card_pools')
                     .update({ oldest_image_url: oldestImage })
                     .eq('oracle_id', oracleId)
-                    .select('id'); // Select a lightweight column
+                    .select('id');
                 
                 if (updateError) throw new Error(`DB update error for oracle_id ${oracleId}: ${updateError.message}`);
                 
@@ -120,7 +111,6 @@ export async function backfillOracleData(): Promise<{ success: boolean; updated:
     }
     
     return { success: true, updated: updatedCount, failed: failedCount, errors };
-
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "An unknown error occurred.";
     errors.push(message);
@@ -128,24 +118,39 @@ export async function backfillOracleData(): Promise<{ success: boolean; updated:
   }
 }
 
+// --- THIS IS THE ONLY MODIFIED FUNCTION IN THIS FILE ---
 export async function getMatchReplay(matchId: string): Promise<{ gameStates: GameState[] | null; team1: Team | null; team2: Team | null; } | null> {
     const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
     if (!matchId) {
         console.error("getMatchReplay called with invalid matchId");
         return null;
     }
-    const { data, error } = await supabase.from('sim_matches').select(`game_states, team1:teams!team1_id(id, name, emoji), team2:teams!team2_id(id, name, emoji)`).eq('id', matchId).single();
+
+    // FIX: Use the correct syntax for joining with a specified foreign key column.
+    // The format is: new_name:foreign_key_column_name( columns_to_select )
+    const { data, error } = await supabase
+        .from('sim_matches')
+        .select(`
+            game_states,
+            team1:team1_id ( id, name, emoji ),
+            team2:team2_id ( id, name, emoji )
+        `)
+        .eq('id', matchId)
+        .single();
+
     if (error) {
         console.error(`Error fetching replay for match ${matchId}:`, error);
         return null;
     }
-    if (!data) return null;
-    const team1Data = (data.team1 as unknown as Team[] | null)?.[0] || null;
-    const team2Data = (data.team2 as unknown as Team[] | null)?.[0] || null;
+    if (!data) {
+        return null;
+    }
+
+    // FIX: The corrected query returns a single object per team, so no casting is needed.
     return {
         gameStates: data.game_states || null,
-        team1: team1Data,
-        team2: team2Data
+        team1: data.team1 as Team | null,
+        team2: data.team2 as Team | null
     };
 }
 
