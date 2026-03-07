@@ -12,7 +12,6 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { getCardImageUrl } from '@/app/utils/cardUtils';
 
 // --- TYPE DEFINITIONS ---
-
 interface Team {
   id: string;
   name: string;
@@ -44,7 +43,6 @@ interface PlayerInfo {
 }
 
 // --- HELPER FUNCTIONS ---
-
 function getCardCategory(cardTypeLine: string): 'front' | 'back' {
   const type = cardTypeLine.toLowerCase();
   if (type.includes('land') || (type.includes('artifact') && !type.includes('creature'))) {
@@ -56,7 +54,7 @@ function getCardCategory(cardTypeLine: string): 'front' | 'back' {
 function generateLogMessage(prevState: GameState | null, nextState: GameState, teamMap: Map<string, Team>): string | null {
     const formatPlayerName = (logName: string) => teamMap.get(logName)?.name || logName;
     if (!prevState) return `Match starts. Turn ${nextState.turn}. Active player: ${formatPlayerName(nextState.activePlayer)}.`;
-    if (prevState.turn !== nextState.turn) return `Turn ${nextState.turn}: ${formatPlayerName(nextState.activePlayer)} begins their turn.`;
+    if (prevState.turn !== nextState.turn) return `Turn ${Math.ceil(nextState.turn / 2)}: ${formatPlayerName(nextState.activePlayer)} begins their turn.`;
     if (prevState.phase !== nextState.phase) return `${formatPlayerName(nextState.activePlayer)} enters the ${nextState.phase} phase.`;
     for (const logName in nextState.players) {
         const prevPlayer = prevState.players[logName];
@@ -81,7 +79,6 @@ function generateLogMessage(prevState: GameState | null, nextState: GameState, t
 }
 
 // --- MAIN COMPONENT ---
-
 export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDataMap }: ReplayPlayerProps) {
   const { useOldestArt } = useSettings();
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -96,7 +93,6 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     const newTeamMap = new Map<string, Team>();
     let p1Info: PlayerInfo | null = null;
     let p2Info: PlayerInfo | null = null;
-
     const logPlayerNames = Object.keys(initialGameStates[0].players);
 
     if (team1 && team2) {
@@ -201,8 +197,14 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     if (!playerState) return <div className="h-1/2 w-full bg-gray-800" />;
 
     const cards = battlefieldState[playerInfo.logName] || [];
-    const backRow = cards.filter(c => c.row === 'back');
+    // --- FIX: Invert row logic ---
     const frontRow = cards.filter(c => c.row === 'front');
+    const backRow = cards.filter(c => c.row === 'back');
+
+    const lastGraveyardCard = playerState.graveyard?.[playerState.graveyard.length - 1];
+    const lastExileCard = playerState.exile?.[playerState.exile.length - 1];
+    const lastGraveyardCardData = lastGraveyardCard ? cardDataMap.get(lastGraveyardCard.name) : null;
+    const lastExileCardData = lastExileCard ? cardDataMap.get(lastExileCard.name) : null;
 
     const renderRow = (rowCards: BattlefieldCard[]) => (
         <div className="flex-grow flex justify-center items-center gap-[-30px] px-24">
@@ -219,10 +221,13 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
 
     return (
       <div className={`relative w-full h-1/2 bg-gray-700/50 p-4 flex ${flexDirection}`}>
+          {/* --- FIX: Invert rendering order for battlefield rows --- */}
           <div className={`flex h-full ${flexDirection} gap-2`}>
-              {renderRow(frontRow)}
               {renderRow(backRow)}
+              {renderRow(frontRow)}
           </div>
+
+          {/* Player Info and Life Total */}
           <div className={`absolute top-4 left-4 flex items-center gap-4 z-10`}>
               <div className="relative">
                   <div className="text-5xl">{playerInfo.team.emoji}</div>
@@ -231,6 +236,46 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
               <div className={`text-6xl font-bold transition-colors duration-300 ${lifeChange?.logName === playerInfo.logName && lifeChange.type === 'loss' ? 'text-red-500' : ''} ${lifeChange?.logName === playerInfo.logName && lifeChange.type === 'gain' ? 'text-green-500' : ''}`}>
                   {playerState.life}
               </div>
+          </div>
+          
+          {/* --- NEW: Player Metrics and Zone Displays --- */}
+          <div className={`absolute top-4 right-4 flex flex-col items-end gap-4 z-10`}>
+              <div className="flex gap-4">
+                  <div className="text-center">
+                      <p className="font-bold text-2xl">{playerState.handSize}</p>
+                      <p className="text-3xl">🤚</p>
+                  </div>
+                  <div className="text-center">
+                      <p className="font-bold text-2xl">{playerState.librarySize}</p>
+                      <p className="text-3xl">📚</p>
+                  </div>
+                  <div className="text-center">
+                      <p className="font-bold text-2xl">{playerState.graveyard?.length || 0}</p>
+                      <p className="text-3xl">🪦</p>
+                  </div>
+                   <div className="text-center">
+                      <p className="font-bold text-2xl">{playerState.exile?.length || 0}</p>
+                      <p className="text-3xl">🌀</p>
+                  </div>
+              </div>
+               <div className="flex gap-2 mt-2">
+                    {lastGraveyardCardData && (
+                        <div className="relative">
+                            <img src={getCardImageUrl(lastGraveyardCardData, useOldestArt)} alt={lastGraveyardCardData.card_name} className="h-24 object-contain rounded-md" />
+                            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                <p className="text-white font-bold text-xs">Graveyard</p>
+                            </div>
+                        </div>
+                    )}
+                    {lastExileCardData && (
+                        <div className="relative">
+                            <img src={getCardImageUrl(lastExileCardData, useOldestArt)} alt={lastExileCardData.card_name} className="h-24 object-contain rounded-md" />
+                            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                <p className="text-white font-bold text-xs">Exile</p>
+                            </div>
+                        </div>
+                    )}
+               </div>
           </div>
       </div>
     );
@@ -263,8 +308,8 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
                 <Button onClick={() => setCurrentStepIndex(Math.min(initialGameStates.length - 1, currentStepIndex + 1))} variant="ghost" size="icon" disabled={isPlaying}><FastForward /></Button>
             </div>
             <div className="col-span-1 flex flex-col items-end justify-center text-right">
-                {/* --- NEW: Added the current turn display --- */}
-                {currentState?.turn > 0 && <p className="text-lg font-semibold">Turn {currentState.turn}</p>}
+                {/* --- FIX: Display game turn, not log turn --- */}
+                {currentState?.turn > 0 && <p className="text-lg font-semibold">Turn {Math.ceil(currentState.turn / 2)}</p>}
                 <p className="font-bold">Step {currentStepIndex + 1} / {initialGameStates.length}</p>
                 <p className="text-sm text-gray-400">{currentState?.phase}</p>
                  {currentState?.winner && <p className="text-lg font-bold text-yellow-400">Winner: {teamMap.get(currentState.winner)?.name || currentState.winner}</p>}
