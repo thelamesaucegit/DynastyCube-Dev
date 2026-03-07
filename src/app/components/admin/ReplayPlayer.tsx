@@ -206,13 +206,8 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     const lastGraveyardCardData = lastGraveyardCard ? cardDataMap.get(lastGraveyardCard.name) : null;
     const lastExileCardData = lastExileCard ? cardDataMap.get(lastExileCard.name) : null;
 
-    // ---
-    // FIX: Get the URL first and check if it's null before rendering the img tag.
-    // This prevents passing `src={null}` which causes a build error.
-    // ---
     const graveyardImgUrl = lastGraveyardCardData ? getCardImageUrl(lastGraveyardCardData, useOldestArt) : null;
     const exileImgUrl = lastExileCardData ? getCardImageUrl(lastExileCardData, useOldestArt) : null;
-
 
     const renderRow = (rowCards: BattlefieldCard[]) => (
         <div className="flex-grow flex justify-center items-center gap-[-30px] px-24">
@@ -264,9 +259,12 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
                   </div>
               </div>
                <div className="flex gap-2 mt-2">
+                    {/* ---
+                    // FIX: Use the correct property `name` for the alt tag, which exists on `ReplayCardData`.
+                    // --- */}
                     {graveyardImgUrl && lastGraveyardCardData && (
                         <div className="relative">
-                            <img src={graveyardImgUrl} alt={lastGraveyardCardData.card_name} className="h-24 object-contain rounded-md" />
+                            <img src={graveyardImgUrl} alt={lastGraveyardCardData.name} className="h-24 object-contain rounded-md" />
                             <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                                 <p className="text-white font-bold text-xs">Graveyard</p>
                             </div>
@@ -274,7 +272,7 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
                     )}
                     {exileImgUrl && lastExileCardData && (
                         <div className="relative">
-                            <img src={exileImgUrl} alt={lastExileCardData.card_name} className="h-24 object-contain rounded-md" />
+                            <img src={exileImgUrl} alt={lastExileCardData.name} className="h-24 object-contain rounded-md" />
                             <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                                 <p className="text-white font-bold text-xs">Exile</p>
                             </div>
