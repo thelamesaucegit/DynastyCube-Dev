@@ -19,6 +19,12 @@ interface AiProfile {
   profile_name: string;
 }
 
+interface MatchReplayData {
+  gameStates: GameState[] | null;
+  team1: Team | null;
+  team2: Team | null;
+}
+
 async function createClient() {
   const cookieStore = await cookies();
   return createServerClient(
@@ -40,42 +46,57 @@ async function createClient() {
 }
 
 // --- THIS IS THE ONLY MODIFIED FUNCTION IN THIS FILE ---
-export async function getMatchReplay(matchId: string): Promise<{ gameStates: GameState[] | null; team1: Team | null; team2: Team | null; } | null> {
+export async function getMatchReplay(matchId: string): Promise<MatchReplayData | null> {
     const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
     if (!matchId) {
         console.error("getMatchReplay called with invalid matchId");
         return null;
     }
 
-    const { data, error } = await supabase
+    // ---
+    // FIX: Execute queries separately to bypass the Supabase client's foreign key bug with non-UUID columns.
+    // ---
+
+    // 1. Fetch the core match data first.
+    const { data: matchData, error: matchError } = await supabase
         .from('sim_matches')
-        .select(`
-            game_states,
-            team1:team1_id ( id, name, emoji ),
-            team2:team2_id ( id, name, emoji )
-        `)
+        .select('game_states, team1_id, team2_id')
         .eq('id', matchId)
         .single();
 
-    if (error) {
-        console.error(`Error fetching replay for match ${matchId}:`, error);
-        return null;
-    }
-    if (!data) {
+    if (matchError || !matchData) {
+        console.error(`Error fetching match data for ${matchId}:`, matchError?.message);
         return null;
     }
 
-    // --- FIX: Safely handle the array-like response to prevent type errors ---
-    // The Supabase client can return a to-one relationship as an array with one element.
-    // We cast to `unknown` first to bypass incorrect assumptions, then to the expected array type.
-    // Finally, we use optional chaining `?.[0]` to safely get the first element, or null.
-    const team1Data = (data.team1 as unknown as Team[] | null)?.[0] || null;
-    const team2Data = (data.team2 as unknown as Team[] | null)?.[0] || null;
+    const { game_states, team1_id, team2_id } = matchData;
 
+    if (!team1_id || !team2_id) {
+        console.error(`Match ${matchId} is missing team IDs.`);
+        return { gameStates: game_states || null, team1: null, team2: null };
+    }
+
+    // 2. Fetch team data in separate, simple queries using the retrieved IDs.
+    const { data: team1Data, error: team1Error } = await supabase
+        .from('teams')
+        .select('id, name, emoji')
+        .eq('id', team1_id)
+        .single();
+
+    const { data: team2Data, error: team2Error } = await supabase
+        .from('teams')
+        .select('id, name, emoji')
+        .eq('id', team2_id)
+        .single();
+
+    if (team1Error) console.error(`Error fetching team1 data for id ${team1_id}:`, team1Error.message);
+    if (team2Error) console.error(`Error fetching team2 data for id ${team2_id}:`, team2Error.message);
+
+    // Return what we have. The UI will correctly show "Waiting for team data" if a team fetch fails.
     return {
-        gameStates: data.game_states || null,
-        team1: team1Data,
-        team2: team2Data
+        gameStates: game_states || null,
+        team1: team1Data || null,
+        team2: team2Data || null,
     };
 }
 
@@ -269,7 +290,7 @@ export async function backfillCMCForCardPools(): Promise<{ success: boolean; upd
         }
         return { success: true, updated: updatedCount, failed: failedCount, errors };
     } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
         return { success: false, updated: updatedCount, failed: failedCount, errors: [`Unexpected error: ${errorMessage}`] };
     }
 }
@@ -277,6 +298,7 @@ export async function backfillCMCForCardPools(): Promise<{ success: boolean; upd
 export async function backfillAllCMCData(): Promise<{ success: boolean; draftPicksUpdated: number; cardPoolsUpdated: number; totalFailed: number; errors: string[]; }> {
     const poolsResult = await backfillCMCForCardPools();
     const picksResult = await backfillCMCForDraftPicks();
+
     return {
         success: poolsResult.success && picksResult.success,
         cardPoolsUpdated: poolsResult.updated,
