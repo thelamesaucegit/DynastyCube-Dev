@@ -239,15 +239,14 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
               {renderRow(frontRow)}
           </div>
 
-          {/* --- FIX: Consolidated all player info to the left side --- */}
-          <div className={`absolute top-4 left-4 flex flex-col items-start gap-2 z-10`}>
+          <div className={`absolute top-4 left-4 flex flex-col items-start gap-3 z-10`}>
               <div className="flex items-center gap-4">
                 <div className="relative">
                     <div className="text-5xl">{playerInfo.team.emoji}</div>
                     {currentState.activePlayer.toLowerCase().includes(playerInfo.team.id.toLowerCase()) && <div className="absolute -inset-2 rounded-full ring-4 ring-blue-400 ring-offset-4 ring-offset-gray-800 animate-pulse"></div>}
                 </div>
                 <div className={`text-6xl font-bold transition-colors duration-300 ${lifeChange?.logName === playerInfo.logName && lifeChange.type === 'loss' ? 'text-red-500' : ''} ${lifeChange?.logName === playerInfo.logName && lifeChange.type === 'gain' ? 'text-green-500' : ''}`}>
-                    {playerState.life}
+                  {playerState.life}
                 </div>
               </div>
 
