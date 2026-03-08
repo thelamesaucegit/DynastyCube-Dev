@@ -179,7 +179,6 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
   }, [currentStepIndex, initialGameStates, cardDataMap, useOldestArt, player1, player2, teamMap]);
 
   useEffect(() => {
-    // --- FIX: Add a guard clause to ensure player objects are defined ---
     if (!isPlaying || currentStepIndex >= initialGameStates.length - 1 || !player1 || !player2) {
       setIsPlaying(false);
       return;
@@ -240,14 +239,18 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
               {renderRow(frontRow)}
           </div>
 
-          <div className={`absolute top-4 left-4 flex items-center gap-4 z-10`}>
-              <div className="relative">
-                  <div className="text-5xl">{playerInfo.team.emoji}</div>
-                  {currentState.activePlayer.toLowerCase().includes(playerInfo.team.id.toLowerCase()) && <div className="absolute -inset-2 rounded-full ring-4 ring-blue-400 ring-offset-4 ring-offset-gray-800 animate-pulse"></div>}
+          {/* --- FIX: Consolidated all player info to the left side --- */}
+          <div className={`absolute top-4 left-4 flex flex-col items-start gap-2 z-10`}>
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                    <div className="text-5xl">{playerInfo.team.emoji}</div>
+                    {currentState.activePlayer.toLowerCase().includes(playerInfo.team.id.toLowerCase()) && <div className="absolute -inset-2 rounded-full ring-4 ring-blue-400 ring-offset-4 ring-offset-gray-800 animate-pulse"></div>}
+                </div>
+                <div className={`text-6xl font-bold transition-colors duration-300 ${lifeChange?.logName === playerInfo.logName && lifeChange.type === 'loss' ? 'text-red-500' : ''} ${lifeChange?.logName === playerInfo.logName && lifeChange.type === 'gain' ? 'text-green-500' : ''}`}>
+                    {playerState.life}
+                </div>
               </div>
-              <div className={`text-6xl font-bold transition-colors duration-300 ${lifeChange?.logName === playerInfo.logName && lifeChange.type === 'loss' ? 'text-red-500' : ''} ${lifeChange?.logName === playerInfo.logName && lifeChange.type === 'gain' ? 'text-green-500' : ''}`}>
-                  {playerState.life}
-              </div>
+
               <div className="flex gap-4">
                   <div className="text-center">
                       <p className="font-bold text-2xl">{playerState.handSize}</p>
@@ -257,11 +260,6 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
                       <p className="font-bold text-2xl">{playerState.librarySize}</p>
                       <p className="text-3xl">📚</p>
                   </div>
-              </div>
-          </div>
-          
-          <div className={`absolute top-4 right-4 flex items-end gap-2 z-10`}>
-               <div className="flex text-center gap-4">
                   <div className="text-center">
                       <p className="font-bold text-2xl">{playerState.graveyard?.length || 0}</p>
                       <p className="text-3xl">🪦</p>
@@ -270,8 +268,9 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
                       <p className="font-bold text-2xl">{playerState.exile?.length || 0}</p>
                       <p className="text-3xl">🌀</p>
                   </div>
-               </div>
-               <div className="flex gap-2">
+              </div>
+
+               <div className="flex gap-2 mt-2">
                     {graveyardImgUrl && lastGraveyardCardData && (
                         <div className="relative">
                             <img src={graveyardImgUrl} alt={lastGraveyardCardData.name} className="h-24 object-contain rounded-md" />
@@ -316,9 +315,9 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
             </ScrollArea>
             <div className="col-span-1 flex items-center justify-center gap-2">
                 <Button onClick={() => setCurrentStepIndex(0)} variant="ghost" size="icon" disabled={isPlaying}><SkipBack /></Button>
-                <Button onClick={() => setCurrentStepIndex(Math.max(0, currentStepIndex - 1))} variant="ghost" size="icon" disabled={isPlaying}><Rewind /></Button>
+                <Button onClick={() => setCurrentStepIndex(Math.max(0, currentStepIndex - 1))} variant="ghost" size="icon" disabled={isPlaying}><FastForward /></Button>
                 <Button onClick={() => setIsPlaying(!isPlaying)} size="lg" className="w-20">{isPlaying ? <Pause /> : <Play />}</Button>
-                <Button onClick={() => setCurrentStepIndex(Math.min(initialGameStates.length - 1, currentStepIndex + 1))} variant="ghost" size="icon" disabled={isPlaying}><FastForward /></Button>
+                <Button onClick={() => setCurrentStepIndex(Math.min(initialGameStates.length - 1, currentStepIndex + 1))} variant="ghost" size="icon" disabled={isPlaying}><Rewind /></Button>
             </div>
             <div className="col-span-1 flex flex-col items-end justify-center text-right">
                 {currentState?.turn > 0 && <p className="text-lg font-semibold">Turn {Math.ceil(currentState.turn / 2)}</p>}
@@ -330,4 +329,3 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     </div>
   );
 }
-
