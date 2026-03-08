@@ -185,7 +185,8 @@ export default function MatchRunnerPage() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-xl"><Swords /> Forge Match Simulator</CardTitle>
-        <CardDescription>Select teams, AI profiles, and enter decklists to run a simulated match. Type "Test" to use the pre-defined test deck.</CardDescription>
+        {/* --- FIX: Replaced quotes with HTML entities to prevent build error --- */}
+        <CardDescription>Select teams, AI profiles, and enter decklists to run a simulated match. Type &quot;Test&quot; to use the pre-defined test deck.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
