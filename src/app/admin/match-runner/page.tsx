@@ -8,9 +8,8 @@ import { Button } from '@/app/components/ui/button';
 import { Label } from '@/app/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { Textarea } from '@/app/components/ui/textarea';
-import { Input } from '@/app/components/ui/input';
 import { Swords, Hourglass, ShieldCheck, ShieldX, Trophy } from 'lucide-react';
-import { getAiProfiles, validateAndCanonicalizeDeck } from '@/app/actions/adminActions';
+import { getAiProfiles, validateAndCanonicalizeDeck, getTestDecklists } from '@/app/actions/adminActions';
 import { getAllTeams } from '@/app/actions/teamActions';
 
 interface Team {
@@ -23,6 +22,7 @@ interface AiProfile {
   id:string;
   profile_name: string;
 }
+
 
 function formatDecklistToDck(decklist: string, deckName: string): string {
   return `[metadata]\nName=${deckName}\n\n[Main]\n${decklist}`;
@@ -40,13 +40,19 @@ export default function MatchRunnerPage() {
   const [error, setError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState('');
+  const [testDecks, setTestDecks] = useState({ p1_deck: '', p2_deck: '' });
 
   useEffect(() => {
     async function loadInitialData() {
       try {
-        const [aiResult, teamResult] = await Promise.all([ getAiProfiles(), getAllTeams() ]);
+        const [aiResult, teamResult, testDeckResult] = await Promise.all([ 
+            getAiProfiles(), 
+            getAllTeams(),
+            getTestDecklists()
+        ]);
         setProfiles(aiResult);
         if (teamResult.teams) setTeams(teamResult.teams);
+        setTestDecks(testDeckResult);
       } catch (err: unknown) {
         setError(`Failed to load initial page data: ${err instanceof Error ? err.message : "Unknown error"}`);
       }
@@ -58,8 +64,15 @@ export default function MatchRunnerPage() {
     setError(null);
     setValidationError(null);
 
-    const trimmedP1Decklist = player1.decklist.trim();
-    const trimmedP2Decklist = player2.decklist.trim();
+    let p1Decklist = player1.decklist.trim();
+    if (p1Decklist.toLowerCase() === 'test') {
+        p1Decklist = testDecks.p1_deck;
+    }
+
+    let p2Decklist = player2.decklist.trim();
+    if (p2Decklist.toLowerCase() === 'test') {
+        p2Decklist = testDecks.p2_deck;
+    }
 
     if (!team1Id || !team2Id) {
       setError('Please select a team for both players.');
@@ -74,7 +87,7 @@ export default function MatchRunnerPage() {
         return;
     }
     
-    if (!player1.aiProfile || !player2.aiProfile || !trimmedP1Decklist || !trimmedP2Decklist) {
+    if (!player1.aiProfile || !player2.aiProfile || !p1Decklist || !p2Decklist) {
       setError('Please provide a decklist and AI profile for both players.');
       return;
     }
@@ -82,7 +95,7 @@ export default function MatchRunnerPage() {
     setIsValidating(true);
     setStatusMessage('Validating decklists...');
 
-    const allCardNames = [...trimmedP1Decklist.split('\n'), ...trimmedP2Decklist.split('\n')].map(line => line.trim().replace(/^\d+\s/, ''));
+    const allCardNames = [...p1Decklist.split('\n'), ...p2Decklist.split('\n')].map(line => line.trim().replace(/^\d+\s/, ''));
     const { valid, invalid } = await validateAndCanonicalizeDeck(allCardNames);
 
     if (invalid.length > 0) {
@@ -106,13 +119,9 @@ export default function MatchRunnerPage() {
       }).filter(Boolean).join('\n');
     };
     
-    const correctedDeck1List = buildCorrectedDeckList(trimmedP1Decklist);
-    const correctedDeck2List = buildCorrectedDeckList(trimmedP2Decklist);
-
-    // ---
-    // FIX: The team `id` (e.g., "shards") is now used as the deck name for the simulation.
-    // This is the root fix that corrects the entire downstream data flow.
-    // ---
+    const correctedDeck1List = buildCorrectedDeckList(p1Decklist);
+    const correctedDeck2List = buildCorrectedDeckList(p2Decklist);
+    
     const deck1NameForSim = team1.id;
     const deck2NameForSim = team2.id;
     
@@ -159,7 +168,7 @@ export default function MatchRunnerPage() {
     }
   };
   
-  if (isSimulating) {
+    if (isSimulating) {
     return (
         <Card className="max-w-2xl mx-auto mt-10">
             <CardHeader className="text-center">
@@ -176,7 +185,7 @@ export default function MatchRunnerPage() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-xl"><Swords /> Forge Match Simulator</CardTitle>
-        <CardDescription>Select teams, AI profiles, and enter decklists to run a simulated match.</CardDescription>
+        <CardDescription>Select teams, AI profiles, and enter decklists to run a simulated match. Type "Test" to use the pre-defined test deck.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -192,7 +201,7 @@ export default function MatchRunnerPage() {
                     <SelectContent>{profiles.map(p => <SelectItem key={p.id} value={p.profile_name}>{p.profile_name}</SelectItem>)}</SelectContent>
                 </Select>
                 <Label className="mt-2 block" htmlFor="p1_decklist">Player 1 Decklist</Label>
-                <Textarea id="p1_decklist" placeholder="25 Mountain&#10;15 Lightning Bolt" value={player1.decklist} onChange={(e) => setPlayer1({ ...player1, decklist: e.target.value })} className="h-48"/>
+                <Textarea id="p1_decklist" placeholder="15 Lightning Bolt&#10;10 Shivan Dragon&#10;15 Mountain" value={player1.decklist} onChange={(e) => setPlayer1({ ...player1, decklist: e.target.value })} className="h-48"/>
             </div>
             <div className="space-y-4">
                 <Label htmlFor="p2_team">Player 2 Team</Label>
@@ -206,7 +215,7 @@ export default function MatchRunnerPage() {
                     <SelectContent>{profiles.map(p => <SelectItem key={p.id} value={p.profile_name}>{p.profile_name}</SelectItem>)}</SelectContent>
                 </Select>
                 <Label className="mt-2 block" htmlFor="p2_decklist">Player 2 Decklist</Label>
-                <Textarea id="p2_decklist" placeholder="25 Plains&#10;15 Savannah Lions" value={player2.decklist} onChange={(e) => setPlayer2({ ...player2, decklist: e.target.value })} className="h-48"/>
+                <Textarea id="p2_decklist" placeholder="10 Savannah Lions&#10;10 White Knight&#10;5 Swords to Plowshares&#10;15 Plains" value={player2.decklist} onChange={(e) => setPlayer2({ ...player2, decklist: e.target.value })} className="h-48"/>
             </div>
         </div>
         {validationError && (
