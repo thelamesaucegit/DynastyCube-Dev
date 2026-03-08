@@ -11,8 +11,6 @@ import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { useSettings } from '@/contexts/SettingsContext';
 import { getCardImageUrl } from '@/app/utils/cardUtils';
 
-// --- TYPE DEFINITIONS ---
-
 interface Team {
   id: string;
   name: string;
@@ -43,7 +41,6 @@ interface PlayerInfo {
     team: Team;
 }
 
-// --- HELPER FUNCTIONS ---
 function getCardCategory(cardTypeLine: string): 'front' | 'back' {
   const type = cardTypeLine.toLowerCase();
   if (type.includes('land') || (type.includes('artifact') && !type.includes('creature'))) {
@@ -79,7 +76,6 @@ function generateLogMessage(prevState: GameState | null, nextState: GameState, t
     return null;
 }
 
-// --- MAIN COMPONENT ---
 export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDataMap }: ReplayPlayerProps) {
   const { useOldestArt } = useSettings();
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -185,11 +181,21 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     }
     const prevState = initialGameStates[currentStepIndex];
     const nextState = initialGameStates[currentStepIndex + 1];
-    const isBattlefieldEvent = JSON.stringify(prevState.players) !== JSON.stringify(nextState.players);
-    const timeout = isBattlefieldEvent ? 3000 : 500;
+    
+    const isSignificantEvent = (
+        prevState.players[player1?.logName]?.life !== nextState.players[player1?.logName]?.life ||
+        prevState.players[player2?.logName]?.life !== nextState.players[player2?.logName]?.life ||
+        JSON.stringify(prevState.players[player1?.logName]?.battlefield) !== JSON.stringify(nextState.players[player1?.logName]?.battlefield) ||
+        JSON.stringify(prevState.players[player2?.logName]?.battlefield) !== JSON.stringify(nextState.players[player2?.logName]?.battlefield) ||
+        prevState.players[player1?.logName]?.graveyard.length !== nextState.players[player1?.logName]?.graveyard.length ||
+        prevState.players[player2?.logName]?.graveyard.length !== nextState.players[player2?.logName]?.graveyard.length
+    );
+
+    const timeout = isSignificantEvent ? 1500 : 250;
+
     const timer = setTimeout(() => setCurrentStepIndex(prev => prev + 1), timeout);
     return () => clearTimeout(timer);
-  }, [isPlaying, currentStepIndex, initialGameStates]);
+  }, [isPlaying, currentStepIndex, initialGameStates, player1, player2]);
 
   const renderPlayerArea = (playerInfo: PlayerInfo | null, area: 'top' | 'bottom') => {
     if (!playerInfo) return <div className="h-1/2 w-full bg-gray-800 flex items-center justify-center"><p className="text-gray-500">Waiting for team data...</p></div>;
@@ -220,7 +226,7 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
         </div>
     );
     
-    const flexDirection = area === 'top' ? 'flex-col' : 'flex-col-reverse';
+    const flexDirection = area === 'top' ? 'flex-col-reverse' : 'flex-col';
 
     return (
       <div className={`relative w-full h-1/2 bg-gray-700/50 p-4 flex ${flexDirection}`}>
@@ -237,9 +243,6 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
               <div className={`text-6xl font-bold transition-colors duration-300 ${lifeChange?.logName === playerInfo.logName && lifeChange.type === 'loss' ? 'text-red-500' : ''} ${lifeChange?.logName === playerInfo.logName && lifeChange.type === 'gain' ? 'text-green-500' : ''}`}>
                   {playerState.life}
               </div>
-          </div>
-          
-          <div className={`absolute top-4 right-4 flex flex-col items-end gap-4 z-10`}>
               <div className="flex gap-4">
                   <div className="text-center">
                       <p className="font-bold text-2xl">{playerState.handSize}</p>
@@ -249,6 +252,11 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
                       <p className="font-bold text-2xl">{playerState.librarySize}</p>
                       <p className="text-3xl">📚</p>
                   </div>
+              </div>
+          </div>
+          
+          <div className={`absolute top-4 right-4 flex items-end gap-2 z-10`}>
+               <div className="flex text-center gap-4">
                   <div className="text-center">
                       <p className="font-bold text-2xl">{playerState.graveyard?.length || 0}</p>
                       <p className="text-3xl">🪦</p>
@@ -257,11 +265,8 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
                       <p className="font-bold text-2xl">{playerState.exile?.length || 0}</p>
                       <p className="text-3xl">🌀</p>
                   </div>
-              </div>
-               <div className="flex gap-2 mt-2">
-                    {/* ---
-                    // FIX: Use the correct property `name` for the alt tag, which exists on `ReplayCardData`.
-                    // --- */}
+               </div>
+               <div className="flex gap-2">
                     {graveyardImgUrl && lastGraveyardCardData && (
                         <div className="relative">
                             <img src={graveyardImgUrl} alt={lastGraveyardCardData.name} className="h-24 object-contain rounded-md" />
@@ -306,9 +311,9 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
             </ScrollArea>
             <div className="col-span-1 flex items-center justify-center gap-2">
                 <Button onClick={() => setCurrentStepIndex(0)} variant="ghost" size="icon" disabled={isPlaying}><SkipBack /></Button>
-                <Button onClick={() => setCurrentStepIndex(Math.max(0, currentStepIndex - 1))} variant="ghost" size="icon" disabled={isPlaying}><Rewind /></Button>
+                <Button onClick={() => setCurrentStepIndex(Math.max(0, currentStepIndex - 1))} variant="ghost" size="icon" disabled={isPlaying}><FastForward /></Button>
                 <Button onClick={() => setIsPlaying(!isPlaying)} size="lg" className="w-20">{isPlaying ? <Pause /> : <Play />}</Button>
-                <Button onClick={() => setCurrentStepIndex(Math.min(initialGameStates.length - 1, currentStepIndex + 1))} variant="ghost" size="icon" disabled={isPlaying}><FastForward /></Button>
+                <Button onClick={() => setCurrentStepIndex(Math.min(initialGameStates.length - 1, currentStepIndex + 1))} variant="ghost" size="icon" disabled={isPlaying}><Rewind /></Button>
             </div>
             <div className="col-span-1 flex flex-col items-end justify-center text-right">
                 {currentState?.turn > 0 && <p className="text-lg font-semibold">Turn {Math.ceil(currentState.turn / 2)}</p>}
