@@ -7,6 +7,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { fetchAllCards } from "@/lib/scryfall-client";
 import { GameState } from "@/app/types";
+import { invalidateDraftCache } from "@/lib/draftCache";
 
 interface Team {
   id: string;
@@ -18,6 +19,29 @@ interface AiProfile {
   id: string;
   profile_name: string;
 }
+
+export interface CardData {
+  id?: string;
+  card_id: string;
+  card_name: string;
+  card_set?: string;
+  card_type?: string;
+  rarity?: string;
+  colors?: string[];
+  color_identity?: string[];
+  image_url?: string | null;
+  oldest_image_url?: string | null;
+  oracle_id?: string | null;
+  hidden?: boolean;
+  mana_cost?: string;
+  cmc?: number;
+  pool_name?: string;
+  cubucks_cost?: number;
+  created_at?: string;
+  cubecobra_elo?: number;
+  rating_updated_at?: string;
+}
+
 
 interface MatchReplayData {
   gameStates: GameState[] | null;
@@ -45,7 +69,24 @@ async function createClient() {
   );
 }
 
-// --- THIS IS THE ONLY MODIFIED FUNCTION IN THIS FILE ---
+// --- NEW FUNCTION TO FETCH TEST DECKLISTS ---
+export async function getTestDecklists(): Promise<{ p1_deck: string, p2_deck: string }> {
+    const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+    try {
+        const { data, error } = await supabase.from('test_decklists').select('player_slot, decklist');
+        if (error) throw error;
+        
+        const p1 = data.find(d => d.player_slot === 1)?.decklist || '';
+        const p2 = data.find(d => d.player_slot === 2)?.decklist || '';
+        
+        return { p1_deck: p1, p2_deck: p2 };
+    } catch (err) {
+        console.error("Failed to fetch test decklists:", err);
+        return { p1_deck: '', p2_deck: '' };
+    }
+}
+
+
 export async function getMatchReplay(matchId: string): Promise<MatchReplayData | null> {
     const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
     if (!matchId) {
@@ -53,11 +94,6 @@ export async function getMatchReplay(matchId: string): Promise<MatchReplayData |
         return null;
     }
 
-    // ---
-    // FIX: Execute queries separately to bypass the Supabase client's foreign key bug with non-UUID columns.
-    // ---
-
-    // 1. Fetch the core match data first.
     const { data: matchData, error: matchError } = await supabase
         .from('sim_matches')
         .select('game_states, team1_id, team2_id')
@@ -76,7 +112,6 @@ export async function getMatchReplay(matchId: string): Promise<MatchReplayData |
         return { gameStates: game_states || null, team1: null, team2: null };
     }
 
-    // 2. Fetch team data in separate, simple queries using the retrieved IDs.
     const { data: team1Data, error: team1Error } = await supabase
         .from('teams')
         .select('id, name, emoji')
@@ -92,7 +127,6 @@ export async function getMatchReplay(matchId: string): Promise<MatchReplayData |
     if (team1Error) console.error(`Error fetching team1 data for id ${team1_id}:`, team1Error.message);
     if (team2Error) console.error(`Error fetching team2 data for id ${team2_id}:`, team2Error.message);
 
-    // Return what we have. The UI will correctly show "Waiting for team data" if a team fetch fails.
     return {
         gameStates: game_states || null,
         team1: team1Data || null,
@@ -100,8 +134,6 @@ export async function getMatchReplay(matchId: string): Promise<MatchReplayData |
     };
 }
 
-
-// --- ALL OTHER FUNCTIONS REMAIN UNCHANGED AND ARE PRESERVED ---
 
 export async function backfillOracleData(): Promise<{ success: boolean; updated: number; failed: number; errors: string[] }> {
   const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
@@ -290,7 +322,7 @@ export async function backfillCMCForCardPools(): Promise<{ success: boolean; upd
         }
         return { success: true, updated: updatedCount, failed: failedCount, errors };
     } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+        const errorMessage = error instanceof Error ? error.message : String(error);
         return { success: false, updated: updatedCount, failed: failedCount, errors: [`Unexpected error: ${errorMessage}`] };
     }
 }
