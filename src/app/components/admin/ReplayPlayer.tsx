@@ -11,6 +11,8 @@ import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { useSettings } from '@/contexts/SettingsContext';
 import { getCardImageUrl } from '@/app/utils/cardUtils';
 
+// --- TYPE DEFINITIONS ---
+
 interface Team {
   id: string;
   name: string;
@@ -41,6 +43,7 @@ interface PlayerInfo {
     team: Team;
 }
 
+// --- HELPER FUNCTIONS ---
 function getCardCategory(cardTypeLine: string): 'front' | 'back' {
   const type = cardTypeLine.toLowerCase();
   if (type.includes('land') || (type.includes('artifact') && !type.includes('creature'))) {
@@ -76,6 +79,7 @@ function generateLogMessage(prevState: GameState | null, nextState: GameState, t
     return null;
 }
 
+// --- MAIN COMPONENT ---
 export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDataMap }: ReplayPlayerProps) {
   const { useOldestArt } = useSettings();
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -175,7 +179,8 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
   }, [currentStepIndex, initialGameStates, cardDataMap, useOldestArt, player1, player2, teamMap]);
 
   useEffect(() => {
-    if (!isPlaying || currentStepIndex >= initialGameStates.length - 1) {
+    // --- FIX: Add a guard clause to ensure player objects are defined ---
+    if (!isPlaying || currentStepIndex >= initialGameStates.length - 1 || !player1 || !player2) {
       setIsPlaying(false);
       return;
     }
@@ -183,12 +188,12 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     const nextState = initialGameStates[currentStepIndex + 1];
     
     const isSignificantEvent = (
-        prevState.players[player1?.logName]?.life !== nextState.players[player1?.logName]?.life ||
-        prevState.players[player2?.logName]?.life !== nextState.players[player2?.logName]?.life ||
-        JSON.stringify(prevState.players[player1?.logName]?.battlefield) !== JSON.stringify(nextState.players[player1?.logName]?.battlefield) ||
-        JSON.stringify(prevState.players[player2?.logName]?.battlefield) !== JSON.stringify(nextState.players[player2?.logName]?.battlefield) ||
-        prevState.players[player1?.logName]?.graveyard.length !== nextState.players[player1?.logName]?.graveyard.length ||
-        prevState.players[player2?.logName]?.graveyard.length !== nextState.players[player2?.logName]?.graveyard.length
+        prevState.players[player1.logName]?.life !== nextState.players[player1.logName]?.life ||
+        prevState.players[player2.logName]?.life !== nextState.players[player2.logName]?.life ||
+        JSON.stringify(prevState.players[player1.logName]?.battlefield) !== JSON.stringify(nextState.players[player1.logName]?.battlefield) ||
+        JSON.stringify(prevState.players[player2.logName]?.battlefield) !== JSON.stringify(nextState.players[player2.logName]?.battlefield) ||
+        prevState.players[player1.logName]?.graveyard.length !== nextState.players[player1.logName]?.graveyard.length ||
+        prevState.players[player2.logName]?.graveyard.length !== nextState.players[player2.logName]?.graveyard.length
     );
 
     const timeout = isSignificantEvent ? 1500 : 250;
@@ -311,9 +316,9 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
             </ScrollArea>
             <div className="col-span-1 flex items-center justify-center gap-2">
                 <Button onClick={() => setCurrentStepIndex(0)} variant="ghost" size="icon" disabled={isPlaying}><SkipBack /></Button>
-                <Button onClick={() => setCurrentStepIndex(Math.max(0, currentStepIndex - 1))} variant="ghost" size="icon" disabled={isPlaying}><FastForward /></Button>
+                <Button onClick={() => setCurrentStepIndex(Math.max(0, currentStepIndex - 1))} variant="ghost" size="icon" disabled={isPlaying}><Rewind /></Button>
                 <Button onClick={() => setIsPlaying(!isPlaying)} size="lg" className="w-20">{isPlaying ? <Pause /> : <Play />}</Button>
-                <Button onClick={() => setCurrentStepIndex(Math.min(initialGameStates.length - 1, currentStepIndex + 1))} variant="ghost" size="icon" disabled={isPlaying}><Rewind /></Button>
+                <Button onClick={() => setCurrentStepIndex(Math.min(initialGameStates.length - 1, currentStepIndex + 1))} variant="ghost" size="icon" disabled={isPlaying}><FastForward /></Button>
             </div>
             <div className="col-span-1 flex flex-col items-end justify-center text-right">
                 {currentState?.turn > 0 && <p className="text-lg font-semibold">Turn {Math.ceil(currentState.turn / 2)}</p>}
@@ -325,3 +330,4 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     </div>
   );
 }
+
