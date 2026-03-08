@@ -1,17 +1,16 @@
-// src/app/components/admin/ReplayPlayer.tsx
+// src/app/admin/match-runner/page.tsx
 
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
-import { GameState, PlayerState as PlayerStateType, Card as CardType } from '@/app/types';
-import { ReplayCardData } from '@/app/actions/cardActions';
-import { Play, Pause, SkipBack, Rewind, FastForward } from 'lucide-react';
-import { ScrollArea } from '@/app/components/ui/scroll-area';
-import { useSettings } from '@/contexts/SettingsContext';
-import { getCardImageUrl } from '@/app/utils/cardUtils';
-
-// --- TYPE DEFINITIONS ---
+import { Label } from '@/app/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
+import { Textarea } from '@/app/components/ui/textarea';
+import { Swords, Hourglass, ShieldCheck, ShieldX, Trophy } from 'lucide-react';
+import { getAiProfiles, validateAndCanonicalizeDeck, getTestDecklists } from '@/app/actions/adminActions';
+import { getAllTeams } from '@/app/actions/teamActions';
 
 interface Team {
   id: string;
@@ -19,312 +18,220 @@ interface Team {
   emoji: string;
 }
 
-interface ReplayPlayerProps {
-  initialGameStates: GameState[];
-  matchId: string;
-  team1: Team | null;
-  team2: Team | null;
-  cardDataMap: Map<string, ReplayCardData>;
+interface AiProfile {
+  id:string;
+  profile_name: string;
 }
 
-interface BattlefieldCard extends CardType {
-  row: 'front' | 'back';
-  imageUrl: string | null;
+
+function formatDecklistToDck(decklist: string, deckName: string): string {
+  return `[metadata]\nName=${deckName}\n\n[Main]\n${decklist}`;
 }
 
-interface AnimatedCard {
-  name: string;
-  imageUrl: string;
-  type: 'transient' | 'permanent';
-}
-
-interface PlayerInfo {
-    logName: string;
-    team: Team;
-}
-
-// --- HELPER FUNCTIONS ---
-function getCardCategory(cardTypeLine: string): 'front' | 'back' {
-  const type = cardTypeLine.toLowerCase();
-  if (type.includes('land') || (type.includes('artifact') && !type.includes('creature'))) {
-    return 'back';
-  }
-  return 'front';
-}
-
-function generateLogMessage(prevState: GameState | null, nextState: GameState, teamMap: Map<string, Team>): string | null {
-    const formatPlayerName = (logName: string) => teamMap.get(logName)?.name || logName;
-    if (!prevState) return `Match starts. Turn ${nextState.turn}. Active player: ${formatPlayerName(nextState.activePlayer)}.`;
-    if (prevState.turn !== nextState.turn) return `Turn ${Math.ceil(nextState.turn / 2)}: ${formatPlayerName(nextState.activePlayer)} begins their turn.`;
-    if (prevState.phase !== nextState.phase) return `${formatPlayerName(nextState.activePlayer)} enters the ${nextState.phase} phase.`;
-    for (const logName in nextState.players) {
-        const prevPlayer = prevState.players[logName];
-        const nextPlayer = nextState.players[logName];
-        if (!prevPlayer) continue;
-        if (prevPlayer.life !== nextPlayer.life) {
-            const diff = nextPlayer.life - prevPlayer.life;
-            return `${formatPlayerName(logName)} ${diff > 0 ? 'gains' : 'loses'} ${Math.abs(diff)} life. (Now at ${nextPlayer.life})`;
-        }
-        const prevBf = new Set(prevPlayer.battlefield.map(c => c.id));
-        const newCard = nextPlayer.battlefield.find(c => !prevBf.has(c.id));
-        if (newCard) return `${formatPlayerName(logName)} plays ${newCard.name}.`;
-        
-        const nextBf = new Set(nextPlayer.battlefield.map(c => c.id));
-        const removedCard = prevPlayer.battlefield.find(c => !nextBf.has(c.id));
-        if (removedCard) return `${removedCard.name} leaves the battlefield.`;
-
-        const newAttacker = nextPlayer.battlefield.find(c => c.isAttacking && !prevPlayer.battlefield.find(pc => pc.id === c.id)?.isAttacking);
-        if (newAttacker) return `${formatPlayerName(logName)} attacks with ${newAttacker.name}.`;
-    }
-    return null;
-}
-
-// --- MAIN COMPONENT ---
-export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDataMap }: ReplayPlayerProps) {
-  const { useOldestArt } = useSettings();
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [eventLog, setEventLog] = useState<string[]>([]);
-  const [animatedCard, setAnimatedCard] = useState<AnimatedCard | null>(null);
-  const [lifeChange, setLifeChange] = useState<{ logName: string; type: 'gain' | 'loss' } | null>(null);
-  const [battlefieldState, setBattlefieldState] = useState<Record<string, BattlefieldCard[]>>({});
-  const currentState = initialGameStates[currentStepIndex];
-
-  const { player1, player2, teamMap } = useMemo(() => {
-    const newTeamMap = new Map<string, Team>();
-    let p1Info: PlayerInfo | null = null;
-    let p2Info: PlayerInfo | null = null;
-    const logPlayerNames = Object.keys(initialGameStates[0].players);
-
-    if (team1 && team2) {
-      const logName1 = logPlayerNames.find(name => name.toLowerCase().includes(team1.id.toLowerCase()));
-      const logName2 = logPlayerNames.find(name => name.toLowerCase().includes(team2.id.toLowerCase()));
-
-      if (logName1) {
-        p1Info = { logName: logName1, team: team1 };
-        newTeamMap.set(logName1, team1);
-      }
-      if (logName2) {
-        p2Info = { logName: logName2, team: team2 };
-        newTeamMap.set(logName2, team2);
-      }
-    }
-    
-    if (!p1Info || !p2Info) {
-      return { player1: null, player2: null, teamMap: newTeamMap };
-    }
-
-    if (initialGameStates[0].activePlayer.toLowerCase().includes(p2Info.team.id.toLowerCase())) {
-      return { player1: p2Info, player2: p1Info, teamMap: newTeamMap };
-    }
-
-    return { player1: p1Info, player2: p2Info, teamMap: newTeamMap };
-
-  }, [initialGameStates, team1, team2]);
+export default function MatchRunnerPage() {
+  const [profiles, setProfiles] = useState<AiProfile[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [team1Id, setTeam1Id] = useState('');
+  const [team2Id, setTeam2Id] = useState('');
+  const [player1, setPlayer1] = useState({ decklist: '', aiProfile: '' });
+  const [player2, setPlayer2] = useState({ decklist: '', aiProfile: '' });
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [testDecks, setTestDecks] = useState({ p1_deck: '', p2_deck: '' });
 
   useEffect(() => {
-    const prevState = currentStepIndex > 0 ? initialGameStates[currentStepIndex - 1] : null;
-    const state = initialGameStates[currentStepIndex];
-
-    if (!state || !player1 || !player2) return;
-
-    const newBattlefieldState: Record<string, BattlefieldCard[]> = { [player1.logName]: [], [player2.logName]: [] };
-    for (const pName of [player1.logName, player2.logName]) {
-      const playerState = state.players[pName];
-      if (playerState) {
-          newBattlefieldState[pName] = playerState.battlefield.map(card => {
-              const cardInfo = cardDataMap.get(card.name);
-              return {
-                  ...card,
-                  row: getCardCategory(cardInfo?.card_type || ''),
-                  imageUrl: cardInfo ? getCardImageUrl(cardInfo, useOldestArt) : null
-              };
-          });
+    async function loadInitialData() {
+      try {
+        const [aiResult, teamResult, testDeckResult] = await Promise.all([ 
+            getAiProfiles(), 
+            getAllTeams(),
+            getTestDecklists()
+        ]);
+        setProfiles(aiResult);
+        if (teamResult.teams) setTeams(teamResult.teams);
+        setTestDecks(testDeckResult);
+      } catch (err: unknown) {
+        setError(`Failed to load initial page data: ${err instanceof Error ? err.message : "Unknown error"}`);
       }
     }
-    setBattlefieldState(newBattlefieldState);
+    loadInitialData();
+  }, []);
 
-    if (prevState) {
-      const allPrevBfIds = new Set([...(prevState.players[player1.logName]?.battlefield.map(c => c.id) || []), ...(prevState.players[player2.logName]?.battlefield.map(c => c.id) || [])]);
-      const allNextCards = [...(state.players[player1.logName]?.battlefield || []), ...(state.players[player2.logName]?.battlefield || [])];
-      
-      const cardPlayed = allNextCards.find(c => !allPrevBfIds.has(c.id));
+  const handleSimulate = async () => {
+    setError(null);
+    setValidationError(null);
 
-      if (cardPlayed) {
-        const cardInfo = cardDataMap.get(cardPlayed.name);
-        if (cardInfo) {
-            const imageUrl = getCardImageUrl(cardInfo, useOldestArt);
-            if (imageUrl) {
-                const cardType = cardInfo.card_type.toLowerCase();
-                const isPermanent = !cardType.includes('instant') && !cardType.includes('sorcery');
-                setAnimatedCard({ name: cardPlayed.name, imageUrl, type: isPermanent ? 'permanent' : 'transient' });
-                setTimeout(() => setAnimatedCard(null), 2900);
-            }
-        }
-      }
-
-      if (state.players[player1.logName] && prevState.players[player1.logName] && state.players[player1.logName].life !== prevState.players[player1.logName].life) {
-        setLifeChange({ logName: player1.logName, type: state.players[player1.logName].life > prevState.players[player1.logName].life ? 'gain' : 'loss' });
-        setTimeout(() => setLifeChange(null), 1000);
-      }
-      if (state.players[player2.logName] && prevState.players[player2.logName] && state.players[player2.logName].life !== prevState.players[player2.logName].life) {
-        setLifeChange({ logName: player2.logName, type: state.players[player2.logName].life > prevState.players[player2.logName].life ? 'gain' : 'loss' });
-        setTimeout(() => setLifeChange(null), 1000);
-      }
+    let p1Decklist = player1.decklist.trim();
+    if (p1Decklist.toLowerCase() === 'test') {
+        p1Decklist = testDecks.p1_deck;
     }
 
-    const logMessage = generateLogMessage(prevState, state, teamMap);
-    if (logMessage) setEventLog(prev => [logMessage, ...prev].slice(0, 20));
+    let p2Decklist = player2.decklist.trim();
+    if (p2Decklist.toLowerCase() === 'test') {
+        p2Decklist = testDecks.p2_deck;
+    }
 
-  }, [currentStepIndex, initialGameStates, cardDataMap, useOldestArt, player1, player2, teamMap]);
-
-  useEffect(() => {
-    if (!isPlaying || currentStepIndex >= initialGameStates.length - 1 || !player1 || !player2) {
-      setIsPlaying(false);
+    if (!team1Id || !team2Id) {
+      setError('Please select a team for both players.');
       return;
     }
-    const prevState = initialGameStates[currentStepIndex];
-    const nextState = initialGameStates[currentStepIndex + 1];
     
-    const isSignificantEvent = (
-        prevState.players[player1.logName]?.life !== nextState.players[player1.logName]?.life ||
-        prevState.players[player2.logName]?.life !== nextState.players[player2.logName]?.life ||
-        JSON.stringify(prevState.players[player1.logName]?.battlefield) !== JSON.stringify(nextState.players[player1.logName]?.battlefield) ||
-        JSON.stringify(prevState.players[player2.logName]?.battlefield) !== JSON.stringify(nextState.players[player2.logName]?.battlefield) ||
-        prevState.players[player1.logName]?.graveyard.length !== nextState.players[player1.logName]?.graveyard.length ||
-        prevState.players[player2.logName]?.graveyard.length !== nextState.players[player2.logName]?.graveyard.length
-    );
+    const team1 = teams.find(t => t.id === team1Id);
+    const team2 = teams.find(t => t.id === team2Id);
 
-    const timeout = isSignificantEvent ? 1500 : 250;
-
-    const timer = setTimeout(() => setCurrentStepIndex(prev => prev + 1), timeout);
-    return () => clearTimeout(timer);
-  }, [isPlaying, currentStepIndex, initialGameStates, player1, player2]);
-
-  const renderPlayerArea = (playerInfo: PlayerInfo | null, area: 'top' | 'bottom') => {
-    if (!playerInfo) return <div className="h-1/2 w-full bg-gray-800 flex items-center justify-center"><p className="text-gray-500">Waiting for team data...</p></div>;
+    if (!team1 || !team2) {
+        setError('Could not find the selected team data. Please refresh and try again.');
+        return;
+    }
     
-    const playerState = currentState.players[playerInfo.logName];
-    if (!playerState) return <div className="h-1/2 w-full bg-gray-800" />;
+    if (!player1.aiProfile || !player2.aiProfile || !p1Decklist || !p2Decklist) {
+      setError('Please provide a decklist and AI profile for both players.');
+      return;
+    }
 
-    const cards = battlefieldState[playerInfo.logName] || [];
-    const frontRow = cards.filter(c => c.row === 'front');
-    const backRow = cards.filter(c => c.row === 'back');
+    setIsValidating(true);
+    setStatusMessage('Validating decklists...');
 
-    const lastGraveyardCard = playerState.graveyard?.[playerState.graveyard.length - 1];
-    const lastExileCard = playerState.exile?.[playerState.exile.length - 1];
-    const lastGraveyardCardData = lastGraveyardCard ? cardDataMap.get(lastGraveyardCard.name) : null;
-    const lastExileCardData = lastExileCard ? cardDataMap.get(lastExileCard.name) : null;
+    const allCardNames = [...p1Decklist.split('\n'), ...p2Decklist.split('\n')].map(line => line.trim().replace(/^\d+\s/, ''));
+    const { valid, invalid } = await validateAndCanonicalizeDeck(allCardNames);
 
-    const graveyardImgUrl = lastGraveyardCardData ? getCardImageUrl(lastGraveyardCardData, useOldestArt) : null;
-    const exileImgUrl = lastExileCardData ? getCardImageUrl(lastExileCardData, useOldestArt) : null;
+    if (invalid.length > 0) {
+      setValidationError(`The following card names were not found: ${invalid.join(', ')}. Please correct them.`);
+      setIsValidating(false);
+      return;
+    }
+    setIsValidating(false);
+    setIsSimulating(true);
+    setStatusMessage('Validation successful. Submitting match...');
 
-    const renderRow = (rowCards: BattlefieldCard[]) => (
-        <div className="flex-grow flex justify-center items-center gap-[-30px] px-24">
-            {rowCards.map((card, index) => (
-                <div key={card.id} className="relative transition-transform duration-300 hover:scale-150 hover:z-20" style={{ transform: `translateX(${index * -15}px)`}}>
-                    {card.imageUrl && <img src={card.imageUrl} alt={card.name} className="h-28 object-contain drop-shadow-lg rounded-lg" />}
-                    {card.isTapped && <div className="absolute inset-0 bg-black/30 rounded-lg -rotate-12"></div>}
-                </div>
-            ))}
-        </div>
-    );
+    const buildCorrectedDeckList = (decklist: string): string => {
+      return decklist.split('\n').map(line => {
+        const trimmed = line.trim();
+        if (!trimmed) return null;
+        const match = trimmed.match(/^(\d+)\s+(.+)/);
+        const cardName = match ? match[2] : trimmed;
+        const count = match ? match[1] : '1';
+        const canonicalName = valid.get(cardName.toLowerCase());
+        return canonicalName ? `${count} ${canonicalName}` : line;
+      }).filter(Boolean).join('\n');
+    };
     
-    const flexDirection = area === 'top' ? 'flex-col-reverse' : 'flex-col';
+    const correctedDeck1List = buildCorrectedDeckList(p1Decklist);
+    const correctedDeck2List = buildCorrectedDeckList(p2Decklist);
+    
+    const deck1NameForSim = team1.id;
+    const deck2NameForSim = team2.id;
+    
+    try {
+      const response = await fetch('/api/match-runner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          deck1: { content: formatDecklistToDck(correctedDeck1List, deck1NameForSim), aiProfile: player1.aiProfile },
+          deck2: { content: formatDecklistToDck(correctedDeck2List, deck2NameForSim), aiProfile: player2.aiProfile },
+          team1Id: team1Id,
+          team2Id: team2Id,
+        })
+      });
 
-    return (
-      <div className={`relative w-full h-1/2 bg-gray-700/50 p-4 flex ${flexDirection}`}>
-          <div className={`flex h-full ${flexDirection} gap-2`}>
-              {renderRow(backRow)}
-              {renderRow(frontRow)}
-          </div>
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to start simulation.');
+      }
+      
+      const { matchId } = await response.json();
+      if (!matchId) throw new Error("API did not return a valid match ID.");
 
-          <div className={`absolute top-4 left-4 flex flex-col items-start gap-3 z-10`}>
-              <div className="flex items-center gap-4">
-                <div className="relative">
-                    <div className="text-5xl">{playerInfo.team.emoji}</div>
-                    {currentState.activePlayer.toLowerCase().includes(playerInfo.team.id.toLowerCase()) && <div className="absolute -inset-2 rounded-full ring-4 ring-blue-400 ring-offset-4 ring-offset-gray-800 animate-pulse"></div>}
-                </div>
-                <div className={`text-6xl font-bold transition-colors duration-300 ${lifeChange?.logName === playerInfo.logName && lifeChange.type === 'loss' ? 'text-red-500' : ''} ${lifeChange?.logName === playerInfo.logName && lifeChange.type === 'gain' ? 'text-green-500' : ''}`}>
-                  {playerState.life}
-                </div>
-              </div>
+      setStatusMessage(`Simulation started with ID: ${matchId}. Waiting for completion...`);
+      
+      const poll = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`/api/match-runner/${matchId}`);
+          if (!statusRes.ok) return;
+          const { winner, isReplayReady } = await statusRes.json();
+          if (winner && isReplayReady) {
+            clearInterval(poll);
+            setStatusMessage(`Match complete! Winner: ${winner}. Redirecting to replay...`);
+            window.location.href = `/admin/match-viewer/${matchId}`;
+          }
+        } catch (pollError: unknown) {
+          console.error("Polling error:", pollError instanceof Error ? pollError.message : "Unknown polling error");
+        }
+      }, 5000);
 
-              <div className="flex gap-4">
-                  <div className="text-center">
-                      <p className="font-bold text-2xl">{playerState.handSize}</p>
-                      <p className="text-3xl">🤚</p>
-                  </div>
-                  <div className="text-center">
-                      <p className="font-bold text-2xl">{playerState.librarySize}</p>
-                      <p className="text-3xl">📚</p>
-                  </div>
-                  <div className="text-center">
-                      <p className="font-bold text-2xl">{playerState.graveyard?.length || 0}</p>
-                      <p className="text-3xl">🪦</p>
-                  </div>
-                   <div className="text-center">
-                      <p className="font-bold text-2xl">{playerState.exile?.length || 0}</p>
-                      <p className="text-3xl">🌀</p>
-                  </div>
-              </div>
-
-               <div className="flex gap-2 mt-2">
-                    {graveyardImgUrl && lastGraveyardCardData && (
-                        <div className="relative">
-                            <img src={graveyardImgUrl} alt={lastGraveyardCardData.name} className="h-24 object-contain rounded-md" />
-                            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                <p className="text-white font-bold text-xs">Graveyard</p>
-                            </div>
-                        </div>
-                    )}
-                    {exileImgUrl && lastExileCardData && (
-                        <div className="relative">
-                            <img src={exileImgUrl} alt={lastExileCardData.name} className="h-24 object-contain rounded-md" />
-                            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                <p className="text-white font-bold text-xs">Exile</p>
-                            </div>
-                        </div>
-                    )}
-               </div>
-          </div>
-      </div>
-    );
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "An unknown error occurred.");
+      setIsSimulating(false);
+    }
   };
+  
+    if (isSimulating) {
+    return (
+        <Card className="max-w-2xl mx-auto mt-10">
+            <CardHeader className="text-center">
+                <Hourglass className="mx-auto h-12 w-12 text-blue-500 animate-spin" />
+                <CardTitle>Simulation in Progress</CardTitle>
+                <CardDescription>{statusMessage}</CardDescription>
+                {error && <p className="text-red-500 mt-4">{error}</p>}
+            </CardHeader>
+        </Card>
+    );
+  }
 
   return (
-    <div className="bg-gray-900 text-white rounded-lg overflow-hidden select-none">
-        <div className="relative h-[80vh] flex flex-col">
-            {renderPlayerArea(player2, 'top')}
-            {renderPlayerArea(player1, 'bottom')}
-            {animatedCard && (
-                <div className="absolute inset-0 flex items-center justify-center z-50 bg-black/60 backdrop-blur-sm">
-                    <div className="text-center animate-in fade-in zoom-in-75 duration-500">
-                        <p className="text-2xl font-bold mb-2 drop-shadow-lg">{animatedCard.name}</p>
-                        <img src={animatedCard.imageUrl} alt={animatedCard.name} className="h-96 object-contain rounded-lg shadow-2xl"/>
-                    </div>
-                </div>
-            )}
-        </div>
-        <div className="grid grid-cols-3 gap-4 p-4 border-t border-gray-700 bg-gray-800">
-            <ScrollArea className="h-24 col-span-1 rounded-md bg-black/20 p-2">
-                <div className="flex flex-col-reverse">
-                    {eventLog.map((msg, i) => <p key={i} className="text-xs text-gray-400 font-mono animate-in fade-in">{`> ${msg}`}</p>)}
-                </div>
-            </ScrollArea>
-            <div className="col-span-1 flex items-center justify-center gap-2">
-                <Button onClick={() => setCurrentStepIndex(0)} variant="ghost" size="icon" disabled={isPlaying}><SkipBack /></Button>
-                <Button onClick={() => setCurrentStepIndex(Math.max(0, currentStepIndex - 1))} variant="ghost" size="icon" disabled={isPlaying}><FastForward /></Button>
-                <Button onClick={() => setIsPlaying(!isPlaying)} size="lg" className="w-20">{isPlaying ? <Pause /> : <Play />}</Button>
-                <Button onClick={() => setCurrentStepIndex(Math.min(initialGameStates.length - 1, currentStepIndex + 1))} variant="ghost" size="icon" disabled={isPlaying}><Rewind /></Button>
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-xl"><Swords /> Forge Match Simulator</CardTitle>
+        {/* --- FIX: Replaced quotes with HTML entities to prevent build error --- */}
+        <CardDescription>Select teams, AI profiles, and enter decklists to run a simulated match. Type &quot;Test&quot; to use the pre-defined test deck.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+                <Label htmlFor="p1_team">Player 1 Team</Label>
+                <Select onValueChange={setTeam1Id}>
+                    <SelectTrigger id="p1_team"><SelectValue placeholder={<span className="flex items-center gap-2"><Trophy className="size-4" /> Select Team...</span>} /></SelectTrigger>
+                    <SelectContent>{teams.map(t => <SelectItem key={t.id} value={t.id} disabled={t.id === team2Id}>{t.emoji} {t.name}</SelectItem>)}</SelectContent>
+                </Select>
+                <Label className="mt-2 block">Player 1 AI Profile</Label>
+                <Select onValueChange={(value) => setPlayer1({ ...player1, aiProfile: value })}>
+                    <SelectTrigger><SelectValue placeholder="Select AI..." /></SelectTrigger>
+                    <SelectContent>{profiles.map(p => <SelectItem key={p.id} value={p.profile_name}>{p.profile_name}</SelectItem>)}</SelectContent>
+                </Select>
+                <Label className="mt-2 block" htmlFor="p1_decklist">Player 1 Decklist</Label>
+                <Textarea id="p1_decklist" placeholder="15 Lightning Bolt&#10;10 Shivan Dragon&#10;15 Mountain" value={player1.decklist} onChange={(e) => setPlayer1({ ...player1, decklist: e.target.value })} className="h-48"/>
             </div>
-            <div className="col-span-1 flex flex-col items-end justify-center text-right">
-                {currentState?.turn > 0 && <p className="text-lg font-semibold">Turn {Math.ceil(currentState.turn / 2)}</p>}
-                <p className="font-bold">Step {currentStepIndex + 1} / {initialGameStates.length}</p>
-                <p className="text-sm text-gray-400">{currentState?.phase}</p>
-                 {currentState?.winner && <p className="text-lg font-bold text-yellow-400">Winner: {teamMap.get(currentState.winner)?.name || currentState.winner}</p>}
+            <div className="space-y-4">
+                <Label htmlFor="p2_team">Player 2 Team</Label>
+                <Select onValueChange={setTeam2Id}>
+                    <SelectTrigger id="p2_team"><SelectValue placeholder={<span className="flex items-center gap-2"><Trophy className="size-4" /> Select Team...</span>} /></SelectTrigger>
+                    <SelectContent>{teams.map(t => <SelectItem key={t.id} value={t.id} disabled={t.id === team1Id}>{t.emoji} {t.name}</SelectItem>)}</SelectContent>
+                </Select>
+                <Label className="mt-2 block">Player 2 AI Profile</Label>
+                <Select onValueChange={(value) => setPlayer2({ ...player2, aiProfile: value })}>
+                    <SelectTrigger><SelectValue placeholder="Select AI..." /></SelectTrigger>
+                    <SelectContent>{profiles.map(p => <SelectItem key={p.id} value={p.profile_name}>{p.profile_name}</SelectItem>)}</SelectContent>
+                </Select>
+                <Label className="mt-2 block" htmlFor="p2_decklist">Player 2 Decklist</Label>
+                <Textarea id="p2_decklist" placeholder="10 Savannah Lions&#10;10 White Knight&#10;5 Swords to Plowshares&#10;15 Plains" value={player2.decklist} onChange={(e) => setPlayer2({ ...player2, decklist: e.target.value })} className="h-48"/>
             </div>
         </div>
-    </div>
+        {validationError && (
+          <div className="bg-destructive/10 border border-destructive/50 text-destructive p-3 rounded-md flex items-start gap-3">
+            <ShieldX className="size-5 mt-0.5 shrink-0" />
+            <div><h4 className="font-semibold">Validation Failed</h4><p className="text-sm">{validationError}</p></div>
+          </div>
+        )}
+        {error && <p className="text-sm text-red-500">{error}</p>}
+        <Button onClick={handleSimulate} disabled={isValidating || isSimulating}>
+          {isValidating ? <><Hourglass className="size-4 mr-2 animate-spin" /> Validating...</>
+          : isSimulating ? <><Hourglass className="size-4 mr-2 animate-spin" /> Simulating...</>
+          : <><ShieldCheck className="size-4 mr-2" /> Validate & Simulate Match</>}
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
