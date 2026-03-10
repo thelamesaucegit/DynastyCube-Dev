@@ -363,3 +363,338 @@ export async function executeAutoDraft(
     return { success: false, error: "An unexpected error occurred during the auto-draft process." };
   }
 }
+
+// ============================================================================
+// DRAFT LIFECYCLE
+// ============================================================================
+
+/**
+ * Resets the consecutive skip counter for a draft session.
+ * This should be called after a successful, non-skipped pick is made.
+ */
+
+export async function activateDraft(
+  sessionId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createServerClient();
+    const { data: session, error: sessionError } = await supabase
+      .from("draft_sessions")
+      .select("*")
+      .eq("id", sessionId)
+      .single();
+    if (sessionError || !session) {
+      return { success: false, error: "Draft session not found" };
+    }
+
+    if (session.status !== "scheduled" && session.status !== "paused") {
+      return { success: false, error: `Cannot activate a draft with status: ${session.status}` };
+    }
+
+    const { status: draftStatus } = await getDraftStatus();
+    if (!draftStatus) {
+      return { success: false, error: "Could not determine draft status. Ensure draft order is set." };
+    }
+
+    const now = new Date();
+    const deadline = new Date(now.getTime() + session.hours_per_pick * 60 * 60 * 1000);
+
+    const { error: updateError } = await supabase
+      .from("draft_sessions")
+      .update({
+        status: "active",
+        current_pick_deadline: deadline.toISOString(),
+        current_on_clock_team_id: draftStatus.onTheClock.teamId,
+        updated_at: now.toISOString(),
+      })
+      .eq("id", sessionId);
+
+    if (updateError) {
+      console.error("Error activating draft:", updateError);
+      return { success: false, error: updateError.message };
+    }
+
+    await supabase.rpc("notify_all_users_draft", {
+      p_notification_type: "draft_started",
+      p_message: `The draft has started! ${draftStatus.seasonName} draft is now live.`,
+    });
+
+    await supabase.rpc("notify_draft_team_roles", {
+      p_team_id: draftStatus.onTheClock.teamId,
+      p_notification_type: "draft_on_clock",
+      p_message: `${draftStatus.onTheClock.teamEmoji} ${draftStatus.onTheClock.teamName} is ON THE CLOCK! You have ${session.hours_per_pick} hours to make your pick.`,
+    });
+
+    if (draftStatus.onDeck.teamId !== draftStatus.onTheClock.teamId) {
+      await supabase.rpc("notify_draft_team_roles", {
+        p_team_id: draftStatus.onDeck.teamId,
+        p_notification_type: "draft_on_deck",
+        p_message: `${draftStatus.onDeck.teamEmoji} ${draftStatus.onDeck.teamName} is ON DECK! Get ready, you're picking next.`,
+      });
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Unexpected error activating draft:", error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Advance the draft after a pick has been made.
+ * Resets the pick deadline for the next team and sends notifications.
+ * Checks if the draft is complete.
+ * Resets the pick deadline and the consecutive skip counter.
+ */
+export async function advanceDraft(): Promise<{
+  success: boolean;
+  completed?: boolean;
+   autoDrafted?: boolean;
+  error?: string;
+}> {
+  try {
+    const supabase = await createServerClient();
+    const { data: session } = await supabase
+      .from("draft_sessions")
+      .select("*")
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (!session) {
+      return { success: true }; // No active session, do nothing.
+    }
+
+    const { status: draftStatus } = await getDraftStatus();
+    if (!draftStatus) {
+      return { success: false, error: "Could not determine draft status" };
+    }
+
+    const allTeamsReachedRounds = draftStatus.draftOrder.every(
+      (team) => team.picksMade >= session.total_rounds
+    );
+    const pastEndTime = session.end_time && new Date() >= new Date(session.end_time);
+
+    // Check if all teams have spent all their cubucks
+    const { data: teamBalances } = await supabase
+      .from("teams")
+      .select("id, cubucks_balance");
+    const allTeamsOutOfCubucks =
+      teamBalances != null &&
+      teamBalances.length > 0 &&
+      teamBalances.every((t: { id: string; cubucks_balance: number }) => t.cubucks_balance <= 0);
+
+    if (allTeamsReachedRounds || pastEndTime || allTeamsOutOfCubucks) {
+      // Draft is complete
+      await completeDraft(session.id);
+      return { success: true, completed: true };
+    }
+
+    // Draft continues — set new deadline and notify next team
+    const now = new Date();
+    const deadline = new Date(now.getTime() + session.hours_per_pick * 60 * 60 * 1000);
+
+    await supabase
+      .from("draft_sessions")
+      .update({
+        current_pick_deadline: deadline.toISOString(),
+        current_on_clock_team_id: draftStatus.onTheClock.teamId,
+        updated_at: now.toISOString(),
+      })
+      .eq("id", session.id);
+
+    // Notify on-the-clock team
+    await supabase.rpc("notify_draft_team_roles", {
+      p_team_id: draftStatus.onTheClock.teamId,
+      p_notification_type: "draft_on_clock",
+      p_message: `${draftStatus.onTheClock.teamEmoji} ${draftStatus.onTheClock.teamName} is ON THE CLOCK! You have ${session.hours_per_pick} hours to make your pick (Round ${draftStatus.currentRound}).`,
+    });
+
+    // Notify on-deck team
+    if (draftStatus.onDeck.teamId !== draftStatus.onTheClock.teamId) {
+      await supabase.rpc("notify_draft_team_roles", {
+        p_team_id: draftStatus.onDeck.teamId,
+        p_notification_type: "draft_on_deck",
+        p_message: `${draftStatus.onDeck.teamEmoji} ${draftStatus.onDeck.teamName} is ON DECK! Get ready, you're picking next.`,
+      });
+    }
+
+    return { success: true, completed: false };
+  } catch (error) {
+    console.error("Unexpected error advancing draft:", error);
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function pauseDraft(
+  sessionId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createServerClient();
+    const admin = await verifyAdmin(supabase);
+    if (!admin.authorized) {
+      return { success: false, error: admin.error };
+    }
+
+    const { error } = await supabase
+      .from("draft_sessions")
+      .update({
+        status: "paused",
+        current_pick_deadline: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", sessionId)
+      .eq("status", "active");
+
+    if (error) {
+      console.error("Error pausing draft:", error);
+      return { success: false, error: error.message };
+    }
+
+    await supabase.rpc("notify_all_users_draft", {
+      p_notification_type: "draft_started",
+      p_message: "The draft has been paused by an admin. Picks are on hold.",
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Unexpected error pausing draft:", error);
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function resumeDraft(
+  sessionId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createServerClient();
+    const admin = await verifyAdmin(supabase);
+    if (!admin.authorized) {
+      return { success: false, error: admin.error };
+    }
+    
+    return await activateDraft(sessionId);
+  } catch (error) {
+    console.error("Unexpected error resuming draft:", error);
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function completeDraft(
+  sessionId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createServerClient();
+    const admin = await verifyAdmin(supabase);
+    if (!admin.authorized) {
+      return { success: false, error: admin.error };
+    }
+
+    const { error } = await supabase
+      .from("draft_sessions")
+      .update({
+        status: "completed",
+        current_pick_deadline: null,
+        current_on_clock_team_id: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", sessionId);
+
+    if (error) {
+      console.error("Error completing draft:", error);
+      return { success: false, error: error.message };
+    }
+
+    await supabase.rpc("notify_all_users_draft", {
+      p_notification_type: "draft_completed",
+      p_message: "The draft has been completed by an admin.",
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Unexpected error completing draft:", error);
+    return { success: false, error: String(error) };
+  }
+}
+
+// ============================================================================
+// AUTO-DRAFT TIMER CHECK
+// ============================================================================
+
+/**
+ * Check the draft timer state and take action if needed.
+ */
+export async function checkDraftTimer(): Promise<{
+  action: "none" | "activated" | "auto_drafted" | "completed" | "error";
+  message?: string;
+  error?: string;
+  needsReload?: boolean;
+}> {
+  try {
+    const supabase = await createServerClient();
+    const { data: session } = await supabase.from("draft_sessions").select("*").in("status", ["scheduled", "active"]).order("created_at", { ascending: false }).limit(1).single();
+    if (!session) return { action: "none" };
+
+    const now = new Date();
+    if (session.status === "scheduled" && new Date(session.start_time) <= now) {
+      const result = await activateDraft(session.id);
+      return result.success ? { action: "activated", message: "Draft has been activated!" } : { action: "error", error: result.error };
+    }
+    
+    if (session.status === "active" && session.current_pick_deadline && new Date(session.current_pick_deadline) <= now) {
+      const teamId = session.current_on_clock_team_id!;
+      const autoDraftResult = await executeAutoDraft(teamId, session.id);
+
+      // Case 1: A real card was successfully picked.
+      if (autoDraftResult.success) {
+        await resetSkipCounter(session.id); // RESET THE COUNTER
+        const advanceResult = await advanceDraft();
+        return {
+          action: "auto_drafted",
+          message: `Auto-drafted ${autoDraftResult.pick?.cardName || "a card"} for team ${teamId}.`
+        };
+      }
+      
+      // Case 2: The pick failed for any reason (no funds, no cards, etc.) and must be skipped.
+      else {
+        console.error(`Auto-draft failed for ${teamId}: ${autoDraftResult.error}. The pick will be skipped.`);
+        const { status: draftStatus } = await getDraftStatus();
+        if (!draftStatus) {
+            return { action: "error", error: "Could not get draft status to log skipped pick." };
+        }
+        
+        const newSkipCount = (session.consecutive_skipped_picks || 0) + 1;
+        
+        if (newSkipCount >= draftStatus.totalTeams) {
+            console.log(`Stall condition met: ${newSkipCount} consecutive skips. Ending draft.`);
+            await completeDraft(session.id);
+            return {
+                action: "completed",
+                message: `The draft has ended automatically after ${newSkipCount} consecutive skipped picks.`
+            };
+        }
+
+        await supabase.from("draft_sessions").update({ consecutive_skipped_picks: newSkipCount }).eq("id", session.id);
+        const skippedResult = await addSkippedPick(teamId, draftStatus.totalPicks + 1, session.id);
+        if (!skippedResult.success) {
+            return { action: "error", error: `Auto-draft failed and could not log skipped pick: ${skippedResult.error}` };
+        }
+        
+        const advanceResult = await advanceDraft();
+        if (!advanceResult.success) {
+            return { action: "error", error: `Auto-draft failed and draft could not be advanced: ${advanceResult.error}` };
+        }
+
+        return {
+          action: "auto_drafted",
+          message: `Team ${teamId} pick was skipped. Consecutive skips: ${newSkipCount}.`,
+        };
+      }
+    }
+    return { action: "none" };
+  } catch (error) {
+    console.error("Unexpected error checking draft timer:", error);
+    return { action: "error", error: String(error) };
+  }
+}
