@@ -2,13 +2,13 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/app/components/ui/button';
-import { GameState, PlayerState, Card as CardType } from '@/app/types';
+import { GameState, PlayerState as PlayerStateType, Card as CardType } from '@/app/types';
 import { ReplayCardData } from '@/app/actions/cardActions';
 import { Play, Pause, SkipBack, Rewind, FastForward, SkipForward } from 'lucide-react';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/app/components/ui/dialog';
 import { useSettings } from '@/contexts/SettingsContext';
-import { getCardImageUrl } from '@/app/utils/cardUtils';
+import { getCardImageUrl, CardWithImages } from '@/app/utils/cardUtils'; // Import CardWithImages type
 
 // --- TYPE DEFINITIONS ---
 interface Team { id: string; name: string; emoji: string; }
@@ -31,7 +31,7 @@ const getCardCategory = (cardType: string): 'front' | 'back' => {
 
 const generateLogMessage = (prevState: GameState | null, nextState: GameState, teamMap: Map<string, Team>): string | null => {
     const formatPlayerName = (logName: string) => teamMap.get(logName)?.name || logName;
-    if (!prevState) return `Match starts. Turn ${nextState.turn}.`;
+    if (!prevState) return `Match starts.`;
     
     if (prevState.turn !== nextState.turn) return `Turn ${Math.ceil(nextState.turn / 2)}: ${formatPlayerName(nextState.activePlayer)} begins their turn.`;
 
@@ -76,7 +76,7 @@ const ZoneViewer = ({ zoneName, cards, cardDataMap }: { zoneName: string, cards:
         <div className="flex flex-wrap gap-4">
           {cards.length > 0 ? cards.map(card => {
             const cardInfo = cardDataMap.get(card.name);
-            const imageUrl = cardInfo ? getCardImageUrl(cardInfo, useOldestArt) : null;
+            const imageUrl = cardInfo ? getCardImageUrl(cardInfo as CardWithImages, useOldestArt) : null;
             return imageUrl ? <img key={card.id} src={imageUrl} alt={card.name} className="h-48 object-contain rounded-lg" /> : null;
           }) : <p className="text-gray-400">This zone is empty.</p>}
         </div>
@@ -118,6 +118,26 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     return { player1: p1Info, player2: p2Info, teamMap: newTeamMap };
   }, [initialGameStates, team1, team2]);
 
+  const battlefieldState = useMemo(() => {
+    if (!player1 || !player2 || !currentState) return {};
+    const state: Record<string, BattlefieldCard[]> = { [player1.logName]: [], [player2.logName]: [] };
+    for (const pName of [player1.logName, player2.logName]) {
+      const playerState = currentState.players[pName];
+      if (playerState) {
+          state[pName] = playerState.battlefield.map(card => {
+              const cardInfo = cardDataMap.get(card.name);
+              return {
+                  ...card,
+                  row: getCardCategory(card.cardType || ''),
+                  // FIX: Check if cardInfo exists before calling getCardImageUrl
+                  imageUrl: cardInfo ? getCardImageUrl(cardInfo as CardWithImages, useOldestArt) : null
+              };
+          });
+      }
+    }
+    return state;
+  }, [currentState, player1, player2, cardDataMap, useOldestArt]);
+
   useEffect(() => {
     const prevState = currentStepIndex > 0 ? initialGameStates[currentStepIndex - 1] : null;
     const logMessage = generateLogMessage(prevState, currentState, teamMap);
@@ -127,7 +147,7 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
         const newSpell = currentState.stack[currentState.stack.length - 1];
         const cardInfo = cardDataMap.get(newSpell.name);
         if (cardInfo) {
-            const imageUrl = getCardImageUrl(cardInfo, useOldestArt);
+            const imageUrl = getCardImageUrl(cardInfo as CardWithImages, useOldestArt);
             if (imageUrl) {
                 setAnimatedCard({ name: newSpell.name, imageUrl });
                 setTimeout(() => setAnimatedCard(null), 2500);
@@ -141,7 +161,6 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
       setIsPlaying(false);
       return;
     }
-    // FIX: Faster animation for mulligan/pre-game phase
     const timeout = currentState.turn < 1 ? 150 : 1000;
     const timer = setTimeout(() => setCurrentStepIndex(prev => prev + 1), timeout);
     return () => clearTimeout(timer);
@@ -152,28 +171,22 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     const playerState = currentState.players[playerInfo.logName];
     if (!playerState) return <div className="h-1/2 w-full" />;
 
-    const cards: BattlefieldCard[] = playerState.battlefield.map(card => ({
-        ...card,
-        row: getCardCategory(card.cardType || ''),
-        imageUrl: getCardImageUrl(cardDataMap.get(card.name), useOldestArt)
-    }));
-    
-    // FIX: Correctly order rows for top and bottom player
+    const cards = battlefieldState[playerInfo.logName] || [];
     const frontRow = cards.filter(c => c.row === 'front');
     const backRow = cards.filter(c => c.row === 'back');
     const rows = area === 'bottom' ? [backRow, frontRow] : [frontRow, backRow];
-
+    
     const renderRow = (rowCards: BattlefieldCard[]) => (
         <div className="flex-grow flex justify-center items-center gap-[-50px] px-24">
             {rowCards.map(card => (
-                <div key={card.id} className="relative group transition-transform duration-300 hover:scale-150 hover:z-20">
+                <div key={card.id} className="relative group">
                     {card.imageUrl && (
                       <img 
                         src={card.imageUrl} 
                         alt={card.name} 
                         className={`
                           h-32 object-contain drop-shadow-lg rounded-lg
-                          transition-all duration-300
+                          transition-all duration-300 group-hover:scale-150 group-hover:z-20
                           ${card.isTapped ? 'rotate-90' : ''}
                           ${card.isAttacking ? 'ring-4 ring-red-500 scale-110' : ''}
                           ${card.isBlocking ? 'ring-4 ring-blue-500' : ''}
@@ -195,7 +208,6 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
                     <div className="text-6xl font-bold">{playerState.life}</div>
                 </div>
                 <div className="flex gap-4">
-                    {/* FIX: Read hand.length instead of handSize */}
                     <div className="text-center"><p className="font-bold text-2xl">{playerState.hand.length}</p><p className="text-3xl">🤚</p></div>
                     <div className="text-center"><p className="font-bold text-2xl">{playerState.librarySize}</p><p className="text-3xl">📚</p></div>
                     <DialogTrigger asChild><div className="text-center cursor-pointer"><p className="font-bold text-2xl">{playerState.graveyard.length}</p><p className="text-3xl">🪦</p></div></DialogTrigger>
@@ -226,7 +238,6 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
             <ScrollArea className="h-24 col-span-1 rounded-md bg-black/20 p-2"><div className="flex flex-col-reverse">{eventLog.map((msg, i) => <p key={i} className="text-xs text-gray-400 font-mono">{`> ${msg}`}</p>)}</div></ScrollArea>
             <div className="col-span-1 flex items-center justify-center gap-2">
                 <Button onClick={() => setCurrentStepIndex(0)} variant="ghost" size="icon" disabled={isPlaying}><SkipBack /></Button>
-                {/* FIX: Corrected Rewind/FastForward button actions */}
                 <Button onClick={() => setCurrentStepIndex(Math.max(0, currentStepIndex - 1))} variant="ghost" size="icon" disabled={isPlaying}><Rewind /></Button>
                 <Button onClick={() => setIsPlaying(!isPlaying)} size="lg" className="w-20">{isPlaying ? <Pause /> : <Play />}</Button>
                 <Button onClick={() => setCurrentStepIndex(Math.min(initialGameStates.length - 1, currentStepIndex + 1))} variant="ghost" size="icon" disabled={isPlaying}><FastForward /></Button>
