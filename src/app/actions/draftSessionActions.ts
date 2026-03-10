@@ -2,7 +2,7 @@
 
 "use server";
 
-import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
+import { createServerClient, createAdminClient, type AnySupabaseClient } from "@/lib/supabase";
 import { getAvailableCardsForDraft, type CardData } from "@/app/actions/cardActions";
 import { getTeamDraftPicks, addSkippedPick, type DraftPick } from "@/app/actions/draftActions";
 import { getTeamBalance } from "@/app/actions/cubucksActions";
