@@ -189,7 +189,6 @@ export async function getActiveDraftSession(): Promise<{
   }
 }
 
-// Other CRUD functions remain the same...
 export async function getAllDraftSessions(): Promise<{ sessions: DraftSessionInfo[] }> {
   const supabase = await createServerClient();
   const { data, error } = await supabase
@@ -268,7 +267,6 @@ export async function deleteDraftSession(sessionId: string): Promise<{ success: 
   }
 }
 
-
 // ============================================================================
 // DRAFT LIFECYCLE (REWORKED)
 // ============================================================================
@@ -280,7 +278,7 @@ async function completeDraftInternal(sessionId: string, adminClient?: AnySupabas
       .from("draft_sessions")
       .update({
         status: "completed",
-        autodraft_next_pick_at: null, // Clear the deadline
+        autodraft_next_pick_at: null,
         current_on_clock_team_id: null,
         updated_at: new Date().toISOString(),
       })
@@ -318,7 +316,7 @@ export async function activateDraft(sessionId: string, adminClient?: AnySupabase
       .from("draft_sessions")
       .update({
         status: "active",
-        autodraft_next_pick_at: deadline.toISOString(), // Set the new deadline
+        autodraft_next_pick_at: deadline.toISOString(),
         current_on_clock_team_id: draftStatus.onTheClock.teamId,
         updated_at: now.toISOString(),
       })
@@ -329,7 +327,6 @@ export async function activateDraft(sessionId: string, adminClient?: AnySupabase
       return { success: false, error: updateError.message };
     }
     
-    // Notifications...
     await supabase.rpc("notify_all_users_draft", { p_notification_type: "draft_started", p_message: `The draft has started! ${draftStatus.seasonName} draft is now live.` });
     await supabase.rpc("notify_draft_team_roles", { p_team_id: draftStatus.onTheClock.teamId, p_notification_type: "draft_on_clock", p_message: `${draftStatus.onTheClock.teamEmoji} ${draftStatus.onTheClock.teamName} is ON THE CLOCK! You have ${session.hours_per_pick} hours to make your pick.` });
     if (draftStatus.onDeck.teamId !== draftStatus.onTheClock.teamId) {
@@ -369,13 +366,12 @@ export async function advanceDraft(sessionId: string, adminClient?: AnySupabaseC
     await supabase
       .from("draft_sessions")
       .update({
-        autodraft_next_pick_at: deadline.toISOString(), // Set the next pick's deadline
+        autodraft_next_pick_at: deadline.toISOString(),
         current_on_clock_team_id: draftStatus.onTheClock.teamId,
         updated_at: now.toISOString(),
       })
       .eq("id", session.id);
 
-    // Notifications...
     await supabase.rpc("notify_draft_team_roles", { p_team_id: draftStatus.onTheClock.teamId, p_notification_type: "draft_on_clock", p_message: `${draftStatus.onTheClock.teamEmoji} ${draftStatus.onTheClock.teamName} is ON THE CLOCK! You have ${session.hours_per_pick} hours to make your pick (Round ${draftStatus.currentRound}).` });
     if (draftStatus.onDeck.teamId !== draftStatus.onTheClock.teamId) {
       await supabase.rpc("notify_draft_team_roles", { p_team_id: draftStatus.onDeck.teamId, p_notification_type: "draft_on_deck", p_message: `${draftStatus.onDeck.teamEmoji} ${draftStatus.onDeck.teamName} is ON DECK! Get ready, you're picking next.` });
@@ -398,7 +394,7 @@ export async function pauseDraft(sessionId: string): Promise<{ success: boolean;
       .from("draft_sessions")
       .update({
         status: "paused",
-        autodraft_next_pick_at: null, // Clear the deadline to pause the timer
+        autodraft_next_pick_at: null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", sessionId)
@@ -429,6 +425,20 @@ export async function resumeDraft(sessionId: string): Promise<{ success: boolean
   }
 }
 
+// THIS IS THE FIX: Reinstate the exported completeDraft function
+export async function completeDraft(sessionId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createServerClient();
+    const admin = await verifyAdmin(supabase);
+    if (!admin.authorized) return { success: false, error: admin.error };
+
+    return await completeDraftInternal(sessionId);
+  } catch (error) {
+    console.error("Unexpected error completing draft:", error);
+    return { success: false, error: String(error) };
+  }
+}
+
 // ============================================================================
 // AUTO-DRAFT TIMER CHECK (REWORKED)
 // ============================================================================
@@ -442,7 +452,6 @@ export async function checkDraftTimer(adminClient?: AnySupabaseClient): Promise<
     const supabase = adminClient ?? await createServerClient();
     const now = new Date();
 
-    // Find sessions that need to be activated
     const { data: scheduledSessions } = await supabase
       .from("draft_sessions")
       .select("id")
@@ -453,11 +462,10 @@ export async function checkDraftTimer(adminClient?: AnySupabaseClient): Promise<
       await activateDraft(session.id, adminClient);
     }
     
-    // Atomically find and claim an expired pick
     const { data: expiredSession } = await supabase
       .from("draft_sessions")
       .update({
-        autodraft_next_pick_at: null, // Atomically claim the pick by nulling the deadline
+        autodraft_next_pick_at: null,
         updated_at: now.toISOString(),
       })
       .eq("status", "active")
@@ -467,7 +475,7 @@ export async function checkDraftTimer(adminClient?: AnySupabaseClient): Promise<
       .maybeSingle();
 
     if (!expiredSession) {
-      return { action: "none" }; // No expired picks to process
+      return { action: "none" };
     }
 
     const { id: sessionId, current_on_clock_team_id: teamId, consecutive_skipped_picks } = expiredSession;
@@ -488,7 +496,6 @@ export async function checkDraftTimer(adminClient?: AnySupabaseClient): Promise<
       return { action: "auto_drafted", message: `Auto-drafted ${autoDraftResult.pick?.cardName || "a card"} for team ${teamId}.` };
     }
 
-    // Handle skipped pick or failure
     console.log(`Pick skipped/failed for team ${teamId}: ${autoDraftResult.error || "no affordable card available"}`);
     
     const { status: draftStatus } = await getDraftStatus(sessionId);
