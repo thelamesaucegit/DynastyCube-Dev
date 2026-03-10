@@ -2,13 +2,14 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/app/components/ui/button';
-import { GameState, PlayerState as PlayerStateType, Card as CardType } from '@/app/types';
+import { GameState, PlayerState, Card as CardType } from '@/app/types';
 import { ReplayCardData } from '@/app/actions/cardActions';
 import { Play, Pause, SkipBack, Rewind, FastForward, SkipForward } from 'lucide-react';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/app/components/ui/dialog';
 import { useSettings } from '@/contexts/SettingsContext';
-import { getCardImageUrl, CardWithImages } from '@/app/utils/cardUtils'; // Import CardWithImages type
+// FIX: Removed the unnecessary and incorrect import of CardWithImages
+import { getCardImageUrl } from '@/app/utils/cardUtils';
 
 // --- TYPE DEFINITIONS ---
 interface Team { id: string; name: string; emoji: string; }
@@ -76,7 +77,8 @@ const ZoneViewer = ({ zoneName, cards, cardDataMap }: { zoneName: string, cards:
         <div className="flex flex-wrap gap-4">
           {cards.length > 0 ? cards.map(card => {
             const cardInfo = cardDataMap.get(card.name);
-            const imageUrl = cardInfo ? getCardImageUrl(cardInfo as CardWithImages, useOldestArt) : null;
+            // FIX: Handle the case where cardInfo might be undefined
+            const imageUrl = cardInfo ? getCardImageUrl(cardInfo, useOldestArt) : null;
             return imageUrl ? <img key={card.id} src={imageUrl} alt={card.name} className="h-48 object-contain rounded-lg" /> : null;
           }) : <p className="text-gray-400">This zone is empty.</p>}
         </div>
@@ -129,8 +131,7 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
               return {
                   ...card,
                   row: getCardCategory(card.cardType || ''),
-                  // FIX: Check if cardInfo exists before calling getCardImageUrl
-                  imageUrl: cardInfo ? getCardImageUrl(cardInfo as CardWithImages, useOldestArt) : null
+                  imageUrl: cardInfo ? getCardImageUrl(cardInfo, useOldestArt) : null
               };
           });
       }
@@ -147,7 +148,7 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
         const newSpell = currentState.stack[currentState.stack.length - 1];
         const cardInfo = cardDataMap.get(newSpell.name);
         if (cardInfo) {
-            const imageUrl = getCardImageUrl(cardInfo as CardWithImages, useOldestArt);
+            const imageUrl = getCardImageUrl(cardInfo, useOldestArt);
             if (imageUrl) {
                 setAnimatedCard({ name: newSpell.name, imageUrl });
                 setTimeout(() => setAnimatedCard(null), 2500);
