@@ -152,94 +152,70 @@ export async function deleteDraftSession(sessionId: string): Promise<{ success: 
 }
 
 async function completeDraftInternal(sessionId: string, adminClient?: AnySupabaseClient): Promise<{ success: boolean; error?: string }> {
-    try {
-        const supabase = adminClient ?? await createServerClient();
-        const { error } = await supabase.from("draft_sessions").update({ status: "completed", autodraft_next_pick_at: null, current_on_clock_team_id: null, updated_at: new Date().toISOString() }).eq("id", sessionId);
-        if (error) { console.error("Error completing draft (internal):", error); return { success: false, error: error.message }; }
-        await supabase.rpc("notify_all_users_draft", { p_notification_type: "draft_completed", p_message: "The draft has been completed." });
-        return { success: true };
-    } catch (e) {
-        return { success: false, error: String(e) };
-    }
+    const supabase = adminClient ?? await createServerClient();
+    const { error } = await supabase.from("draft_sessions").update({ status: "completed", autodraft_next_pick_at: null, current_on_clock_team_id: null }).eq("id", sessionId);
+    if (error) { console.error("Error completing draft (internal):", error); return { success: false, error: error.message }; }
+    await supabase.rpc("notify_all_users_draft", { p_notification_type: "draft_completed", p_message: "The draft has been completed." });
+    return { success: true };
 }
 
 export async function activateDraft(sessionId: string, adminClient?: AnySupabaseClient): Promise<{ success: boolean; error?: string }> {
-    try {
-        const supabase = adminClient ?? await createServerClient();
-        const { data: session, error: sessionError } = await supabase.from("draft_sessions").select("*").eq("id", sessionId).single();
-        if (sessionError || !session) return { success: false, error: "Draft session not found" };
-        if (session.status !== "scheduled" && session.status !== "paused" && session.status !== "completed") return { success: false, error: `Cannot activate a draft with status: ${session.status}` };
-        const { status: draftStatus } = await getDraftStatus(sessionId, supabase);
-        if (!draftStatus) return { success: false, error: "Could not determine draft status." };
-        const now = new Date();
-        const deadline = new Date(now.getTime() + Number(session.hours_per_pick) * 60 * 60 * 1000);
-        const { error: updateError } = await supabase.from("draft_sessions").update({ status: "active", autodraft_next_pick_at: deadline.toISOString(), current_on_clock_team_id: draftStatus.onTheClock.teamId }).eq("id", sessionId);
-        if (updateError) return { success: false, error: updateError.message };
-        // Notifications...
-        return { success: true };
-    } catch(e) {
-        return { success: false, error: String(e) };
-    }
+    const supabase = adminClient ?? await createServerClient();
+    const { data: session, error: sessionError } = await supabase.from("draft_sessions").select("*").eq("id", sessionId).single();
+    if (sessionError || !session) return { success: false, error: "Draft session not found" };
+    if (session.status !== "scheduled" && session.status !== "paused" && session.status !== "completed") return { success: false, error: `Cannot activate a draft with status: ${session.status}` };
+    const { status: draftStatus } = await getDraftStatus(sessionId, supabase); // Pass client
+    if (!draftStatus) return { success: false, error: "Could not determine draft status." };
+    const now = new Date();
+    const deadline = new Date(now.getTime() + Number(session.hours_per_pick) * 60 * 60 * 1000);
+    const { error: updateError } = await supabase.from("draft_sessions").update({ status: "active", autodraft_next_pick_at: deadline.toISOString(), current_on_clock_team_id: draftStatus.onTheClock.teamId }).eq("id", sessionId);
+    if (updateError) return { success: false, error: updateError.message };
+    // Notifications...
+    return { success: true };
 }
 
 export async function advanceDraft(sessionId: string, adminClient?: AnySupabaseClient): Promise<{ success: boolean; completed?: boolean; error?: string }> {
-    try {
-        const supabase = adminClient ?? await createServerClient();
-        const { data: session, error: sessionError } = await supabase.from("draft_sessions").select("*").eq("id", sessionId).single();
-        if (sessionError || !session) return { success: false, error: "Draft session not found" };
-        if (session.status !== "active") return { success: true };
-        const { status: draftStatus } = await getDraftStatus(sessionId, supabase);
-        if (!draftStatus) return { success: false, error: "Could not determine draft status" };
-        if (draftStatus.draftOrder.every((team) => team.picksMade >= session.total_rounds)) {
-          await completeDraftInternal(session.id, adminClient);
-          return { success: true, completed: true };
-        }
-        const now = new Date();
-        const deadline = new Date(now.getTime() + Number(session.hours_per_pick) * 60 * 60 * 1000);
-        await supabase.from("draft_sessions").update({ autodraft_next_pick_at: deadline.toISOString(), current_on_clock_team_id: draftStatus.onTheClock.teamId }).eq("id", session.id);
-        return { success: true, completed: false };
-    } catch(e) {
-        return { success: false, error: String(e) };
+    const supabase = adminClient ?? await createServerClient();
+    const { data: session, error: sessionError } = await supabase.from("draft_sessions").select("*").eq("id", sessionId).single();
+    if (sessionError || !session) return { success: false, error: "Draft session not found" };
+    if (session.status !== "active") return { success: true };
+    const { status: draftStatus } = await getDraftStatus(sessionId, supabase); // Pass client
+    if (!draftStatus) return { success: false, error: "Could not determine draft status" };
+    if (draftStatus.draftOrder.every((team) => team.picksMade >= session.total_rounds)) {
+      await completeDraftInternal(session.id, adminClient);
+      return { success: true, completed: true };
     }
+    const now = new Date();
+    const deadline = new Date(now.getTime() + Number(session.hours_per_pick) * 60 * 60 * 1000);
+    await supabase.from("draft_sessions").update({ autodraft_next_pick_at: deadline.toISOString(), current_on_clock_team_id: draftStatus.onTheClock.teamId }).eq("id", sessionId);
+    return { success: true, completed: false };
 }
 
 export async function pauseDraft(sessionId: string): Promise<{ success: boolean; error?: string }> {
-    try {
-        const supabase = await createServerClient();
-        const admin = await verifyAdmin(supabase);
-        if (!admin.authorized) return { success: false, error: admin.error };
-        const { error } = await supabase.from("draft_sessions").update({ status: "paused", autodraft_next_pick_at: null }).eq("id", sessionId).eq("status", "active");
-        if (error) return { success: false, error: error.message };
-        return { success: true };
-    } catch(e) {
-        return { success: false, error: String(e) };
-    }
-}
-
-export async function resumeDraft(sessionId: string): Promise<{ success: boolean; error?: string }> {
-    try {
-        const supabase = await createServerClient();
-        const admin = await verifyAdmin(supabase);
-        if (!admin.authorized) return { success: false, error: admin.error };
-        return await activateDraft(sessionId);
-    } catch (e) {
-        return { success: false, error: String(e) };
-    }
-}
-
-export async function completeDraft(sessionId: string): Promise<{ success: boolean; error?: string }> {
-  try {
     const supabase = await createServerClient();
     const admin = await verifyAdmin(supabase);
     if (!admin.authorized) return { success: false, error: admin.error };
-    return await completeDraftInternal(sessionId);
-  } catch (error) {
-    return { success: false, error: String(error) };
-  }
+    const { error } = await supabase.from("draft_sessions").update({ status: "paused", autodraft_next_pick_at: null }).eq("id", sessionId).eq("status", "active");
+    if (error) return { success: false, error: error.message };
+    return { success: true };
 }
 
-export async function checkDraftTimer(): Promise<{ action: "none" | "activated" | "auto_drafted" | "completed" | "error"; message?: string; error?: string; }> {
-  const supabase = createAdminClient();
+export async function resumeDraft(sessionId: string): Promise<{ success: boolean; error?: string }> {
+    const supabase = await createServerClient();
+    const admin = await verifyAdmin(supabase);
+    if (!admin.authorized) return { success: false, error: admin.error };
+    return await activateDraft(sessionId);
+}
+
+export async function completeDraft(sessionId: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createServerClient();
+  const admin = await verifyAdmin(supabase);
+  if (!admin.authorized) return { success: false, error: admin.error };
+  return await completeDraftInternal(sessionId);
+}
+
+export async function checkDraftTimer(adminClient?: AnySupabaseClient): Promise<{ action: "none" | "activated" | "auto_drafted" | "completed" | "error"; message?: string; error?: string; }> {
+  const supabase = adminClient ?? createAdminClient(); // Correctly create client if not passed
   try {
     const now = new Date();
     const { data: scheduledSessions } = await supabase.from("draft_sessions").select("id").eq("status", "scheduled").lte("start_time", now.toISOString());
