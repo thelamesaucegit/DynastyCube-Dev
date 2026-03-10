@@ -62,7 +62,7 @@ export async function addSkippedPick(
   draftSessionId: string,
   adminClient?: AnySupabaseClient
 ): Promise<{ success: boolean; pick?: DraftPick; error?: string }> {
-  const supabase = adminClient ?? await createClient();
+  const supabase = adminClient ?? await createServerClient();
   try {
     const skippedPickData = {
       team_id: teamId,
@@ -94,7 +94,7 @@ export async function addSkippedPick(
 export async function addDraftPick(
   pick: DraftPick
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
+  const supabase = await createServerClient();
   try {
     // Verify user is authenticated and is a member of the team
     const authCheck = await verifyTeamMembership(pick.team_id);
@@ -150,7 +150,7 @@ export async function addDraftPick(
 async function verifyTeamMembership(
   teamId: string
 ): Promise<{ authorized: boolean; userId?: string; error?: string }> {
-  const supabase = await createClient();
+  const supabase = await createServerClient();
   // Check authentication
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {
@@ -173,7 +173,7 @@ async function verifyTeamMembership(
  * Get the team_id for a deck
  */
 async function getDeckTeamId(deckId: string): Promise<string | null> {
-  const supabase = await createClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("team_decks")
     .select("team_id")
@@ -186,7 +186,7 @@ async function getDeckTeamId(deckId: string): Promise<string | null> {
  * Get the team_id for a deck card (via deck lookup)
  */
 async function getDeckCardTeamId(cardId: string): Promise<string | null> {
-  const supabase = await createClient();
+  const supabase = await createServerClient();
   // Get the deck_id for this card
   const { data: cardData } = await supabase
     .from("deck_cards")
@@ -204,7 +204,7 @@ async function getDeckCardTeamId(cardId: string): Promise<string | null> {
  * Get the team_id for a draft pick
  */
 async function getDraftPickTeamId(pickId: string): Promise<string | null> {
-  const supabase = await createClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from("team_draft_picks")
     .select("team_id")
@@ -220,7 +220,7 @@ export async function getTeamDraftPicks(
   teamId: string,
   draftSessionId?: string
 ): Promise<{ picks: DraftPick[]; error?: string }> {
-  const supabase = await createClient();
+  const supabase = await createServerClient();
   try {
     let query = supabase
       .from("team_draft_picks")
@@ -250,7 +250,7 @@ export async function addDraftPickInternal(
   pick: DraftPick,
   _isAutoDraft?: boolean
 ): Promise<{ success: boolean; pick?: DraftPick; error?: string }> {
-  const supabase = await createClient();
+  const supabase = await createServerClient();
   try {
     if (pick.card_pool_id) {
         const { data: existingPick, error: checkError } = await supabase
@@ -305,7 +305,7 @@ export async function addDraftPickInternal(
 export async function removeDraftPick(
   pickId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
+  const supabase = await createServerClient();
   try {
     const teamId = await getDraftPickTeamId(pickId);
     if (!teamId) {
@@ -336,7 +336,7 @@ export async function removeDraftPick(
 export async function getTeamDecks(
   teamId: string
 ): Promise<{ decks: Deck[]; error?: string }> {
-  const supabase = await createClient();
+  const supabase = await createServerClient();
   try {
     const { data, error } = await supabase
       .from("team_decks")
@@ -389,7 +389,7 @@ export async function getTeamDecks(
 export async function createDeck(
   deck: Deck
 ): Promise<{ success: boolean; deckId?: string; error?: string }> {
-  const supabase = await createClient();
+  const supabase = await createServerClient();
   try {
     const authCheck = await verifyTeamMembership(deck.team_id);
     if (!authCheck.authorized) {
@@ -435,7 +435,7 @@ export async function createDeck(
 export async function deleteDeck(
   deckId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
+  const supabase = await createServerClient();
   try {
     const teamId = await getDeckTeamId(deckId);
     if (!teamId) {
@@ -466,7 +466,7 @@ export async function deleteDeck(
 export async function getDeckCards(
   deckId: string
 ): Promise<{ cards: DeckCard[]; error?: string }> {
-  const supabase = await createClient();
+  const supabase = await createServerClient();
   try {
     const { data, error } = await supabase
       .from("deck_cards")
@@ -490,7 +490,7 @@ export async function getDeckCards(
 export async function addCardToDeck(
   deckCard: DeckCard
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
+  const supabase = await createServerClient();
   try {
     const teamId = await getDeckTeamId(deckCard.deck_id);
     if (!teamId) return { success: false, error: "Deck not found" };
@@ -537,7 +537,7 @@ export async function updateDeckCardQuantity(
   cardId: string,
   newQuantity: number
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
+  const supabase = await createServerClient();
   try {
     const teamId = await getDeckCardTeamId(cardId);
     if (!teamId) {
@@ -568,7 +568,7 @@ export async function updateDeckCardQuantity(
 export async function removeCardFromDeck(
   cardId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
+  const supabase = await createServerClient();
   try {
     const teamId = await getDeckCardTeamId(cardId);
     if (!teamId) {
