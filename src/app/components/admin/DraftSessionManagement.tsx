@@ -6,7 +6,7 @@ import React, { useState, useEffect } from "react";
 import {
   createDraftSession,
   getActiveDraftSession,
-  getDraftSessions,
+  getAllDraftSessions, // Corrected import name
   updateDraftSession,
   deleteDraftSession,
   activateDraft,
@@ -34,8 +34,6 @@ export const DraftSessionManagement: React.FC = () => {
   const [startTime, setStartTime] = useState("");
   const [endDate, setEndDate] = useState("");
   const [endTime, setEndTime] = useState("");
-
-  // Edit state
   const [editingHours, setEditingHours] = useState(false);
   const [editHoursValue, setEditHoursValue] = useState("");
   const [testModeLoading, setTestModeLoading] = useState(false);
@@ -56,7 +54,6 @@ export const DraftSessionManagement: React.FC = () => {
 
   // Live countdown timer
   useEffect(() => {
-    // THIS IS THE FIX: Read from the new authoritative 'autodraft_next_pick_at' column
     if (!activeSession?.autodraft_next_pick_at || activeSession.status !== "active") {
       setCountdown("");
       return;
@@ -89,7 +86,7 @@ export const DraftSessionManagement: React.FC = () => {
     try {
       const [sessionRes, sessionsRes, orderRes] = await Promise.all([
         getActiveDraftSession(),
-        getDraftSessions(),
+        getAllDraftSessions(), // Corrected function call
         getActiveDraftOrder(),
       ]);
       setActiveSession(sessionRes.session);
@@ -195,7 +192,7 @@ export const DraftSessionManagement: React.FC = () => {
     }
   };
   
-  const handleResumeCompleted = async (sessionId: string) => {
+    const handleResumeCompleted = async (sessionId: string) => {
     if (!confirm("Resume this completed draft? The timer will restart from the current pick position.")) return;
     setActionLoading(true);
     try {
@@ -292,7 +289,7 @@ export const DraftSessionManagement: React.FC = () => {
       setTestModeLoading(false);
     }
   };
-
+  
   const formatDateTime = (dateStr: string) => {
     return new Date(dateStr).toLocaleString();
   };
@@ -306,7 +303,7 @@ export const DraftSessionManagement: React.FC = () => {
       default: return null;
     }
   };
-
+  
   if (loading) {
     return (
       <div className="admin-section">
