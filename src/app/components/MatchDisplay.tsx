@@ -1,10 +1,9 @@
-// src/app/components/MatchDisplay.tsx
 "use client";
 
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/card';
 import { Separator } from '@/app/components/ui/separator';
-import { GameState, PlayerState } from '@/app/types'; // FIX: Removed unused 'GameCard' import
+import { GameState, PlayerState, Card as GameCard } from '@/app/types'; // Renamed Card to GameCard to avoid name clash
 
 function PlayerDisplay({ player, isActive }: { player: PlayerState, isActive: boolean }) {
   return (
@@ -12,20 +11,21 @@ function PlayerDisplay({ player, isActive }: { player: PlayerState, isActive: bo
       <h3 className="font-bold text-lg">{player.name}</h3>
       <div className="flex justify-between text-sm text-gray-600 mb-2">
         <span>Life: {player.life}</span>
-        <span>Hand: {player.handSize}</span>
+        {/* FIX: Use the length of the hand array instead of the old handSize property */}
+        <span>Hand: {player.hand.length}</span>
       </div>
       <Separator />
       <div className="mt-2 min-h-[200px]">
         <h4 className="font-semibold mb-2">Battlefield</h4>
         {player.battlefield.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-            {player.battlefield.map(card => (
+            {player.battlefield.map((card: GameCard) => (
               <div 
                 key={card.id} 
                 className={`
                   p-2 border rounded text-xs text-center
                   ${card.isAttacking ? 'border-red-500 border-2' : ''}
-                  ${card.isBlocked ? 'border-yellow-500 border-2' : ''}
+                  ${card.isBlocking ? 'border-yellow-500 border-2' : ''}
                   ${card.isTapped ? 'text-gray-500 italic' : ''}
                 `}
               >
