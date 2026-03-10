@@ -27,6 +27,20 @@ export const getSupabaseClient = () => {
 // Export the singleton instance for client-side
 export const supabase = getSupabaseClient();
 
+// Admin client for server-to-server calls (cron jobs) — bypasses RLS via service role key
+export const createAdminClient = () => {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceRoleKey) {
+    throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set. Required for server-side cron operations.");
+  }
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+};
+
+// Shared type for passing admin or server client through the call chain
+export type AnySupabaseClient = ReturnType<typeof createAdminClient>;
+
 // Export function for server-side usage with proper auth context
 export const createServerClient = async () => {
   const cookieStore = await cookies();
