@@ -632,7 +632,7 @@ export async function checkDraftTimer(): Promise<{
   needsReload?: boolean;
 }> {
   try {
-    const supabase = await createServerClient();
+    const supabase = await createAdminClient();
     const { data: session } = await supabase.from("draft_sessions").select("*").in("status", ["scheduled", "active"]).order("created_at", { ascending: false }).limit(1).single();
     if (!session) return { action: "none" };
 
@@ -644,7 +644,7 @@ export async function checkDraftTimer(): Promise<{
     
     if (session.status === "active" && session.current_pick_deadline && new Date(session.current_pick_deadline) <= now) {
       const teamId = session.current_on_clock_team_id!;
-      const autoDraftResult = await executeAutoDraft(teamId, session.id);
+      const autoDraftResult = await executeAutoDraft(teamId, session.id,supabase);
 
       // Case 1: A real card was successfully picked.
       if (autoDraftResult.success) {
@@ -668,7 +668,7 @@ export async function checkDraftTimer(): Promise<{
         
         if (newSkipCount >= draftStatus.totalTeams) {
             console.log(`Stall condition met: ${newSkipCount} consecutive skips. Ending draft.`);
-            await completeDraft(session.id);
+            await completeDraft(session.id, supabase);
             return {
                 action: "completed",
                 message: `The draft has ended automatically after ${newSkipCount} consecutive skipped picks.`
@@ -676,7 +676,7 @@ export async function checkDraftTimer(): Promise<{
         }
 
         await supabase.from("draft_sessions").update({ consecutive_skipped_picks: newSkipCount }).eq("id", session.id);
-        const skippedResult = await addSkippedPick(teamId, draftStatus.totalPicks + 1, session.id);
+        const skippedResult = await addSkippedPick(teamId, draftStatus.totalPicks + 1, session.id, supabase);
         if (!skippedResult.success) {
             return { action: "error", error: `Auto-draft failed and could not log skipped pick: ${skippedResult.error}` };
         }
