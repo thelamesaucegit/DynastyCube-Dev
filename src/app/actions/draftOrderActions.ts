@@ -2,7 +2,7 @@
 
 "use server";
 
-import { createServerClient } from "@/lib/supabase";
+import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 
 // ============================================================================
 // TYPES
@@ -43,27 +43,38 @@ export interface DraftSetting {
   updated_at: string;
 }
 
-// THIS IS THE FIX: Define the shape of the RPC response
 interface PickCount {
   team_id: string;
   pick_count: number;
 }
 
+export interface DraftStatusTeam {
+  teamId: string;
+  teamName: string;
+  teamEmoji: string;
+  pickPosition: number;
+}
+
+export interface DraftStatus {
+  onTheClock: DraftStatusTeam;
+  onDeck: DraftStatusTeam;
+  currentRound: number;
+  totalPicks: number;
+  totalTeams: number;
+  seasonName: string;
+  draftOrder: Array<DraftStatusTeam & { picksMade: number }>;
+}
 
 // ============================================================================
 // HELPERS
 // ============================================================================
 
-async function verifyAdmin(supabase: Awaited<ReturnType<typeof createServerClient>>): Promise<{
+async function verifyAdmin(supabase: AnySupabaseClient): Promise<{
   authorized: boolean;
   userId?: string;
   error?: string;
 }> {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {
     return { authorized: false, error: "Not authenticated" };
   }
@@ -503,32 +514,17 @@ export async function getActiveDraftOrder(): Promise<{
 // DRAFT STATUS (On the Clock / On Deck)
 // ============================================================================
 
-export interface DraftStatusTeam {
-  teamId: string;
-  teamName: string;
-  teamEmoji: string;
-  pickPosition: number;
-}
-
-export interface DraftStatus {
-  onTheClock: DraftStatusTeam;
-  onDeck: DraftStatusTeam;
-  currentRound: number;
-  totalPicks: number;
-  totalTeams: number;
-  seasonName: string;
-  draftOrder: Array<DraftStatusTeam & { picksMade: number }>;
-}
-
 export async function getDraftStatus(
-  sessionId?: string | null
+  sessionId?: string | null,
+  client?: AnySupabaseClient
 ): Promise<{
   status: DraftStatus | null;
   seasonId?: string;
   error?: string;
 }> {
   try {
-    const supabase = await createServerClient();
+    const supabase = client ?? await createServerClient();
+    
     const { data: activeSeason, error: seasonError } = await supabase
       .from("seasons")
       .select("id, season_name")
@@ -565,7 +561,6 @@ export async function getDraftStatus(
         return { status: null, seasonId: activeSeason.id, error: rpcError.message };
       }
       
-      // THIS IS THE FIX: Apply the 'PickCount' type to the row parameter.
       (pickData || []).forEach((row: PickCount) => {
         pickCounts.set(row.team_id, Number(row.pick_count));
       });
@@ -575,37 +570,33 @@ export async function getDraftStatus(
       const team = Array.isArray(entry.team) ? entry.team[0] : entry.team;
       return {
         teamId: entry.team_id,
-        teamName: team.name || "Unknown",
-        teamEmoji: team.emoji || "?",
+        teamName: team!.name || "Unknown",
+        teamEmoji: team!.emoji || "?",
         pickPosition: entry.pick_position,
         picksMade: pickCounts.get(entry.team_id) || 0,
       };
     });
 
     const totalTeams = draftOrder.length;
+    if (totalTeams === 0) return { status: null, seasonId: activeSeason.id };
+    
     const totalPicks = draftOrder.reduce((sum, t) => sum + t.picksMade, 0);
     const minPicks = Math.min(...draftOrder.map((t) => t.picksMade));
     const currentRound = minPicks + 1;
     const teamsNeedingPick = draftOrder.filter((t) => t.picksMade === minPicks);
-    const onTheClock = teamsNeedingPick[0];
 
-    let onDeck: typeof draftOrder[0];
-    if (teamsNeedingPick.length > 1) {
-      onDeck = teamsNeedingPick[1];
-    } else {
-      onDeck = draftOrder[0];
+    if (teamsNeedingPick.length === 0) {
+      if (draftOrder.every(t => t.picksMade >= minPicks + 1)) {
+        return { status: null, seasonId: activeSeason.id, error: "Draft appears to be complete, but not marked." };
+      }
+      return { status: null, seasonId: activeSeason.id, error: "Could not determine team on the clock." };
     }
+    
+    const onTheClock = teamsNeedingPick[0];
+    const onDeck = teamsNeedingPick.length > 1 ? teamsNeedingPick[1] : draftOrder[0];
 
     return {
-      status: {
-        onTheClock,
-        onDeck,
-        currentRound,
-        totalPicks,
-        totalTeams,
-        seasonName: activeSeason.season_name,
-        draftOrder,
-      },
+      status: { onTheClock, onDeck, currentRound, totalPicks, totalTeams, seasonName: activeSeason.season_name, draftOrder },
       seasonId: activeSeason.id,
     };
   } catch (error) {
