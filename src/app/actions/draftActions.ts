@@ -4,7 +4,7 @@
 
 import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 
-// Note: The old 'createClient' helper function has been removed from this file.
+// Note: The old 'createClient' helper function is now removed to use the consistent 'createServerClient'
 
 export interface DraftPick {
   id?: string;
