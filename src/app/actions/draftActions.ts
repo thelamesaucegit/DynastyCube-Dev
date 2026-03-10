@@ -2,10 +2,10 @@
 
 "use server";
 
-import { cookies } from "next/headers";
 import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 
-
+// Removed the old, incorrect createClient() helper function from here.
+// All functions will now directly use createServerClient() or the passed-in adminClient.
 
 export interface DraftPick {
   id?: string;
@@ -53,8 +53,84 @@ export interface DeckCard {
 }
 
 /**
+ * Verify that the current user is authenticated and is a member of the specified team.
+ * Accepts an optional Supabase client for flexibility (user-context or admin-context).
+ */
+async function verifyTeamMembership(
+  teamId: string,
+  client: AnySupabaseClient
+): Promise<{ authorized: boolean; userId?: string; error?: string }> {
+  const { data: { user }, error: authError } = await client.auth.getUser();
+
+  if (authError || !user) {
+    return { authorized: false, error: "You must be logged in to perform this action" };
+  }
+
+  const { data: membership, error: membershipError } = await client
+    .from("team_members")
+    .select("id")
+    .eq("team_id", teamId)
+    .eq("user_id", user.id)
+    .single();
+
+  if (membershipError || !membership) {
+    return { authorized: false, userId: user.id, error: "You must be a member of this team to perform this action" };
+  }
+
+  return { authorized: true, userId: user.id };
+}
+
+/**
+ * Get the team_id for a deck.
+ * Uses a user-context client.
+ */
+async function getDeckTeamId(deckId: string): Promise<string | null> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("team_decks")
+    .select("team_id")
+    .eq("id", deckId)
+    .single();
+  return data?.team_id || null;
+}
+
+/**
+ * Get the team_id for a deck card (via deck lookup).
+ * Uses a user-context client.
+ */
+async function getDeckCardTeamId(cardId: string): Promise<string | null> {
+  const supabase = await createServerClient();
+  // Get the deck_id for this card
+  const { data: cardData } = await supabase
+    .from("deck_cards")
+    .select("deck_id")
+    .eq("id", cardId)
+    .single();
+  if (!cardData?.deck_id) {
+    return null;
+  }
+  // Get the team_id for this deck
+  return getDeckTeamId(cardData.deck_id);
+}
+
+/**
+ * Get the team_id for a draft pick.
+ * Uses a user-context client.
+ */
+async function getDraftPickTeamId(pickId: string): Promise<string | null> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("team_draft_picks")
+    .select("team_id")
+    .eq("id", pickId)
+    .single();
+  return data?.team_id || null;
+}
+
+/**
  * Internal: Adds a "skipped" pick to the draft history.
  * This is used when a team fails to auto-draft, allowing the draft to advance.
+ * Can accept an optional adminClient for server-side calls.
  */
 export async function addSkippedPick(
   teamId: string,
@@ -62,7 +138,7 @@ export async function addSkippedPick(
   draftSessionId: string,
   adminClient?: AnySupabaseClient
 ): Promise<{ success: boolean; pick?: DraftPick; error?: string }> {
-  const supabase = adminClient ?? await createServerClient();
+  const supabase = adminClient ?? await createServerClient(); // Use provided client or create a new user-context one
   try {
     const skippedPickData = {
       team_id: teamId,
@@ -77,10 +153,12 @@ export async function addSkippedPick(
       .insert(skippedPickData)
       .select()
       .single();
+
     if (error) {
       console.error("Error adding skipped pick:", error);
       return { success: false, error: error.message };
     }
+
     return { success: true, pick: newPick };
   } catch (error) {
     console.error("Unexpected error adding skipped pick:", error);
@@ -89,28 +167,34 @@ export async function addSkippedPick(
 }
 
 /**
- * Add a card to team's draft picks
+ * Add a card to team's draft picks.
+ * Uses a user-context client.
  */
 export async function addDraftPick(
   pick: DraftPick
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerClient();
+  const supabase = await createServerClient(); // User-context client
   try {
     // Verify user is authenticated and is a member of the team
-    const authCheck = await verifyTeamMembership(pick.team_id);
+    const authCheck = await verifyTeamMembership(pick.team_id, supabase); // Pass client
     if (!authCheck.authorized) {
       return { success: false, error: authCheck.error };
     }
+
+    // --- FIX: Check if the card instance has already been drafted ---
+    // This prevents race conditions where two users draft the same instance at the same time.
     if (pick.card_pool_id) {
         const { data: existingPick, error: checkError } = await supabase
             .from("team_draft_picks")
             .select("id")
             .eq("card_pool_id", pick.card_pool_id)
             .single();
-        if (checkError && checkError.code !== "PGRST116") { // Ignore "not found" error
+
+        if (checkError && checkError.code !== 'PGRST116') { // Ignore "not found" error
             console.error("Error checking for existing draft pick:", checkError);
             return { success: false, error: "Database error checking card availability." };
         }
+
         if (existingPick) {
             return { success: false, error: "This specific card has already been drafted." };
         }
@@ -118,8 +202,8 @@ export async function addDraftPick(
     
     const { error } = await supabase.from("team_draft_picks").insert({
       team_id: pick.team_id,
-      card_pool_id: pick.card_pool_id,
-      draft_session_id: pick.draft_session_id,
+      card_pool_id: pick.card_pool_id, 
+      draft_session_id: pick.draft_session_id, 
       card_id: pick.card_id,
       card_name: pick.card_name,
       card_set: pick.card_set,
@@ -145,92 +229,28 @@ export async function addDraftPick(
 }
 
 /**
- * Verify that the current user is authenticated and is a member of the specified team
- */
-async function verifyTeamMembership(
-  teamId: string
-): Promise<{ authorized: boolean; userId?: string; error?: string }> {
-  const supabase = await createServerClient();
-  // Check authentication
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) {
-    return { authorized: false, error: "You must be logged in to perform this action" };
-  }
-  // Check team membership
-  const { data: membership, error: membershipError } = await supabase
-    .from("team_members")
-    .select("id")
-    .eq("team_id", teamId)
-    .eq("user_id", user.id)
-    .single();
-  if (membershipError || !membership) {
-    return { authorized: false, userId: user.id, error: "You must be a member of this team to perform this action" };
-  }
-  return { authorized: true, userId: user.id };
-}
-
-/**
- * Get the team_id for a deck
- */
-async function getDeckTeamId(deckId: string): Promise<string | null> {
-  const supabase = await createServerClient();
-  const { data } = await supabase
-    .from("team_decks")
-    .select("team_id")
-    .eq("id", deckId)
-    .single();
-  return data?.team_id || null;
-}
-
-/**
- * Get the team_id for a deck card (via deck lookup)
- */
-async function getDeckCardTeamId(cardId: string): Promise<string | null> {
-  const supabase = await createServerClient();
-  // Get the deck_id for this card
-  const { data: cardData } = await supabase
-    .from("deck_cards")
-    .select("deck_id")
-    .eq("id", cardId)
-    .single();
-  if (!cardData?.deck_id) {
-    return null;
-  }
-  // Get the team_id for this deck
-  return getDeckTeamId(cardData.deck_id);
-}
-
-/**
- * Get the team_id for a draft pick
- */
-async function getDraftPickTeamId(pickId: string): Promise<string | null> {
-  const supabase = await createServerClient();
-  const { data } = await supabase
-    .from("team_draft_picks")
-    .select("team_id")
-    .eq("id", pickId)
-    .single();
-  return data?.team_id || null;
-}
-
-/**
  * Get all draft picks for a team, optionally scoped to a specific draft session.
+ * Can accept an optional adminClient for server-side calls.
  */
 export async function getTeamDraftPicks(
   teamId: string,
-  draftSessionId?: string
+  draftSessionId?: string,
+  adminClient?: AnySupabaseClient
 ): Promise<{ picks: DraftPick[]; error?: string }> {
-  const supabase = await createServerClient();
+  const supabase = adminClient ?? await createServerClient(); // Use provided client or create a new user-context one
   try {
     let query = supabase
       .from("team_draft_picks")
       .select("*")
       .eq("team_id", teamId);
+
     // This is the fix: only filter by session if the ID is provided
     if (draftSessionId) {
       query = query.eq("draft_session_id", draftSessionId);
     }
+
     const { data, error } = await query.order("pick_number", { ascending: true });
+
     if (error) {
       console.error("Error fetching draft picks:", error);
       return { picks: [], error: error.message };
@@ -245,12 +265,13 @@ export async function getTeamDraftPicks(
 /**
  * Internal: Add a draft pick without user session check.
  * Only for use by server-side auto-draft logic.
+ * Uses a user-context client, but does not verify user membership.
  */
 export async function addDraftPickInternal(
   pick: DraftPick,
-  _isAutoDraft?: boolean
+  _isAutoDraft?: boolean // Keeping for potential future use or original context
 ): Promise<{ success: boolean; pick?: DraftPick; error?: string }> {
-  const supabase = await createServerClient();
+  const supabase = await createServerClient(); // User-context client
   try {
     if (pick.card_pool_id) {
         const { data: existingPick, error: checkError } = await supabase
@@ -258,14 +279,17 @@ export async function addDraftPickInternal(
             .select("id")
             .eq("card_pool_id", pick.card_pool_id)
             .single();
+
         if (checkError && checkError.code !== "PGRST116") { // Ignore "not found" error
             console.error("Error checking for existing auto-draft pick:", checkError);
             return { success: false, error: "Database error checking card availability for auto-draft." };
         }
+
         if (existingPick) {
             return { success: false, error: "This specific card has already been drafted by another process." };
         }
     }
+
     const { data: newPick, error } = await supabase
       .from("team_draft_picks")
       .insert({
@@ -283,14 +307,17 @@ export async function addDraftPickInternal(
         mana_cost: pick.mana_cost,
         cmc: pick.cmc,
         pick_number: pick.pick_number,
-        drafted_by: null,
+        drafted_by: null, // auto-drafted — no user session
       })
       .select()
       .single();
+
     if (error) {
       console.error("Error adding auto-draft pick:", error);
       return { success: false, error: error.message };
     }
+
+    // Return the newly created pick object on success
     return { success: true, pick: newPick };
     
   } catch (error) {
@@ -300,29 +327,36 @@ export async function addDraftPickInternal(
 }
 
 /**
- * Remove a card from team's draft picks
+ * Remove a card from team's draft picks.
+ * Uses a user-context client.
  */
 export async function removeDraftPick(
   pickId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerClient();
+  const supabase = await createServerClient(); // User-context client
   try {
+    // Get the team_id for this draft pick
     const teamId = await getDraftPickTeamId(pickId);
     if (!teamId) {
       return { success: false, error: "Draft pick not found" };
     }
-    const authCheck = await verifyTeamMembership(teamId);
+
+    // Verify user is authenticated and is a member of the team
+    const authCheck = await verifyTeamMembership(teamId, supabase); // Pass client
     if (!authCheck.authorized) {
       return { success: false, error: authCheck.error };
     }
+
     const { error } = await supabase
       .from("team_draft_picks")
       .delete()
       .eq("id", pickId);
+
     if (error) {
       console.error("Error removing draft pick:", error);
       return { success: false, error: error.message };
     }
+
     return { success: true };
   } catch (error) {
     console.error("Unexpected error removing draft pick:", error);
@@ -331,26 +365,34 @@ export async function removeDraftPick(
 }
 
 /**
- * Get all decks for a team
+ * Get all decks for a team.
+ * Uses a user-context client.
  */
 export async function getTeamDecks(
   teamId: string
 ): Promise<{ decks: Deck[]; error?: string }> {
-  const supabase = await createServerClient();
+  const supabase = await createServerClient(); // User-context client
   try {
+    // Fetch decks
     const { data, error } = await supabase
       .from("team_decks")
       .select("*")
       .eq("team_id", teamId)
       .order("updated_at", { ascending: false });
+
     if (error) {
       console.error("Error fetching decks:", error);
       return { decks: [], error: error.message };
     }
+
     if (!data || data.length === 0) {
       return { decks: [] };
     }
+
+    // Get unique creator IDs
     const creatorIds = [...new Set(data.map((d) => d.created_by).filter(Boolean))];
+
+    // Fetch creator names if there are any
     let creatorMap: Record<string, string> = {};
     if (creatorIds.length > 0) {
       const { data: profiles } = await supabase
@@ -364,6 +406,8 @@ export async function getTeamDecks(
         }, {} as Record<string, string>);
       }
     }
+
+    // Transform data to include created_by_name
     const decks: Deck[] = data.map((deck) => ({
       id: deck.id,
       team_id: deck.team_id,
@@ -384,17 +428,20 @@ export async function getTeamDecks(
 }
 
 /**
- * Create a new deck
+ * Create a new deck.
+ * Uses a user-context client.
  */
 export async function createDeck(
   deck: Deck
 ): Promise<{ success: boolean; deckId?: string; error?: string }> {
-  const supabase = await createServerClient();
+  const supabase = await createServerClient(); // User-context client
   try {
-    const authCheck = await verifyTeamMembership(deck.team_id);
+    // Verify user is authenticated and is a member of the team
+    const authCheck = await verifyTeamMembership(deck.team_id, supabase); // Pass client
     if (!authCheck.authorized) {
       return { success: false, error: authCheck.error };
     }
+
     const { data, error } = await supabase
       .from("team_decks")
       .insert({
@@ -407,6 +454,7 @@ export async function createDeck(
       })
       .select()
       .single();
+
     if (error) {
       console.error("Error creating deck:", {
         message: error.message,
@@ -419,6 +467,7 @@ export async function createDeck(
         error: `Database error: ${error.message}${error.hint ? ` (${error.hint})` : ''}`
       };
     }
+
     return { success: true, deckId: data.id };
   } catch (error) {
     console.error("Unexpected error creating deck:", error);
@@ -430,29 +479,36 @@ export async function createDeck(
 }
 
 /**
- * Delete a deck
+ * Delete a deck.
+ * Uses a user-context client.
  */
 export async function deleteDeck(
   deckId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerClient();
+  const supabase = await createServerClient(); // User-context client
   try {
+    // Get the team_id for this deck
     const teamId = await getDeckTeamId(deckId);
     if (!teamId) {
       return { success: false, error: "Deck not found" };
     }
-    const authCheck = await verifyTeamMembership(teamId);
+
+    // Verify user is authenticated and is a member of the team
+    const authCheck = await verifyTeamMembership(teamId, supabase); // Pass client
     if (!authCheck.authorized) {
       return { success: false, error: authCheck.error };
     }
+
     const { error } = await supabase
       .from("team_decks")
       .delete()
       .eq("id", deckId);
+
     if (error) {
       console.error("Error deleting deck:", error);
       return { success: false, error: error.message };
     }
+
     return { success: true };
   } catch (error) {
     console.error("Unexpected error deleting deck:", error);
@@ -461,18 +517,20 @@ export async function deleteDeck(
 }
 
 /**
- * Get cards in a deck
+ * Get cards in a deck.
+ * Uses a user-context client.
  */
 export async function getDeckCards(
   deckId: string
 ): Promise<{ cards: DeckCard[]; error?: string }> {
-  const supabase = await createServerClient();
+  const supabase = await createServerClient(); // User-context client
   try {
     const { data, error } = await supabase
       .from("deck_cards")
       .select("*")
       .eq("deck_id", deckId)
       .order("category", { ascending: true });
+
     if (error) {
       console.error("Error fetching deck cards:", error);
       return { cards: [], error: error.message };
@@ -485,17 +543,19 @@ export async function getDeckCards(
 }
 
 /**
- * Add a card to a deck
+ * Add a card to a deck.
+ * Uses a user-context client.
  */
 export async function addCardToDeck(
   deckCard: DeckCard
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerClient();
+  const supabase = await createServerClient(); // User-context client
   try {
     const teamId = await getDeckTeamId(deckCard.deck_id);
     if (!teamId) return { success: false, error: "Deck not found" };
-    const authCheck = await verifyTeamMembership(teamId);
+    const authCheck = await verifyTeamMembership(teamId, supabase); // Pass client
     if (!authCheck.authorized) return { success: false, error: authCheck.error };
+
     if (deckCard.draft_pick_id) {
         const { data: existingCard, error: checkError } = await supabase
             .from("deck_cards")
@@ -503,13 +563,14 @@ export async function addCardToDeck(
             .eq("deck_id", deckCard.deck_id)
             .eq("draft_pick_id", deckCard.draft_pick_id)
             .single();
-        if (checkError && checkError.code !== "PGRST116") {
+        if (checkError && checkError.code !== 'PGRST116') {
             return { success: false, error: "Database error checking for card." };
         }
         if (existingCard) {
             return { success: false, error: "This specific drafted card is already in the deck." };
         }
     }
+
     const { error } = await supabase.from("deck_cards").insert({
       deck_id: deckCard.deck_id,
       draft_pick_id: deckCard.draft_pick_id,
@@ -519,6 +580,7 @@ export async function addCardToDeck(
       is_commander: deckCard.is_commander || false,
       category: deckCard.category || "mainboard",
     });
+
     if (error) {
       console.error("Error adding card to deck:", error);
       return { success: false, error: error.message };
@@ -531,30 +593,37 @@ export async function addCardToDeck(
 }
 
 /**
- * Update a deck card's quantity
+ * Update a deck card's quantity.
+ * Uses a user-context client.
  */
 export async function updateDeckCardQuantity(
   cardId: string,
   newQuantity: number
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerClient();
+  const supabase = await createServerClient(); // User-context client
   try {
+    // Get the team_id for this deck card
     const teamId = await getDeckCardTeamId(cardId);
     if (!teamId) {
       return { success: false, error: "Card not found" };
     }
-    const authCheck = await verifyTeamMembership(teamId);
+
+    // Verify user is authenticated and is a member of the team
+    const authCheck = await verifyTeamMembership(teamId, supabase); // Pass client
     if (!authCheck.authorized) {
       return { success: false, error: authCheck.error };
     }
+
     const { error } = await supabase
       .from("deck_cards")
       .update({ quantity: newQuantity })
       .eq("id", cardId);
+
     if (error) {
       console.error("Error updating deck card quantity:", error);
       return { success: false, error: error.message };
     }
+
     return { success: true };
   } catch (error) {
     console.error("Unexpected error updating deck card quantity:", error);
@@ -563,29 +632,36 @@ export async function updateDeckCardQuantity(
 }
 
 /**
- * Remove a card from a deck
+ * Remove a card from a deck.
+ * Uses a user-context client.
  */
 export async function removeCardFromDeck(
   cardId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createServerClient();
+  const supabase = await createServerClient(); // User-context client
   try {
+    // Get the team_id for this deck card
     const teamId = await getDeckCardTeamId(cardId);
     if (!teamId) {
       return { success: false, error: "Card not found" };
     }
-    const authCheck = await verifyTeamMembership(teamId);
+
+    // Verify user is authenticated and is a member of the team
+    const authCheck = await verifyTeamMembership(teamId, supabase); // Pass client
     if (!authCheck.authorized) {
       return { success: false, error: authCheck.error };
     }
+
     const { error } = await supabase
       .from("deck_cards")
       .delete()
       .eq("id", cardId);
+
     if (error) {
       console.error("Error removing card from deck:", error);
       return { success: false, error: error.message };
     }
+
     return { success: true };
   } catch (error) {
     console.error("Unexpected error removing card from deck:", error);
