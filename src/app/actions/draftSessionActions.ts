@@ -589,14 +589,14 @@ export async function completeDraft(
 /**
  * Check the draft timer state and take action if needed.
  */
-export async function checkDraftTimer(): Promise<{
+export async function checkDraftTimer(adminClient?: AnySupabaseClient): Promise<{
   action: "none" | "activated" | "auto_drafted" | "completed" | "error";
   message?: string;
   error?: string;
   needsReload?: boolean;
 }> {
   try {
-    const supabase = await createServerClient();
+    const supabase = adminClient ?? await createServerClient();
     const { data: session } = await supabase.from("draft_sessions").select("*").in("status", ["scheduled", "active"]).order("created_at", { ascending: false }).limit(1).single();
     if (!session) return { action: "none" };
 
@@ -608,7 +608,7 @@ export async function checkDraftTimer(): Promise<{
     
     if (session.status === "active" && session.current_pick_deadline && new Date(session.current_pick_deadline) <= now) {
       const teamId = session.current_on_clock_team_id!;
-      const autoDraftResult = await executeAutoDraft(teamId, session.id);
+      const autoDraftResult = await executeAutoDraft(teamId, session.id, supabase);
 
       // Case 1: A real card was successfully picked.
       if (autoDraftResult.success) {
