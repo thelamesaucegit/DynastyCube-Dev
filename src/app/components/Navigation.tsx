@@ -46,7 +46,7 @@ import {
   History,
   Info,
 } from "lucide-react";
-import { getAllDraftSessions, type DraftSessionInfo } from "@/app/actions/draftSessionActions";
+import { getDraftSessions, type DraftSessionInfo } from "@/app/actions/draftSessionActions";
 
 export default function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -60,7 +60,7 @@ export default function Navigation() {
   useEffect(() => {
     setMounted(true);
     async function loadDrafts() {
-      const { sessions } = await getAllDraftSessions();
+      const { sessions } = await getDraftSessions();
       setDraftSessions(sessions);
     }
     loadDrafts();
