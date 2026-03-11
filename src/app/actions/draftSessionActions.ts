@@ -18,6 +18,7 @@ export interface DraftSession {
   total_rounds: number;
   hours_per_pick: number;
   start_time: string;
+  name: string;
   end_time: string | null;
   current_pick_deadline: string | null;
   current_on_clock_team_id: string | null;
