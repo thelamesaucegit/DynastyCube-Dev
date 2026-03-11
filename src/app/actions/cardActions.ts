@@ -5,6 +5,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { invalidateDraftCache } from '@/lib/draftCache';
+import { type AnySupabaseClient } from "@/lib/supabase";
 
 async function createClient() {
   const cookieStore = await cookies();
@@ -108,8 +109,8 @@ export async function getCardPool(poolName: string = "default"): Promise<{ cards
   }
 }
 
-export async function getAvailableCardsForDraft(poolName: string = "default"): Promise<{ cards: CardData[]; error?: string }> {
-  const supabase = await createClient();
+export async function getAvailableCardsForDraft(poolName: string = "default", adminClient?: AnySupabaseClient): Promise<{ cards: CardData[]; error?: string }> {
+  const supabase = adminClient ?? await createClient();
   try {
     const { data: allCards, error: poolError } = await supabase.from("card_pools").select("*").eq("pool_name", poolName).eq('hidden', false).order("card_name", { ascending: true });
     if (poolError) {

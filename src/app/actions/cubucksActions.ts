@@ -1,7 +1,7 @@
 // src/app/actions/cubucksActions.ts
 "use server";
 
-import { createServerClient } from "@/lib/supabase";
+import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 
 // ============================================
 // TYPES
@@ -247,10 +247,11 @@ export async function getTeamBalances(): Promise<{
  * Get single team balance
  */
 export async function getTeamBalance(
-  teamId: string
+  teamId: string,
+  adminClient?: AnySupabaseClient
 ): Promise<{ team: TeamBalance | null; error?: string }> {
   try {
-    const supabase = await createServerClient();
+    const supabase = adminClient ?? await createServerClient();
 
     const { data, error } = await supabase
       .from("teams")
