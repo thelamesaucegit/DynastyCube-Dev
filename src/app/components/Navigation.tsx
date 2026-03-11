@@ -46,7 +46,7 @@ import {
   History,
   Info,
 } from "lucide-react";
-import { getDraftSessions, type DraftSessionInfo } from "@/app/actions/draftSessionActions";
+import { getDraftSessions, type DraftSession } from "@/app/actions/draftSessionActions";
 
 export default function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
