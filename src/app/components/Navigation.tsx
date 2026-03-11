@@ -51,7 +51,7 @@ import { getDraftSessions, type DraftSession } from "@/app/actions/draftSessionA
 export default function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [draftSessions, setDraftSessions] = useState<DraftSessionInfo[]>([]);
+  const [draftSessions, setDraftSessions] = useState<DraftSession[]>([]);
   const pathname = usePathname();
   const { user, loading, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
