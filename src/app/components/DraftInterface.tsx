@@ -137,7 +137,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       if (result.success) {
         setSuccess(`Acquired ${card.card_name} for ${cardCost} Cubucks!`);
         await conditionallyCleanupDraftQueues(card.card_id);
-        await advanceDraft(activeSessionId);
+        await advanceDraft();
         await loadDraftData();
         onDraftComplete?.();
         setTimeout(() => setSuccess(null), 3000);
