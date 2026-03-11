@@ -383,14 +383,40 @@ export async function executeAutoDraft(
       supabase.channel(`draft-updates-${draftSessionId}`).send({ type: 'broadcast', event: 'new_pick', payload: { ...skippedPick, team_name: teamData?.name || 'Unknown' } });
       return { success: true, source: "skipped", pick: { cardId: "skipped", cardName: "SKIPPED", cost: 0 } };
     }
-    const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", { /* ...params... */ }).single();
+    const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
+      p_team_id: teamId,
+      p_draft_session_id: draftSessionId,
+      p_card_pool_id: card.id,
+      p_card_id: card.card_id,
+      p_card_name: card.card_name,
+      p_card_set: card.card_set,
+      p_card_type: card.card_type,
+      p_rarity: card.rarity,
+      p_colors: card.colors,
+      p_image_url: card.image_url,
+      p_oldest_image_url: card.oldest_image_url,
+      p_mana_cost: card.mana_cost,
+      p_cmc: card.cmc,
+      p_pick_number: pickNumber,
+      p_cost: card.cubucks_cost || 1,
+      p_is_manual_pick: false,
+      p_user_id: null,
+    }).single();
     if (rpcError) {
       console.error("Atomic auto-draft failed:", rpcError);
       return { success: false, error: `Draft failed: ${rpcError.message}` };
     }
     const newPick = data as DraftPick;
     if (!newPick) return { success: false, error: "Draft pick could not be confirmed." };
-    await supabase.from("auto_draft_log").insert({ /* ...params... */ });
+    await supabase.from("auto_draft_log").insert({
+      team_id: teamId,
+      card_id: card.card_id,
+      card_name: card.card_name,
+      card_pool_id: card.id,
+      pick_source: preview.source === "manual_queue" ? "manual_queue" : "algorithm",
+      algorithm_details: preview.algorithmDetails ?? null,
+      round_number: pickNumber,
+    });
     await conditionallyCleanupDraftQueues(card.card_id, supabase);
     const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
     supabase.channel(`draft-updates-${draftSessionId}`).send({ type: 'broadcast', event: 'new_pick', payload: { ...newPick, team_name: teamData?.name || 'Unknown' } });

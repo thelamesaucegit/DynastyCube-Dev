@@ -288,27 +288,28 @@ export async function getRecentGames(limit: number = 5): Promise<{
 
   try {
     const { data, error } = await supabase
-      .from("games")
+      .from("matches")
       .select(`
         id,
-        team1_id,
-        team2_id,
-        team1_score,
-        team2_score,
-        winner_id,
-        played_at,
-        team1:teams!games_team1_id_fkey (
+        home_team_id,
+        away_team_id,
+        home_team_wins,
+        away_team_wins,
+        winner_team_id,
+        confirmed_at,
+        team1:teams!matches_home_team_id_fkey (
           id,
           name,
           emoji
         ),
-        team2:teams!games_team2_id_fkey (
+        team2:teams!matches_away_team_id_fkey (
           id,
           name,
           emoji
         )
       `)
-      .order("played_at", { ascending: false })
+      .eq("status", "completed")
+      .order("confirmed_at", { ascending: false })
       .limit(limit);
 
     if (error) {
@@ -316,21 +317,21 @@ export async function getRecentGames(limit: number = 5): Promise<{
       return { games: [], error: error.message };
     }
 
-    const games: RecentGame[] = (data || []).map((game) => {
-      const team1 = Array.isArray(game.team1) ? game.team1[0] : game.team1;
-      const team2 = Array.isArray(game.team2) ? game.team2[0] : game.team2;
+    const games: RecentGame[] = (data || []).map((match) => {
+      const team1 = Array.isArray(match.team1) ? match.team1[0] : match.team1;
+      const team2 = Array.isArray(match.team2) ? match.team2[0] : match.team2;
       return {
-        id: game.id,
-        team1_id: game.team1_id,
+        id: match.id,
+        team1_id: match.home_team_id,
         team1_name: team1?.name || "Unknown Team",
         team1_emoji: team1?.emoji || "❓",
-        team2_id: game.team2_id,
+        team2_id: match.away_team_id,
         team2_name: team2?.name || "Unknown Team",
         team2_emoji: team2?.emoji || "❓",
-        team1_score: game.team1_score,
-        team2_score: game.team2_score,
-        winner_id: game.winner_id,
-        played_at: game.played_at,
+        team1_score: match.home_team_wins,
+        team2_score: match.away_team_wins,
+        winner_id: match.winner_team_id,
+        played_at: match.confirmed_at,
       };
     });
 
