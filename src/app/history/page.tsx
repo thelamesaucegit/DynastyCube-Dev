@@ -26,12 +26,10 @@ import type { HistoryEraRow } from "@/types/history";
 
 // =============================================================================
 // TEAM-FIRST PIVOT TYPES
-// When viewMode is "team-first", the inner hierarchy flips from
-// Era > Season > Team  →  Era > Team > Season.
-// These types represent the pivoted structure.
+// When viewMode is "team-first" the inner hierarchy flips:
+//   Era > Season > Team  →  Era > Team > Season
 // =============================================================================
 
-/** One team's presence across multiple seasons within a single era */
 export interface TeamEraGroup {
   teamId: string;
   teamName: string;
@@ -44,29 +42,23 @@ export interface TeamEraGroup {
   }[];
 }
 
-/** A ComposedEra augmented with the team-first pivot grouping */
 export interface PivotedEra {
   era: HistoryEraRow;
-  /** Used in team-first mode — one group per team that appears in this era */
+  /** Used in team-first mode */
   teamGroups: TeamEraGroup[];
-  /** Used in season-first mode — the original season array */
+  /** Used in season-first mode */
   seasons: ComposedSeason[];
 }
 
 // =============================================================================
 // PIVOT HELPER
-// Transforms ComposedEra[] (season-first) into PivotedEra[] (team-first ready).
-// Called only when viewMode switches — result is memoized in the component.
+// Pure function — no side effects, result is memoized in the component.
 // =============================================================================
 
 function pivotEras(eras: ComposedEra[]): PivotedEra[] {
   return eras.map((composedEra) => {
-    // Collect every team ID that appears in any season of this era
     const teamMap = new Map<string, Omit<TeamEraGroup, "seasons">>();
-    const teamSeasons = new Map<
-      string,
-      TeamEraGroup["seasons"]
-    >();
+    const teamSeasons = new Map<string, TeamEraGroup["seasons"]>();
 
     composedEra.seasons.forEach((composedSeason) => {
       composedSeason.teamEntries.forEach((teamEntry) => {
@@ -78,7 +70,6 @@ function pivotEras(eras: ComposedEra[]): PivotedEra[] {
           });
           teamSeasons.set(teamEntry.teamId, []);
         }
-
         teamSeasons.get(teamEntry.teamId)!.push({
           season: composedSeason.season,
           teamEntry,
@@ -87,19 +78,11 @@ function pivotEras(eras: ComposedEra[]): PivotedEra[] {
       });
     });
 
-    // Assemble team groups, sorted by team name for consistent ordering
     const teamGroups: TeamEraGroup[] = Array.from(teamMap.values())
       .sort((a, b) => a.teamName.localeCompare(b.teamName))
-      .map((team) => ({
-        ...team,
-        seasons: teamSeasons.get(team.teamId)!,
-      }));
+      .map((team) => ({ ...team, seasons: teamSeasons.get(team.teamId)! }));
 
-    return {
-      era: composedEra.era,
-      seasons: composedEra.seasons,
-      teamGroups,
-    };
+    return { era: composedEra.era, seasons: composedEra.seasons, teamGroups };
   });
 }
 
@@ -108,7 +91,7 @@ function pivotEras(eras: ComposedEra[]): PivotedEra[] {
 // =============================================================================
 
 export default function HistoryPage() {
-  // --- Data state ---
+  // --- Data ---
   const [composedEras, setComposedEras] = useState<ComposedEra[]>([]);
   const [erasForFilter, setErasForFilter] = useState<
     (HistoryEraRow & { seasons: HistorySeasonRow[] })[]
@@ -117,12 +100,12 @@ export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // --- User permission state ---
+  // --- Permissions ---
   const [isAdmin, setIsAdmin] = useState(false);
   const [isHistorian, setIsHistorian] = useState(false);
   const [historianTeamId, setHistorianTeamId] = useState<string | null>(null);
 
-  // --- Filter + view mode state ---
+  // --- UI state ---
   const [filters, setFilters] = useState<HistoryFilterState>({
     eraId: null,
     seasonId: null,
@@ -130,10 +113,15 @@ export default function HistoryPage() {
   });
   const [viewMode, setViewMode] = useState<ViewMode>("season-first");
 
+  /**
+   * editMode: admin-only toggle that reveals all inline CRUD controls.
+   * When false the page is clean reading mode for all users.
+   * When true, admins see edit/delete/hide buttons at every level of the hierarchy.
+   */
+  const [editMode, setEditMode] = useState(false);
+
   // ==========================================================================
   // INITIAL LOAD
-  // Fetches filter dropdown options and user info in parallel.
-  // History content is loaded separately (see loadHistory).
   // ==========================================================================
 
   useEffect(() => {
@@ -144,10 +132,8 @@ export default function HistoryPage() {
           getTeamsForFilter(),
           getCurrentUserHistorianInfo(),
         ]);
-
         if (erasResult.eras) setErasForFilter(erasResult.eras);
         if (teamsResult.teams) setTeamsForFilter(teamsResult.teams);
-
         setIsAdmin(userInfo.isAdmin);
         setIsHistorian(userInfo.isHistorian);
         setHistorianTeamId(userInfo.historianTeamId ?? null);
@@ -155,13 +141,11 @@ export default function HistoryPage() {
         setError("Failed to initialize history page");
       }
     };
-
     init();
   }, []);
 
   // ==========================================================================
-  // HISTORY CONTENT LOAD
-  // Re-runs whenever the active filters change.
+  // CONTENT LOAD — re-runs on filter change
   // ==========================================================================
 
   const loadHistory = useCallback(async () => {
@@ -169,11 +153,8 @@ export default function HistoryPage() {
     setError(null);
     try {
       const result = await getComposedHistory(filters);
-      if (result.error) {
-        setError(result.error);
-      } else {
-        setComposedEras(result.eras);
-      }
+      if (result.error) setError(result.error);
+      else setComposedEras(result.eras);
     } catch {
       setError("Failed to load history");
     } finally {
@@ -187,17 +168,28 @@ export default function HistoryPage() {
 
   // ==========================================================================
   // PIVOT MEMO
-  // Pivots the season-first data into team-first structure.
-  // Only recalculates when composedEras changes.
   // ==========================================================================
 
   const pivotedEras = useMemo(() => pivotEras(composedEras), [composedEras]);
 
   // ==========================================================================
+  // REFRESH
+  // Passed deep into the tree so any admin action can trigger a full reload.
+  // Also refreshes filter dropdowns so new eras/seasons appear immediately.
+  // ==========================================================================
+
+  const handleRefresh = useCallback(async () => {
+    const [erasResult, teamsResult] = await Promise.all([
+      getErasAndSeasonsForFilters(),
+      getTeamsForFilter(),
+      loadHistory(),
+    ]);
+    if (erasResult.eras) setErasForFilter(erasResult.eras);
+    if (teamsResult.teams) setTeamsForFilter(teamsResult.teams);
+  }, [loadHistory]);
+
+  // ==========================================================================
   // FILTER HANDLERS
-  // Each dropdown sets one key; the others remain unchanged.
-  // When a season filter is set, auto-clear conflicting era filter only if
-  // the chosen season does not belong to the chosen era.
   // ==========================================================================
 
   const handleFilterChange = useCallback(
@@ -207,17 +199,12 @@ export default function HistoryPage() {
     []
   );
 
-  const handleViewModeChange = useCallback((mode: ViewMode) => {
-    setViewMode(mode);
-  }, []);
-
   // ==========================================================================
   // RENDER
   // ==========================================================================
 
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8">
-      {/* Page header */}
       <div className="mb-8">
         <h1 className="text-4xl font-bold tracking-tight mb-2">History</h1>
         <p className="text-lg text-muted-foreground">
@@ -225,17 +212,19 @@ export default function HistoryPage() {
         </p>
       </div>
 
-      {/* Filter bar — dropdowns for Era, Season, Team and the view mode toggle */}
       <HistoryFilters
         eras={erasForFilter}
         teams={teamsForFilter}
         filters={filters}
         viewMode={viewMode}
+        isAdmin={isAdmin}
+        editMode={editMode}
         onFilterChange={handleFilterChange}
-        onViewModeChange={handleViewModeChange}
+        onViewModeChange={setViewMode}
+        onEditModeChange={setEditMode}
+        onRefresh={handleRefresh}
       />
 
-      {/* Content area */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-16">
           <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
@@ -263,7 +252,9 @@ export default function HistoryPage() {
               isAdmin={isAdmin}
               isHistorian={isHistorian}
               historianTeamId={historianTeamId}
-              onRefresh={loadHistory}
+              editMode={editMode}
+              allTeams={teamsForFilter}
+              onRefresh={handleRefresh}
             />
           ))}
         </div>
