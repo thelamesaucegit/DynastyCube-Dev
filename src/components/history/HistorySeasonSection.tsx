@@ -1,232 +1,261 @@
-// src/components/history/HistorySeasonSection.tsx
+// src/app/history/page.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
-import { HistoryTeamSection } from "@/components/history/HistoryTeamSection";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import {
+  getComposedHistory,
+  getErasAndSeasonsForFilters,
+  getTeamsForFilter,
+  getCurrentUserHistorianInfo,
+} from "@/app/actions/historyActions";
+import { HistoryFilters } from "@/components/history/HistoryFilters";
+import { HistoryEraSection } from "@/components/history/HistoryEraSection";
+import { Loader2, AlertCircle } from "lucide-react";
+import { Card, CardContent } from "@/app/components/ui/card";
 import type {
-  HistoryFilterState,
+  ComposedEra,
+  ComposedSeason,
   TeamSeasonEntry,
-  LeagueSeasonEntry,
+  HistoryFilterState,
   HistorySeasonRow,
+  LeagueSeasonEntry,
+  ViewMode,
+  TeamBasic,
 } from "@/types/history";
+import type { HistoryEraRow } from "@/types/history";
 
 // =============================================================================
-// PROPS
+// TEAM-FIRST PIVOT TYPES
+// When viewMode is "team-first" the inner hierarchy flips:
+//   Era > Season > Team  →  Era > Team > Season
 // =============================================================================
 
-interface HistorySeasonSectionProps {
-  season: HistorySeasonRow;
-  leagueEntry: LeagueSeasonEntry;
-  /** One entry per team present in this season (may be a subset when filtered) */
-  teamEntries: TeamSeasonEntry[];
-  /** When true the accordion starts open — set by parent when this season is filtered */
-  defaultOpen?: boolean;
-  filters: HistoryFilterState;
-  isAdmin: boolean;
-  isHistorian: boolean;
-  historianTeamId: string | null;
-  onRefresh: () => void;
+export interface TeamEraGroup {
+  teamId: string;
+  teamName: string;
+  teamEmoji: string;
+  /** Ordered by season.display_order */
+  seasons: {
+    season: HistorySeasonRow;
+    teamEntry: TeamSeasonEntry;
+    leagueEntry: LeagueSeasonEntry;
+  }[];
+}
+
+export interface PivotedEra {
+  era: HistoryEraRow;
+  /** Used in team-first mode */
+  teamGroups: TeamEraGroup[];
+  /** Used in season-first mode */
+  seasons: ComposedSeason[];
 }
 
 // =============================================================================
-// COMPONENT
+// PIVOT HELPER
+// Pure function — no side effects, result is memoized in the component.
 // =============================================================================
 
-export function HistorySeasonSection({
-  season,
-  leagueEntry,
-  teamEntries,
-  defaultOpen = false,
-  filters,
-  isAdmin,
-  isHistorian,
-  historianTeamId,
-  onRefresh,
-}: HistorySeasonSectionProps) {
-  // Seasons start collapsed unless the parent signals they should open
-  const [isOpen, setIsOpen] = useState(defaultOpen);
+function pivotEras(eras: ComposedEra[]): PivotedEra[] {
+  return eras.map((composedEra) => {
+    const teamMap = new Map<string, Omit<TeamEraGroup, "seasons">>();
+    const teamSeasons = new Map<string, TeamEraGroup["seasons"]>();
 
-  // Re-open if the season filter changes to match this season
+    composedEra.seasons.forEach((composedSeason) => {
+      composedSeason.teamEntries.forEach((teamEntry) => {
+        if (!teamMap.has(teamEntry.teamId)) {
+          teamMap.set(teamEntry.teamId, {
+            teamId: teamEntry.teamId,
+            teamName: teamEntry.teamName,
+            teamEmoji: teamEntry.teamEmoji,
+          });
+          teamSeasons.set(teamEntry.teamId, []);
+        }
+        teamSeasons.get(teamEntry.teamId)!.push({
+          season: composedSeason.season,
+          teamEntry,
+          leagueEntry: composedSeason.leagueEntry,
+        });
+      });
+    });
+
+    const teamGroups: TeamEraGroup[] = Array.from(teamMap.values())
+      .sort((a, b) => a.teamName.localeCompare(b.teamName))
+      .map((team) => ({ ...team, seasons: teamSeasons.get(team.teamId)! }));
+
+    return { era: composedEra.era, seasons: composedEra.seasons, teamGroups };
+  });
+}
+
+// =============================================================================
+// PAGE COMPONENT
+// =============================================================================
+
+export default function HistoryPage() {
+  // --- Data ---
+  const [composedEras, setComposedEras] = useState<ComposedEra[]>([]);
+  const [erasForFilter, setErasForFilter] = useState<
+    (HistoryEraRow & { seasons: HistorySeasonRow[] })[]
+  >([]);
+  const [teamsForFilter, setTeamsForFilter] = useState<TeamBasic[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // --- Permissions ---
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isHistorian, setIsHistorian] = useState(false);
+  const [historianTeamId, setHistorianTeamId] = useState<string | null>(null);
+
+  // --- UI state ---
+  const [filters, setFilters] = useState<HistoryFilterState>({
+    eraId: null,
+    seasonId: null,
+    teamId: null,
+  });
+  const [viewMode, setViewMode] = useState<ViewMode>("season-first");
+
+  /**
+   * editMode: admin-only toggle that reveals all inline CRUD controls.
+   * When false the page is clean reading mode for all users.
+   * When true, admins see edit/delete/hide buttons at every level of the hierarchy.
+   */
+  const [editMode, setEditMode] = useState(false);
+
+  // ==========================================================================
+  // INITIAL LOAD
+  // ==========================================================================
+
   useEffect(() => {
-    if (filters.seasonId === season.id) {
-      setIsOpen(true);
+    const init = async () => {
+      try {
+        const [erasResult, teamsResult, userInfo] = await Promise.all([
+          getErasAndSeasonsForFilters(),
+          getTeamsForFilter(),
+          getCurrentUserHistorianInfo(),
+        ]);
+        if (erasResult.eras) setErasForFilter(erasResult.eras);
+        if (teamsResult.teams) setTeamsForFilter(teamsResult.teams);
+        setIsAdmin(userInfo.isAdmin);
+        setIsHistorian(userInfo.isHistorian);
+        setHistorianTeamId(userInfo.historianTeamId ?? null);
+      } catch {
+        setError("Failed to initialize history page");
+      }
+    };
+    init();
+  }, []);
+
+  // ==========================================================================
+  // CONTENT LOAD — re-runs on filter change
+  // ==========================================================================
+
+  const loadHistory = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await getComposedHistory(filters);
+      if (result.error) setError(result.error);
+      else setComposedEras(result.eras);
+    } catch {
+      setError("Failed to load history");
+    } finally {
+      setLoading(false);
     }
-  }, [filters.seasonId, season.id]);
+  }, [filters]);
 
-  // --------------------------------------------------------------------------
-  // Determine whether the league entry has any visible content.
-  // If all league slots are empty, we omit the league section from the UI.
-  // --------------------------------------------------------------------------
-  const hasLeagueContent = leagueEntry.slots.some(
-    (slot) => slot.entries.length > 0 && !slot.isHidden
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
+
+  // ==========================================================================
+  // PIVOT MEMO
+  // ==========================================================================
+
+  const pivotedEras = useMemo(() => pivotEras(composedEras), [composedEras]);
+
+  // ==========================================================================
+  // REFRESH
+  // Passed deep into the tree so any admin action can trigger a full reload.
+  // Also refreshes filter dropdowns so new eras/seasons appear immediately.
+  // ==========================================================================
+
+  const handleRefresh = useCallback(async () => {
+    const [erasResult, teamsResult] = await Promise.all([
+      getErasAndSeasonsForFilters(),
+      getTeamsForFilter(),
+      loadHistory(),
+    ]);
+    if (erasResult.eras) setErasForFilter(erasResult.eras);
+    if (teamsResult.teams) setTeamsForFilter(teamsResult.teams);
+  }, [loadHistory]);
+
+  // ==========================================================================
+  // FILTER HANDLERS
+  // ==========================================================================
+
+  const handleFilterChange = useCallback(
+    (key: keyof HistoryFilterState, value: string | null) => {
+      setFilters((prev) => ({ ...prev, [key]: value }));
+    },
+    []
   );
+
+  // ==========================================================================
+  // RENDER
+  // ==========================================================================
 
   return (
-    <div>
-      {/* Season accordion header */}
-      <button
-        type="button"
-        onClick={() => setIsOpen((v) => !v)}
-        className="w-full flex items-center gap-3 px-4 py-3 text-left
-                   hover:bg-muted/40 transition-colors"
-      >
-        {isOpen ? (
-          <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-        ) : (
-          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-        )}
+    <div className="container max-w-7xl mx-auto px-4 py-8">
+      <div className="mb-8">
+        <h1 className="text-4xl font-bold tracking-tight mb-2">History</h1>
+        <p className="text-lg text-muted-foreground">
+          Records and chronicles of the Dynasty Cube league
+        </p>
+      </div>
 
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <span className="font-semibold text-base">{season.name}</span>
+      <HistoryFilters
+        eras={erasForFilter}
+        teams={teamsForFilter}
+        filters={filters}
+        viewMode={viewMode}
+        isAdmin={isAdmin}
+        editMode={editMode}
+        onFilterChange={handleFilterChange}
+        onViewModeChange={setViewMode}
+        onEditModeChange={setEditMode}
+        onRefresh={handleRefresh}
+      />
 
-          {season.description && (
-            <span className="text-sm text-muted-foreground truncate hidden sm:block">
-              — {season.description}
-            </span>
-          )}
-
-          {/* Link to the season's draft spreadsheet if one is stored */}
-          {season.spreadsheet_url && (
-            <a
-              href={season.spreadsheet_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()} // don't toggle accordion
-              className="ml-1 text-muted-foreground hover:text-primary transition-colors shrink-0"
-              title="View draft spreadsheet"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
-          )}
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-16">
+          <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
+          <p className="text-muted-foreground">Loading history...</p>
         </div>
-
-        {!isOpen && (
-          <span className="text-xs text-muted-foreground mr-1 shrink-0">
-            {teamEntries.length}{" "}
-            {teamEntries.length === 1 ? "team" : "teams"}
-          </span>
-        )}
-      </button>
-
-      {/* Season content */}
-      {isOpen && (
-        <div className="border-t">
-
-          {/* --- League-level content for this season ---
-              Rendered as a special section above team entries.
-              Only shown if there is at least one non-empty league slot.
-          */}
-          {hasLeagueContent && (
-            <LeagueSeasonContent leagueEntry={leagueEntry} isAdmin={isAdmin} />
-          )}
-
-          {/* --- Team entries ---
-              One HistoryTeamSection per team that has content in this season.
-              Teams are separated by a subtle divider.
-          */}
-          <div className="divide-y">
-            {teamEntries.map((teamEntry) => {
-              // Determine if this user can directly edit this team's content
-              const canEdit =
-                isAdmin ||
-                (isHistorian && historianTeamId === teamEntry.teamId);
-
-              // Highlight teams whose content was surfaced via cross-team filter
-              const isCrossTeamSurfaced =
-                !!filters.teamId &&
-                filters.teamId !== teamEntry.teamId;
-
-              return (
-                <HistoryTeamSection
-                  key={teamEntry.teamId}
-                  teamEntry={teamEntry}
-                  // Auto-expand the team whose filter is active,
-                  // or auto-expand cross-team entries since the user filtered for them
-                  defaultOpen={
-                    filters.teamId === teamEntry.teamId || isCrossTeamSurfaced
-                  }
-                  canEdit={canEdit}
-                  isAdmin={isAdmin}
-                  isCrossTeamSurfaced={isCrossTeamSurfaced}
-                  onRefresh={onRefresh}
-                />
-              );
-            })}
-          </div>
-
-          {/* Empty state — no team content */}
-          {teamEntries.length === 0 && (
-            <div className="px-4 py-6 text-sm text-muted-foreground text-center">
-              No team history has been written for this season yet.
-            </div>
-          )}
+      ) : error ? (
+        <Card className="border-destructive">
+          <CardContent className="pt-6 flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
+            <p className="text-muted-foreground">{error}</p>
+          </CardContent>
+        </Card>
+      ) : pivotedEras.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground">
+          No history records found for the selected filters.
         </div>
-      )}
-    </div>
-  );
-}
-
-
-// =============================================================================
-// LEAGUE SEASON CONTENT
-// Displays the league-level slots (cap rules, votes, etc.) for a season.
-// Rendered above team entries when content exists.
-// =============================================================================
-
-function LeagueSeasonContent({
-  leagueEntry,
-  isAdmin,
-}: {
-  leagueEntry: LeagueSeasonEntry;
-  isAdmin: boolean;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-
-  const visibleSlots = leagueEntry.slots.filter(
-    (slot) =>
-      slot.entries.length > 0 && (isAdmin || !slot.isHidden)
-  );
-
-  if (visibleSlots.length === 0) return null;
-
-  return (
-    <div className="border-b bg-muted/20">
-      <button
-        type="button"
-        onClick={() => setIsOpen((v) => !v)}
-        className="w-full flex items-center gap-2 px-6 py-2.5 text-left
-                   hover:bg-muted/40 transition-colors"
-      >
-        {isOpen ? (
-          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        ) : (
-          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        )}
-        <span className="text-sm font-medium text-muted-foreground">
-          League Records
-        </span>
-      </button>
-
-      {isOpen && (
-        <div className="px-6 pb-4 space-y-4">
-          {visibleSlots.map((slot) => (
-            <div key={slot.slotType}>
-              <h4 className="text-xs font-semibold uppercase tracking-wider
-                             text-muted-foreground mb-1.5">
-                {slot.title}
-              </h4>
-              <div className="space-y-2">
-                {slot.entries.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="text-sm leading-relaxed whitespace-pre-wrap"
-                  >
-                    {entry.content}
-                  </div>
-                ))}
-              </div>
-            </div>
+      ) : (
+        <div className="space-y-4 mt-6">
+          {pivotedEras.map((pivotedEra) => (
+            <HistoryEraSection
+              key={pivotedEra.era.id}
+              pivotedEra={pivotedEra}
+              viewMode={viewMode}
+              filters={filters}
+              isAdmin={isAdmin}
+              isHistorian={isHistorian}
+              historianTeamId={historianTeamId}
+              editMode={editMode}
+              allTeams={teamsForFilter}
+              onRefresh={handleRefresh}
+            />
           ))}
         </div>
       )}
