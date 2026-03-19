@@ -38,8 +38,8 @@ replayData.gameStates.forEach(state => {
     state.stack?.forEach(card => allCardNames.add(card.name));
     
     Object.values(state.players).forEach(player => {
-        ['battlefield', 'graveyard', 'hand', 'exile'].forEach(zone => {
-            (player as any)[zone]?.forEach((card: Card) => allCardNames.add(card.name));
+        [player.battlefield, player.graveyard, player.hand, player.exile].forEach(zone => {
+            zone?.forEach(card => allCardNames.add(card.name));
         });
     });
 });

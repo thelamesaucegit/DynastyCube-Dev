@@ -222,31 +222,27 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     );
 };    
     return (
-      <Dialog>
-        <div className="relative w-full h-1/2 p-4 flex flex-col">
-            <div className="flex-grow flex flex-col gap-2">{rows.map((row, i) => renderRow(row))}</div>
-            <div className="absolute top-4 left-4 flex flex-col items-start gap-3 z-10">
-                <div className="flex items-center gap-4">
-                    <div className="text-5xl">{playerInfo.team.emoji}</div>
-                    <div className="text-6xl font-bold">{playerState.life}</div>
-                </div>
-                <div className="flex gap-4">
-                    <div className="text-center"><p className="font-bold text-2xl">{playerState.hand.length}</p><p className="text-3xl">🤚</p></div>
-                    <div className="text-center"><p className="font-bold text-2xl">{playerState.librarySize}</p><p className="text-3xl">📚</p></div>
-                   </div>
-            </div>
-        </div>
-        </Dialog>
-// Each needs its own Dialog
-<Dialog>
-  <DialogTrigger asChild><div className="text-center cursor-pointer"><p className="font-bold text-2xl">{playerState.graveyard.length}🪦</div></DialogTrigger>
-  <ZoneViewer zoneName="Graveyard" cards={playerState.graveyard} cardDataMap={cardDataMap} />
-</Dialog>
-<Dialog>
-  <DialogTrigger asChild><div className="text-center cursor-pointer"><p className="font-bold text-2xl">{playerState.exile.length}🌀</div></DialogTrigger>
-  <ZoneViewer zoneName="Exile" cards={playerState.exile} cardDataMap={cardDataMap} />
-</Dialog>
-      
+      <div className="relative w-full h-1/2 p-4 flex flex-col">
+          <div className="flex-grow flex flex-col gap-2">{rows.map((row, i) => renderRow(row))}</div>
+          <div className="absolute top-4 left-4 flex flex-col items-start gap-3 z-10">
+              <div className="flex items-center gap-4">
+                  <div className="text-5xl">{playerInfo.team.emoji}</div>
+                  <div className="text-6xl font-bold">{playerState.life}</div>
+              </div>
+              <div className="flex gap-4">
+                  <div className="text-center"><p className="font-bold text-2xl">{playerState.hand.length}</p><p className="text-3xl">🤚</p></div>
+                  <div className="text-center"><p className="font-bold text-2xl">{playerState.librarySize}</p><p className="text-3xl">📚</p></div>
+                  <Dialog>
+                    <DialogTrigger asChild><div className="text-center cursor-pointer"><p className="font-bold text-2xl">{playerState.graveyard.length}</p><p className="text-3xl">🪦</p></div></DialogTrigger>
+                    <ZoneViewer zoneName="Graveyard" cards={playerState.graveyard} cardDataMap={cardDataMap} />
+                  </Dialog>
+                  <Dialog>
+                    <DialogTrigger asChild><div className="text-center cursor-pointer"><p className="font-bold text-2xl">{playerState.exile.length}</p><p className="text-3xl">🌀</p></div></DialogTrigger>
+                    <ZoneViewer zoneName="Exile" cards={playerState.exile} cardDataMap={cardDataMap} />
+                  </Dialog>
+              </div>
+          </div>
+      </div>
     );
   };
 
