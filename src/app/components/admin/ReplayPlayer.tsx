@@ -211,14 +211,20 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
                 <div className="flex gap-4">
                     <div className="text-center"><p className="font-bold text-2xl">{playerState.hand.length}</p><p className="text-3xl">🤚</p></div>
                     <div className="text-center"><p className="font-bold text-2xl">{playerState.librarySize}</p><p className="text-3xl">📚</p></div>
-                    <DialogTrigger asChild><div className="text-center cursor-pointer"><p className="font-bold text-2xl">{playerState.graveyard.length}</p><p className="text-3xl">🪦</p></div></DialogTrigger>
-                    <DialogTrigger asChild><div className="text-center cursor-pointer"><p className="font-bold text-2xl">{playerState.exile.length}</p><p className="text-3xl">🌀</p></div></DialogTrigger>
-                </div>
+                   </div>
             </div>
         </div>
-        <ZoneViewer zoneName="Graveyard" cards={playerState.graveyard} cardDataMap={cardDataMap} />
-        <ZoneViewer zoneName="Exile" cards={playerState.exile} cardDataMap={cardDataMap} />
-      </Dialog>
+        </Dialog>
+// Each needs its own Dialog
+<Dialog>
+  <DialogTrigger asChild><div className="text-center cursor-pointer"><p className="font-bold text-2xl">{playerState.graveyard.length}🪦</div></DialogTrigger>
+  <ZoneViewer zoneName="Graveyard" cards={playerState.graveyard} cardDataMap={cardDataMap} />
+</Dialog>
+<Dialog>
+  <DialogTrigger asChild><div className="text-center cursor-pointer"><p className="font-bold text-2xl">{playerState.exile.length}🌀</div></DialogTrigger>
+  <ZoneViewer zoneName="Exile" cards={playerState.exile} cardDataMap={cardDataMap} />
+</Dialog>
+      
     );
   };
 
