@@ -33,13 +33,16 @@ export default async function MatchViewerPage({ params }: { params: Promise<{ ma
 
   // 2. Collect all unique card names that appear in the entire match log.
   const allCardNames = new Set<string>();
-  replayData.gameStates.forEach(state => {
+replayData.gameStates.forEach(state => {
+    // Also scan the global stack
+    state.stack?.forEach(card => allCardNames.add(card.name));
+    
     Object.values(state.players).forEach(player => {
-      player.battlefield.forEach(card => {
-        allCardNames.add(card.name);
-      });
+        ['battlefield', 'graveyard', 'hand', 'exile'].forEach(zone => {
+            (player as any)[zone]?.forEach((card: Card) => allCardNames.add(card.name));
+        });
     });
-  });
+});
 
   // 3. Fetch the data (type, image URL) for all those unique cards in a single batch.
   const cardDataMap = await getCardDataForReplay(Array.from(allCardNames));
