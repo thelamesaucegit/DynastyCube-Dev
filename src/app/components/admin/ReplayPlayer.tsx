@@ -177,28 +177,51 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     const backRow = cards.filter(c => c.row === 'back');
     const rows = area === 'bottom' ? [backRow, frontRow] : [frontRow, backRow];
     
-    const renderRow = (rowCards: BattlefieldCard[]) => (
-        <div className="flex-grow flex justify-center items-center gap-[-50px] px-24">
-            {rowCards.map(card => (
-                <div key={card.id} className="relative group">
-                    {card.imageUrl && (
-                      <img 
-                        src={card.imageUrl} 
-                        alt={card.name} 
-                        className={`
-                          h-32 object-contain drop-shadow-lg rounded-lg
-                          transition-all duration-300 group-hover:scale-150 group-hover:z-20
-                          ${card.isTapped ? 'rotate-90' : ''}
-                          ${card.isAttacking ? 'ring-4 ring-red-500 scale-110' : ''}
-                          ${card.isBlocking ? 'ring-4 ring-blue-500' : ''}
-                        `}
-                      />
+    const renderRow = (rowCards: BattlefieldCard[]) => {
+    // Group cards by name
+    const groups = rowCards.reduce<Record<string, BattlefieldCard[]>>((acc, card) => {
+        (acc[card.name] = acc[card.name] || []).push(card);
+        return acc;
+    }, {});
+
+    return (
+        <div className="flex-grow flex justify-center items-center gap-2 px-24">
+            {Object.entries(groups).map(([name, cards]) => (
+                <div key={name} className="relative" style={{ width: '80px', height: '112px' }}>
+                    {cards.map((card, i) => (
+                        <div
+                            key={card.id}
+                            className="absolute group"
+                            style={{ top: `${i * -6}px`, left: `${i * 6}px`, zIndex: i }}
+                        >
+                            {card.imageUrl
+                                ? <img
+                                    src={card.imageUrl}
+                                    alt={card.name}
+                                    className={`
+                                        h-28 object-contain drop-shadow-lg rounded-lg
+                                        transition-all duration-300 group-hover:scale-150 group-hover:z-20
+                                        ${card.isTapped ? 'rotate-90' : ''}
+                                        ${card.isAttacking ? 'ring-4 ring-red-500 scale-110' : ''}
+                                        ${card.isBlocking ? 'ring-4 ring-blue-500' : ''}
+                                    `}
+                                />
+                                : <div className="h-28 w-20 bg-gray-700 rounded-lg flex items-center justify-center text-xs text-center p-1 text-white">
+                                    {card.name}
+                                  </div>
+                            }
+                        </div>
+                    ))}
+                    {cards.length > 1 && (
+                        <div className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center z-50">
+                            {cards.length}
+                        </div>
                     )}
                 </div>
             ))}
         </div>
     );
-    
+};    
     return (
       <Dialog>
         <div className="relative w-full h-1/2 p-4 flex flex-col">
@@ -232,6 +255,17 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     <div className="bg-gray-900 text-white rounded-lg overflow-hidden select-none">
         <div className="relative h-[80vh] flex flex-col">
             {renderPlayerArea(player2, 'top')}
+          {currentState.stack.length > 0 && (
+  <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-30 flex gap-2 items-center bg-black/50 rounded-lg p-2">
+    {currentState.stack.map(card => {
+      const cardInfo = cardDataMap.get(card.name);
+      const imageUrl = cardInfo ? getCardImageUrl(cardInfo, useOldestArt) : null;
+      return imageUrl 
+        ? <img key={card.id} src={imageUrl} alt={card.name} className="h-24 rounded-lg shadow-lg ring-2 ring-yellow-400" />
+        : <div key={card.id} className="h-24 w-16 bg-gray-700 rounded-lg flex items-center justify-center text-xs text-center p-1">{card.name}</div>;
+    })}
+  </div>
+)}
             {renderPlayerArea(player1, 'bottom')}
             {animatedCard && (
                 <div className="absolute inset-0 flex items-center justify-center z-50 bg-black/60 backdrop-blur-sm pointer-events-none">
