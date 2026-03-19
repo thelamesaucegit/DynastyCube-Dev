@@ -175,8 +175,7 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     const cards = battlefieldState[playerInfo.logName] || [];
     const frontRow = cards.filter(c => c.row === 'front');
     const backRow = cards.filter(c => c.row === 'back');
-    const rows = area === 'bottom' ? [backRow, frontRow] : [frontRow, backRow];
-    
+    const rows = area === 'bottom' ? [frontRow, backRow] : [backRow, frontRow];    
     const renderRow = (rowCards: BattlefieldCard[]) => {
     // Group cards by name
     const groups = rowCards.reduce<Record<string, BattlefieldCard[]>>((acc, card) => {
