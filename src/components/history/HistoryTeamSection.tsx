@@ -3,8 +3,18 @@
 
 import React, { useState, useEffect } from "react";
 import { ChevronDown, ChevronRight, Link2 } from "lucide-react";
-import type { TeamSeasonEntry, HistorySlot } from "@/types/history";
+import {
+  InlineEntryForm,
+  AdminHiddenToggle,
+  AdminDeleteButton,
+} from "@/components/history/HistoryAdminForms";
+import {
+  adminToggleSectionHidden,
+  adminToggleEntryHidden,
+  adminDeleteEntry,
+} from "@/app/actions/historyActions";
 import { TEAM_SLOT_SCHEMA } from "@/config/historySlotSchema";
+import type { TeamSeasonEntry, HistorySlot, TeamBasic } from "@/types/history";
 
 // =============================================================================
 // PROPS
@@ -12,16 +22,22 @@ import { TEAM_SLOT_SCHEMA } from "@/config/historySlotSchema";
 
 interface HistoryTeamSectionProps {
   teamEntry: TeamSeasonEntry;
-  /** When true the accordion starts open */
+  /** Needed to create new slot sections (adminUpsertSlotSection requires eraId) */
+  eraId: string;
+  /** Same as teamEntry.seasonId — passed explicitly for clarity */
+  seasonId: string;
   defaultOpen?: boolean;
-  /** When true this user can directly edit this team's content */
   canEdit: boolean;
   isAdmin: boolean;
   /**
-   * When true, this team entry was surfaced by a cross-team filter
-   * (i.e. it's not the primary filtered team, but references it).
-   * Used to add a subtle visual indicator so the user understands why it appeared.
+   * When true all slot types from TEAM_SLOT_SCHEMA are shown (including
+   * empty ones) so the admin can add entries to any slot.
+   * When false only slots with visible entries are shown.
    */
+  editMode: boolean;
+  /** All visible teams — used for referenced-team selection in cross-team slots */
+  allTeams: TeamBasic[];
+  /** True when this entry was surfaced by a cross-team filter */
   isCrossTeamSurfaced?: boolean;
   onRefresh: () => void;
 }
@@ -32,30 +48,55 @@ interface HistoryTeamSectionProps {
 
 export function HistoryTeamSection({
   teamEntry,
+  eraId,
+  seasonId,
   defaultOpen = false,
   canEdit,
   isAdmin,
+  editMode,
+  allTeams,
   isCrossTeamSurfaced = false,
   onRefresh,
 }: HistoryTeamSectionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
-  // Sync open state if defaultOpen changes (e.g. filter applied after mount)
   useEffect(() => {
     if (defaultOpen) setIsOpen(true);
   }, [defaultOpen]);
 
   // --------------------------------------------------------------------------
-  // Visible slots: filter out empty slots and hidden slots (for non-admins).
-  // Empty slots still exist in teamEntry.slots (the schema guarantees this)
-  // but we never render them — they only matter for positional logic.
-  // Slots are always in TEAM_SLOT_SCHEMA order because buildTeamSeasonEntry
-  // in historyActions maps over the schema array directly.
+  // SLOT VISIBILITY RULES
+  //
+  // In read mode:  show only slots that have at least one visible entry.
+  // In edit mode:  show ALL slots from TEAM_SLOT_SCHEMA so the admin can add
+  //               content to currently empty slots.
+  //
+  // teamEntry.slots is always the full set from TEAM_SLOT_SCHEMA (guaranteed
+  // by buildTeamSeasonEntry in historyActions). In edit mode we map over the
+  // schema directly to ensure correct ordering even for slots with no DB record.
   // --------------------------------------------------------------------------
 
-  const visibleSlots = teamEntry.slots.filter(
-    (slot) => slot.entries.length > 0 && (isAdmin || !slot.isHidden)
-  );
+  const slotsToRender: HistorySlot[] = editMode
+    ? TEAM_SLOT_SCHEMA.map((slotDef) => {
+        const existing = teamEntry.slots.find(
+          (s) => s.slotType === slotDef.type
+        );
+        // Return existing slot data, or a blank placeholder for empty slots
+        return (
+          existing ?? {
+            sectionId: null,
+            slotType: slotDef.type,
+            title: slotDef.label,
+            entries: [],
+            referencedTeamIds: [],
+            isHidden: false,
+            displayOrder: slotDef.order,
+          }
+        );
+      })
+    : teamEntry.slots.filter(
+        (s) => s.entries.length > 0 && (isAdmin || !s.isHidden)
+      );
 
   return (
     <div>
@@ -66,17 +107,15 @@ export function HistoryTeamSection({
         className="w-full flex items-center gap-3 px-4 py-3 text-left
                    hover:bg-muted/30 transition-colors"
       >
-        {isOpen ? (
-          <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-        ) : (
-          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-        )}
-
+        {isOpen
+          ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+          : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+        }
         <span className="font-semibold">
           {teamEntry.teamEmoji} {teamEntry.teamName}
         </span>
 
-        {/* Badge shown when this entry was surfaced via cross-team reference */}
+        {/* Cross-team badge */}
         {isCrossTeamSurfaced && (
           <span
             className="flex items-center gap-1 ml-1 px-1.5 py-0.5 rounded text-xs
@@ -88,28 +127,33 @@ export function HistoryTeamSection({
           </span>
         )}
 
-        {!isOpen && visibleSlots.length > 0 && (
+        {!isOpen && slotsToRender.filter((s) => s.entries.length > 0).length > 0 && (
           <span className="ml-auto text-xs text-muted-foreground mr-1">
-            {visibleSlots.length}{" "}
-            {visibleSlots.length === 1 ? "section" : "sections"}
+            {slotsToRender.filter((s) => s.entries.length > 0).length} sections
           </span>
         )}
       </button>
 
       {/* Team content */}
       {isOpen && (
-        <div className="px-4 pb-4 pt-1 space-y-6 border-t">
-          {visibleSlots.length === 0 ? (
+        <div className="px-4 pb-4 pt-2 space-y-6 border-t">
+          {slotsToRender.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">
               No history has been written for this team yet.
             </p>
           ) : (
-            visibleSlots.map((slot) => (
-              <HistorySlotDisplay
+            slotsToRender.map((slot) => (
+              <TeamSlotDisplay
                 key={slot.slotType}
                 slot={slot}
+                teamId={teamEntry.teamId}
+                eraId={eraId}
+                seasonId={seasonId}
                 canEdit={canEdit}
                 isAdmin={isAdmin}
+                editMode={editMode}
+                allTeams={allTeams}
+                onRefresh={onRefresh}
               />
             ))
           )}
@@ -121,54 +165,201 @@ export function HistoryTeamSection({
 
 
 // =============================================================================
-// HISTORY SLOT DISPLAY
-// Renders the content of one slot (e.g. "Flavor Text", "Draft Picks").
-// Each slot type has its own visual treatment defined here.
+// TEAM SLOT DISPLAY
+// Renders one slot (e.g. "Draft Picks", "Championship") with its entries.
+// In edit mode, shows admin controls for adding/editing/deleting entries and
+// toggling slot visibility.
 // =============================================================================
 
-// Slot types that get a special italic/poem treatment
+// Slot types rendered with italic / poem formatting
 const FLAVOR_SLOT_TYPES = new Set(["flavor_text"]);
 
-// Slot types that render as a simple list rather than prose
-// (Extend this set if a new slot type warrants list rendering)
+// Slot types whose entries are rendered as a numbered list
 const LIST_SLOT_TYPES = new Set(["draft_picks"]);
 
-function HistorySlotDisplay({
+function TeamSlotDisplay({
   slot,
+  teamId,
+  eraId,
+  seasonId,
   canEdit,
   isAdmin,
+  editMode,
+  allTeams,
+  onRefresh,
 }: {
   slot: HistorySlot;
+  teamId: string;
+  eraId: string;
+  seasonId: string;
   canEdit: boolean;
   isAdmin: boolean;
+  editMode: boolean;
+  allTeams: TeamBasic[];
+  onRefresh: () => void;
 }) {
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+
   const isFlavor = FLAVOR_SLOT_TYPES.has(slot.slotType);
   const isList = LIST_SLOT_TYPES.has(slot.slotType);
+  const hasEntries = slot.entries.length > 0;
+
+  // In read mode, skip empty slots entirely.
+  // In edit mode, always render so the admin can add entries.
+  const shouldShow = hasEntries || (editMode && canEdit);
+  if (!shouldShow) return null;
 
   return (
     <div className="space-y-2">
       {/*
         Slot label header.
-        Flavor text slots get no label — the poem/haiku speaks for itself.
-        All other slots show their TEAM_SLOT_SCHEMA label.
+        Flavor text slots get no label — the poem speaks for itself.
+        In edit mode we always show the label so the admin knows which slot is which.
       */}
-      {!isFlavor && (
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          {slot.title}
-        </h4>
+      {(!isFlavor || editMode) && (
+        <div className="flex items-center gap-2">
+          <h4 className={`text-xs font-semibold uppercase tracking-wider flex-1
+            ${isFlavor ? "text-muted-foreground/60" : "text-muted-foreground"}`}>
+            {slot.title}
+            {slot.isHidden && (
+              <span className="ml-2 text-amber-600 font-normal">(hidden)</span>
+            )}
+          </h4>
+
+          {/* Slot-level admin controls */}
+          {editMode && canEdit && (
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* Hide/show toggle — only available once the section exists in DB */}
+              {slot.sectionId && isAdmin && (
+                <AdminHiddenToggle
+                  isHidden={slot.isHidden}
+                  onToggle={async (v) => {
+                    await adminToggleSectionHidden(slot.sectionId!, v);
+                    onRefresh();
+                  }}
+                  size="xs"
+                />
+              )}
+              <button
+                type="button"
+                onClick={() => setShowAddForm((v) => !v)}
+                className="px-1.5 py-0.5 text-xs rounded text-muted-foreground
+                           hover:text-foreground hover:bg-muted transition-colors"
+              >
+                + Add Entry
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
-      {/* Slot entries */}
-      <div className={isFlavor ? "pl-4 border-l-2 border-muted" : ""}>
+      {/* Existing entries */}
+      <div className={isFlavor ? "pl-4 border-l-2 border-muted" : "space-y-2"}>
         {slot.entries.map((entry) => (
-          <SlotEntryContent
-            key={entry.id}
-            content={entry.content}
-            isFlavor={isFlavor}
-            isList={isList}
-          />
+          <div key={entry.id} className="group">
+            {editingEntryId === entry.id ? (
+              // Inline edit form for this specific entry
+              <InlineEntryForm
+                sectionId={slot.sectionId}
+                entryId={entry.id}
+                initialContent={entry.content}
+                slotType={slot.slotType}
+                slotTitle={slot.title}
+                ownerType="team"
+                ownerId={teamId}
+                eraId={eraId}
+                seasonId={seasonId}
+                referencedTeamIds={slot.referencedTeamIds}
+                allTeams={allTeams}
+                onSuccess={() => {
+                  setEditingEntryId(null);
+                  onRefresh();
+                }}
+                onCancel={() => setEditingEntryId(null)}
+              />
+            ) : (
+              <div className="flex gap-2">
+                {/* Entry content */}
+                <div className="flex-1">
+                  <SlotEntryContent
+                    content={entry.content}
+                    isFlavor={isFlavor}
+                    isList={isList}
+                    isHidden={entry.is_hidden}
+                    showHiddenState={editMode && isAdmin}
+                  />
+                </div>
+
+                {/*
+                  Per-entry admin controls.
+                  Visible on hover to keep the reading experience clean.
+                  Admins get hide + delete; non-admin historians get edit only.
+                */}
+                {editMode && canEdit && (
+                  <div className="shrink-0 flex items-start gap-1 pt-0.5
+                                  opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      onClick={() => setEditingEntryId(entry.id)}
+                      className="px-1.5 py-0.5 text-xs rounded text-muted-foreground
+                                 hover:text-foreground hover:bg-muted transition-colors"
+                    >
+                      Edit
+                    </button>
+                    {isAdmin && (
+                      <>
+                        <AdminHiddenToggle
+                          isHidden={entry.is_hidden}
+                          onToggle={async (v) => {
+                            await adminToggleEntryHidden(entry.id, v);
+                            onRefresh();
+                          }}
+                          size="xs"
+                        />
+                        <AdminDeleteButton
+                          label="Delete"
+                          onConfirm={async () => {
+                            await adminDeleteEntry(entry.id);
+                            onRefresh();
+                          }}
+                        />
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         ))}
       </div>
+
+      {/* Add entry form */}
+      {editMode && canEdit && showAddForm && (
+        <InlineEntryForm
+          sectionId={slot.sectionId}
+          slotType={slot.slotType}
+          slotTitle={slot.title}
+          ownerType="team"
+          ownerId={teamId}
+          eraId={eraId}
+          seasonId={seasonId}
+          referencedTeamIds={slot.referencedTeamIds}
+          allTeams={allTeams}
+          onSuccess={(newSectionId) => {
+            setShowAddForm(false);
+            onRefresh();
+          }}
+          onCancel={() => setShowAddForm(false)}
+        />
+      )}
+
+      {/* Empty slot placeholder in edit mode */}
+      {!hasEntries && editMode && canEdit && !showAddForm && (
+        <p className="text-xs text-muted-foreground italic pl-1">
+          No entries yet — use Add Entry above.
+        </p>
+      )}
     </div>
   );
 }
@@ -176,39 +367,45 @@ function HistorySlotDisplay({
 
 // =============================================================================
 // SLOT ENTRY CONTENT
-// Handles per-entry rendering. Content is stored as plain text in the DB.
+// Handles per-entry rendering with slot-type-specific formatting.
 //
-// FUTURE: If content is migrated to Markdown or rich text, update the
-// rendering here (e.g. swap the <p> for a Markdown renderer component).
+// ADDING A NEW FORMAT:
+//   1. Add the slot type to the relevant set above (FLAVOR_SLOT_TYPES etc.)
+//   2. Add an `isXxx` boolean derived from the slot type
+//   3. Add a render branch below
 //
-// Adding a new content format:
-//   1. Add a new `isXxx` boolean prop (or detect by slot type)
-//   2. Add a branch in the render below
+// FUTURE: If content is migrated to Markdown, swap the <p> tags for a
+// Markdown renderer component here — this is the only place to update.
 // =============================================================================
 
 function SlotEntryContent({
   content,
   isFlavor,
   isList,
+  isHidden,
+  showHiddenState,
 }: {
   content: string;
   isFlavor: boolean;
   isList: boolean;
+  isHidden: boolean;
+  showHiddenState: boolean;
 }) {
+  const hiddenStyle = showHiddenState && isHidden ? "opacity-40" : "";
+
   if (isFlavor) {
-    // Haiku / poem: italic, preserve line breaks, subtle indent
     return (
-      <p className="text-sm italic leading-relaxed whitespace-pre-line text-muted-foreground">
+      <p className={`text-sm italic leading-relaxed whitespace-pre-line
+                     text-muted-foreground ${hiddenStyle}`}>
         {content}
       </p>
     );
   }
 
   if (isList) {
-    // Draft picks etc.: split on newlines and render as a compact list
     const lines = content.split("\n").filter((l) => l.trim().length > 0);
     return (
-      <ul className="space-y-0.5">
+      <ul className={`space-y-0.5 ${hiddenStyle}`}>
         {lines.map((line, i) => (
           <li key={i} className="text-sm flex gap-2">
             <span className="text-muted-foreground shrink-0">{i + 1}.</span>
@@ -219,8 +416,9 @@ function SlotEntryContent({
     );
   }
 
-  // Default: prose paragraph, preserving intentional line breaks
   return (
-    <p className="text-sm leading-relaxed whitespace-pre-wrap">{content}</p>
+    <p className={`text-sm leading-relaxed whitespace-pre-wrap ${hiddenStyle}`}>
+      {content}
+    </p>
   );
 }
