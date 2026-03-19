@@ -2,10 +2,22 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Pencil, Plus } from "lucide-react";
+import { Button } from "@/app/components/ui/button";
 import { HistorySeasonSection } from "@/components/history/HistorySeasonSection";
+import {
+  InlineEraForm,
+  InlineSeasonForm,
+  AdminHiddenToggle,
+} from "@/components/history/HistoryAdminForms";
+import { adminUpdateEra } from "@/app/actions/historyActions";
 import type { PivotedEra, TeamEraGroup } from "@/app/history/page";
-import type { HistoryFilterState, ViewMode, ComposedSeason } from "@/types/history";
+import type {
+  HistoryFilterState,
+  ViewMode,
+  ComposedSeason,
+  TeamBasic,
+} from "@/types/history";
 
 // =============================================================================
 // PROPS
@@ -18,11 +30,13 @@ interface HistoryEraSectionProps {
   isAdmin: boolean;
   isHistorian: boolean;
   historianTeamId: string | null;
+  editMode: boolean;
+  allTeams: TeamBasic[];
   onRefresh: () => void;
 }
 
 // =============================================================================
-// COMPONENT
+// COMPONENT — routes to season-first or team-first layout
 // =============================================================================
 
 export function HistoryEraSection({
@@ -32,94 +46,165 @@ export function HistoryEraSection({
   isAdmin,
   isHistorian,
   historianTeamId,
+  editMode,
+  allTeams,
   onRefresh,
 }: HistoryEraSectionProps) {
-  // Eras are expanded by default (see spec: "only thing expanded should be the Eras")
+  // Eras start expanded by default (spec requirement)
   const [isOpen, setIsOpen] = useState(true);
 
-  // --------------------------------------------------------------------------
-  // Season-first view: render Era > Season > Team
-  // Team-first view:   render Era > Team > Season
-  //
-  // The view toggle has no effect when filters already collapse the content
-  // to a single dimension — the data returned from the server already
-  // reflects the filter, so both modes produce equivalent output in that case.
-  // --------------------------------------------------------------------------
+  const sharedProps = {
+    pivotedEra,
+    filters,
+    isOpen,
+    onToggle: () => setIsOpen((v) => !v),
+    isAdmin,
+    isHistorian,
+    historianTeamId,
+    editMode,
+    allTeams,
+    onRefresh,
+  };
 
-  if (viewMode === "team-first") {
-    return (
-      <TeamFirstEraSection
-        pivotedEra={pivotedEra}
-        filters={filters}
-        isOpen={isOpen}
-        onToggle={() => setIsOpen((v) => !v)}
-        isAdmin={isAdmin}
-        isHistorian={isHistorian}
-        historianTeamId={historianTeamId}
-        onRefresh={onRefresh}
-      />
-    );
-  }
-
-  return (
-    <SeasonFirstEraSection
-      pivotedEra={pivotedEra}
-      filters={filters}
-      isOpen={isOpen}
-      onToggle={() => setIsOpen((v) => !v)}
-      isAdmin={isAdmin}
-      isHistorian={isHistorian}
-      historianTeamId={historianTeamId}
-      onRefresh={onRefresh}
-    />
-  );
+  return viewMode === "team-first"
+    ? <TeamFirstEraSection {...sharedProps} />
+    : <SeasonFirstEraSection {...sharedProps} />;
 }
 
 
 // =============================================================================
 // SHARED ERA HEADER
-// Used by both season-first and team-first layouts.
+// Renders the era title, collapse chevron, and (in edit mode) admin controls.
 // =============================================================================
 
 function EraHeader({
-  name,
-  description,
+  era,
   isOpen,
   onToggle,
   childCount,
+  isAdmin,
+  editMode,
+  onRefresh,
 }: {
-  name: string;
-  description?: string | null;
+  era: PivotedEra["era"];
   isOpen: boolean;
   onToggle: () => void;
   childCount: number;
+  isAdmin: boolean;
+  editMode: boolean;
+  onRefresh: () => void;
 }) {
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [showSeasonForm, setShowSeasonForm] = useState(false);
+
   return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className="w-full flex items-center justify-between p-4 text-left
-                 hover:bg-muted/50 transition-colors rounded-t-lg"
-    >
-      <div className="flex items-center gap-3">
-        {isOpen ? (
-          <ChevronDown className="h-5 w-5 text-muted-foreground shrink-0" />
-        ) : (
-          <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
-        )}
-        <div>
-          <h2 className="text-xl font-bold tracking-tight">{name}</h2>
-          {description && (
-            <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
+    <div>
+      <div className="flex items-center">
+        {/* Main clickable header */}
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex-1 flex items-center gap-3 p-4 text-left
+                     hover:bg-muted/50 transition-colors rounded-tl-lg"
+        >
+          {isOpen
+            ? <ChevronDown className="h-5 w-5 text-muted-foreground shrink-0" />
+            : <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
+          }
+          <div>
+            <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
+              {era.name}
+              {/* Visual indicator when era is hidden from non-admins */}
+              {era.is_hidden && (
+                <span className="text-xs font-normal px-1.5 py-0.5 rounded
+                                 bg-amber-500/15 text-amber-600">
+                  Hidden
+                </span>
+              )}
+            </h2>
+            {era.description && (
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {era.description}
+              </p>
+            )}
+          </div>
+          {!isOpen && (
+            <span className="ml-auto text-xs text-muted-foreground mr-2">
+              {childCount} {childCount === 1 ? "season" : "seasons"}
+            </span>
           )}
-        </div>
+        </button>
+
+        {/*
+          Admin controls — only visible in edit mode.
+          Rendered to the right of the header so they don't interfere with
+          the expand/collapse click target.
+        */}
+        {editMode && isAdmin && (
+          <div className="flex items-center gap-1.5 pr-4 shrink-0">
+            <AdminHiddenToggle
+              isHidden={era.is_hidden}
+              onToggle={async (newValue) => {
+                await adminUpdateEra(era.id, { is_hidden: newValue });
+                onRefresh();
+              }}
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setShowEditForm((v) => !v);
+                setShowSeasonForm(false);
+              }}
+              className="gap-1 h-7 px-2 text-xs"
+            >
+              <Pencil className="h-3 w-3" />
+              Edit
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setShowSeasonForm((v) => !v);
+                setShowEditForm(false);
+              }}
+              className="gap-1 h-7 px-2 text-xs"
+            >
+              <Plus className="h-3 w-3" />
+              Season
+            </Button>
+          </div>
+        )}
       </div>
-      {!isOpen && (
-        <span className="text-xs text-muted-foreground mr-1">
-          {childCount} {childCount === 1 ? "season" : "seasons"}
-        </span>
+
+      {/* Edit era form — inline below header */}
+      {editMode && isAdmin && showEditForm && (
+        <div className="px-4 pb-3">
+          <InlineEraForm
+            era={era}
+            onSuccess={() => {
+              setShowEditForm(false);
+              onRefresh();
+            }}
+            onCancel={() => setShowEditForm(false)}
+          />
+        </div>
       )}
-    </button>
+
+      {/* Add season form — inline below header */}
+      {editMode && isAdmin && showSeasonForm && (
+        <div className="px-4 pb-3">
+          <InlineSeasonForm
+            eraId={era.id}
+            onSuccess={() => {
+              setShowSeasonForm(false);
+              onRefresh();
+            }}
+            onCancel={() => setShowSeasonForm(false)}
+          />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -136,6 +221,8 @@ function SeasonFirstEraSection({
   isAdmin,
   isHistorian,
   historianTeamId,
+  editMode,
+  allTeams,
   onRefresh,
 }: {
   pivotedEra: PivotedEra;
@@ -145,16 +232,20 @@ function SeasonFirstEraSection({
   isAdmin: boolean;
   isHistorian: boolean;
   historianTeamId: string | null;
+  editMode: boolean;
+  allTeams: TeamBasic[];
   onRefresh: () => void;
 }) {
   return (
     <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
       <EraHeader
-        name={pivotedEra.era.name}
-        description={pivotedEra.era.description}
+        era={pivotedEra.era}
         isOpen={isOpen}
         onToggle={onToggle}
         childCount={pivotedEra.seasons.length}
+        isAdmin={isAdmin}
+        editMode={editMode}
+        onRefresh={onRefresh}
       />
 
       {isOpen && (
@@ -165,15 +256,25 @@ function SeasonFirstEraSection({
               season={composedSeason.season}
               leagueEntry={composedSeason.leagueEntry}
               teamEntries={composedSeason.teamEntries}
-              // Auto-expand the season if it matches the active season filter
               defaultOpen={filters.seasonId === composedSeason.season.id}
               filters={filters}
               isAdmin={isAdmin}
               isHistorian={isHistorian}
               historianTeamId={historianTeamId}
+              editMode={editMode}
+              allTeams={allTeams}
               onRefresh={onRefresh}
             />
           ))}
+
+          {/* Empty state */}
+          {pivotedEra.seasons.length === 0 && (
+            <div className="px-4 py-8 text-sm text-muted-foreground text-center">
+              {editMode && isAdmin
+                ? "No seasons yet — use the Season button above to add one."
+                : "No seasons have been recorded for this era."}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -183,8 +284,6 @@ function SeasonFirstEraSection({
 
 // =============================================================================
 // TEAM-FIRST LAYOUT  (Era → Team → Season)
-// Each team group accordion contains one HistorySeasonSection per season
-// the team appears in.
 // =============================================================================
 
 function TeamFirstEraSection({
@@ -195,6 +294,8 @@ function TeamFirstEraSection({
   isAdmin,
   isHistorian,
   historianTeamId,
+  editMode,
+  allTeams,
   onRefresh,
 }: {
   pivotedEra: PivotedEra;
@@ -204,16 +305,20 @@ function TeamFirstEraSection({
   isAdmin: boolean;
   isHistorian: boolean;
   historianTeamId: string | null;
+  editMode: boolean;
+  allTeams: TeamBasic[];
   onRefresh: () => void;
 }) {
   return (
     <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
       <EraHeader
-        name={pivotedEra.era.name}
-        description={pivotedEra.era.description}
+        era={pivotedEra.era}
         isOpen={isOpen}
         onToggle={onToggle}
         childCount={pivotedEra.seasons.length}
+        isAdmin={isAdmin}
+        editMode={editMode}
+        onRefresh={onRefresh}
       />
 
       {isOpen && (
@@ -226,9 +331,17 @@ function TeamFirstEraSection({
               isAdmin={isAdmin}
               isHistorian={isHistorian}
               historianTeamId={historianTeamId}
+              editMode={editMode}
+              allTeams={allTeams}
               onRefresh={onRefresh}
             />
           ))}
+
+          {pivotedEra.teamGroups.length === 0 && (
+            <div className="px-4 py-8 text-sm text-muted-foreground text-center">
+              No team history for this era yet.
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -237,8 +350,7 @@ function TeamFirstEraSection({
 
 
 // =============================================================================
-// TEAM GROUP SECTION (used only in team-first mode)
-// Renders one team accordion that contains its seasons nested inside.
+// TEAM GROUP SECTION (team-first mode only)
 // =============================================================================
 
 function TeamGroupSection({
@@ -247,6 +359,8 @@ function TeamGroupSection({
   isAdmin,
   isHistorian,
   historianTeamId,
+  editMode,
+  allTeams,
   onRefresh,
 }: {
   teamGroup: TeamEraGroup;
@@ -254,18 +368,14 @@ function TeamGroupSection({
   isAdmin: boolean;
   isHistorian: boolean;
   historianTeamId: string | null;
+  editMode: boolean;
+  allTeams: TeamBasic[];
   onRefresh: () => void;
 }) {
-  // Auto-expand the team group if it matches the active team filter
-  const [isOpen, setIsOpen] = useState(
-    filters.teamId === teamGroup.teamId
-  );
+  const [isOpen, setIsOpen] = useState(filters.teamId === teamGroup.teamId);
 
-  // If the team filter changes (e.g. user picks a different team), update
   useEffect(() => {
-    if (filters.teamId === teamGroup.teamId) {
-      setIsOpen(true);
-    }
+    if (filters.teamId === teamGroup.teamId) setIsOpen(true);
   }, [filters.teamId, teamGroup.teamId]);
 
   return (
@@ -276,11 +386,10 @@ function TeamGroupSection({
         className="w-full flex items-center gap-3 px-4 py-3 text-left
                    hover:bg-muted/40 transition-colors"
       >
-        {isOpen ? (
-          <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-        ) : (
-          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-        )}
+        {isOpen
+          ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+          : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+        }
         <span className="text-lg font-semibold">
           {teamGroup.teamEmoji} {teamGroup.teamName}
         </span>
@@ -299,13 +408,14 @@ function TeamGroupSection({
               key={season.id}
               season={season}
               leagueEntry={leagueEntry}
-              // In team-first mode, only pass the one team's entry per season
               teamEntries={[teamEntry]}
               defaultOpen={filters.seasonId === season.id}
               filters={filters}
               isAdmin={isAdmin}
               isHistorian={isHistorian}
               historianTeamId={historianTeamId}
+              editMode={editMode}
+              allTeams={allTeams}
               onRefresh={onRefresh}
             />
           ))}
