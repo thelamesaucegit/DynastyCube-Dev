@@ -113,7 +113,7 @@ export default function TeamsPage() {
           const secondaryColor = team.secondary_color || "#e4e4e7";
 
           return (
-            <Link key={team.id} href={`/teams/${team.id}`}>
+            <Link key={team.short_name} href={`/teams/${team.short_name}`}>
               <Card className={`group relative hover:shadow-xl hover:z-50 transition-all hover:-translate-y-1 cursor-pointer h-full flex flex-col ${
                 badge === "clock" ? "ring-2 ring-green-500" : badge === "deck" ? "ring-2 ring-yellow-500" : ""
               }`}>
