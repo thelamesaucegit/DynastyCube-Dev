@@ -61,6 +61,7 @@ export interface TeamWithDetails {
   name: string;
   emoji: string;
   motto: string;
+  short_name: string;
   wins: number;
   losses: number;
   primary_color: string | null;
@@ -449,7 +450,7 @@ export async function getTeamsWithDetails(): Promise<{
     // 1. Get all visible teams and their records + member count
     const { data: teams, error: teamsError } = await supabase
       .from("teams")
-      .select("id, name, emoji, motto, wins, losses, primary_color, secondary_color, member_count")
+      .select("id, name, emoji, motto, short_name, wins, losses, primary_color, secondary_color, member_count")
       .eq('is_hidden', false); // <-- Filter to only get visible teams
 
     if (teamsError) {

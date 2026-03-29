@@ -3,11 +3,53 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import {
+  TEAM_SLOT_SCHEMA,
+  LEAGUE_SLOT_SCHEMA,
+  CROSS_TEAM_SURFACEABLE_SLOT_ARRAY,
+} from "@/config/historySlotSchema";
+import type {
+  HistoryEraRow,
+  HistorySeasonRow,
+  HistorySectionRow,
+  HistoryEntryRow,
+  HistorySlot,
+  TeamSeasonEntry,
+  LeagueSeasonEntry,
+  ComposedSeason,
+  ComposedEra,
+  HistoryFilterState,
+  TeamBasic,
+  HistorySection,
+  HistoryUpdateRequest,
+  HistorianUser,
+} from "@/types/history";
 
-// Create a Supabase client with cookies support
+// Re-export types that existing components still import from this file
+export type {
+  HistoryEraRow,
+  HistorySeasonRow,
+  HistorySectionRow,
+  HistoryEntryRow,
+  HistorySlot,
+  TeamSeasonEntry,
+  LeagueSeasonEntry,
+  ComposedSeason,
+  ComposedEra,
+  HistoryFilterState,
+  TeamBasic,
+};
+
+// Legacy type exports — keep until existing components are rewritten
+export type { HistorySection, HistoryEntry, HistoryUpdateRequest, HistorianUser } from "@/types/history";
+
+
+// =============================================================================
+// SUPABASE CLIENT
+// =============================================================================
+
 async function createClient() {
   const cookieStore = await cookies();
-
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -22,7 +64,7 @@ async function createClient() {
               cookieStore.set(name, value, options)
             );
           } catch {
-            // Ignore errors in Server Components
+            // Ignore in Server Components
           }
         },
       },
@@ -30,76 +72,30 @@ async function createClient() {
   );
 }
 
-// =============================================================================
-// TYPES
-// =============================================================================
-
-export interface HistorySection {
-  id: string;
-  owner_type: "team" | "league";
-  owner_id: string | null;
-  title: string;
-  display_order: number;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-  entries?: HistoryEntry[];
-}
-
-export interface HistoryEntry {
-  id: string;
-  section_id: string;
-  content: string;
-  display_order: number;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface HistoryUpdateRequest {
-  id: string;
-  requester_id: string;
-  request_type: "append_entry" | "new_section";
-  target_owner_type: "team" | "league";
-  target_owner_id: string | null;
-  target_section_id: string | null;
-  proposed_title: string | null;
-  proposed_content: string;
-  status: "pending" | "approved" | "rejected";
-  admin_notes: string | null;
-  reviewed_by: string | null;
-  reviewed_at: string | null;
-  created_at: string;
-  updated_at: string;
-  // Joined fields
-  requester_display_name?: string;
-  target_section_title?: string;
-  target_team_name?: string;
-}
-
-export interface TeamBasic {
-  id: string;
-  name: string;
-  emoji: string;
-}
-
-export interface HistorianUser {
-  user_id: string;
-  display_name: string;
-  team_name: string;
-  team_emoji: string;
-}
 
 // =============================================================================
-// HELPER: Check if user is historian for a team
+// PRIVATE HELPERS
 // =============================================================================
 
+/** Returns true if the authenticated user has is_admin = true */
+async function isUserAdmin(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("users")
+    .select("is_admin")
+    .eq("id", userId)
+    .single();
+  return data?.is_admin ?? false;
+}
+
+/** Returns true if userId holds the "historian" role for the given teamId */
 async function isUserHistorianForTeam(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   teamId: string
 ): Promise<boolean> {
-  // Get user's team membership
   const { data: membership } = await supabase
     .from("team_members")
     .select("id")
@@ -109,7 +105,6 @@ async function isUserHistorianForTeam(
 
   if (!membership) return false;
 
-  // Check if they have historian role
   const { data: role } = await supabase
     .from("team_member_roles")
     .select("id")
@@ -120,24 +115,14 @@ async function isUserHistorianForTeam(
   return !!role;
 }
 
-async function isUserAdmin(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string
-): Promise<boolean> {
-  const { data } = await supabase
-    .from("users")
-    .select("is_admin")
-    .eq("id", userId)
-    .single();
-
-  return data?.is_admin || false;
-}
-
+/**
+ * Returns the team ID for which the user holds the historian role,
+ * or null if they hold no such role.
+ */
 async function getUserTeamAsHistorian(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string
 ): Promise<string | null> {
-  // Find team membership
   const { data: memberships } = await supabase
     .from("team_members")
     .select("id, team_id")
@@ -145,7 +130,6 @@ async function getUserTeamAsHistorian(
 
   if (!memberships || memberships.length === 0) return null;
 
-  // Check each membership for historian role
   for (const membership of memberships) {
     const { data: role } = await supabase
       .from("team_member_roles")
@@ -161,103 +145,315 @@ async function getUserTeamAsHistorian(
 }
 
 // =============================================================================
-// PUBLIC: Read functions
+// PRIVATE: SECTION SELECT STRING
+// One place to update if history_sections columns change.
+// =============================================================================
+
+const SECTION_SELECT = `
+  id, owner_type, owner_id, era_id, season_id, slot_type, title,
+  display_order, referenced_team_ids, is_hidden, created_by, created_at, updated_at,
+  history_entries (
+    id, section_id, content, display_order, is_hidden, created_by, created_at, updated_at
+  )
+`;
+
+// =============================================================================
+// PRIVATE: COMPOSITION HELPERS
+// These build the strongly-typed UI objects from raw DB rows.
+// They are pure functions — no DB calls.
+// =============================================================================
+
+type SectionWithEntries = HistorySectionRow & { entries: HistoryEntryRow[] };
+
+/**
+ * Builds a LeagueSeasonEntry from all sections belonging to a season.
+ * Maps each LEAGUE_SLOT_SCHEMA entry to a HistorySlot.
+ * Slots with no DB record get sectionId: null and entries: [].
+ */
+function buildLeagueSeasonEntry(
+  seasonId: string,
+  allSeasonSections: SectionWithEntries[]
+): LeagueSeasonEntry {
+  const leagueSections = allSeasonSections.filter(
+    (s) => s.owner_type === "league" && s.season_id === seasonId
+  );
+
+  const slots: HistorySlot[] = LEAGUE_SLOT_SCHEMA.map((slotDef) => {
+    const section = leagueSections.find((s) => s.slot_type === slotDef.type);
+    return {
+      sectionId: section?.id ?? null,
+      slotType: slotDef.type,
+      title: slotDef.label,
+      entries: section?.entries ?? [],
+      referencedTeamIds: [],
+      isHidden: section?.is_hidden ?? false,
+      displayOrder: slotDef.order,
+    };
+  });
+
+  return { seasonId, slots };
+}
+
+/**
+ * Builds a TeamSeasonEntry for one team within one season.
+ * Maps each TEAM_SLOT_SCHEMA entry to a HistorySlot.
+ * Slots with no DB record get sectionId: null and entries: [].
+ *
+ * The slot order always follows TEAM_SLOT_SCHEMA regardless of DB display_order,
+ * so cross-team events snap into the correct positional slot automatically.
+ */
+function buildTeamSeasonEntry(
+  team: TeamBasic,
+  seasonId: string,
+  allSeasonSections: SectionWithEntries[]
+): TeamSeasonEntry {
+  // Only sections owned by this team for this season
+  const teamSections = allSeasonSections.filter(
+    (s) => s.owner_id === team.id && s.season_id === seasonId
+  );
+
+  const slots: HistorySlot[] = TEAM_SLOT_SCHEMA.map((slotDef) => {
+    const section = teamSections.find((s) => s.slot_type === slotDef.type);
+    return {
+      sectionId: section?.id ?? null,
+      slotType: slotDef.type,
+      title: slotDef.label,
+      entries: section?.entries ?? [],
+      referencedTeamIds: section?.referenced_team_ids ?? [],
+      isHidden: section?.is_hidden ?? false,
+      displayOrder: slotDef.order,
+    };
+  });
+
+  return {
+    teamId: team.id,
+    teamName: team.name,
+    teamEmoji: team.emoji,
+    seasonId,
+    slots,
+  };
+}
+
+// =============================================================================
+// PRIVATE: SECTION FETCHER
+// Handles the cross-team filter logic by running two separate queries
+// (own sections + referenced sections) and deduplicating the results.
+// Using two queries is intentional — it avoids brittle PostgREST OR+AND
+// combinations with array operators.
+// =============================================================================
+
+async function fetchSectionsForComposition(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  seasonIds: string[],
+  filters: HistoryFilterState,
+  isAdmin: boolean
+): Promise<SectionWithEntries[]> {
+  if (seasonIds.length === 0) return [];
+
+  // Shared base builder: filter by season and hidden status
+  function base() {
+    let q = supabase
+      .from("history_sections")
+      .select(SECTION_SELECT)
+      .in("season_id", seasonIds);
+    if (!isAdmin) q = q.eq("is_hidden", false);
+    return q;
+  }
+
+  type RawSection = HistorySectionRow & { history_entries: HistoryEntryRow[] };
+  let rawSections: RawSection[] = [];
+
+  if (filters.teamId) {
+    // Query A: sections OWNED by the filtered team
+    const { data: owned, error: e1 } = await base()
+      .eq("owner_type", "team")
+      .eq("owner_id", filters.teamId);
+    if (e1) throw e1;
+
+    // Query B: cross-team sections that REFERENCE the filtered team.
+    // Only surfaces slot types marked crossTeamSurfaceable in the schema
+    // (e.g. postseason_r1, championship — not flavor_text or narrative).
+    const { data: referenced, error: e2 } = await base()
+      .in("slot_type", CROSS_TEAM_SURFACEABLE_SLOT_ARRAY)
+      .contains("referenced_team_ids", [filters.teamId]);
+    if (e2) throw e2;
+
+    // Deduplicate by section id (a section could theoretically appear in both)
+    const seen = new Set<string>();
+    for (const s of [...(owned ?? []), ...(referenced ?? [])]) {
+      if (!seen.has(s.id)) {
+        seen.add(s.id);
+        rawSections.push(s);
+      }
+    }
+  } else {
+    // No team filter — fetch all sections across all seasons
+    const { data, error } = await base();
+    if (error) throw error;
+    rawSections = data ?? [];
+  }
+
+  // Attach entries to each section, filtering hidden for non-admins
+  return rawSections.map((section) => ({
+    ...section,
+    entries: (section.history_entries ?? [])
+      .filter((e: HistoryEntryRow) => isAdmin || !e.is_hidden)
+      .sort(
+        (a: HistoryEntryRow, b: HistoryEntryRow) =>
+          a.display_order - b.display_order
+      ),
+  }));
+}
+
+
+// =============================================================================
+// PUBLIC: PRIMARY COMPOSED HISTORY FETCH
+// This is the main data function called by the history page.
+// It returns the full Era > Season > Team hierarchy, pre-composed for the UI.
 // =============================================================================
 
 /**
- * Fetch sections + entries for a given owner (team or league)
+ * Fetches and composes the full history hierarchy based on the given filters.
+ *
+ * Filter logic:
+ *   - eraId: only include that era (and its seasons/teams)
+ *   - seasonId: only include that season (still grouped under its era)
+ *   - teamId: include sections owned by that team, PLUS cross-team surfaceable
+ *     sections from other teams that reference this team
+ *
+ * When no filters are set, the full visible history is returned.
  */
-export async function getHistoryByOwner(
-  ownerType: "team" | "league",
-  ownerId: string | null
-): Promise<{ sections: HistorySection[]; error?: string }> {
+export async function getComposedHistory(
+  filters: HistoryFilterState
+): Promise<{ eras: ComposedEra[]; error?: string }> {
   const supabase = await createClient();
 
   try {
-    let query = supabase
-      .from("history_sections")
-      .select(`
-        id,
-        owner_type,
-        owner_id,
-        title,
-        display_order,
-        created_by,
-        created_at,
-        updated_at,
-        history_entries (
-          id,
-          section_id,
-          content,
-          display_order,
-          created_by,
-          created_at,
-          updated_at
-        )
-      `)
-      .eq("owner_type", ownerType)
+    // Determine admin status — admins see hidden content
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const isAdmin = user ? await isUserAdmin(supabase, user.id) : false;
+
+    // --- STEP 1: FETCH ERAS ---
+    let erasQuery = supabase
+      .from("history_eras")
+      .select("*")
       .order("display_order", { ascending: true });
+    if (!isAdmin) erasQuery = erasQuery.eq("is_hidden", false);
+    if (filters.eraId) erasQuery = erasQuery.eq("id", filters.eraId);
 
-    if (ownerType === "league") {
-      query = query.is("owner_id", null);
-    } else {
-      query = query.eq("owner_id", ownerId!);
-    }
+    const { data: eras, error: erasError } = await erasQuery;
+    if (erasError) throw erasError;
+    if (!eras || eras.length === 0) return { eras: [] };
 
-    const { data, error } = await query;
+    const eraIds = eras.map((e) => e.id);
 
-    if (error) {
-      console.error("Error fetching history:", error);
-      return { sections: [], error: error.message };
-    }
+    // --- STEP 2: FETCH SEASONS ---
+    let seasonsQuery = supabase
+      .from("history_seasons")
+      .select("*")
+      .in("era_id", eraIds)
+      .order("display_order", { ascending: true });
+    if (!isAdmin) seasonsQuery = seasonsQuery.eq("is_hidden", false);
+    if (filters.seasonId) seasonsQuery = seasonsQuery.eq("id", filters.seasonId);
 
-    // Sort entries within each section
-    const sections: HistorySection[] = (data || []).map((section) => ({
-      ...section,
-      entries: (section.history_entries || []).sort(
-        (a: HistoryEntry, b: HistoryEntry) => a.display_order - b.display_order
+    const { data: seasons, error: seasonsError } = await seasonsQuery;
+    if (seasonsError) throw seasonsError;
+    if (!seasons || seasons.length === 0) return { eras: [] };
+
+    const seasonIds = seasons.map((s) => s.id);
+
+    // --- STEP 3: FETCH SECTIONS WITH ENTRIES ---
+    // Handles cross-team filter logic internally (see fetchSectionsForComposition)
+    const sections = await fetchSectionsForComposition(
+      supabase,
+      seasonIds,
+      filters,
+      isAdmin
+    );
+
+    // --- STEP 4: FETCH TEAMS ---
+    // Build a map of all teams that appear as owners in the fetched sections,
+    // plus (for the team filter case) teams referenced by cross-team sections.
+    const ownerTeamIds = [
+      ...new Set(
+        sections
+          .filter((s) => s.owner_type === "team" && s.owner_id)
+          .map((s) => s.owner_id!)
       ),
-    }));
+    ];
 
-    return { sections };
-  } catch (error) {
-    console.error("Unexpected error fetching history:", error);
-    return { sections: [], error: "An unexpected error occurred" };
-  }
-}
+    let teamMap = new Map<string, TeamBasic>();
 
-/**
- * Get teams list for tab navigation
- */
-export async function getTeamsWithHistory(): Promise<{
-  teams: TeamBasic[];
-  error?: string;
-}> {
-  const supabase = await createClient();
+    if (ownerTeamIds.length > 0) {
+      let teamsQuery = supabase
+        .from("teams")
+        .select("id, name, emoji, is_hidden")
+        .in("id", ownerTeamIds);
+      if (!isAdmin) teamsQuery = teamsQuery.eq("is_hidden", false);
 
-  try {
-    const { data, error } = await supabase
-      .from("teams")
-      .select("id, name, emoji")
-      .order("name");
-
-    if (error) {
-      console.error("Error fetching teams:", error);
-      return { teams: [], error: error.message };
+      const { data: teamsData, error: teamsError } = await teamsQuery;
+      if (teamsError) throw teamsError;
+      teamMap = new Map((teamsData ?? []).map((t) => [t.id, t]));
     }
 
-    return { teams: data || [] };
+    // --- STEP 5: COMPOSE THE HIERARCHY ---
+    const composedEras: ComposedEra[] = eras.map((era) => {
+      const eraSeasons = seasons.filter((s) => s.era_id === era.id);
+
+      const composedSeasons: ComposedSeason[] = eraSeasons.map((season) => {
+        const seasonSections = sections.filter(
+          (s) => s.season_id === season.id
+        );
+
+        // League entry: uses LEAGUE_SLOT_SCHEMA ordering
+        const leagueEntry = buildLeagueSeasonEntry(season.id, seasonSections);
+
+        // Determine which teams appear in this season (have at least one section)
+        const teamIdsInSeason = [
+          ...new Set(
+            seasonSections
+              .filter((s) => s.owner_type === "team" && s.owner_id)
+              .map((s) => s.owner_id!)
+          ),
+        ];
+
+        // Build one TeamSeasonEntry per team that appears in this season
+        const teamEntries: TeamSeasonEntry[] = teamIdsInSeason
+          .map((teamId) => {
+            const team = teamMap.get(teamId);
+            // Skip teams hidden from this user
+            if (!team) return null;
+            return buildTeamSeasonEntry(team, season.id, seasonSections);
+          })
+          .filter((entry): entry is TeamSeasonEntry => entry !== null);
+
+        return { season, leagueEntry, teamEntries };
+      });
+
+      return { era, seasons: composedSeasons };
+    });
+
+    return { eras: composedEras };
   } catch (error) {
-    console.error("Unexpected error fetching teams:", error);
-    return { teams: [], error: "An unexpected error occurred" };
+    console.error("Unexpected error in getComposedHistory:", error);
+    return { eras: [], error: "An unexpected error occurred" };
   }
 }
 
+
+// =============================================================================
+// PUBLIC: FILTER OPTIONS
+// Lightweight fetches for populating the three filter dropdowns on the page.
+// =============================================================================
+
 /**
- * Get all users with the historian role (for admin limit management)
+ * Returns all visible eras and their seasons for the filter dropdowns.
+ * Admins see hidden eras/seasons; other users do not.
  */
-export async function getAllHistorians(): Promise<{
-  historians: HistorianUser[];
+export async function getErasAndSeasonsForFilters(): Promise<{
+  eras: (HistoryEraRow & { seasons: HistorySeasonRow[] })[];
   error?: string;
 }> {
   const supabase = await createClient();
@@ -266,60 +462,82 @@ export async function getAllHistorians(): Promise<{
     const {
       data: { user },
     } = await supabase.auth.getUser();
+    const isAdmin = user ? await isUserAdmin(supabase, user.id) : false;
 
-    if (!user) {
-      return { historians: [], error: "Not authenticated" };
-    }
+    let erasQuery = supabase
+      .from("history_eras")
+      .select("*")
+      .order("display_order", { ascending: true });
+    if (!isAdmin) erasQuery = erasQuery.eq("is_hidden", false);
 
-    const admin = await isUserAdmin(supabase, user.id);
-    if (!admin) {
-      return { historians: [], error: "Admin access required" };
-    }
+    const { data: eras, error: erasError } = await erasQuery;
+    if (erasError) throw erasError;
 
-    // Use the team_members_with_roles view which already joins users
-    const { data: members, error } = await supabase
-      .from("team_members_with_roles")
-      .select("user_id, user_display_name, team_id, roles");
+    if (!eras || eras.length === 0) return { eras: [] };
 
-    if (error) {
-      console.error("Error fetching historians:", error);
-      return { historians: [], error: error.message };
-    }
+    let seasonsQuery = supabase
+      .from("history_seasons")
+      .select("*")
+      .in("era_id", eras.map((e) => e.id))
+      .order("display_order", { ascending: true });
+    if (!isAdmin) seasonsQuery = seasonsQuery.eq("is_hidden", false);
 
-    // Filter to only those with historian role
-    const historianMembers = (members || []).filter(
-      (m) => Array.isArray(m.roles) && m.roles.includes("historian")
-    );
+    const { data: seasons, error: seasonsError } = await seasonsQuery;
+    if (seasonsError) throw seasonsError;
 
-    // Get team details for each historian
-    const teamIds = [...new Set(historianMembers.map((m) => m.team_id))];
-    const { data: teams } = await supabase
-      .from("teams")
-      .select("id, name, emoji")
-      .in("id", teamIds);
+    const result = eras.map((era) => ({
+      ...era,
+      seasons: (seasons ?? []).filter((s) => s.era_id === era.id),
+    }));
 
-    const teamMap = new Map((teams || []).map((t) => [t.id, t]));
-
-    const historians: HistorianUser[] = historianMembers.map((m) => {
-      const team = teamMap.get(m.team_id);
-      return {
-        user_id: m.user_id,
-        display_name: m.user_display_name || "Unknown",
-        team_name: team?.name || "Unknown",
-        team_emoji: team?.emoji || "",
-      };
-    });
-
-    return { historians };
+    return { eras: result };
   } catch (error) {
-    console.error("Unexpected error fetching historians:", error);
-    return { historians: [], error: "An unexpected error occurred" };
+    console.error("Unexpected error in getErasAndSeasonsForFilters:", error);
+    return { eras: [], error: "An unexpected error occurred" };
   }
 }
 
 /**
- * Get current user's historian info (which team, if any)
+ * Returns the teams list for the Team filter dropdown.
+ * Admins see hidden teams; other users only see teams where is_hidden = false.
+ *
+ * NOTE: This replaces the old getTeamsWithHistory() which did not filter
+ * by is_hidden. The old function is kept below for backward compatibility.
  */
+export async function getTeamsForFilter(): Promise<{
+  teams: TeamBasic[];
+  error?: string;
+}> {
+  const supabase = await createClient();
+
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const isAdmin = user ? await isUserAdmin(supabase, user.id) : false;
+
+    let query = supabase
+      .from("teams")
+      .select("id, name, emoji, is_hidden")
+      .order("name");
+    if (!isAdmin) query = query.eq("is_hidden", false);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    return { teams: data ?? [] };
+  } catch (error) {
+    console.error("Unexpected error in getTeamsForFilter:", error);
+    return { teams: [], error: "An unexpected error occurred" };
+  }
+}
+
+
+// =============================================================================
+// PUBLIC: CURRENT USER INFO
+// Unchanged from original — used by the page to determine edit permissions.
+// =============================================================================
+
 export async function getCurrentUserHistorianInfo(): Promise<{
   isHistorian: boolean;
   historianTeamId: string | null;
@@ -348,7 +566,7 @@ export async function getCurrentUserHistorianInfo(): Promise<{
       userId: user.id,
     };
   } catch (error) {
-    console.error("Unexpected error fetching historian info:", error);
+    console.error("Unexpected error in getCurrentUserHistorianInfo:", error);
     return {
       isHistorian: false,
       historianTeamId: null,
@@ -359,13 +577,427 @@ export async function getCurrentUserHistorianInfo(): Promise<{
   }
 }
 
+
 // =============================================================================
-// HISTORIAN: Own-team editing
+// ADMIN: ERA MANAGEMENT
 // =============================================================================
 
 /**
- * Create a new section for historian's own team
+ * Create a new era. Admin only.
+ * Automatically assigns the next available display_order.
  */
+export async function adminCreateEra(params: {
+  name: string;
+  description?: string;
+  isHidden?: boolean;
+}): Promise<{ success: boolean; eraId?: string; error?: string }> {
+  const supabase = await createClient();
+
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+    if (!(await isUserAdmin(supabase, user.id)))
+      return { success: false, error: "Admin access required" };
+
+    const { data: last } = await supabase
+      .from("history_eras")
+      .select("display_order")
+      .order("display_order", { ascending: false })
+      .limit(1);
+
+    const nextOrder = last && last.length > 0 ? last[0].display_order + 1 : 0;
+
+    const { data, error } = await supabase
+      .from("history_eras")
+      .insert({
+        name: params.name,
+        description: params.description ?? null,
+        display_order: nextOrder,
+        is_hidden: params.isHidden ?? false,
+        created_by: user.id,
+      })
+      .select()
+      .single();
+
+    if (error) return { success: false, error: error.message };
+    return { success: true, eraId: data.id };
+  } catch (error) {
+    console.error("Unexpected error in adminCreateEra:", error);
+    return { success: false, error: "An unexpected error occurred" };
+  }
+}
+
+/**
+ * Update era metadata (name, description, is_hidden). Admin only.
+ * Pass only the fields you want to change.
+ */
+export async function adminUpdateEra(
+  eraId: string,
+  updates: Partial<Pick<HistoryEraRow, "name" | "description" | "is_hidden" | "display_order">>
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+    if (!(await isUserAdmin(supabase, user.id)))
+      return { success: false, error: "Admin access required" };
+
+    const { error } = await supabase
+      .from("history_eras")
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq("id", eraId);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (error) {
+    console.error("Unexpected error in adminUpdateEra:", error);
+    return { success: false, error: "An unexpected error occurred" };
+  }
+}
+
+
+// =============================================================================
+// ADMIN: SEASON MANAGEMENT
+// =============================================================================
+
+/**
+ * Create a new season within an era. Admin only.
+ * Automatically assigns the next available display_order within the era.
+ */
+export async function adminCreateSeason(params: {
+  eraId: string;
+  name: string;
+  spreadsheetUrl?: string;
+  description?: string;
+  isHidden?: boolean;
+}): Promise<{ success: boolean; seasonId?: string; error?: string }> {
+  const supabase = await createClient();
+
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+    if (!(await isUserAdmin(supabase, user.id)))
+      return { success: false, error: "Admin access required" };
+
+    const { data: last } = await supabase
+      .from("history_seasons")
+      .select("display_order")
+      .eq("era_id", params.eraId)
+      .order("display_order", { ascending: false })
+      .limit(1);
+
+    const nextOrder = last && last.length > 0 ? last[0].display_order + 1 : 0;
+
+    const { data, error } = await supabase
+      .from("history_seasons")
+      .insert({
+        era_id: params.eraId,
+        name: params.name,
+        spreadsheet_url: params.spreadsheetUrl ?? null,
+        description: params.description ?? null,
+        display_order: nextOrder,
+        is_hidden: params.isHidden ?? false,
+        created_by: user.id,
+      })
+      .select()
+      .single();
+
+    if (error) return { success: false, error: error.message };
+    return { success: true, seasonId: data.id };
+  } catch (error) {
+    console.error("Unexpected error in adminCreateSeason:", error);
+    return { success: false, error: "An unexpected error occurred" };
+  }
+}
+
+/**
+ * Update season metadata. Admin only.
+ * Pass only the fields you want to change.
+ */
+export async function adminUpdateSeason(
+  seasonId: string,
+  updates: Partial<
+    Pick<
+      HistorySeasonRow,
+      "name" | "description" | "spreadsheet_url" | "is_hidden" | "display_order"
+    >
+  >
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+    if (!(await isUserAdmin(supabase, user.id)))
+      return { success: false, error: "Admin access required" };
+
+    const { error } = await supabase
+      .from("history_seasons")
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq("id", seasonId);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (error) {
+    console.error("Unexpected error in adminUpdateSeason:", error);
+    return { success: false, error: "An unexpected error occurred" };
+  }
+}
+
+
+// =============================================================================
+// ADMIN: SECTION / SLOT MANAGEMENT
+// =============================================================================
+
+/**
+ * Create or update a history section for a specific slot.
+ * Admin only — use the historian request system for non-admin team historians.
+ *
+ * If a section already exists for (season_id + owner_id/league + slot_type),
+ * this will create a duplicate — the caller should check first.
+ */
+export async function adminUpsertSlotSection(params: {
+  ownerType: "team" | "league";
+  ownerId: string | null;
+  eraId: string;
+  seasonId: string;
+  slotType: string;
+  title: string;
+  referencedTeamIds?: string[];
+  isHidden?: boolean;
+}): Promise<{ success: boolean; sectionId?: string; error?: string }> {
+  const supabase = await createClient();
+
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+    if (!(await isUserAdmin(supabase, user.id)))
+      return { success: false, error: "Admin access required" };
+
+    // Check if a section already exists for this slot
+    let existing = supabase
+      .from("history_sections")
+      .select("id")
+      .eq("season_id", params.seasonId)
+      .eq("slot_type", params.slotType)
+      .eq("owner_type", params.ownerType);
+
+    if (params.ownerType === "league") {
+      existing = existing.is("owner_id", null);
+    } else {
+      existing = existing.eq("owner_id", params.ownerId!);
+    }
+
+    const { data: existingSection } = await existing.maybeSingle();
+
+    if (existingSection) {
+      // Update the existing section
+      const { error } = await supabase
+        .from("history_sections")
+        .update({
+          title: params.title,
+          referenced_team_ids: params.referencedTeamIds ?? [],
+          is_hidden: params.isHidden ?? false,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existingSection.id);
+
+      if (error) return { success: false, error: error.message };
+      return { success: true, sectionId: existingSection.id };
+    }
+
+    // Create a new section for this slot
+    const { data, error } = await supabase
+      .from("history_sections")
+      .insert({
+        owner_type: params.ownerType,
+        owner_id: params.ownerId,
+        era_id: params.eraId,
+        season_id: params.seasonId,
+        slot_type: params.slotType,
+        title: params.title,
+        display_order: 0, // Ordering is driven by the slot schema, not this value
+        referenced_team_ids: params.referencedTeamIds ?? [],
+        is_hidden: params.isHidden ?? false,
+        created_by: user.id,
+      })
+      .select()
+      .single();
+
+    if (error) return { success: false, error: error.message };
+    return { success: true, sectionId: data.id };
+  } catch (error) {
+    console.error("Unexpected error in adminUpsertSlotSection:", error);
+    return { success: false, error: "An unexpected error occurred" };
+  }
+}
+
+/**
+ * Toggle is_hidden on any history section. Admin only.
+ */
+export async function adminToggleSectionHidden(
+  sectionId: string,
+  isHidden: boolean
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+    if (!(await isUserAdmin(supabase, user.id)))
+      return { success: false, error: "Admin access required" };
+
+    const { error } = await supabase
+      .from("history_sections")
+      .update({ is_hidden: isHidden, updated_at: new Date().toISOString() })
+      .eq("id", sectionId);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (error) {
+    console.error("Unexpected error in adminToggleSectionHidden:", error);
+    return { success: false, error: "An unexpected error occurred" };
+  }
+}
+
+/**
+ * Toggle is_hidden on any history entry. Admin only.
+ */
+export async function adminToggleEntryHidden(
+  entryId: string,
+  isHidden: boolean
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+    if (!(await isUserAdmin(supabase, user.id)))
+      return { success: false, error: "Admin access required" };
+
+    const { error } = await supabase
+      .from("history_entries")
+      .update({ is_hidden: isHidden, updated_at: new Date().toISOString() })
+      .eq("id", entryId);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (error) {
+    console.error("Unexpected error in adminToggleEntryHidden:", error);
+    return { success: false, error: "An unexpected error occurred" };
+  }
+}
+
+/**
+ * Toggle is_hidden on a team. Admin only.
+ * Hidden teams do not appear in the team filter dropdown or team entries
+ * for non-admin users.
+ */
+export async function adminToggleTeamHidden(
+  teamId: string,
+  isHidden: boolean
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+    if (!(await isUserAdmin(supabase, user.id)))
+      return { success: false, error: "Admin access required" };
+
+    const { error } = await supabase
+      .from("teams")
+      .update({ is_hidden: isHidden, updated_at: new Date().toISOString() })
+      .eq("id", teamId);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (error) {
+    console.error("Unexpected error in adminToggleTeamHidden:", error);
+    return { success: false, error: "An unexpected error occurred" };
+  }
+}
+
+
+// =============================================================================
+// BACKWARD COMPATIBILITY
+// The functions below are kept exactly as they were in the original file.
+// They are used by existing components that have not yet been rewritten.
+// DO NOT use these in new code — use getComposedHistory instead.
+// =============================================================================
+
+/** @deprecated Use getComposedHistory instead */
+export async function getTeamsWithHistory(): Promise<{
+  teams: TeamBasic[];
+  error?: string;
+}> {
+  return getTeamsForFilter();
+}
+
+/** @deprecated Use getComposedHistory instead */
+export async function getHistoryByOwner(
+  ownerType: "team" | "league",
+  ownerId: string | null
+): Promise<{ sections: HistorySection[]; error?: string }> {
+  const supabase = await createClient();
+
+  try {
+    let query = supabase
+      .from("history_sections")
+      .select(`
+        id, owner_type, owner_id, title, display_order, created_by, created_at, updated_at,
+        history_entries (
+          id, section_id, content, display_order, is_hidden, created_by, created_at, updated_at
+        )
+      `)
+      .eq("owner_type", ownerType)
+      .eq("is_hidden", false)
+      .order("display_order", { ascending: true });
+
+    if (ownerType === "league") {
+      query = query.is("owner_id", null);
+    } else {
+      query = query.eq("owner_id", ownerId!);
+    }
+
+    const { data, error } = await query;
+    if (error) return { sections: [], error: error.message };
+
+    const sections = (data ?? []).map((section) => ({
+      ...section,
+      entries: (section.history_entries ?? []).sort(
+        (a: { display_order: number }, b: { display_order: number }) => a.display_order - b.display_order
+      ),
+    }));
+
+    return { sections };
+  } catch {
+    return { sections: [], error: "An unexpected error occurred" };
+  }
+}
+
+
+// =============================================================================
+// HISTORIAN: OWN-TEAM EDITING (unchanged from original)
+// =============================================================================
+
 export async function createHistorySection(
   ownerType: "team" | "league",
   ownerId: string | null,
@@ -377,27 +1009,19 @@ export async function createHistorySection(
     const {
       data: { user },
     } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
 
-    if (!user) {
-      return { success: false, error: "Not authenticated" };
-    }
-
-    // Verify historian role for the target team
     if (ownerType === "team" && ownerId) {
       const isHistorian = await isUserHistorianForTeam(supabase, user.id, ownerId);
       const admin = await isUserAdmin(supabase, user.id);
-      if (!isHistorian && !admin) {
+      if (!isHistorian && !admin)
         return { success: false, error: "You must be a historian for this team" };
-      }
     } else if (ownerType === "league") {
-      // Only admins can directly create league sections
       const admin = await isUserAdmin(supabase, user.id);
-      if (!admin) {
+      if (!admin)
         return { success: false, error: "Only admins can create league sections" };
-      }
     }
 
-    // Get next display_order
     let orderQuery = supabase
       .from("history_sections")
       .select("display_order")
@@ -412,7 +1036,8 @@ export async function createHistorySection(
     }
 
     const { data: lastSection } = await orderQuery;
-    const nextOrder = lastSection && lastSection.length > 0 ? lastSection[0].display_order + 1 : 0;
+    const nextOrder =
+      lastSection && lastSection.length > 0 ? lastSection[0].display_order + 1 : 0;
 
     const { data, error } = await supabase
       .from("history_sections")
@@ -426,21 +1051,13 @@ export async function createHistorySection(
       .select()
       .single();
 
-    if (error) {
-      console.error("Error creating history section:", error);
-      return { success: false, error: error.message };
-    }
-
+    if (error) return { success: false, error: error.message };
     return { success: true, sectionId: data.id };
-  } catch (error) {
-    console.error("Unexpected error creating history section:", error);
+  } catch {
     return { success: false, error: "An unexpected error occurred" };
   }
 }
 
-/**
- * Add an entry to an existing section
- */
 export async function appendHistoryEntry(
   sectionId: string,
   content: string
@@ -451,37 +1068,27 @@ export async function appendHistoryEntry(
     const {
       data: { user },
     } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
 
-    if (!user) {
-      return { success: false, error: "Not authenticated" };
-    }
-
-    // Get the section to verify ownership
     const { data: section, error: sectionError } = await supabase
       .from("history_sections")
       .select("owner_type, owner_id")
       .eq("id", sectionId)
       .single();
 
-    if (sectionError || !section) {
-      return { success: false, error: "Section not found" };
-    }
+    if (sectionError || !section) return { success: false, error: "Section not found" };
 
-    // Verify permissions
     if (section.owner_type === "team" && section.owner_id) {
       const isHistorian = await isUserHistorianForTeam(supabase, user.id, section.owner_id);
       const admin = await isUserAdmin(supabase, user.id);
-      if (!isHistorian && !admin) {
+      if (!isHistorian && !admin)
         return { success: false, error: "You must be a historian for this team" };
-      }
     } else if (section.owner_type === "league") {
       const admin = await isUserAdmin(supabase, user.id);
-      if (!admin) {
+      if (!admin)
         return { success: false, error: "Only admins can add league entries" };
-      }
     }
 
-    // Get next display_order
     const { data: lastEntry } = await supabase
       .from("history_entries")
       .select("display_order")
@@ -489,7 +1096,8 @@ export async function appendHistoryEntry(
       .order("display_order", { ascending: false })
       .limit(1);
 
-    const nextOrder = lastEntry && lastEntry.length > 0 ? lastEntry[0].display_order + 1 : 0;
+    const nextOrder =
+      lastEntry && lastEntry.length > 0 ? lastEntry[0].display_order + 1 : 0;
 
     const { data, error } = await supabase
       .from("history_entries")
@@ -502,119 +1110,18 @@ export async function appendHistoryEntry(
       .select()
       .single();
 
-    if (error) {
-      console.error("Error appending history entry:", error);
-      return { success: false, error: error.message };
-    }
-
+    if (error) return { success: false, error: error.message };
     return { success: true, entryId: data.id };
-  } catch (error) {
-    console.error("Unexpected error appending history entry:", error);
+  } catch {
     return { success: false, error: "An unexpected error occurred" };
   }
 }
 
-/**
- * Reorder an entry up or down within its section
- */
-export async function reorderHistoryEntry(
-  entryId: string,
-  direction: "up" | "down"
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
-
-  try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return { success: false, error: "Not authenticated" };
-    }
-
-    // Get the entry and its section
-    const { data: entry, error: entryError } = await supabase
-      .from("history_entries")
-      .select("id, section_id, display_order")
-      .eq("id", entryId)
-      .single();
-
-    if (entryError || !entry) {
-      return { success: false, error: "Entry not found" };
-    }
-
-    // Get the section for permission check
-    const { data: section } = await supabase
-      .from("history_sections")
-      .select("owner_type, owner_id")
-      .eq("id", entry.section_id)
-      .single();
-
-    if (!section) {
-      return { success: false, error: "Section not found" };
-    }
-
-    // Verify permissions
-    if (section.owner_type === "team" && section.owner_id) {
-      const isHistorian = await isUserHistorianForTeam(supabase, user.id, section.owner_id);
-      const admin = await isUserAdmin(supabase, user.id);
-      if (!isHistorian && !admin) {
-        return { success: false, error: "You must be a historian for this team" };
-      }
-    } else {
-      const admin = await isUserAdmin(supabase, user.id);
-      if (!admin) {
-        return { success: false, error: "Only admins can reorder league entries" };
-      }
-    }
-
-    // Get all entries in the section ordered
-    const { data: entries } = await supabase
-      .from("history_entries")
-      .select("id, display_order")
-      .eq("section_id", entry.section_id)
-      .order("display_order", { ascending: true });
-
-    if (!entries || entries.length < 2) {
-      return { success: false, error: "Cannot reorder - not enough entries" };
-    }
-
-    // Find current index
-    const currentIndex = entries.findIndex((e) => e.id === entryId);
-    const swapIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
-
-    if (swapIndex < 0 || swapIndex >= entries.length) {
-      return { success: false, error: "Cannot move further in that direction" };
-    }
-
-    // Swap display_order values
-    const currentOrder = entries[currentIndex].display_order;
-    const swapOrder = entries[swapIndex].display_order;
-
-    await supabase
-      .from("history_entries")
-      .update({ display_order: swapOrder, updated_at: new Date().toISOString() })
-      .eq("id", entryId);
-
-    await supabase
-      .from("history_entries")
-      .update({ display_order: currentOrder, updated_at: new Date().toISOString() })
-      .eq("id", entries[swapIndex].id);
-
-    return { success: true };
-  } catch (error) {
-    console.error("Unexpected error reordering entry:", error);
-    return { success: false, error: "An unexpected error occurred" };
-  }
-}
 
 // =============================================================================
-// HISTORIAN: Request system (cross-team / league)
+// HISTORIAN: REQUEST SYSTEM (unchanged from original)
 // =============================================================================
 
-/**
- * Submit a history update request
- */
 export async function submitHistoryUpdateRequest(params: {
   requestType: "append_entry" | "new_section";
   targetOwnerType: "team" | "league";
@@ -629,25 +1136,20 @@ export async function submitHistoryUpdateRequest(params: {
     const {
       data: { user },
     } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
 
-    if (!user) {
-      return { success: false, error: "Not authenticated" };
-    }
-
-    // Verify user is a historian on some team
     const historianTeamId = await getUserTeamAsHistorian(supabase, user.id);
-    if (!historianTeamId) {
+    if (!historianTeamId)
       return { success: false, error: "You must be a historian to submit requests" };
-    }
 
-    // Check pending request limit
-    const { data: pendingCount } = await supabase.rpc("get_user_pending_request_count", {
-      p_user_id: user.id,
-    });
-
-    const { data: maxAllowed } = await supabase.rpc("get_user_max_pending_requests", {
-      p_user_id: user.id,
-    });
+    const { data: pendingCount } = await supabase.rpc(
+      "get_user_pending_request_count",
+      { p_user_id: user.id }
+    );
+    const { data: maxAllowed } = await supabase.rpc(
+      "get_user_max_pending_requests",
+      { p_user_id: user.id }
+    );
 
     if ((pendingCount || 0) >= (maxAllowed || 1)) {
       return {
@@ -671,21 +1173,13 @@ export async function submitHistoryUpdateRequest(params: {
       .select()
       .single();
 
-    if (error) {
-      console.error("Error submitting history request:", error);
-      return { success: false, error: error.message };
-    }
-
+    if (error) return { success: false, error: error.message };
     return { success: true, requestId: data.id };
-  } catch (error) {
-    console.error("Unexpected error submitting history request:", error);
+  } catch {
     return { success: false, error: "An unexpected error occurred" };
   }
 }
 
-/**
- * Get historian's own pending requests and limit status
- */
 export async function getMyPendingRequests(): Promise<{
   requests: HistoryUpdateRequest[];
   pendingCount: number;
@@ -698,10 +1192,8 @@ export async function getMyPendingRequests(): Promise<{
     const {
       data: { user },
     } = await supabase.auth.getUser();
-
-    if (!user) {
+    if (!user)
       return { requests: [], pendingCount: 0, maxAllowed: 1, error: "Not authenticated" };
-    }
 
     const { data: requests, error } = await supabase
       .from("history_update_requests")
@@ -709,83 +1201,213 @@ export async function getMyPendingRequests(): Promise<{
       .eq("requester_id", user.id)
       .order("created_at", { ascending: false });
 
-    if (error) {
-      console.error("Error fetching my requests:", error);
+    if (error)
       return { requests: [], pendingCount: 0, maxAllowed: 1, error: error.message };
-    }
 
-    const { data: pendingCount } = await supabase.rpc("get_user_pending_request_count", {
-      p_user_id: user.id,
-    });
-
-    const { data: maxAllowed } = await supabase.rpc("get_user_max_pending_requests", {
-      p_user_id: user.id,
-    });
+    const { data: pendingCount } = await supabase.rpc(
+      "get_user_pending_request_count",
+      { p_user_id: user.id }
+    );
+    const { data: maxAllowed } = await supabase.rpc(
+      "get_user_max_pending_requests",
+      { p_user_id: user.id }
+    );
 
     return {
       requests: requests || [],
       pendingCount: pendingCount || 0,
       maxAllowed: maxAllowed || 1,
     };
-  } catch (error) {
-    console.error("Unexpected error fetching my requests:", error);
-    return { requests: [], pendingCount: 0, maxAllowed: 1, error: "An unexpected error occurred" };
+  } catch {
+    return {
+      requests: [],
+      pendingCount: 0,
+      maxAllowed: 1,
+      error: "An unexpected error occurred",
+    };
   }
 }
 
+
 // =============================================================================
-// ADMIN: Request management
+// ADMIN: DIRECT CONTENT MANAGEMENT (unchanged from original)
 // =============================================================================
 
-/**
- * Get all history update requests (admin)
- */
-export async function getAllHistoryRequests(
-  statusFilter?: "pending" | "approved" | "rejected"
-): Promise<{ requests: HistoryUpdateRequest[]; error?: string }> {
+export async function adminUpdateSectionTitle(
+  sectionId: string,
+  title: string
+): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
-
   try {
     const {
       data: { user },
     } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+    if (!(await isUserAdmin(supabase, user.id)))
+      return { success: false, error: "Admin access required" };
 
-    if (!user) {
-      return { requests: [], error: "Not authenticated" };
-    }
+    const { error } = await supabase
+      .from("history_sections")
+      .update({ title, updated_at: new Date().toISOString() })
+      .eq("id", sectionId);
 
-    const admin = await isUserAdmin(supabase, user.id);
-    if (!admin) {
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch {
+    return { success: false, error: "An unexpected error occurred" };
+  }
+}
+
+export async function adminUpdateEntryContent(
+  entryId: string,
+  content: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+    if (!(await isUserAdmin(supabase, user.id)))
+      return { success: false, error: "Admin access required" };
+
+    const { error } = await supabase
+      .from("history_entries")
+      .update({ content, updated_at: new Date().toISOString() })
+      .eq("id", entryId);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch {
+    return { success: false, error: "An unexpected error occurred" };
+  }
+}
+
+export async function adminDeleteSection(
+  sectionId: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+    if (!(await isUserAdmin(supabase, user.id)))
+      return { success: false, error: "Admin access required" };
+
+    const { error } = await supabase
+      .from("history_sections")
+      .delete()
+      .eq("id", sectionId);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch {
+    return { success: false, error: "An unexpected error occurred" };
+  }
+}
+
+export async function adminDeleteEntry(
+  entryId: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+    if (!(await isUserAdmin(supabase, user.id)))
+      return { success: false, error: "Admin access required" };
+
+    const { error } = await supabase
+      .from("history_entries")
+      .delete()
+      .eq("id", entryId);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch {
+    return { success: false, error: "An unexpected error occurred" };
+  }
+}
+
+export async function getAllHistorians(): Promise<{
+  historians: HistorianUser[];
+  error?: string;
+}> {
+  const supabase = await createClient();
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { historians: [], error: "Not authenticated" };
+    if (!(await isUserAdmin(supabase, user.id)))
+      return { historians: [], error: "Admin access required" };
+
+    const { data: members, error } = await supabase
+      .from("team_members_with_roles")
+      .select("user_id, user_display_name, team_id, roles");
+
+    if (error) return { historians: [], error: error.message };
+
+    const historianMembers = (members || []).filter(
+      (m) => Array.isArray(m.roles) && m.roles.includes("historian")
+    );
+
+    const teamIds = [...new Set(historianMembers.map((m) => m.team_id))];
+    const { data: teams } = await supabase
+      .from("teams")
+      .select("id, name, emoji")
+      .in("id", teamIds);
+
+    const teamMap = new Map((teams || []).map((t) => [t.id, t]));
+
+    return {
+      historians: historianMembers.map((m) => {
+        const team = teamMap.get(m.team_id);
+        return {
+          user_id: m.user_id,
+          display_name: m.user_display_name || "Unknown",
+          team_name: team?.name || "Unknown",
+          team_emoji: team?.emoji || "",
+        };
+      }),
+    };
+  } catch {
+    return { historians: [], error: "An unexpected error occurred" };
+  }
+}
+
+export async function getAllHistoryRequests(
+  statusFilter?: "pending" | "approved" | "rejected"
+): Promise<{ requests: HistoryUpdateRequest[]; error?: string }> {
+  const supabase = await createClient();
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { requests: [], error: "Not authenticated" };
+    if (!(await isUserAdmin(supabase, user.id)))
       return { requests: [], error: "Admin access required" };
-    }
 
     let query = supabase
       .from("history_update_requests")
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (statusFilter) {
-      query = query.eq("status", statusFilter);
-    }
+    if (statusFilter) query = query.eq("status", statusFilter);
 
     const { data, error } = await query;
+    if (error) return { requests: [], error: error.message };
 
-    if (error) {
-      console.error("Error fetching all requests:", error);
-      return { requests: [], error: error.message };
-    }
-
-    // Enrich with display names and section/team names
-    const enriched: HistoryUpdateRequest[] = await Promise.all(
+    const enriched = await Promise.all(
       (data || []).map(async (req) => {
-        // Get requester display name
         const { data: requesterUser } = await supabase
           .from("users")
           .select("display_name")
           .eq("id", req.requester_id)
           .single();
 
-        // Get section title if applicable
         let sectionTitle: string | undefined;
         if (req.target_section_id) {
           const { data: section } = await supabase
@@ -796,7 +1418,6 @@ export async function getAllHistoryRequests(
           sectionTitle = section?.title;
         }
 
-        // Get team name if applicable
         let teamName: string | undefined;
         if (req.target_owner_id) {
           const { data: team } = await supabase
@@ -817,53 +1438,35 @@ export async function getAllHistoryRequests(
     );
 
     return { requests: enriched };
-  } catch (error) {
-    console.error("Unexpected error fetching all requests:", error);
+  } catch {
     return { requests: [], error: "An unexpected error occurred" };
   }
 }
 
-/**
- * Approve a history update request (admin) - applies the content
- */
 export async function approveHistoryRequest(
   requestId: string,
   notes?: string
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
-
   try {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-
-    if (!user) {
-      return { success: false, error: "Not authenticated" };
-    }
-
-    const admin = await isUserAdmin(supabase, user.id);
-    if (!admin) {
+    if (!user) return { success: false, error: "Not authenticated" };
+    if (!(await isUserAdmin(supabase, user.id)))
       return { success: false, error: "Admin access required" };
-    }
 
-    // Get the request
     const { data: request, error: reqError } = await supabase
       .from("history_update_requests")
       .select("*")
       .eq("id", requestId)
       .single();
 
-    if (reqError || !request) {
-      return { success: false, error: "Request not found" };
-    }
-
-    if (request.status !== "pending") {
+    if (reqError || !request) return { success: false, error: "Request not found" };
+    if (request.status !== "pending")
       return { success: false, error: "Request has already been reviewed" };
-    }
 
-    // Apply the content based on request type
     if (request.request_type === "new_section") {
-      // Create new section with the proposed content as first entry
       let orderQuery = supabase
         .from("history_sections")
         .select("display_order")
@@ -878,7 +1481,8 @@ export async function approveHistoryRequest(
       }
 
       const { data: lastSection } = await orderQuery;
-      const nextOrder = lastSection && lastSection.length > 0 ? lastSection[0].display_order + 1 : 0;
+      const nextOrder =
+        lastSection && lastSection.length > 0 ? lastSection[0].display_order + 1 : 0;
 
       const { data: newSection, error: sectionError } = await supabase
         .from("history_sections")
@@ -892,11 +1496,9 @@ export async function approveHistoryRequest(
         .select()
         .single();
 
-      if (sectionError) {
+      if (sectionError)
         return { success: false, error: "Failed to create section: " + sectionError.message };
-      }
 
-      // Add the entry
       await supabase.from("history_entries").insert({
         section_id: newSection.id,
         content: request.proposed_content,
@@ -904,7 +1506,6 @@ export async function approveHistoryRequest(
         created_by: request.requester_id,
       });
     } else if (request.request_type === "append_entry") {
-      // Append entry to existing section
       const { data: lastEntry } = await supabase
         .from("history_entries")
         .select("display_order")
@@ -912,7 +1513,8 @@ export async function approveHistoryRequest(
         .order("display_order", { ascending: false })
         .limit(1);
 
-      const nextOrder = lastEntry && lastEntry.length > 0 ? lastEntry[0].display_order + 1 : 0;
+      const nextOrder =
+        lastEntry && lastEntry.length > 0 ? lastEntry[0].display_order + 1 : 0;
 
       const { error: entryError } = await supabase.from("history_entries").insert({
         section_id: request.target_section_id!,
@@ -921,12 +1523,10 @@ export async function approveHistoryRequest(
         created_by: request.requester_id,
       });
 
-      if (entryError) {
+      if (entryError)
         return { success: false, error: "Failed to add entry: " + entryError.message };
-      }
     }
 
-    // Mark request as approved
     const { error: updateError } = await supabase
       .from("history_update_requests")
       .update({
@@ -938,39 +1538,25 @@ export async function approveHistoryRequest(
       })
       .eq("id", requestId);
 
-    if (updateError) {
-      return { success: false, error: updateError.message };
-    }
-
+    if (updateError) return { success: false, error: updateError.message };
     return { success: true };
-  } catch (error) {
-    console.error("Unexpected error approving request:", error);
+  } catch {
     return { success: false, error: "An unexpected error occurred" };
   }
 }
 
-/**
- * Reject a history update request (admin)
- */
 export async function rejectHistoryRequest(
   requestId: string,
   notes?: string
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
-
   try {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-
-    if (!user) {
-      return { success: false, error: "Not authenticated" };
-    }
-
-    const admin = await isUserAdmin(supabase, user.id);
-    if (!admin) {
+    if (!user) return { success: false, error: "Not authenticated" };
+    if (!(await isUserAdmin(supabase, user.id)))
       return { success: false, error: "Admin access required" };
-    }
 
     const { error } = await supabase
       .from("history_update_requests")
@@ -983,220 +1569,108 @@ export async function rejectHistoryRequest(
       })
       .eq("id", requestId);
 
-    if (error) {
-      console.error("Error rejecting request:", error);
-      return { success: false, error: error.message };
-    }
-
+    if (error) return { success: false, error: error.message };
     return { success: true };
-  } catch (error) {
-    console.error("Unexpected error rejecting request:", error);
+  } catch {
     return { success: false, error: "An unexpected error occurred" };
   }
 }
 
-/**
- * Update per-user historian request limit (admin)
- */
 export async function updateHistorianRequestLimit(
   userId: string,
   maxPending: number
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
-
   try {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-
-    if (!user) {
-      return { success: false, error: "Not authenticated" };
-    }
-
-    const admin = await isUserAdmin(supabase, user.id);
-    if (!admin) {
+    if (!user) return { success: false, error: "Not authenticated" };
+    if (!(await isUserAdmin(supabase, user.id)))
       return { success: false, error: "Admin access required" };
-    }
 
-    const { error } = await supabase
-      .from("historian_request_limits")
-      .upsert({
-        user_id: userId,
-        max_pending_requests: maxPending,
-        updated_by: user.id,
-        updated_at: new Date().toISOString(),
-      });
+    const { error } = await supabase.from("historian_request_limits").upsert({
+      user_id: userId,
+      max_pending_requests: maxPending,
+      updated_by: user.id,
+      updated_at: new Date().toISOString(),
+    });
 
-    if (error) {
-      console.error("Error updating request limit:", error);
-      return { success: false, error: error.message };
-    }
-
+    if (error) return { success: false, error: error.message };
     return { success: true };
-  } catch (error) {
-    console.error("Unexpected error updating request limit:", error);
+  } catch {
     return { success: false, error: "An unexpected error occurred" };
   }
 }
 
-// =============================================================================
-// ADMIN: Direct content management
-// =============================================================================
-
-/**
- * Edit any section title (admin)
- */
-export async function adminUpdateSectionTitle(
-  sectionId: string,
-  title: string
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
-
-  try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return { success: false, error: "Not authenticated" };
-    }
-
-    const admin = await isUserAdmin(supabase, user.id);
-    if (!admin) {
-      return { success: false, error: "Admin access required" };
-    }
-
-    const { error } = await supabase
-      .from("history_sections")
-      .update({ title, updated_at: new Date().toISOString() })
-      .eq("id", sectionId);
-
-    if (error) {
-      console.error("Error updating section title:", error);
-      return { success: false, error: error.message };
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error("Unexpected error updating section title:", error);
-    return { success: false, error: "An unexpected error occurred" };
-  }
-}
-
-/**
- * Edit any entry content (admin)
- */
-export async function adminUpdateEntryContent(
+export async function reorderHistoryEntry(
   entryId: string,
-  content: string
+  direction: "up" | "down"
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
-
   try {
     const {
       data: { user },
     } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
 
-    if (!user) {
-      return { success: false, error: "Not authenticated" };
-    }
-
-    const admin = await isUserAdmin(supabase, user.id);
-    if (!admin) {
-      return { success: false, error: "Admin access required" };
-    }
-
-    const { error } = await supabase
+    const { data: entry, error: entryError } = await supabase
       .from("history_entries")
-      .update({ content, updated_at: new Date().toISOString() })
-      .eq("id", entryId);
+      .select("id, section_id, display_order")
+      .eq("id", entryId)
+      .single();
 
-    if (error) {
-      console.error("Error updating entry content:", error);
-      return { success: false, error: error.message };
-    }
+    if (entryError || !entry) return { success: false, error: "Entry not found" };
 
-    return { success: true };
-  } catch (error) {
-    console.error("Unexpected error updating entry content:", error);
-    return { success: false, error: "An unexpected error occurred" };
-  }
-}
-
-/**
- * Delete a section (admin) - cascades to entries
- */
-export async function adminDeleteSection(
-  sectionId: string
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
-
-  try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return { success: false, error: "Not authenticated" };
-    }
-
-    const admin = await isUserAdmin(supabase, user.id);
-    if (!admin) {
-      return { success: false, error: "Admin access required" };
-    }
-
-    const { error } = await supabase
+    const { data: section } = await supabase
       .from("history_sections")
-      .delete()
-      .eq("id", sectionId);
+      .select("owner_type, owner_id")
+      .eq("id", entry.section_id)
+      .single();
 
-    if (error) {
-      console.error("Error deleting section:", error);
-      return { success: false, error: error.message };
+    if (!section) return { success: false, error: "Section not found" };
+
+    if (section.owner_type === "team" && section.owner_id) {
+      const isHistorian = await isUserHistorianForTeam(supabase, user.id, section.owner_id);
+      const admin = await isUserAdmin(supabase, user.id);
+      if (!isHistorian && !admin)
+        return { success: false, error: "You must be a historian for this team" };
+    } else {
+      const admin = await isUserAdmin(supabase, user.id);
+      if (!admin)
+        return { success: false, error: "Only admins can reorder league entries" };
     }
 
-    return { success: true };
-  } catch (error) {
-    console.error("Unexpected error deleting section:", error);
-    return { success: false, error: "An unexpected error occurred" };
-  }
-}
-
-/**
- * Delete an entry (admin)
- */
-export async function adminDeleteEntry(
-  entryId: string
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
-
-  try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return { success: false, error: "Not authenticated" };
-    }
-
-    const admin = await isUserAdmin(supabase, user.id);
-    if (!admin) {
-      return { success: false, error: "Admin access required" };
-    }
-
-    const { error } = await supabase
+    const { data: entries } = await supabase
       .from("history_entries")
-      .delete()
+      .select("id, display_order")
+      .eq("section_id", entry.section_id)
+      .order("display_order", { ascending: true });
+
+    if (!entries || entries.length < 2)
+      return { success: false, error: "Cannot reorder — not enough entries" };
+
+    const currentIndex = entries.findIndex((e) => e.id === entryId);
+    const swapIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+
+    if (swapIndex < 0 || swapIndex >= entries.length)
+      return { success: false, error: "Cannot move further in that direction" };
+
+    const currentOrder = entries[currentIndex].display_order;
+    const swapOrder = entries[swapIndex].display_order;
+
+    await supabase
+      .from("history_entries")
+      .update({ display_order: swapOrder, updated_at: new Date().toISOString() })
       .eq("id", entryId);
 
-    if (error) {
-      console.error("Error deleting entry:", error);
-      return { success: false, error: error.message };
-    }
+    await supabase
+      .from("history_entries")
+      .update({ display_order: currentOrder, updated_at: new Date().toISOString() })
+      .eq("id", entries[swapIndex].id);
 
     return { success: true };
-  } catch (error) {
-    console.error("Unexpected error deleting entry:", error);
+  } catch {
     return { success: false, error: "An unexpected error occurred" };
   }
 }

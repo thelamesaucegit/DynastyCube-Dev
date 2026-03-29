@@ -1,155 +1,210 @@
 // src/app/history/page.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { HistoryTabBar } from "@/components/history/HistoryTabBar";
-import { HistoryContent } from "@/components/history/HistoryContent";
-import { HistoryRequestForm } from "@/components/history/HistoryRequestForm";
-import { HistoryRequestStatus } from "@/components/history/HistoryRequestStatus";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  getTeamsWithHistory,
-  getHistoryByOwner,
+  getComposedHistory,
+  getErasAndSeasonsForFilters,
+  getTeamsForFilter,
   getCurrentUserHistorianInfo,
-  getMyPendingRequests,
-  submitHistoryUpdateRequest,
-  type TeamBasic,
-  type HistorySection,
-  type HistoryUpdateRequest,
 } from "@/app/actions/historyActions";
+import { HistoryFilters } from "@/components/history/HistoryFilters";
+import { HistoryEraSection } from "@/components/history/HistoryEraSection";
+import { Loader2, AlertCircle } from "lucide-react";
 import { Card, CardContent } from "@/app/components/ui/card";
-import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
+import type {
+  ComposedEra,
+  ComposedSeason,
+  TeamSeasonEntry,
+  HistoryFilterState,
+  HistorySeasonRow,
+  LeagueSeasonEntry,
+  ViewMode,
+  TeamBasic,
+} from "@/types/history";
+import type { HistoryEraRow } from "@/types/history";
+
+// =============================================================================
+// TEAM-FIRST PIVOT TYPES
+// When viewMode is "team-first" the inner hierarchy flips:
+//   Era > Season > Team  →  Era > Team > Season
+// =============================================================================
+
+export interface TeamEraGroup {
+  teamId: string;
+  teamName: string;
+  teamEmoji: string;
+  /** Ordered by season.display_order */
+  seasons: {
+    season: HistorySeasonRow;
+    teamEntry: TeamSeasonEntry;
+    leagueEntry: LeagueSeasonEntry;
+  }[];
+}
+
+export interface PivotedEra {
+  era: HistoryEraRow;
+  /** Used in team-first mode */
+  teamGroups: TeamEraGroup[];
+  /** Used in season-first mode */
+  seasons: ComposedSeason[];
+}
+
+// =============================================================================
+// PIVOT HELPER
+// Pure function — no side effects, result is memoized in the component.
+// =============================================================================
+
+function pivotEras(eras: ComposedEra[]): PivotedEra[] {
+  return eras.map((composedEra) => {
+    const teamMap = new Map<string, Omit<TeamEraGroup, "seasons">>();
+    const teamSeasons = new Map<string, TeamEraGroup["seasons"]>();
+
+    composedEra.seasons.forEach((composedSeason) => {
+      composedSeason.teamEntries.forEach((teamEntry) => {
+        if (!teamMap.has(teamEntry.teamId)) {
+          teamMap.set(teamEntry.teamId, {
+            teamId: teamEntry.teamId,
+            teamName: teamEntry.teamName,
+            teamEmoji: teamEntry.teamEmoji,
+          });
+          teamSeasons.set(teamEntry.teamId, []);
+        }
+        teamSeasons.get(teamEntry.teamId)!.push({
+          season: composedSeason.season,
+          teamEntry,
+          leagueEntry: composedSeason.leagueEntry,
+        });
+      });
+    });
+
+    const teamGroups: TeamEraGroup[] = Array.from(teamMap.values())
+      .sort((a, b) => a.teamName.localeCompare(b.teamName))
+      .map((team) => ({ ...team, seasons: teamSeasons.get(team.teamId)! }));
+
+    return { era: composedEra.era, seasons: composedEra.seasons, teamGroups };
+  });
+}
+
+// =============================================================================
+// PAGE COMPONENT
+// =============================================================================
 
 export default function HistoryPage() {
-  const [teams, setTeams] = useState<TeamBasic[]>([]);
-  const [activeTab, setActiveTab] = useState("league");
-  const [sections, setSections] = useState<HistorySection[]>([]);
+  // --- Data ---
+  const [composedEras, setComposedEras] = useState<ComposedEra[]>([]);
+  const [erasForFilter, setErasForFilter] = useState<
+    (HistoryEraRow & { seasons: HistorySeasonRow[] })[]
+  >([]);
+  const [teamsForFilter, setTeamsForFilter] = useState<TeamBasic[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // User info
+  // --- Permissions ---
+  const [isAdmin, setIsAdmin] = useState(false);
   const [isHistorian, setIsHistorian] = useState(false);
   const [historianTeamId, setHistorianTeamId] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
 
-  // Request system
-  const [myRequests, setMyRequests] = useState<HistoryUpdateRequest[]>([]);
-  const [pendingCount, setPendingCount] = useState(0);
-  const [maxAllowed, setMaxAllowed] = useState(1);
-  const [requestLoading, setRequestLoading] = useState(false);
-  const [requestError, setRequestError] = useState<string | null>(null);
-  const [requestSuccess, setRequestSuccess] = useState<string | null>(null);
+  // --- UI state ---
+  const [filters, setFilters] = useState<HistoryFilterState>({
+    eraId: null,
+    seasonId: null,
+    teamId: null,
+  });
+  const [viewMode, setViewMode] = useState<ViewMode>("season-first");
 
-  // Load teams and user info on mount
+  /**
+   * editMode: admin-only toggle that reveals all inline CRUD controls.
+   * When false the page is clean reading mode for all users.
+   * When true, admins see edit/delete/hide buttons at every level of the hierarchy.
+   */
+  const [editMode, setEditMode] = useState(false);
+
+  // ==========================================================================
+  // INITIAL LOAD
+  // ==========================================================================
+
   useEffect(() => {
     const init = async () => {
       try {
-        const [teamsResult, userInfo] = await Promise.all([
-          getTeamsWithHistory(),
+        const [erasResult, teamsResult, userInfo] = await Promise.all([
+          getErasAndSeasonsForFilters(),
+          getTeamsForFilter(),
           getCurrentUserHistorianInfo(),
         ]);
-
-        if (teamsResult.teams) {
-          setTeams(teamsResult.teams);
-        }
-
-        setIsHistorian(userInfo.isHistorian);
-        setHistorianTeamId(userInfo.historianTeamId);
+        if (erasResult.eras) setErasForFilter(erasResult.eras);
+        if (teamsResult.teams) setTeamsForFilter(teamsResult.teams);
         setIsAdmin(userInfo.isAdmin);
-
-        // Load requests if historian
-        if (userInfo.isHistorian) {
-          const reqResult = await getMyPendingRequests();
-          setMyRequests(reqResult.requests);
-          setPendingCount(reqResult.pendingCount);
-          setMaxAllowed(reqResult.maxAllowed);
-        }
+        setIsHistorian(userInfo.isHistorian);
+        setHistorianTeamId(userInfo.historianTeamId ?? null);
       } catch {
-        setError("Failed to initialize");
+        setError("Failed to initialize history page");
       }
     };
-
     init();
   }, []);
 
-  // Load content when tab changes
-  const loadContent = useCallback(async () => {
+  // ==========================================================================
+  // CONTENT LOAD — re-runs on filter change
+  // ==========================================================================
+
+  const loadHistory = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const ownerType = activeTab === "league" ? "league" : "team";
-      const ownerId = activeTab === "league" ? null : activeTab;
-      const result = await getHistoryByOwner(ownerType as "team" | "league", ownerId);
-      if (result.error) {
-        setError(result.error);
-      } else {
-        setSections(result.sections);
-      }
+      const result = await getComposedHistory(filters);
+      if (result.error) setError(result.error);
+      else setComposedEras(result.eras);
     } catch {
       setError("Failed to load history");
     } finally {
       setLoading(false);
     }
-  }, [activeTab]);
+  }, [filters]);
 
   useEffect(() => {
-    loadContent();
-  }, [loadContent]);
+    loadHistory();
+  }, [loadHistory]);
 
-  // Determine if user can edit current tab
-  const canEdit =
-    isAdmin ||
-    (isHistorian &&
-      activeTab !== "league" &&
-      historianTeamId === activeTab);
+  // ==========================================================================
+  // PIVOT MEMO
+  // ==========================================================================
 
-  // Show request form when historian views non-own-team content
-  const showRequestForm =
-    isHistorian &&
-    !isAdmin &&
-    (activeTab === "league" || (activeTab !== "league" && historianTeamId !== activeTab));
+  const pivotedEras = useMemo(() => pivotEras(composedEras), [composedEras]);
 
-  const handleSubmitRequest = async (params: {
-    requestType: "append_entry" | "new_section";
-    targetSectionId?: string;
-    proposedTitle?: string;
-    proposedContent: string;
-  }) => {
-    setRequestLoading(true);
-    setRequestError(null);
-    setRequestSuccess(null);
-    try {
-      const ownerType = activeTab === "league" ? "league" : "team";
-      const ownerId = activeTab === "league" ? null : activeTab;
+  // ==========================================================================
+  // REFRESH
+  // Passed deep into the tree so any admin action can trigger a full reload.
+  // Also refreshes filter dropdowns so new eras/seasons appear immediately.
+  // ==========================================================================
 
-      const result = await submitHistoryUpdateRequest({
-        requestType: params.requestType,
-        targetOwnerType: ownerType as "team" | "league",
-        targetOwnerId: ownerId,
-        targetSectionId: params.targetSectionId,
-        proposedTitle: params.proposedTitle,
-        proposedContent: params.proposedContent,
-      });
+  const handleRefresh = useCallback(async () => {
+    const [erasResult, teamsResult] = await Promise.all([
+      getErasAndSeasonsForFilters(),
+      getTeamsForFilter(),
+      loadHistory(),
+    ]);
+    if (erasResult.eras) setErasForFilter(erasResult.eras);
+    if (teamsResult.teams) setTeamsForFilter(teamsResult.teams);
+  }, [loadHistory]);
 
-      if (result.success) {
-        setRequestSuccess("Request submitted successfully!");
-        // Refresh requests
-        const reqResult = await getMyPendingRequests();
-        setMyRequests(reqResult.requests);
-        setPendingCount(reqResult.pendingCount);
-        setMaxAllowed(reqResult.maxAllowed);
-      } else {
-        setRequestError(result.error || "Failed to submit request");
-      }
-    } catch {
-      setRequestError("An unexpected error occurred");
-    } finally {
-      setRequestLoading(false);
-    }
-  };
+  // ==========================================================================
+  // FILTER HANDLERS
+  // ==========================================================================
+
+  const handleFilterChange = useCallback(
+    (key: keyof HistoryFilterState, value: string | null) => {
+      setFilters((prev) => ({ ...prev, [key]: value }));
+    },
+    []
+  );
+
+  // ==========================================================================
+  // RENDER
+  // ==========================================================================
 
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8">
-      {/* Header */}
       <div className="mb-8">
         <h1 className="text-4xl font-bold tracking-tight mb-2">History</h1>
         <p className="text-lg text-muted-foreground">
@@ -157,10 +212,17 @@ export default function HistoryPage() {
         </p>
       </div>
 
-      <HistoryTabBar
-        teams={teams}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
+      <HistoryFilters
+        eras={erasForFilter}
+        teams={teamsForFilter}
+        filters={filters}
+        viewMode={viewMode}
+        isAdmin={isAdmin}
+        editMode={editMode}
+        onFilterChange={handleFilterChange}
+        onViewModeChange={setViewMode}
+        onEditModeChange={setEditMode}
+        onRefresh={handleRefresh}
       />
 
       {loading ? (
@@ -175,51 +237,27 @@ export default function HistoryPage() {
             <p className="text-muted-foreground">{error}</p>
           </CardContent>
         </Card>
+      ) : pivotedEras.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground">
+          No history records found for the selected filters.
+        </div>
       ) : (
-        <>
-          <HistoryContent
-            sections={sections}
-            ownerType={activeTab === "league" ? "league" : "team"}
-            ownerId={activeTab === "league" ? null : activeTab}
-            canEdit={canEdit}
-            isAdmin={isAdmin}
-            onRefresh={loadContent}
-          />
-
-          {/* Request form for historians viewing other teams/league */}
-          {showRequestForm && (
-            <div className="mt-6 space-y-4">
-              {requestSuccess && (
-                <Card className="border-emerald-500/50">
-                  <CardContent className="pt-6 flex items-center gap-3">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
-                    <p className="text-sm">{requestSuccess}</p>
-                  </CardContent>
-                </Card>
-              )}
-              {requestError && (
-                <Card className="border-destructive">
-                  <CardContent className="pt-6 flex items-center gap-3">
-                    <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
-                    <p className="text-sm">{requestError}</p>
-                  </CardContent>
-                </Card>
-              )}
-              <HistoryRequestForm
-                sections={sections}
-                pendingCount={pendingCount}
-                maxAllowed={maxAllowed}
-                onSubmit={handleSubmitRequest}
-                loading={requestLoading}
-              />
-              <HistoryRequestStatus
-                requests={myRequests}
-                pendingCount={pendingCount}
-                maxAllowed={maxAllowed}
-              />
-            </div>
-          )}
-        </>
+        <div className="space-y-4 mt-6">
+          {pivotedEras.map((pivotedEra) => (
+            <HistoryEraSection
+              key={pivotedEra.era.id}
+              pivotedEra={pivotedEra}
+              viewMode={viewMode}
+              filters={filters}
+              isAdmin={isAdmin}
+              isHistorian={isHistorian}
+              historianTeamId={historianTeamId}
+              editMode={editMode}
+              allTeams={teamsForFilter}
+              onRefresh={handleRefresh}
+            />
+          ))}
+        </div>
       )}
     </div>
   );
