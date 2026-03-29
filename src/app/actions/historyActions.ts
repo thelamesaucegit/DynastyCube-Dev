@@ -20,6 +20,9 @@ import type {
   ComposedEra,
   HistoryFilterState,
   TeamBasic,
+  HistorySection,
+  HistoryUpdateRequest,
+  HistorianUser,
 } from "@/types/history";
 
 // Re-export types that existing components still import from this file
@@ -257,7 +260,8 @@ async function fetchSectionsForComposition(
     return q;
   }
 
-  let rawSections: any[] = [];
+  type RawSection = HistorySectionRow & { history_entries: HistoryEntryRow[] };
+  let rawSections: RawSection[] = [];
 
   if (filters.teamId) {
     // Query A: sections OWNED by the filtered team
@@ -951,7 +955,7 @@ export async function getTeamsWithHistory(): Promise<{
 export async function getHistoryByOwner(
   ownerType: "team" | "league",
   ownerId: string | null
-): Promise<{ sections: any[]; error?: string }> {
+): Promise<{ sections: HistorySection[]; error?: string }> {
   const supabase = await createClient();
 
   try {
@@ -960,7 +964,7 @@ export async function getHistoryByOwner(
       .select(`
         id, owner_type, owner_id, title, display_order, created_by, created_at, updated_at,
         history_entries (
-          id, section_id, content, display_order, created_by, created_at, updated_at
+          id, section_id, content, display_order, is_hidden, created_by, created_at, updated_at
         )
       `)
       .eq("owner_type", ownerType)
@@ -979,7 +983,7 @@ export async function getHistoryByOwner(
     const sections = (data ?? []).map((section) => ({
       ...section,
       entries: (section.history_entries ?? []).sort(
-        (a: any, b: any) => a.display_order - b.display_order
+        (a: { display_order: number }, b: { display_order: number }) => a.display_order - b.display_order
       ),
     }));
 
@@ -1177,7 +1181,7 @@ export async function submitHistoryUpdateRequest(params: {
 }
 
 export async function getMyPendingRequests(): Promise<{
-  requests: any[];
+  requests: HistoryUpdateRequest[];
   pendingCount: number;
   maxAllowed: number;
   error?: string;
@@ -1328,7 +1332,7 @@ export async function adminDeleteEntry(
 }
 
 export async function getAllHistorians(): Promise<{
-  historians: any[];
+  historians: HistorianUser[];
   error?: string;
 }> {
   const supabase = await createClient();
@@ -1376,7 +1380,7 @@ export async function getAllHistorians(): Promise<{
 
 export async function getAllHistoryRequests(
   statusFilter?: "pending" | "approved" | "rejected"
-): Promise<{ requests: any[]; error?: string }> {
+): Promise<{ requests: HistoryUpdateRequest[]; error?: string }> {
   const supabase = await createClient();
   try {
     const {

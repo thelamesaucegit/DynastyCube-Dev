@@ -33,6 +33,7 @@ import {
   adminUpdateEntryContent,
 } from "@/app/actions/historyActions";
 import { CROSS_TEAM_SURFACEABLE_SLOTS } from "@/config/historySlotSchema";
+import type { TeamSlotType, LeagueSlotType } from "@/config/historySlotSchema";
 import type { HistoryEraRow, HistorySeasonRow, TeamBasic } from "@/types/history";
 
 
@@ -429,7 +430,7 @@ export function InlineEntryForm({
   const [error, setError] = useState<string | null>(null);
 
   // Is this slot type one that can surface under referenced teams?
-  const isCrossTeamSlot = CROSS_TEAM_SURFACEABLE_SLOTS.has(slotType as any);
+  const isCrossTeamSlot = CROSS_TEAM_SURFACEABLE_SLOTS.has(slotType as TeamSlotType | LeagueSlotType);
 
   function toggleRefTeam(teamId: string) {
     setSelectedRefTeams((prev) =>
