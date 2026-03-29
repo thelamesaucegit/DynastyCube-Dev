@@ -20,7 +20,7 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@/components/*": ["./src/app/components/*"],
+      "@/components/*": ["./src/app/components/*", "./src/components/*"],
       "@/hooks/*": ["./src/app/hooks/*"],
       "@/styles/*": ["./src/app/styles/*"],
       "@/utils/*": ["./src/app/utils/*"]
