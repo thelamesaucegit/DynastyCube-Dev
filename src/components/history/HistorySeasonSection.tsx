@@ -386,9 +386,9 @@ function LeagueSlotDisplay({
               />
             ) : (
               <div className="flex gap-2">
-                <p className="text-sm leading-relaxed whitespace-pre-wrap flex-1">
-                  {entry.content}
-                </p>
+             <div className="flex-1">
+      <HistoryEntryRenderer content={entry.content} />
+     </div>
                 {editMode && isAdmin && (
                   <div className="shrink-0 flex items-start gap-1 opacity-0 group-hover:opacity-100
                                   transition-opacity">
