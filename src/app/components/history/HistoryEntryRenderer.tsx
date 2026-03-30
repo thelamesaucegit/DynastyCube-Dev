@@ -19,7 +19,7 @@ import React, { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { visit } from "unist-util-visit";
-import type { Root, Text, Parent } from "mdast";
+import type { Root, Text } from "mdast";
 
 // =============================================================================
 // REMARK SPOILER PLUGIN
@@ -43,9 +43,9 @@ function remarkSpoiler() {
     visit(
       tree,
       "text",
-      (node: Text, index: number | null, parent: Parent | null) => {
+      (node: Text, index: number | undefined, parent: Parent | undefined) => {
         // Skip if no parent slot available or no spoiler markers present
-        if (!parent || index === null || !node.value.includes("||")) return;
+        if (!parent || index === undefined || !node.value.includes("||")) return;
 
         const regex = /\|\|(.+?)\|\|/g;
 const newNodes: (Text | { type: "spoiler"; data: { hName: string; hProperties: { className: string } }; children: Text[] })[] = [];        let lastIndex = 0;
