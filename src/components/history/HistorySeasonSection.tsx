@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { HistoryEntryRenderer } from "@/app/components/history/HistoryEntryRenderer";
 import { ChevronDown, ChevronRight, ExternalLink, Pencil } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import { HistoryTeamSection } from "@/components/history/HistoryTeamSection";
