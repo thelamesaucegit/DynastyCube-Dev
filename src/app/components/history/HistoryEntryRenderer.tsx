@@ -48,7 +48,7 @@ function remarkSpoiler() {
         if (!parent || index === undefined || !node.value.includes("||")) return;
 
         const regex = /\|\|(.+?)\|\|/g;
-const newNodes: (Text | { type: "spoiler"; data: { hName: string; hProperties: { className: string } }; children: Text[] })[] = [];        let lastIndex = 0;
+const newNodes: (Text | { type: string; data: unknown; children: Text[] })[] = [];
         let match: RegExpExecArray | null;
         let foundAny = false;
 
@@ -87,8 +87,7 @@ const newNodes: (Text | { type: "spoiler"; data: { hName: string; hProperties: {
         }
 
         // Replace the original text node with the split array
-        parent.children.splice(index, 1, ...newNodes);
-      }
+(parent.children as unknown as (Text | { type: string; data: unknown; children: Text[] })[]).splice(index, 1, ...newNodes);      }
     );
   };
 }
