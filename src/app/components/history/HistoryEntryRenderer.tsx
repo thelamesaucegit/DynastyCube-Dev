@@ -1,4 +1,3 @@
-// src/app/components/history/HistoryEntryRenderer.tsx
 // =============================================================================
 // HISTORY ENTRY RENDERER
 // =============================================================================
@@ -49,8 +48,7 @@ function remarkSpoiler() {
         if (!parent || index === null || !node.value.includes("||")) return;
 
         const regex = /\|\|(.+?)\|\|/g;
-        const newNodes: any[] = [];
-        let lastIndex = 0;
+const newNodes: (Text | { type: "spoiler"; data: { hName: string; hProperties: { className: string } }; children: Text[] })[] = [];        let lastIndex = 0;
         let match: RegExpExecArray | null;
         let foundAny = false;
 
