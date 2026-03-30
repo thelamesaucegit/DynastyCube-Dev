@@ -202,7 +202,7 @@ function CompletedWidget() {
 }
 
 function FullWidget({ status, session, recentPick }: { status: DraftStatus; session: DraftSession | null; recentPick: RecentPickData | null }) {
-  const pickCountdown = useCountdown(session?.autodraft_next_pick_at); // Use the new column
+  const pickCountdown = useCountdown(session?.current_pick_deadline); // Use the new column
   const startCountdown = useStartCountdown(session?.status === "scheduled" ? session.start_time : null);
   const isScheduled = session?.status === "scheduled";
   const isActive = session?.status === "active";
@@ -292,7 +292,7 @@ function FullWidget({ status, session, recentPick }: { status: DraftStatus; sess
 }
 
 function CompactWidget({ status, session, recentPick }: { status: DraftStatus; session: DraftSession | null; recentPick: RecentPickData | null }) {
-  const pickCountdown = useCountdown(session?.autodraft_next_pick_at); // Use the new column
+  const pickCountdown = useCountdown(session?.current_pick_deadline); // Use the new column
 
   return (
     <Card className="border-amber-500/30 bg-gradient-to-r from-amber-500/5 to-orange-500/5 mb-6">
@@ -338,7 +338,7 @@ function TeamWidget({ status, session, teamId, recentPick }: { status: DraftStat
   const isOnClock = status.onTheClock.teamId === teamId;
   const isOnDeck = status.onDeck.teamId === teamId;
   const teamEntry = status.draftOrder.find((t) => t.teamId === teamId);
-  const pickCountdown = useCountdown(session?.autodraft_next_pick_at); // Use the new column
+  const pickCountdown = useCountdown(session?.current_pick_deadline); // Use the new column
 
   if (!teamEntry) return null;
 
