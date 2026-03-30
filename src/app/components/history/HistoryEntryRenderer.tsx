@@ -19,7 +19,7 @@ import React, { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { visit } from "unist-util-visit";
-import type { Root, Text } from "mdast";
+import type { Root, Text, Parent } from "mdast";
 
 // =============================================================================
 // REMARK SPOILER PLUGIN
