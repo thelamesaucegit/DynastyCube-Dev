@@ -49,6 +49,7 @@ function remarkSpoiler() {
 
         const regex = /\|\|(.+?)\|\|/g;
 const newNodes: (Text | { type: string; data: unknown; children: Text[] })[] = [];
+        let lastIndex = 0;
         let match: RegExpExecArray | null;
         let foundAny = false;
 
