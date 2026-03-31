@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { HistoryEntryRenderer } from "@/app/components/history/HistoryEntryRenderer";
 import { ChevronDown, ChevronRight, Link2 } from "lucide-react";
 import {
   InlineEntryForm,
@@ -170,12 +171,8 @@ export function HistoryTeamSection({
 // In edit mode, shows admin controls for adding/editing/deleting entries and
 // toggling slot visibility.
 // =============================================================================
+   const FLAVOR_SLOT_TYPES = new Set(["flavor_text"]);
 
-// Slot types rendered with italic / poem formatting
-const FLAVOR_SLOT_TYPES = new Set(["flavor_text"]);
-
-// Slot types whose entries are rendered as a numbered list
-const LIST_SLOT_TYPES = new Set(["draft_picks"]);
 
 function TeamSlotDisplay({
   slot,
@@ -202,7 +199,6 @@ function TeamSlotDisplay({
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
 
   const isFlavor = FLAVOR_SLOT_TYPES.has(slot.slotType);
-  const isList = LIST_SLOT_TYPES.has(slot.slotType);
   const hasEntries = slot.entries.length > 0;
 
   // In read mode, skip empty slots entirely.
@@ -285,7 +281,6 @@ function TeamSlotDisplay({
                   <SlotEntryContent
                     content={entry.content}
                     isFlavor={isFlavor}
-                    isList={isList}
                     isHidden={entry.is_hidden}
                     showHiddenState={editMode && isAdmin}
                   />
@@ -378,47 +373,24 @@ function TeamSlotDisplay({
 // Markdown renderer component here — this is the only place to update.
 // =============================================================================
 
-function SlotEntryContent({
-  content,
-  isFlavor,
-  isList,
-  isHidden,
-  showHiddenState,
-}: {
-  content: string;
-  isFlavor: boolean;
-  isList: boolean;
-  isHidden: boolean;
-  showHiddenState: boolean;
-}) {
-  const hiddenStyle = showHiddenState && isHidden ? "opacity-40" : "";
+// Slot types whose entries get the flavor text (italic, border-left) visual treatment.
+   // The markdown renderer handles the text itself — this only controls the wrapper style.
 
-  if (isFlavor) {
-    return (
-      <p className={`text-sm italic leading-relaxed whitespace-pre-line
-                     text-muted-foreground ${hiddenStyle}`}>
-        {content}
-      </p>
-    );
-  }
-
-  if (isList) {
-    const lines = content.split("\n").filter((l) => l.trim().length > 0);
-    return (
-      <ul className={`space-y-0.5 ${hiddenStyle}`}>
-        {lines.map((line, i) => (
-          <li key={i} className="text-sm flex gap-2">
-            <span className="text-muted-foreground shrink-0">{i + 1}.</span>
-            <span>{line.trim().replace(/^[-•]\s*/, "")}</span>
-          </li>
-        ))}
-      </ul>
-    );
-  }
-
-  return (
-    <p className={`text-sm leading-relaxed whitespace-pre-wrap ${hiddenStyle}`}>
-      {content}
-    </p>
-  );
-}
+   function SlotEntryContent({
+     content,
+     isFlavor,
+     isHidden,
+     showHiddenState,
+   }: {
+     content: string;
+     isFlavor: boolean;
+     isHidden: boolean;
+     showHiddenState: boolean;
+   }) {
+     const hiddenStyle = showHiddenState && isHidden ? "opacity-40" : "";
+     return (
+       <div className={hiddenStyle}>
+         <HistoryEntryRenderer content={content} />
+       </div>
+     );
+   }

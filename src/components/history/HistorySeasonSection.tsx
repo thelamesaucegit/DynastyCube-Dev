@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { HistoryEntryRenderer } from "@/app/components/history/HistoryEntryRenderer";
 import { ChevronDown, ChevronRight, ExternalLink, Pencil, Plus } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import { HistoryTeamSection } from "@/components/history/HistoryTeamSection";
@@ -532,9 +533,9 @@ function LeagueSlotDisplay({
               />
             ) : (
               <div className="flex gap-2">
-                <p className="text-sm leading-relaxed whitespace-pre-wrap flex-1">
-                  {entry.content}
-                </p>
+             <div className="flex-1">
+      <HistoryEntryRenderer content={entry.content} />
+     </div>
                 {editMode && isAdmin && (
                   <div className="shrink-0 flex items-start gap-1 opacity-0 group-hover:opacity-100
                                   transition-opacity">

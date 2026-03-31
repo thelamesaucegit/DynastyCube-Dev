@@ -17,6 +17,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { MarkdownEditor } from "@/app/components/history/MarkdownEditor";
 import { Loader2, Eye, EyeOff, Trash2, AlertTriangle } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import {
@@ -504,14 +505,18 @@ export function InlineEntryForm({
         {isEdit ? `Edit — ${slotTitle}` : `Add Entry — ${slotTitle}`}
       </p>
       <form onSubmit={handleSubmit} className="space-y-3">
-        <TextArea
-          label="Content"
-          value={content}
-          onChange={setContent}
-          placeholder="Write the history entry here..."
-          rows={5}
-          required
-        />
+ <div className="flex flex-col gap-1">
+     <label className="text-xs font-medium text-muted-foreground">
+       Content<span className="text-destructive ml-0.5">*</span>
+     </label>
+     <MarkdownEditor
+       value={content}
+       onChange={setContent}
+       placeholder="Write the history entry here..."
+       disabled={loading}
+       minHeight="140px"
+     />
+   </div>
 
         {/*
           Referenced Teams selector — only shown for cross-team surfaceable slots
