@@ -16,7 +16,8 @@ import { Badge } from "@/app/components/ui/badge";
 import { Loader2, ArrowLeft, AlertCircle, Ban, Send } from "lucide-react";
 
 interface Team {
-  id: string;
+  id: string;         // UUID primary key
+  short_name: string; // URL slug e.g. 'shards'
   name: string;
   emoji: string;
 }
@@ -73,11 +74,11 @@ export default function CreateTradePage({ params }: TradePageProps) {
       setTradesEnabled(enabled);
 
       const teams = await getTeamsWithMembers();
-      const current = teams.find((t) => t.id === teamId);
+      const current = teams.find((t) => t.short_name === teamId);
       setCurrentTeam(current || null);
-      setAllTeams(teams.filter((t) => t.id !== teamId));
+      setAllTeams(teams.filter((t) => t.id !== current?.id));
 
-      const { picks } = await getTeamDraftPicks(teamId);
+      const { picks } = await getTeamDraftPicks(current?.id ?? teamId);
       setMyDraftPicks(picks);
 
       const { seasons: allSeasons } = await getSeasons();

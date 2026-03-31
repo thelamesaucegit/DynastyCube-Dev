@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from "react";
 import { HistoryEntryRenderer } from "@/app/components/history/HistoryEntryRenderer";
-import { ChevronDown, ChevronRight, ExternalLink, Pencil } from "lucide-react";
+import { ChevronDown, ChevronRight, ExternalLink, Pencil, Plus } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import { HistoryTeamSection } from "@/components/history/HistoryTeamSection";
 import {
@@ -15,7 +15,7 @@ import {
   adminUpdateSeason,
   adminToggleSectionHidden,
 } from "@/app/actions/historyActions";
-import { LEAGUE_SLOT_SCHEMA } from "@/config/historySlotSchema";
+import { LEAGUE_SLOT_SCHEMA, TEAM_SLOT_SCHEMA } from "@/config/historySlotSchema";
 import type {
   HistoryFilterState,
   TeamSeasonEntry,
@@ -47,6 +47,25 @@ interface HistorySeasonSectionProps {
 // COMPONENT
 // =============================================================================
 
+/** Builds a synthetic (empty) TeamSeasonEntry for a team not yet in this season */
+function makeSyntheticTeamEntry(team: TeamBasic, seasonId: string): TeamSeasonEntry {
+  return {
+    teamId: team.id,
+    teamName: team.name,
+    teamEmoji: team.emoji,
+    seasonId,
+    slots: TEAM_SLOT_SCHEMA.map((slotDef) => ({
+      sectionId: null,
+      slotType: slotDef.type,
+      title: slotDef.label,
+      entries: [],
+      referencedTeamIds: [],
+      isHidden: false,
+      displayOrder: slotDef.order,
+    })),
+  };
+}
+
 export function HistorySeasonSection({
   season,
   leagueEntry,
@@ -62,6 +81,9 @@ export function HistorySeasonSection({
 }: HistorySeasonSectionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [showEditForm, setShowEditForm] = useState(false);
+  const [pendingTeams, setPendingTeams] = useState<TeamBasic[]>([]);
+  const [showTeamPicker, setShowTeamPicker] = useState(false);
+  const [selectedTeamId, setSelectedTeamId] = useState("");
 
   useEffect(() => {
     if (filters.seasonId === season.id) setIsOpen(true);
@@ -72,6 +94,39 @@ export function HistorySeasonSection({
   const hasLeagueContent = editMode
     ? true
     : leagueEntry.slots.some((s) => s.entries.length > 0 && !s.isHidden);
+
+  const existingTeamIds = new Set(teamEntries.map((e) => e.teamId));
+  const pendingTeamIds = new Set(pendingTeams.map((t) => t.id));
+
+  // Teams admin can still add (not already in season, not pending)
+  const availableTeams = allTeams.filter(
+    (t) => !existingTeamIds.has(t.id) && !pendingTeamIds.has(t.id)
+  );
+
+  // Historian's team info — for the "Add My Team" shortcut
+  const historianTeam =
+    isHistorian && historianTeamId
+      ? (allTeams.find((t) => t.id === historianTeamId) ?? null)
+      : null;
+  const canHistorianAddOwnTeam =
+    historianTeam !== null &&
+    !existingTeamIds.has(historianTeam.id) &&
+    !pendingTeamIds.has(historianTeam.id);
+
+  function handleAddTeamFromPicker() {
+    const team = allTeams.find((t) => t.id === selectedTeamId);
+    if (team) {
+      setPendingTeams((prev) => [...prev, team]);
+      setSelectedTeamId("");
+      setShowTeamPicker(false);
+    }
+  }
+
+  function handleAddMyTeam() {
+    if (historianTeam) {
+      setPendingTeams((prev) => [...prev, historianTeam]);
+    }
+  }
 
   return (
     <div>
@@ -141,6 +196,35 @@ export function HistorySeasonSection({
               <Pencil className="h-3 w-3" />
               Edit
             </Button>
+            {availableTeams.length > 0 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setShowTeamPicker((v) => !v);
+                  setShowEditForm(false);
+                }}
+                className="gap-1 h-7 px-2 text-xs"
+              >
+                <Plus className="h-3 w-3" />
+                Team
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Historian shortcut — only visible when their team isn't in this season */}
+        {editMode && isHistorian && !isAdmin && canHistorianAddOwnTeam && (
+          <div className="pr-4 shrink-0">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleAddMyTeam}
+              className="gap-1 h-7 px-2 text-xs"
+            >
+              <Plus className="h-3 w-3" />
+              Add My Team
+            </Button>
           </div>
         )}
       </div>
@@ -157,6 +241,45 @@ export function HistorySeasonSection({
             }}
             onCancel={() => setShowEditForm(false)}
           />
+        </div>
+      )}
+
+      {/* Team picker — admin selects which team to add */}
+      {editMode && isAdmin && showTeamPicker && (
+        <div className="px-4 pb-3">
+          <div className="rounded-md border border-dashed border-border bg-muted/30 p-3 flex items-center gap-2">
+            <select
+              value={selectedTeamId}
+              onChange={(e) => setSelectedTeamId(e.target.value)}
+              className="flex-1 h-8 rounded-md border border-input bg-background px-3 text-sm
+                         focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">Select a team…</option>
+              {availableTeams.map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.emoji} {team.name}
+                  {team.is_hidden ? " (hidden)" : ""}
+                </option>
+              ))}
+            </select>
+            <Button
+              size="sm"
+              onClick={handleAddTeamFromPicker}
+              disabled={!selectedTeamId}
+            >
+              Add Team
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setShowTeamPicker(false);
+                setSelectedTeamId("");
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
         </div>
       )}
 
@@ -201,12 +324,35 @@ export function HistorySeasonSection({
                 />
               );
             })}
+
+            {/* Pending teams — added via +Team but not yet saved */}
+            {pendingTeams.map((team) => {
+              const canEdit =
+                isAdmin || (isHistorian && historianTeamId === team.id);
+              return (
+                <HistoryTeamSection
+                  key={`pending-${team.id}`}
+                  teamEntry={makeSyntheticTeamEntry(team, season.id)}
+                  eraId={season.era_id}
+                  seasonId={season.id}
+                  defaultOpen={true}
+                  canEdit={canEdit}
+                  isAdmin={isAdmin}
+                  editMode={editMode}
+                  allTeams={allTeams}
+                  onRefresh={() => {
+                    setPendingTeams((prev) => prev.filter((t) => t.id !== team.id));
+                    onRefresh();
+                  }}
+                />
+              );
+            })}
           </div>
 
-          {teamEntries.length === 0 && (
+          {teamEntries.length === 0 && pendingTeams.length === 0 && (
             <div className="px-4 py-6 text-sm text-muted-foreground text-center">
-              {editMode && isAdmin
-                ? "No team entries for this season. Team content is added via the team sections below."
+              {editMode && (isAdmin || canHistorianAddOwnTeam)
+                ? "No team entries for this season yet — use the + Team button above to add one."
                 : "No team history has been written for this season yet."}
             </div>
           )}

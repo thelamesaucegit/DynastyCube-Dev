@@ -28,7 +28,8 @@ interface TeamMember {
 }
 
 interface Team {
-  id: string;
+  id: string;         // UUID primary key
+  short_name: string; // URL slug e.g. 'shards'
   name: string;
   emoji: string;
   members?: TeamMember[];
@@ -94,10 +95,10 @@ export default function TradesPage({ params }: TradesPageProps) {
       setTradesEnabled(enabled);
 
       const teams = await getTeamsWithMembers();
-      const current = teams.find((t) => t.id === teamId);
+      const current = teams.find((t) => t.short_name === teamId);
       setCurrentTeam(current || null);
 
-      const { trades: teamTrades } = await getTeamTrades(teamId);
+      const { trades: teamTrades } = await getTeamTrades(current?.id ?? teamId);
       setTrades(teamTrades || []);
     } catch (error) {
       console.error("Error loading trades:", error);
@@ -190,11 +191,12 @@ export default function TradesPage({ params }: TradesPageProps) {
   };
 
   const getFilteredTrades = () => {
+    const teamUUID = currentTeam?.id;
     switch (filter) {
       case "incoming":
-        return trades.filter((t) => t.to_team_id === teamId && t.status === "pending");
+        return trades.filter((t) => t.to_team_id === teamUUID && t.status === "pending");
       case "outgoing":
-        return trades.filter((t) => t.from_team_id === teamId && t.status === "pending");
+        return trades.filter((t) => t.from_team_id === teamUUID && t.status === "pending");
       case "history":
         return trades.filter((t) => ["accepted", "rejected", "cancelled", "expired"].includes(t.status));
       default:
@@ -290,8 +292,8 @@ export default function TradesPage({ params }: TradesPageProps) {
         {(["all", "incoming", "outgoing", "history"] as const).map((f) => {
           const counts = {
             all: trades.length,
-            incoming: trades.filter((t) => t.to_team_id === teamId && t.status === "pending").length,
-            outgoing: trades.filter((t) => t.from_team_id === teamId && t.status === "pending").length,
+            incoming: trades.filter((t) => t.to_team_id === currentTeam?.id && t.status === "pending").length,
+            outgoing: trades.filter((t) => t.from_team_id === currentTeam?.id && t.status === "pending").length,
             history: trades.filter((t) => ["accepted", "rejected", "cancelled", "expired"].includes(t.status)).length,
           };
           const labels = { all: "All", incoming: "Incoming", outgoing: "Outgoing", history: "History" };
@@ -332,7 +334,7 @@ export default function TradesPage({ params }: TradesPageProps) {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {filteredTrades.map((trade) => {
-            const isIncoming = trade.to_team_id === teamId;
+            const isIncoming = trade.to_team_id === currentTeam?.id;
             const isPending = trade.status === "pending";
             const otherTeam = isIncoming
               ? { name: trade.from_team_name, emoji: trade.from_team_emoji }

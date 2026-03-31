@@ -41,7 +41,8 @@ interface TeamMember {
 }
 
 interface Team {
-  id: string;
+  id: string;         // UUID primary key
+  short_name: string; // URL-safe identifier e.g. 'shards', 'ninja'
   name: string;
   emoji: string;
   motto: string;
@@ -58,10 +59,10 @@ export interface UserForDropdown {
 
 export interface TeamWithDetails {
   id: string;
+  short_name: string;
   name: string;
   emoji: string;
   motto: string;
-  short_name: string;
   wins: number;
   losses: number;
   primary_color: string | null;
@@ -102,6 +103,33 @@ export async function getUsersForDropdown(): Promise<{
   } catch (error) {
     console.error("Unexpected error fetching users:", error);
     return { users: [], error: "An unexpected error occurred" };
+  }
+}
+
+/**
+ * Resolve a team short_name (URL slug) to the full team object including UUID.
+ * Use this at page boundaries where teamId comes from a route param.
+ */
+export async function getTeamByShortName(
+  shortName: string
+): Promise<{ team: Team | null; error?: string }> {
+  const supabase = await createClient();
+  try {
+    const { data, error } = await supabase
+      .from("teams")
+      .select("*")
+      .eq("short_name", shortName)
+      .single();
+
+    if (error) {
+      if (error.code === "PGRST116") return { team: null };
+      return { team: null, error: error.message };
+    }
+
+    return { team: data };
+  } catch (error) {
+    console.error("Unexpected error fetching team by short_name:", error);
+    return { team: null, error: "An unexpected error occurred" };
   }
 }
 
@@ -423,7 +451,7 @@ export async function getAllTeams(): Promise<{
   try {
     const { data, error } = await supabase
       .from("teams")
-      .select("id, name, emoji, motto")
+      .select("id, short_name, name, emoji, motto")
       .order("name");
 
     if (error) {
