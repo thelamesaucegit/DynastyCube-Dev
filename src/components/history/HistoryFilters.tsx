@@ -18,6 +18,7 @@ interface HistoryFiltersProps {
   filters: HistoryFilterState;
   viewMode: ViewMode;
   isAdmin: boolean;
+  isHistorian: boolean;
   editMode: boolean;
   onFilterChange: (key: keyof HistoryFilterState, value: string | null) => void;
   onViewModeChange: (mode: ViewMode) => void;
@@ -36,6 +37,7 @@ export function HistoryFilters({
   filters,
   viewMode,
   isAdmin,
+  isHistorian,
   editMode,
   onFilterChange,
   onViewModeChange,
@@ -219,7 +221,7 @@ export function HistoryFilters({
           Turning it on reveals inline CRUD controls at every level of the
           history hierarchy. Turning it off returns to clean reading mode.
         */}
-        {isAdmin && (
+        {(isAdmin || isHistorian) && (
           <button
             type="button"
             onClick={() => {
@@ -247,14 +249,14 @@ export function HistoryFilters({
         Contains top-level structural actions: creating a new Era.
         Season creation lives inside HistoryEraSection (closer to where it belongs).
       */}
-      {editMode && isAdmin && (
+      {editMode && (isAdmin || isHistorian) && (
         <div className="flex items-center gap-3 px-4 py-3 rounded-lg border
                         border-amber-500/30 bg-amber-500/5">
           <span className="text-xs font-semibold uppercase tracking-wider text-amber-600">
             Edit Mode
           </span>
           <div className="flex-1" />
-          {!showEraForm && (
+          {isAdmin && !showEraForm && (
             <Button
               size="sm"
               variant="outline"
