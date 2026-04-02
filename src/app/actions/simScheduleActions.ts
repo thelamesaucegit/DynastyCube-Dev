@@ -50,66 +50,96 @@ export async function getTeamCurrentDecklist(
     const supabase = createServiceClient();
 
     try {
-        // Attempt 1: week-specific current submission
+        // Tier 1: Week-specific confirmed submission
         if (weekId) {
             const { data, error } = await supabase
-                .from("deck_submissions")
-                .select("deck_list, submitted_at")
-                .eq("team_id", teamId)
-                .eq("week_id", weekId)
-                .eq("is_current", true)
-                .order("submitted_at", { ascending: false })
+                .from('deck_submissions')
+                .select('deck_list, submitted_at')
+                .eq('team_id', teamId)
+                .eq('week_id', weekId)
+                .eq('is_current', true)
+                .order('submitted_at', { ascending: false })
                 .limit(1)
                 .maybeSingle();
 
             if (!error && data?.deck_list) {
-                const cardCount = countCardsInDecklist(data.deck_list);
                 return {
                     decklist: data.deck_list,
-                    cardCount,
+                    cardCount: countCardsInDecklist(data.deck_list),
                     source: 'week_submission',
                     submittedAt: data.submitted_at,
                 };
             }
         }
 
-        // Attempt 2: most recent current submission for this team, any week
-        const { data, error } = await supabase
-            .from("deck_submissions")
-            .select("deck_list, submitted_at, week_id")
-            .eq("team_id", teamId)
-            .eq("is_current", true)
-            .order("submitted_at", { ascending: false })
+        // Tier 2: Most recent submission for this team, any week this season
+        const { data: latestSubmission } = await supabase
+            .from('deck_submissions')
+            .select('deck_list, submitted_at')
+            .eq('team_id', teamId)
+            .eq('is_current', true)
+            .order('submitted_at', { ascending: false })
             .limit(1)
             .maybeSingle();
 
-        if (error) {
-            return { decklist: null, cardCount: 0, source: 'none', submittedAt: null, error: error.message };
+        if (latestSubmission?.deck_list) {
+            return {
+                decklist: latestSubmission.deck_list,
+                cardCount: countCardsInDecklist(latestSubmission.deck_list),
+                source: 'latest_submission',
+                submittedAt: latestSubmission.submitted_at,
+            };
         }
 
-        if (!data?.deck_list) {
+        // Tier 3: Build directly from deck_cards (most recently updated deck)
+        const { data: deck } = await supabase
+            .from('team_decks')
+            .select('id, deck_name')
+            .eq('team_id', teamId)
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (!deck) {
             return { decklist: null, cardCount: 0, source: 'none', submittedAt: null };
         }
 
-        const cardCount = countCardsInDecklist(data.deck_list);
+        const { data: cards } = await supabase
+            .from('deck_cards')
+            .select('card_name, quantity')
+            .eq('deck_id', deck.id)
+            .eq('category', 'mainboard');
+
+        if (!cards || cards.length === 0) {
+            return { decklist: null, cardCount: 0, source: 'none', submittedAt: null };
+        }
+
+        const deckList = formatAsDckFromCards(teamId, cards);
         return {
-            decklist: data.deck_list,
-            cardCount,
-            source: 'latest_submission',
-            submittedAt: data.submitted_at,
+            decklist: deckList,
+            cardCount: cards.reduce((sum, c) => sum + (c.quantity || 1), 0),
+            source: 'none', // signals to scheduler that a submission should be created
+            submittedAt: null,
         };
 
     } catch (e) {
-        return { 
-            decklist: null, 
-            cardCount: 0, 
-            source: 'none', 
+        return {
+            decklist: null,
+            cardCount: 0,
+            source: 'none',
             submittedAt: null,
-            error: "Unexpected error fetching decklist" 
+            error: e instanceof Error ? e.message : 'Unexpected error',
         };
     }
 }
-
+// Add this helper to simScheduleActions.ts alongside countCardsInDecklist
+function formatAsDckFromCards(
+    teamId: string,
+    cards: Array<{ card_name: string; quantity: number | null }>
+): string {
+    const lines = cards.map(c => `${c.quantity || 1} ${c.card_name}`).join('\n');
+    return `[metadata]\nName=${teamId}\n\n[Main]\n${lines}`;
+}
 /** Count total cards in a .dck formatted decklist string */
 function countCardsInDecklist(decklist: string): number {
     return decklist.split('\n').reduce((count, line) => {
