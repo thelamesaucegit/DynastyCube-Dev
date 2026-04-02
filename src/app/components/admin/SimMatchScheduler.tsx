@@ -35,7 +35,7 @@ export const SimMatchScheduler: React.FC<SimMatchSchedulerProps> = ({ activeSeas
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
-
+const [deckWarnings, setDeckWarnings] = useState<string[]>([]);
     // Form state
     const [team1Id, setTeam1Id] = useState("");
     const [team2Id, setTeam2Id] = useState("");
@@ -126,6 +126,7 @@ export const SimMatchScheduler: React.FC<SimMatchSchedulerProps> = ({ activeSeas
 
         if (result.success) {
             setSuccess(`Match scheduled! Sim ID: ${result.simMatchId}`);
+            setDeckWarnings(result.deckWarnings || []);
             // Reset form
             setTeam1Id(""); setTeam2Id("");
             setTeam1Profile(""); setTeam2Profile("");
@@ -173,6 +174,14 @@ export const SimMatchScheduler: React.FC<SimMatchSchedulerProps> = ({ activeSeas
                 <div className="bg-green-50 dark:bg-green-900/20 border border-green-300 dark:border-green-700 rounded-lg p-4 text-green-800 dark:text-green-200 text-sm">
                     ✓ {success}
                 </div>
+            {success && deckWarnings.length > 0 && (
+    <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg p-3 text-sm text-yellow-800 dark:text-yellow-200">
+        <p className="font-medium mb-1">⚠ Deck warnings:</p>
+        <ul className="list-disc list-inside space-y-1">
+            {deckWarnings.map((w, i) => <li key={i}>{w}</li>)}
+        </ul>
+    </div>
+)}
             )}
             {error && (
                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg p-4 text-red-800 dark:text-red-200 text-sm">
