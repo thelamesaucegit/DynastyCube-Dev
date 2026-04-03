@@ -11,6 +11,34 @@ function createServiceClient() {
         process.env.SUPABASE_SERVICE_KEY!
     );
 }
+// Add this interface near the top of deckGenerationActions.ts
+interface DraftPickWithPool {
+    id: string;
+    card_id: string;
+    card_name: string;
+    card_type: string | null;
+    mana_cost: string | null;
+    cubecobra_elo: number | null;
+    card_pool_id: string | null;
+    card_pools: { cubucks_cost: number | null } | null;
+}
+
+// Then in generatePlaceholderDeck, type the query result:
+const { data: picks, error: picksError } = await supabase
+    .from('team_draft_picks')
+    .select(`
+        id,
+        card_id,
+        card_name,
+        card_type,
+        mana_cost,
+        cubecobra_elo,
+        card_pool_id,
+        card_pools!card_pool_id(cubucks_cost)
+    `)
+    .eq('team_id', teamId)
+    .neq('card_id', 'skipped-pick')
+    .returns<DraftPickWithPool[]>();
 
 const COLOR_TO_BASIC_LAND: Record<string, string> = {
     W: 'Plains',
@@ -109,8 +137,7 @@ export async function generatePlaceholderDeck(
             card_type: p.card_type || '',
             mana_cost: p.mana_cost || '',
             elo: p.cubecobra_elo ?? 0,
-            cost: (p.card_pools as any)?.cubucks_cost ?? 1,
-        }));
+ cost: p.card_pools?.cubucks_cost ?? 1,        }));
 
         // 4. Sort by ELO descending
         normalizedPicks.sort((a, b) => b.elo - a.elo);
