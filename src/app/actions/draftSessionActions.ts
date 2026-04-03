@@ -6,6 +6,8 @@ import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 import { getDraftStatus, type DraftStatus } from "@/app/actions/draftOrderActions";
 import { executeAutoDraft } from "@/app/actions/autoDraftActions";
 import { addSkippedPick } from "@/app/actions/draftActions"; 
+import { generatePlaceholderDeck } from "@/app/actions/deckGenerationActions";
+
 
 // ============================================================================
 // TYPES
@@ -577,6 +579,26 @@ export async function completeDraft(
       return { success: false, error: error.message };
     }
 
+ // Generate placeholder decks for all teams in the draft.
+    const { data: teams, error: teamsError } = await supabase
+      .from('draft_order')
+      .select('team_id')
+      .eq('season_id', session.season_id);
+
+    if (teamsError) {
+        console.error("Error fetching teams for placeholder deck generation:", teamsError);
+    }
+
+    if (teams) {
+      console.log(\`Generating placeholder decks for ${teams.length} teams in session ${sessionId}...\`);
+      for (const team of teams) {
+          const { success, error: deckError } = await generatePlaceholderDeck(team.team_id, sessionId);
+          if (!success) {
+              console.error(\`Failed to generate placeholder deck for team ${team.team_id}: ${deckError}\`);
+          }
+      }
+    }
+    
     await supabase.rpc("notify_all_users_draft", {
       p_notification_type: "draft_completed",
       p_message: "The draft has been completed by an admin.",
