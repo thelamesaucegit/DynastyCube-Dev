@@ -24,7 +24,7 @@ import { DataBackfillManagement } from "@/app/components/admin/DataBackfillManag
 import { getTeamsWithMembers } from "../actions/teamActions";
 import { getCardPool } from "../actions/cardActions";
 import { SimMatchScheduler } from "@/app/components/admin/SimMatchScheduler";
-import { getAllSeasons } from "@/app/actions/scheduleActions";
+import { getAllSeasons, getActiveSeasonNumber } from "@/app/actions/scheduleActions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
@@ -33,6 +33,7 @@ import {
   Trophy,
   Layers,
   Coins,
+  BsCalendarWeek,
   CalendarDays,
   Swords,
   BarChart3,
@@ -81,10 +82,10 @@ export default function AdminPage() {
 
  const loadStats = async () => {
   try {
-    const [teams, { cards }, { seasons }] = await Promise.all([
+     const [teams, { cards }, activeSeasonNumber] = await Promise.all([
       getTeamsWithMembers(),
       getCardPool(),
-      getAllSeasons(),
+      getActiveSeasonNumber(),
     ]);
 
     const totalMembers = teams.reduce(
@@ -92,14 +93,12 @@ export default function AdminPage() {
       0
     );
 
-    const activeSeason = seasons.find(s => s.status === "active");
-
-    setStats({
+ setStats({
       totalUsers: totalMembers,
       activeTeams: teams.length,
       cardPoolSize: cards.length,
       draftEvents: 0,
-      activeSeasonNumber: activeSeason ? Number(activeSeason.name.match(/\d+/)?.[0] ?? 1) : 1,
+      activeSeasonNumber: activeSeasonNumber ?? 1,
     });
   } catch (error) {
     console.error("Error loading stats:", error);
@@ -112,6 +111,7 @@ export default function AdminPage() {
     { id: "cards", label: "Cards", icon: <Layers className="size-4" /> },
     { id: "cubucks", label: "Cubucks", icon: <Coins className="size-4" /> },
     { id: "essence", label: "Essence", icon: <Sparkles className="size-4" /> },
+    { id: "sim-schedule", label: "Sim Schedule", icon: <BsCalendarWeek className="size-4" /> },
     { id: "seasons", label: "Seasons", icon: <CalendarDays className="size-4" /> },
     { id: "matches", label: "Matches", icon: <Swords className="size-4" /> },
     { id: "draft-order", label: "Draft Order", icon: <ListOrdered className="size-4" /> },
@@ -145,6 +145,21 @@ export default function AdminPage() {
         return <CubucksManagement />;
       case "essence":
         return <EssenceManagement />;
+        case "sim-schedule":
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-xl font-semibold flex items-center gap-2">
+          <Swords className="size-5" />
+          Simulated Match Scheduler
+        </h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Schedule and trigger simulated matches between teams using their current decklists.
+        </p>
+      </div>
+      <SimMatchScheduler activeSeasonNumber={stats.activeSeasonNumber} />
+    </div>
+  );
       case "seasons":
         return <SeasonManagement />;
       case "ratings":
