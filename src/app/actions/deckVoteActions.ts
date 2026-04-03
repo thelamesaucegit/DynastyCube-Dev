@@ -23,11 +23,18 @@ interface PollWithOptions {
     poll_options: PollOptionRow[];
 }
 
+interface PollOptionSummaryRow {
+    id: string;
+    deck_id: string | null;
+    option_text: string;
+    vote_count: number;
+}
+
 interface PollSummary {
     id: string;
     title: string;
     ends_at: string;
-    poll_options: PollOptionRow[];
+    poll_options: PollOptionSummaryRow[];
 }
 /**
  * Create a deck vote poll for a team for a given week.
