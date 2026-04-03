@@ -30,6 +30,16 @@ export interface ScheduleWeek {
   updated_at: string;
 }
 
+export async function getActiveSeasonNumber(): Promise<number | null> {
+  const supabase = await createServerClient();
+  const { data, error } = await supabase
+    .from('seasons')
+    .select('season_number')
+    .eq('is_active', true)
+    .single();
+  if (error || !data) return null;
+  return data.season_number;
+}
 /**
  * Get all schedule weeks for a season
  */
