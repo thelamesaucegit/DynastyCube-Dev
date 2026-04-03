@@ -40,6 +40,26 @@ const { data: picks, error: picksError } = await supabase
     .neq('card_id', 'skipped-pick')
     .returns<DraftPickWithPool[]>();
 
+interface DeckCardInsert {
+    deck_id: string;
+    draft_pick_id: string | null;
+    card_id: string;
+    card_name: string;
+    quantity: number;
+    is_commander: boolean;
+    category: string;
+}
+
+// Then type the array explicitly:
+const deckCardRows: DeckCardInsert[] = selectedCards.map(card => ({
+    deck_id: deckId,
+    draft_pick_id: card.id,
+    card_id: card.card_id,
+    card_name: card.card_name,
+    quantity: 1,
+    is_commander: false,
+    category: 'mainboard',
+}));
 const COLOR_TO_BASIC_LAND: Record<string, string> = {
     W: 'Plains',
     U: 'Island',
@@ -248,7 +268,7 @@ export async function generatePlaceholderDeck(
             if (!landName) continue;
             deckCardRows.push({
                 deck_id: deckId,
-                draft_pick_id: null as any,
+                draft_pick_id: null,
                 card_id: BASIC_LAND_CARD_IDS[landName],
                 card_name: landName,
                 quantity: count,
@@ -336,32 +356,26 @@ export async function submitDeckForWeek(
 
         // 4. Check for existing submission for this team+week
         const { data: existing } = await supabase
-            .from('deck_submissions')
-            .select('id')
-            .eq('team_id', teamId)
-            .eq('week_id', weekId)
-            .maybeSingle();
+    .from('deck_submissions')
+    .select('id, version')
+    .eq('team_id', teamId)
+    .eq('week_id', weekId)
+    .maybeSingle();
 
-        if (existing) {
-            // Update in place — preserves version history intent
-            const { data: updated, error: updateError } = await supabase
-                .from('deck_submissions')
-                .update({
-                    deck_list: deckList,
-                    deck_name: deck.deck_name,
-                    is_current: true,
-                    version: supabase.rpc as any, // increment handled by DB if trigger exists
-                })
-                .eq('id', existing.id)
-                .select('id')
-                .single();
+if (existing) {
+    const { error: updateError } = await supabase
+        .from('deck_submissions')
+        .update({
+            deck_list: deckList,
+            deck_name: deck.deck_name,
+            is_current: true,
+            version: (existing.version ?? 1) + 1,
+        })
+        .eq('id', existing.id);
 
-            if (updateError) {
-                return { success: false, error: updateError.message };
-            }
-            return { success: true, submissionId: existing.id };
-        }
-
+    if (updateError) return { success: false, error: updateError.message };
+    return { success: true, submissionId: existing.id };
+}
         // 5. Insert new submission
         const { data: submission, error: insertError } = await supabase
             .from('deck_submissions')
