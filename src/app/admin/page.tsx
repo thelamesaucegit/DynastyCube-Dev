@@ -23,6 +23,8 @@ import { EssenceManagement } from "../components/admin/EssenceManagement";
 import { DataBackfillManagement } from "@/app/components/admin/DataBackfillManagement";
 import { getTeamsWithMembers } from "../actions/teamActions";
 import { getCardPool } from "../actions/cardActions";
+import { SimMatchScheduler } from "@/app/components/admin/SimMatchScheduler";
+import { getAllSeasons } from "@/app/actions/scheduleActions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
@@ -52,13 +54,14 @@ import {
   Play,
 } from "lucide-react";
 
-type TabType = "users" | "teams" | "cards" | "cubucks" | "essence" | "seasons" | "matches" | "draft-order" | "draft-session" | "ratings" | "news" | "timers" | "reports" | "votes" | "settings" | "history" | "glossary";
+type TabType = "users" | "teams" | "cards" | "cubucks" | "essence" | "seasons" | "matches" | "sim-schedule" | "draft-order" | "draft-session" | "ratings" | "news" | "timers" | "reports" | "votes" | "settings" | "history" | "glossary";
 
 interface Stats {
   totalUsers: number;
   activeTeams: number;
   cardPoolSize: number;
   draftEvents: number;
+  activeSeasonNumber: number;
 }
 
 export default function AdminPage() {
@@ -68,6 +71,7 @@ export default function AdminPage() {
     activeTeams: 8,
     cardPoolSize: 0,
     draftEvents: 0,
+    activeSeasonNumber: 1,
   });
 
   // Load stats on mount
@@ -75,26 +79,32 @@ export default function AdminPage() {
     loadStats();
   }, []);
 
-  const loadStats = async () => {
-    try {
-      // Get teams and count members
-      const teams = await getTeamsWithMembers();
-      const totalMembers = teams.reduce(
-        (sum, team) => sum + (team.members?.length || 0),
-        0
-      );
-      // Get card pool
-      const { cards } = await getCardPool();
-      setStats({
-        totalUsers: totalMembers,
-        activeTeams: teams.length,
-        cardPoolSize: cards.length,
-        draftEvents: 0, // TODO: Implement when draft_events table is created
-      });
-    } catch (error) {
-      console.error("Error loading stats:", error);
-    }
-  };
+ const loadStats = async () => {
+  try {
+    const [teams, { cards }, { seasons }] = await Promise.all([
+      getTeamsWithMembers(),
+      getCardPool(),
+      getAllSeasons(),
+    ]);
+
+    const totalMembers = teams.reduce(
+      (sum, team) => sum + (team.members?.length || 0),
+      0
+    );
+
+    const activeSeason = seasons.find(s => s.status === "active");
+
+    setStats({
+      totalUsers: totalMembers,
+      activeTeams: teams.length,
+      cardPoolSize: cards.length,
+      draftEvents: 0,
+      activeSeasonNumber: activeSeason ? Number(activeSeason.name.match(/\d+/)?.[0] ?? 1) : 1,
+    });
+  } catch (error) {
+    console.error("Error loading stats:", error);
+  }
+};
 
   const tabItems: { id: TabType; label: string; icon: React.ReactNode }[] = [
     { id: "users", label: "Users", icon: <Users className="size-4" /> },
