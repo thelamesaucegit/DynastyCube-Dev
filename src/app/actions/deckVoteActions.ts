@@ -140,7 +140,7 @@ export async function resolveDeckVotePoll(
 
     try {
         // 1. Fetch poll with options and vote counts
-       const { data: poll, error: pollError } = await supabase
+       const { data: rawPoll, error: pollError } = await supabase
     .from('polls')
     .select(`
         id,
@@ -154,8 +154,8 @@ export async function resolveDeckVotePoll(
         )
     `)
     .eq('id', pollId)
-    .returns<PollWithOptions>()
     .single();
+        const poll = rawPoll as unknown as PollWithOptions;
 
         if (pollError || !poll) {
             return { success: false, error: 'Poll not found' };
@@ -270,9 +270,8 @@ export async function getTeamActiveDeckVotePoll(
             query = query.eq('week_id', weekId);
         }
 
-       const { data, error } = await query
-    .returns<PollSummary>()
-    .maybeSingle();
+       const { data: rawData, error } = await query.maybeSingle();
+        const data = rawData as unknown as PollSummary | null;
 
         if (error) return { poll: null, error: error.message };
         if (!data) return { poll: null };

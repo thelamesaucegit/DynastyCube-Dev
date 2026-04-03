@@ -171,17 +171,19 @@ const [deckWarnings, setDeckWarnings] = useState<string[]>([]);
             </div>
 
             {success && (
-                <div className="bg-green-50 dark:bg-green-900/20 border border-green-300 dark:border-green-700 rounded-lg p-4 text-green-800 dark:text-green-200 text-sm">
-                    ✓ {success}
-                </div>
-            {success && deckWarnings.length > 0 && (
-    <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg p-3 text-sm text-yellow-800 dark:text-yellow-200">
-        <p className="font-medium mb-1">⚠ Deck warnings:</p>
-        <ul className="list-disc list-inside space-y-1">
-            {deckWarnings.map((w, i) => <li key={i}>{w}</li>)}
-        </ul>
-    </div>
-)}
+                <>
+                    <div className="bg-green-50 dark:bg-green-900/20 border border-green-300 dark:border-green-700 rounded-lg p-4 text-green-800 dark:text-green-200 text-sm">
+                        ✓ {success}
+                    </div>
+                    {deckWarnings.length > 0 && (
+                        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg p-3 text-sm text-yellow-800 dark:text-yellow-200">
+                            <p className="font-medium mb-1">⚠ Deck warnings:</p>
+                            <ul className="list-disc list-inside space-y-1">
+                                {deckWarnings.map((w, i) => <li key={i}>{w}</li>)}
+                            </ul>
+                        </div>
+                    )}
+                </>
             )}
             {error && (
                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg p-4 text-red-800 dark:text-red-200 text-sm">
@@ -381,7 +383,7 @@ const [deckWarnings, setDeckWarnings] = useState<string[]>([]);
                                                 Week {match.week_number} · {new Date(match.match_date).toLocaleString()}
                                             </p>
                                             {match.sim_match_id && (
-                                                
+                                                <a
                                                     href={`/admin/match-viewer/${match.sim_match_id}`}
                                                     className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
                                                 >

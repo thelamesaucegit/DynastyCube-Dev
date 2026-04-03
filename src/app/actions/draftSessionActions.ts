@@ -580,21 +580,27 @@ export async function completeDraft(
     }
 
  // Generate placeholder decks for all teams in the draft.
+    const { data: sessionData } = await supabase
+      .from('draft_sessions')
+      .select('season_id')
+      .eq('id', sessionId)
+      .single();
+
     const { data: teams, error: teamsError } = await supabase
       .from('draft_order')
       .select('team_id')
-      .eq('season_id', session.season_id);
+      .eq('season_id', sessionData?.season_id);
 
     if (teamsError) {
         console.error("Error fetching teams for placeholder deck generation:", teamsError);
     }
 
     if (teams) {
-      console.log(\`Generating placeholder decks for ${teams.length} teams in session ${sessionId}...\`);
+      console.log(`Generating placeholder decks for ${teams.length} teams in session ${sessionId}...`);
       for (const team of teams) {
           const { success, error: deckError } = await generatePlaceholderDeck(team.team_id, sessionId);
           if (!success) {
-              console.error(\`Failed to generate placeholder deck for team ${team.team_id}: ${deckError}\`);
+              console.error(`Failed to generate placeholder deck for team ${team.team_id}: ${deckError}`);
           }
       }
     }

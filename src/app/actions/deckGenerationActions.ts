@@ -23,23 +23,6 @@ interface DraftPickWithPool {
     card_pools: { cubucks_cost: number | null } | null;
 }
 
-// Then in generatePlaceholderDeck, type the query result:
-const { data: picks, error: picksError } = await supabase
-    .from('team_draft_picks')
-    .select(`
-        id,
-        card_id,
-        card_name,
-        card_type,
-        mana_cost,
-        cubecobra_elo,
-        card_pool_id,
-        card_pools!card_pool_id(cubucks_cost)
-    `)
-    .eq('team_id', teamId)
-    .neq('card_id', 'skipped-pick')
-    .returns<DraftPickWithPool[]>();
-
 interface DeckCardInsert {
     deck_id: string;
     draft_pick_id: string | null;
@@ -49,17 +32,6 @@ interface DeckCardInsert {
     is_commander: boolean;
     category: string;
 }
-
-// Then type the array explicitly:
-const deckCardRows: DeckCardInsert[] = selectedCards.map(card => ({
-    deck_id: deckId,
-    draft_pick_id: card.id,
-    card_id: card.card_id,
-    card_name: card.card_name,
-    quantity: 1,
-    is_commander: false,
-    category: 'mainboard',
-}));
 const COLOR_TO_BASIC_LAND: Record<string, string> = {
     W: 'Plains',
     U: 'Island',
@@ -157,7 +129,8 @@ export async function generatePlaceholderDeck(
             card_type: p.card_type || '',
             mana_cost: p.mana_cost || '',
             elo: p.cubecobra_elo ?? 0,
- cost: p.card_pools?.cubucks_cost ?? 1,        }));
+            cost: p.card_pools?.[0]?.cubucks_cost ?? 1,
+        }));
 
         // 4. Sort by ELO descending
         normalizedPicks.sort((a, b) => b.elo - a.elo);
