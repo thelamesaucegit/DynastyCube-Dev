@@ -9,7 +9,26 @@ function createServiceClient() {
         process.env.SUPABASE_SERVICE_KEY!
     );
 }
+interface PollOptionRow {
+    id: string;
+    deck_id: string | null;
+    option_text: string;
+    vote_count: number;
+    option_order: number;
+}
 
+interface PollWithOptions {
+    id: string;
+    team_id: string | null;
+    poll_options: PollOptionRow[];
+}
+
+interface PollSummary {
+    id: string;
+    title: string;
+    ends_at: string;
+    poll_options: PollOptionRow[];
+}
 /**
  * Create a deck vote poll for a team for a given week.
  * Poll options are the team's current decks.
@@ -114,21 +133,22 @@ export async function resolveDeckVotePoll(
 
     try {
         // 1. Fetch poll with options and vote counts
-        const { data: poll, error: pollError } = await supabase
-            .from('polls')
-            .select(`
-                id,
-                team_id,
-                poll_options (
-                    id,
-                    deck_id,
-                    option_text,
-                    vote_count,
-                    option_order
-                )
-            `)
-            .eq('id', pollId)
-            .single();
+       const { data: poll, error: pollError } = await supabase
+    .from('polls')
+    .select(`
+        id,
+        team_id,
+        poll_options (
+            id,
+            deck_id,
+            option_text,
+            vote_count,
+            option_order
+        )
+    `)
+    .eq('id', pollId)
+    .returns<PollWithOptions>()
+    .single();
 
         if (pollError || !poll) {
             return { success: false, error: 'Poll not found' };
@@ -138,13 +158,7 @@ export async function resolveDeckVotePoll(
             return { success: false, error: 'Poll is not associated with a team' };
         }
 
-        const options = poll.poll_options as Array<{
-            id: string;
-            deck_id: string | null;
-            option_text: string;
-            vote_count: number;
-            option_order: number;
-        }>;
+       const options: PollOptionRow[] = poll.poll_options;
 
         if (!options || options.length === 0) {
             return { success: false, error: 'Poll has no options' };
@@ -249,19 +263,21 @@ export async function getTeamActiveDeckVotePoll(
             query = query.eq('week_id', weekId);
         }
 
-        const { data, error } = await query.maybeSingle();
+       const { data, error } = await query
+    .returns<PollSummary>()
+    .maybeSingle();
 
         if (error) return { poll: null, error: error.message };
         if (!data) return { poll: null };
 
-        return {
-            poll: {
-                id: data.id,
-                title: data.title,
-                ends_at: data.ends_at,
-                options: (data.poll_options as any[]) || [],
-            }
-        };
+     return {
+    poll: {
+        id: data.id,
+        title: data.title,
+        ends_at: data.ends_at,
+        options: data.poll_options,
+    }
+};
     } catch (e) {
         return { poll: null, error: e instanceof Error ? e.message : 'Unexpected error' };
     }
