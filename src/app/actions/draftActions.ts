@@ -253,6 +253,17 @@ export async function createDeck(deck: Deck): Promise<{ success: boolean; deckId
   try {
     const authCheck = await verifyTeamMembership(deck.team_id, supabase);
     if (!authCheck.authorized) return { success: false, error: authCheck.error };
+
+    // Enforce 3-deck-per-user-per-team limit (excludes system-generated decks where created_by is null)
+    const { count, error: countError } = await supabase
+      .from('team_decks')
+      .select('id', { count: 'exact', head: true })
+      .eq('team_id', deck.team_id)
+      .eq('created_by', authCheck.userId);
+
+    if (countError) return { success: false, error: 'Failed to check deck limit' };
+    if ((count ?? 0) >= 3) return { success: false, error: 'You have reached the maximum of 3 decks per team. Please delete a deck before creating a new one.' };
+
     const { data, error } = await supabase.from("team_decks").insert({ team_id: deck.team_id, deck_name: deck.deck_name, description: deck.description, format: deck.format || "standard", is_public: deck.is_public || false, created_by: authCheck.userId }).select().single();
     if (error) return { success: false, error: `Database error: ${error.message}` };
     return { success: true, deckId: data.id };
