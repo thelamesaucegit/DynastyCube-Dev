@@ -319,7 +319,50 @@ export async function createScheduledSimMatch(params: {
         return { success: false, error: scheduleError?.message || "Failed to create schedule entry" };
     }
 
+    // 5. Trigger the match runner API
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : 'http://localhost:3000';
 
+    let simMatchId: string | undefined;
+    try {
+        const response = await fetch(`${appUrl}/api/match-runner`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                deck1: { content: deck1, aiProfile: params.team1_ai_profile },
+                deck2: { content: deck2, aiProfile: params.team2_ai_profile },
+                team1Id: params.team1_id,
+                team2Id: params.team2_id,
+            }),
+        });
+
+        if (!response.ok) {
+            const errorBody = await response.json().catch(() => ({}));
+            return { success: false, error: (errorBody as { error?: string }).error || "Match runner API returned an error" };
+        }
+
+        const result = await response.json() as { matchId?: string };
+        simMatchId = result.matchId;
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : "Unknown error contacting match runner";
+        return { success: false, error: msg };
+    }
+
+    // 6. Write sim_match_id back to the schedule row
+    if (simMatchId) {
+        await supabase
+            .from("schedule")
+            .update({ sim_match_id: simMatchId })
+            .eq("id", scheduleRow.id);
+    }
+
+    return {
+        success: true,
+        scheduleId: scheduleRow.id,
+        simMatchId,
+        deckWarnings: deckWarnings.length > 0 ? deckWarnings : undefined,
+    };
 }
 
 /**
