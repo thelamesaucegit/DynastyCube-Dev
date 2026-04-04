@@ -18,7 +18,7 @@ interface ReplayPlayerProps {
   matchId: string;
   team1: Team | null;
   team2: Team | null;
-  cardDataMap: Map<string, ReplayCardData>;
+  cardDataMap: Record<string, ReplayCardData>;
 }
 interface BattlefieldCard extends CardType { row: 'front' | 'back'; imageUrl: string | null; }
 interface AnimatedCard { name: string; imageUrl: string; }
@@ -66,7 +66,7 @@ const generateLogMessage = (prevState: GameState | null, nextState: GameState, t
 };
 
 // --- MODAL COMPONENT for Graveyard/Exile ---
-const ZoneViewer = ({ zoneName, cards, cardDataMap }: { zoneName: string, cards: CardType[], cardDataMap: Map<string, ReplayCardData>}) => {
+const ZoneViewer = ({ zoneName, cards, cardDataMap }: { zoneName: string, cards: CardType[], cardDataMap: Record<string, ReplayCardData>}) => {
   const { useOldestArt } = useSettings();
   return (
     <DialogContent className="bg-gray-800 border-gray-700 max-w-4xl">
@@ -76,7 +76,7 @@ const ZoneViewer = ({ zoneName, cards, cardDataMap }: { zoneName: string, cards:
       <ScrollArea className="max-h-[60vh] p-4">
         <div className="flex flex-wrap gap-4">
           {cards.length > 0 ? cards.map(card => {
-            const cardInfo = cardDataMap.get(card.name);
+            const cardInfo = cardDataMap[card.name];
             // FIX: Handle the case where cardInfo might be undefined
             const imageUrl = cardInfo ? getCardImageUrl(cardInfo, useOldestArt) : null;
             return imageUrl ? <img key={card.id} src={imageUrl} alt={card.name} className="h-48 object-contain rounded-lg" /> : null;
@@ -127,7 +127,7 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
       const playerState = currentState.players[pName];
       if (playerState) {
           state[pName] = playerState.battlefield.map(card => {
-              const cardInfo = cardDataMap.get(card.name);
+              const cardInfo = cardDataMap[card.name];
               return {
                   ...card,
                   row: getCardCategory(card.cardType || ''),
@@ -146,7 +146,7 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     
     if (prevState && currentState.stack.length > prevState.stack.length) {
         const newSpell = currentState.stack[currentState.stack.length - 1];
-        const cardInfo = cardDataMap.get(newSpell.name);
+        const cardInfo = cardDataMap[newSpell.name];
         if (cardInfo) {
             const imageUrl = getCardImageUrl(cardInfo, useOldestArt);
             if (imageUrl) {
@@ -253,7 +253,7 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
           {currentState.stack.length > 0 && (
   <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-30 flex gap-2 items-center bg-black/50 rounded-lg p-2">
     {currentState.stack.map(card => {
-      const cardInfo = cardDataMap.get(card.name);
+      const cardInfo = cardDataMap[card.name];
       const imageUrl = cardInfo ? getCardImageUrl(cardInfo, useOldestArt) : null;
       return imageUrl 
         ? <img key={card.id} src={imageUrl} alt={card.name} className="h-24 rounded-lg shadow-lg ring-2 ring-yellow-400" />
