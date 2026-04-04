@@ -1,0 +1,322 @@
+/* =================================
+   AUTHENTICATION COMPONENT STYLES
+   ================================= */
+
+/* Discord Login Container */
+.discord-login {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 60vh;
+  padding: 2rem;
+}
+
+/* Login Card */
+.login-card {
+  max-width: 400px;
+  width: 100%;
+  padding: 3rem 2rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background-color: #ffffff;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.login-header h2 {
+  margin-bottom: 0.5rem;
+  color: #1f2937;
+  font-size: 1.5rem;
+}
+
+.login-header p {
+  margin-bottom: 2rem;
+  color: #6b7280;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+/* OAuth Login Buttons */
+.discord-login-btn,
+.google-login-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 1rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 0.75rem;
+}
+
+.discord-login-btn {
+  background-color: #5865f2;
+  color: white;
+}
+
+.discord-login-btn:hover:not(:disabled) {
+  background-color: #4752c4;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(88, 101, 242, 0.3);
+}
+
+.google-login-btn {
+  background-color: #ffffff;
+  color: #1f2937;
+  border: 1px solid #e5e7eb;
+}
+
+.google-login-btn:hover:not(:disabled) {
+  background-color: #f9fafb;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.discord-login-btn:disabled,
+.google-login-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.discord-icon,
+.google-icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* Login Footer */
+.login-footer p {
+  font-size: 0.85rem;
+  color: #9ca3af;
+  line-height: 1.4;
+}
+
+/* Message States */
+.error-message {
+  padding: 0.75rem;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  color: #dc2626;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.success-message {
+  padding: 0.75rem;
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  color: #16a34a;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+/* Loading State */
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 200px;
+}
+
+.loading-spinner {
+  font-size: 1.1rem;
+  color: #6b7280;
+}
+
+/* Navigation Sign Out Link */
+.sign-out-link {
+  background: none !important;
+  border: none !important;
+  padding: 8px 12px !important;
+  cursor: pointer;
+  color: #1f2937;
+  font-size: 0.95rem;
+  font-weight: 500;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.sign-out-link:hover {
+  color: #dc2626 !important;
+  background-color: #f9fafb !important;
+}
+
+/* =================================
+   RESPONSIVE DESIGN
+   ================================= */
+
+@media (max-width: 768px) {
+  .discord-login {
+    padding: 1rem;
+    min-height: 50vh;
+  }
+
+  .login-card {
+    padding: 2rem 1.5rem;
+  }
+}
+
+/* =================================
+   THEME-SPECIFIC STYLES
+   ================================= */
+
+/* Dark Mode (System Preference) */
+@media (prefers-color-scheme: dark) {
+  .login-card {
+    background-color: #1f2937;
+    border-color: #374151;
+  }
+
+  .login-header h2 {
+    color: #f9fafb;
+  }
+
+  .login-header p {
+    color: #9ca3af;
+  }
+
+  .login-footer p {
+    color: #6b7280;
+  }
+
+  .google-login-btn {
+    background-color: #374151;
+    color: #f9fafb;
+    border-color: #4b5563;
+  }
+
+  .google-login-btn:hover:not(:disabled) {
+    background-color: #4b5563;
+  }
+
+  .sign-out-link {
+    color: #f9fafb;
+  }
+
+  .sign-out-link:hover {
+    color: #ef4444 !important;
+    background-color: #374151 !important;
+  }
+}
+
+/* Manual Dark Mode Toggle */
+html[data-theme="dark"] .login-card {
+  background-color: #1f2937;
+  border-color: #374151;
+}
+
+html[data-theme="dark"] .login-header h2 {
+  color: #f9fafb;
+}
+
+html[data-theme="dark"] .login-header p {
+  color: #9ca3af;
+}
+
+html[data-theme="dark"] .login-footer p {
+  color: #6b7280;
+}
+
+html[data-theme="dark"] .google-login-btn {
+  background-color: #374151;
+  color: #f9fafb;
+  border-color: #4b5563;
+}
+
+html[data-theme="dark"] .google-login-btn:hover:not(:disabled) {
+  background-color: #4b5563;
+}
+
+html[data-theme="dark"] .sign-out-link {
+  color: #f9fafb;
+}
+
+html[data-theme="dark"] .sign-out-link:hover {
+  color: #ef4444 !important;
+  background-color: #374151 !important;
+}
+
+/* Manual Light Mode Toggle - Override system dark mode */
+@media (prefers-color-scheme: dark) {
+  html[data-theme="light"] .login-card {
+    background-color: #ffffff !important;
+    border-color: #e5e7eb !important;
+  }
+
+  html[data-theme="light"] .login-header h2 {
+    color: #1f2937 !important;
+  }
+
+  html[data-theme="light"] .login-header p {
+    color: #6b7280 !important;
+  }
+
+  html[data-theme="light"] .login-footer p {
+    color: #9ca3af !important;
+  }
+
+  html[data-theme="light"] .google-login-btn {
+    background-color: #ffffff !important;
+    color: #1f2937 !important;
+    border-color: #e5e7eb !important;
+  }
+
+  html[data-theme="light"] .google-login-btn:hover:not(:disabled) {
+    background-color: #f9fafb !important;
+  }
+
+  html[data-theme="light"] .sign-out-link {
+    color: #1f2937 !important;
+  }
+
+  html[data-theme="light"] .sign-out-link:hover {
+    color: #dc2626 !important;
+    background-color: #f9fafb !important;
+  }
+}
+
+/* Also apply outside media query for non-dark system preferences */
+html[data-theme="light"] .login-card {
+  background-color: #ffffff;
+  border-color: #e5e7eb;
+}
+
+html[data-theme="light"] .login-header h2 {
+  color: #1f2937;
+}
+
+html[data-theme="light"] .login-header p {
+  color: #6b7280;
+}
+
+html[data-theme="light"] .login-footer p {
+  color: #9ca3af;
+}
+
+html[data-theme="light"] .google-login-btn {
+  background-color: #ffffff;
+  color: #1f2937;
+  border-color: #e5e7eb;
+}
+
+html[data-theme="light"] .google-login-btn:hover:not(:disabled) {
+  background-color: #f9fafb;
+}
+
+html[data-theme="light"] .sign-out-link {
+  color: #1f2937;
+}
+
+html[data-theme="light"] .sign-out-link:hover {
+  color: #dc2626 !important;
+  background-color: #f9fafb !important;
+}

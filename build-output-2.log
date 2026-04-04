@@ -1,0 +1,99 @@
+
+> dynastycube@0.1.0 build
+> next build
+
+   ▲ Next.js 15.4.3
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 3.0s
+   Linting and checking validity of types ...
+
+./src/app/admin/roles/page.tsx
+20:6  Warning: React Hook useEffect has a missing dependency: 'checkAdminStatus'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./src/app/components/AccountLinking.tsx
+35:6  Warning: React Hook useEffect has a missing dependency: 'supabase.auth'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./src/app/components/DeckBuilder.tsx
+61:11  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+152:5  Warning: Unused eslint-disable directive (no problems were reported from 'react-hooks/exhaustive-deps').
+974:17  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./src/app/components/DisplayNameEditor.tsx
+26:6  Warning: React Hook useEffect has a missing dependency: 'loadCurrentDisplayName'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./src/app/components/DraftInterface.tsx
+409:21  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./src/app/components/MatchRecording.tsx
+44:6  Warning: React Hook useEffect has missing dependencies: 'checkUserRoles' and 'loadMatchData'. Either include them or remove the dependency array.  react-hooks/exhaustive-deps
+
+./src/app/components/TeamCubucksDisplay.tsx
+30:6  Warning: React Hook useEffect has a missing dependency: 'loadData'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./src/app/components/TeamStats.tsx
+68:9  Warning: '_maxTypeCount' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/components/admin/CardManagement.tsx
+237:19  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+301:19  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./src/app/components/admin/MatchExtensionManager.tsx
+38:6  Warning: React Hook useEffect has a missing dependency: 'loadWeeks'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+44:6  Warning: React Hook useEffect has a missing dependency: 'loadMatches'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+157:9  Warning: 'currentMatch' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/components/admin/MatchScheduler.tsx
+36:6  Warning: React Hook useEffect has a missing dependency: 'loadData'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+42:6  Warning: React Hook useEffect has a missing dependency: 'loadWeekMatches'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./src/app/components/admin/ScheduleOverview.tsx
+31:6  Warning: React Hook useEffect has a missing dependency: 'loadWeeks'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./src/app/components/admin/UserManagement.tsx
+197:21  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./src/app/components/admin/VoteManagement.tsx
+9:3  Warning: 'updatePoll' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/components/team/MatchSchedulingWidget.tsx
+48:6  Warning: React Hook useEffect has a missing dependency: 'loadMatches'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./src/app/messages/page.tsx
+64:6  Warning: React Hook useEffect has a missing dependency: 'loadMessages'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./src/app/pools/page.tsx
+354:19  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./src/app/teams/[teamId]/page.tsx
+237:25  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./src/app/teams/[teamId]/trades/new/page.tsx
+62:6  Warning: React Hook useEffect has a missing dependency: 'loadData'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./src/app/teams/[teamId]/trades/page.tsx
+74:6  Warning: React Hook useEffect has a missing dependency: 'loadData'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+106:15  Warning: 'trade' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/vote/page.tsx
+32:6  Warning: React Hook useEffect has a missing dependency: 'loadPolls'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./src/lib/supabase.ts
+42:18  Warning: 'error' is defined but never used.  @typescript-eslint/no-unused-vars
+51:18  Warning: 'error' is defined but never used.  @typescript-eslint/no-unused-vars
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/app/api-reference/config/eslint#disabling-rules
+Failed to compile.
+
+./src/app/components/MatchRecording.tsx:123:13
+Type error: Type 'string' is not assignable to type '"scheduled" | "in_progress" | "completed" | "cancelled"'.
+
+[0m [90m 121 |[39m             home_team_wins[33m:[39m result[33m.[39mupdatedStats[33m.[39mhome_wins[33m,[39m
+ [90m 122 |[39m             away_team_wins[33m:[39m result[33m.[39mupdatedStats[33m.[39maway_wins[33m,[39m
+[31m[1m>[22m[39m[90m 123 |[39m             status[33m:[39m result[33m.[39mupdatedStats[33m.[39mmatch_status[33m,[39m
+ [90m     |[39m             [31m[1m^[22m[39m
+ [90m 124 |[39m           })[33m;[39m
+ [90m 125 |[39m         }
+ [90m 126 |[39m[0m
+Next.js build worker exited with code: 1 and signal: null

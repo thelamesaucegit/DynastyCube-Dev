@@ -1,77 +1,458 @@
-/* Typography styles */
+/* =================================
+   TYPOGRAPHY UTILITIES
+   Using Design System Variables
+   ================================= */
+
+/* Headings */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: var(--font-bold);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-gray-900);
+  margin-bottom: var(--spacing-4);
+}
+
 h1 {
-  font-size: 2rem;
-  font-weight: 600;
-  margin-bottom: 1rem;
-  color: #333;
+  font-size: var(--text-4xl);
+  font-weight: var(--font-extrabold);
 }
 
 h2 {
-  font-size: 1.5rem;
-  font-weight: 600;
-  margin-bottom: 0.75rem;
-  color: #333;
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
 }
 
-.subtitle {
-  font-size: 1.2rem;
-  font-weight: 400;
-  color: #666;
-  margin-bottom: 2rem;
+h3 {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-semibold);
 }
 
-.construction-notice {
-  font-size: 1rem;
-  color: #333;
-  margin-bottom: 1.5rem;
+h4 {
+  font-size: var(--text-xl);
+  font-weight: var(--font-semibold);
 }
 
+h5 {
+  font-size: var(--text-lg);
+  font-weight: var(--font-medium);
+}
+
+h6 {
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
+}
+
+/* Paragraphs */
+p {
+  margin-bottom: var(--spacing-4);
+  line-height: var(--leading-relaxed);
+  color: var(--color-gray-700);
+}
+
+/* Links */
 a {
-  color: #0066cc;
+  color: var(--color-primary-600);
   text-decoration: underline;
+  font-weight: var(--font-medium);
+  transition: color var(--transition-fast);
 }
 
 a:hover {
-  color: #004499;
+  color: var(--color-primary-700);
   text-decoration: none;
 }
 
 a:visited {
-  color: #551a8b;
+  color: var(--color-primary-800);
 }
 
-/* Dark mode typography */
-@media (prefers-color-scheme: dark) {
-  body {
-    background-color: #1a1a1a;
-    color: #e0e0e0;
-  }
-  
+a:focus-visible {
+  outline: 2px solid var(--color-primary-500);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Utility Classes */
+.subtitle {
+  font-size: var(--text-xl);
+  font-weight: var(--font-normal);
+  color: var(--color-gray-600);
+  margin-bottom: var(--spacing-8);
+  line-height: var(--leading-relaxed);
+}
+
+.construction-notice {
+  font-size: var(--text-lg);
+  font-weight: var(--font-medium);
+  color: var(--color-warning-700);
+  background: var(--color-warning-50);
+  border: 2px solid var(--color-warning-200);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-4) var(--spacing-6);
+  margin-bottom: var(--spacing-6);
+}
+
+/* Text Sizes */
+.text-xs {
+  font-size: var(--text-xs);
+}
+
+.text-sm {
+  font-size: var(--text-sm);
+}
+
+.text-base {
+  font-size: var(--text-base);
+}
+
+.text-lg {
+  font-size: var(--text-lg);
+}
+
+.text-xl {
+  font-size: var(--text-xl);
+}
+
+.text-2xl {
+  font-size: var(--text-2xl);
+}
+
+.text-3xl {
+  font-size: var(--text-3xl);
+}
+
+/* Font Weights */
+.font-light {
+  font-weight: var(--font-light);
+}
+
+.font-normal {
+  font-weight: var(--font-normal);
+}
+
+.font-medium {
+  font-weight: var(--font-medium);
+}
+
+.font-semibold {
+  font-weight: var(--font-semibold);
+}
+
+.font-bold {
+  font-weight: var(--font-bold);
+}
+
+/* Text Alignment */
+.text-left {
+  text-align: left;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text-right {
+  text-align: right;
+}
+
+/* Lists */
+ul,
+ol {
+  margin-bottom: var(--spacing-4);
+  padding-left: var(--spacing-6);
+}
+
+li {
+  margin-bottom: var(--spacing-2);
+  line-height: var(--leading-relaxed);
+}
+
+/* Blockquotes */
+blockquote {
+  border-left: 4px solid var(--color-primary-500);
+  padding-left: var(--spacing-4);
+  margin: var(--spacing-6) 0;
+  font-style: italic;
+  color: var(--color-gray-600);
+}
+
+/* Code */
+code {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  background: var(--color-gray-100);
+  padding: var(--spacing-1) var(--spacing-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-primary-700);
+}
+
+pre {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  background: var(--color-gray-900);
+  color: var(--color-gray-100);
+  padding: var(--spacing-4);
+  border-radius: var(--radius-lg);
+  overflow-x: auto;
+  margin-bottom: var(--spacing-6);
+}
+
+pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+/* =================================
+   RESPONSIVE TYPOGRAPHY
+   ================================= */
+
+@media (max-width: 768px) {
   h1 {
-    color: #fff;
+    font-size: var(--text-3xl);
   }
-  
+
   h2 {
-    color: #fff;
+    font-size: var(--text-2xl);
   }
-  
+
+  h3 {
+    font-size: var(--text-xl);
+  }
+
   .subtitle {
-    color: #ccc;
+    font-size: var(--text-lg);
   }
-  
+
   .construction-notice {
-    color: #e0e0e0;
+    font-size: var(--text-base);
+    padding: var(--spacing-3) var(--spacing-4);
   }
-  
+}
+
+@media (max-width: 480px) {
+  h1 {
+    font-size: var(--text-2xl);
+  }
+
+  h2 {
+    font-size: var(--text-xl);
+  }
+}
+
+/* =================================
+   THEME-SPECIFIC TYPOGRAPHY
+   ================================= */
+
+/* Dark Mode (System Preference) */
+@media (prefers-color-scheme: dark) {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    color: var(--color-gray-50);
+  }
+
+  p {
+    color: var(--color-gray-300);
+  }
+
+  .subtitle {
+    color: var(--color-gray-400);
+  }
+
+  .construction-notice {
+    color: var(--color-warning-400);
+    background: rgba(245, 158, 11, 0.1);
+    border-color: var(--color-warning-700);
+  }
+
   a {
-    color: #66b3ff;
+    color: var(--color-primary-400);
   }
-  
+
   a:hover {
-    color: #99ccff;
+    color: var(--color-primary-300);
   }
-  
+
   a:visited {
-    color: #cc99ff;
+    color: var(--color-primary-500);
   }
+
+  blockquote {
+    border-left-color: var(--color-primary-400);
+    color: var(--color-gray-400);
+  }
+
+  code {
+    background: var(--color-gray-800);
+    color: var(--color-primary-400);
+  }
+
+  pre {
+    background: var(--color-gray-900);
+    color: var(--color-gray-100);
+  }
+}
+
+/* Manual Dark Mode Toggle */
+html[data-theme="dark"] h1,
+html[data-theme="dark"] h2,
+html[data-theme="dark"] h3,
+html[data-theme="dark"] h4,
+html[data-theme="dark"] h5,
+html[data-theme="dark"] h6 {
+  color: var(--color-gray-50);
+}
+
+html[data-theme="dark"] p {
+  color: var(--color-gray-300);
+}
+
+html[data-theme="dark"] .subtitle {
+  color: var(--color-gray-400);
+}
+
+html[data-theme="dark"] .construction-notice {
+  color: var(--color-warning-400);
+  background: rgba(245, 158, 11, 0.1);
+  border-color: var(--color-warning-700);
+}
+
+html[data-theme="dark"] a {
+  color: var(--color-primary-400);
+}
+
+html[data-theme="dark"] a:hover {
+  color: var(--color-primary-300);
+}
+
+html[data-theme="dark"] a:visited {
+  color: var(--color-primary-500);
+}
+
+html[data-theme="dark"] blockquote {
+  border-left-color: var(--color-primary-400);
+  color: var(--color-gray-400);
+}
+
+html[data-theme="dark"] code {
+  background: var(--color-gray-800);
+  color: var(--color-primary-400);
+}
+
+html[data-theme="dark"] pre {
+  background: var(--color-gray-900);
+  color: var(--color-gray-100);
+}
+
+/* Manual Light Mode Toggle - Override system dark mode */
+@media (prefers-color-scheme: dark) {
+  html[data-theme="light"] h1,
+  html[data-theme="light"] h2,
+  html[data-theme="light"] h3,
+  html[data-theme="light"] h4,
+  html[data-theme="light"] h5,
+  html[data-theme="light"] h6 {
+    color: var(--color-gray-900) !important;
+  }
+
+  html[data-theme="light"] p {
+    color: var(--color-gray-700) !important;
+  }
+
+  html[data-theme="light"] .subtitle {
+    color: var(--color-gray-600) !important;
+  }
+
+  html[data-theme="light"] .construction-notice {
+    color: var(--color-warning-700) !important;
+    background: var(--color-warning-50) !important;
+    border-color: var(--color-warning-200) !important;
+  }
+
+  html[data-theme="light"] a {
+    color: var(--color-primary-600) !important;
+  }
+
+  html[data-theme="light"] a:hover {
+    color: var(--color-primary-700) !important;
+  }
+
+  html[data-theme="light"] a:visited {
+    color: var(--color-primary-800) !important;
+  }
+
+  html[data-theme="light"] blockquote {
+    border-left-color: var(--color-primary-500) !important;
+    color: var(--color-gray-600) !important;
+  }
+
+  html[data-theme="light"] code {
+    background: var(--color-gray-100) !important;
+    color: var(--color-primary-700) !important;
+  }
+
+  html[data-theme="light"] pre {
+    background: var(--color-gray-900) !important;
+    color: var(--color-gray-100) !important;
+  }
+}
+
+/* Also apply outside media query */
+html[data-theme="light"] h1,
+html[data-theme="light"] h2,
+html[data-theme="light"] h3,
+html[data-theme="light"] h4,
+html[data-theme="light"] h5,
+html[data-theme="light"] h6 {
+  color: var(--color-gray-900) !important;
+}
+
+html[data-theme="light"] p {
+  color: var(--color-gray-700) !important;
+}
+
+html[data-theme="light"] .subtitle {
+  color: var(--color-gray-600) !important;
+}
+
+html[data-theme="light"] .construction-notice {
+  color: var(--color-warning-700) !important;
+  background: var(--color-warning-50) !important;
+  border-color: var(--color-warning-200) !important;
+}
+
+html[data-theme="light"] a {
+  color: var(--color-primary-600) !important;
+}
+
+html[data-theme="light"] a:hover {
+  color: var(--color-primary-700) !important;
+}
+
+html[data-theme="light"] a:visited {
+  color: var(--color-primary-800) !important;
+}
+
+html[data-theme="light"] blockquote {
+  border-left-color: var(--color-primary-500) !important;
+  color: var(--color-gray-600) !important;
+}
+
+html[data-theme="light"] code {
+  background: var(--color-gray-100) !important;
+  color: var(--color-primary-700) !important;
+}
+
+html[data-theme="light"] pre {
+  background: var(--color-gray-900) !important;
+  color: var(--color-gray-100) !important;
 }
