@@ -1,0 +1,42 @@
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { execSync } from 'child_process'
+import path from 'path'
+
+let commitHash = process.env.VITE_COMMIT_HASH?.slice(0, 7) || 'unknown'
+try {
+  if (commitHash === 'unknown') {
+    commitHash = execSync('git rev-parse --short HEAD').toString().trim()
+  }
+} catch {
+  // git may not be available (e.g. Docker build)
+}
+
+export default defineConfig({
+  plugins: [react()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+    },
+  },
+  define: {
+    __COMMIT_HASH__: JSON.stringify(commitHash),
+  },
+  server: {
+    port: 5173,
+    proxy: {
+      '/game': {
+        target: 'http://localhost:8080',
+        ws: true,
+        changeOrigin: true,
+      },
+      '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+    },
+  },
+  build: {
+    sourcemap: true,
+  },
+})
