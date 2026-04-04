@@ -1,0 +1,122 @@
+/**
+ * Connection slice - handles WebSocket connection state and authentication.
+ */
+import type { SliceCreator, EntityId } from './types'
+import type { ConnectionStatus } from '@/network/websocket.ts'
+import { GameWebSocket, getWebSocketUrl } from '@/network/websocket.ts'
+import { handleServerMessage, createLoggingHandlers } from '@/network/messageHandlers.ts'
+import { createConnectMessage, ErrorCode } from '@/types'
+import {
+  getWebSocket,
+  setWebSocket,
+  clearLobbyId,
+  clearDeckState,
+} from './shared'
+import { createMessageHandlers } from './handlers'
+
+export interface ConnectionSliceState {
+  connectionStatus: ConnectionStatus
+  playerId: EntityId | null
+  sessionId: string | null
+  pendingTournamentId: string | null
+  aiEnabled: boolean
+}
+
+export interface ConnectionSliceActions {
+  connect: (playerName: string) => void
+  disconnect: () => void
+  setPendingTournamentId: (lobbyId: string | null) => void
+}
+
+export type ConnectionSlice = ConnectionSliceState & ConnectionSliceActions
+
+export const createConnectionSlice: SliceCreator<ConnectionSlice> = (set, get) => ({
+  // Initial state
+  connectionStatus: 'disconnected' as ConnectionStatus,
+  playerId: null,
+  sessionId: null,
+  pendingTournamentId: null,
+  aiEnabled: false,
+
+  // Actions
+  connect: (playerName) => {
+    const { connectionStatus } = get()
+    if (connectionStatus === 'connecting' || connectionStatus === 'connected') {
+      return
+    }
+
+    const existingWs = getWebSocket()
+    if (existingWs) {
+      existingWs.disconnect()
+    }
+
+    // Store player name for reconnection
+    localStorage.setItem('argentum-player-name', playerName)
+
+    // Build message handlers from the full store
+    const handlers = createMessageHandlers(set, get)
+    const wrappedHandlers = import.meta.env.DEV
+      ? createLoggingHandlers(handlers)
+      : handlers
+
+    const ws = new GameWebSocket({
+      url: getWebSocketUrl(),
+      onMessage: (msg) => handleServerMessage(msg, wrappedHandlers),
+      onStatusChange: (status) => {
+        set({ connectionStatus: status })
+        if (status === 'connected' && getWebSocket()) {
+          // Check URL ?token= param first (for dev scenario links), then localStorage
+          const urlToken = new URLSearchParams(window.location.search).get('token')
+          if (urlToken) {
+            localStorage.setItem('argentum-token', urlToken)
+          }
+          const token = urlToken ?? localStorage.getItem('argentum-token') ?? undefined
+          const storedName = localStorage.getItem('argentum-player-name') ?? playerName
+          getWebSocket()?.send(createConnectMessage(storedName, token))
+        }
+      },
+      onError: () => {
+        set({
+          lastError: {
+            code: ErrorCode.INTERNAL_ERROR,
+            message: 'WebSocket connection error',
+            timestamp: Date.now(),
+          },
+        })
+      },
+    })
+
+    setWebSocket(ws)
+    ws.connect()
+  },
+
+  disconnect: () => {
+    const ws = getWebSocket()
+    ws?.disconnect()
+    setWebSocket(null)
+    localStorage.removeItem('argentum-token')
+    localStorage.removeItem('argentum-player-name')
+    clearLobbyId()
+    clearDeckState()
+    set({
+      connectionStatus: 'disconnected',
+      playerId: null,
+      sessionId: null,
+      pendingTournamentId: null,
+      opponentName: null,
+      gameState: null,
+      legalActions: [],
+      pendingDecision: null,
+      mulliganState: null,
+      waitingForOpponentMulligan: false,
+      gameOverState: null,
+      deckBuildingState: null,
+      lobbyState: null,
+      tournamentState: null,
+    })
+  },
+
+  setPendingTournamentId: (lobbyId) => {
+    set({ pendingTournamentId: lobbyId })
+  },
+})

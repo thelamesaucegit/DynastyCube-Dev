@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { getMatchReplay } from '@/app/actions/adminActions';
-import { getCardDataForReplay } from '@/app/actions/cardActions';
+import { getCardDataForReplay, ReplayCardData } from '@/app/actions/cardActions';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/card';
 import { AlertTriangle } from 'lucide-react';
 import { ReplayPlayer } from '@/app/components/admin/ReplayPlayer';
@@ -45,7 +45,10 @@ replayData.gameStates.forEach(state => {
 });
 
   // 3. Fetch the data (type, image URL) for all those unique cards in a single batch.
-  const cardDataMap = await getCardDataForReplay(Array.from(allCardNames));
+  // Convert Map to a plain object so it can be serialized across the RSC boundary.
+  const cardDataMap: Record<string, ReplayCardData> = Object.fromEntries(
+    await getCardDataForReplay(Array.from(allCardNames))
+  );
 
   // 4. Render the interactive Client Component, passing all fetched data as props.
   return (

@@ -45,6 +45,12 @@
     "@radix-ui/react-tooltip": "1.1.8",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.52.1",
+    "mana-font": "^1.18.0",
+    "zustand": "^5.0.0",
+    "@react-three/fiber": "^8.16.8",
+    "@react-three/drei": "^9.108.3",
+    "framer-motion": "^11.3.8",
+    "three": "^0.166.1"
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "cmdk": "1.1.1",

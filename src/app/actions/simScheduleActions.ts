@@ -319,58 +319,7 @@ export async function createScheduledSimMatch(params: {
         return { success: false, error: scheduleError?.message || "Failed to create schedule entry" };
     }
 
-    const scheduleId = scheduleRow.id;
 
-    // 5. Trigger the simulation
-    try {
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-        const response = await fetch(`${baseUrl}/api/match-runner`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                deck1: { content: deck1, aiProfile: params.team1_ai_profile },
-                deck2: { content: deck2, aiProfile: params.team2_ai_profile },
-                team1Id: params.team1_id,
-                team2Id: params.team2_id,
-            }),
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            await supabase
-                .from("schedule")
-                .update({ status: "sim_failed" })
-                .eq("id", scheduleId);
-            return { 
-                success: false, 
-                scheduleId,
-                deckWarnings,
-                error: `Schedule entry created but sim failed to start: ${errorData.error}` 
-            };
-        }
-
-        const { matchId: simMatchId } = await response.json();
-
-        // 6. Write sim_match_id back
-        await supabase
-            .from("schedule")
-            .update({ sim_match_id: simMatchId, status: "in_progress" })
-            .eq("id", scheduleId);
-
-        return { success: true, scheduleId, simMatchId, deckWarnings };
-
-    } catch (e) {
-        await supabase
-            .from("schedule")
-            .update({ status: "sim_failed" })
-            .eq("id", scheduleId);
-        return { 
-            success: false, 
-            scheduleId,
-            deckWarnings,
-            error: "Schedule entry created but sim server was unreachable" 
-        };
-    }
 }
 
 /**
