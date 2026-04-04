@@ -12,7 +12,7 @@ import { reconstructSnapshots, type PublicReplayData } from '@/replay/reconstruc
 
 const HEADER_HEIGHT = 55
 
-export function ReplayPage() {
+export default function ReplayPage(props: ArgentumReplayPlayerProps){
   const { gameId } = useParams<{ gameId: string }>()
   const navigate = useNavigate()
 
@@ -48,59 +48,6 @@ export function ReplayPage() {
     [setSpectatingState],
   )
 
-  // Load replay on mount
-  useEffect(() => {
-    if (!gameId) return
-    let cancelled = false
-
-    async function loadReplay() {
-      setLoading(true)
-      setError(null)
-      try {
-        const response = await fetch(`/api/public/replays/${gameId}`)
-        if (!response.ok) {
-          if (response.status === 404) {
-            setError('Replay not found. It may have expired or the game ID is invalid.')
-          } else {
-            setError('Failed to load replay.')
-          }
-          setLoading(false)
-          return
-        }
-        const data = await response.json() as PublicReplayData
-        if (cancelled) return
-        setMetadata(data.metadata)
-        const reconstructed = reconstructSnapshots(data.initialSnapshot, data.deltas)
-        setSnapshots(reconstructed)
-        setCurrentStep(0)
-        if (reconstructed.length > 0) {
-          writeSnapshotToStore(reconstructed[0]!)
-        }
-      } catch {
-        if (!cancelled) setError('Failed to load replay.')
-      }
-      if (!cancelled) setLoading(false)
-    }
-
-    loadReplay()
-    return () => { cancelled = true }
-  }, [gameId, writeSnapshotToStore])
-
-  // Clean up spectating state on unmount
-  useEffect(() => {
-    return () => {
-      setSpectatingState(null)
-    }
-  }, [setSpectatingState])
-
-  const goToStep = useCallback(
-    (step: number) => {
-      if (step < 0 || step >= snapshots.length) return
-      setCurrentStep(step)
-      writeSnapshotToStore(snapshots[step]!)
-    },
-    [snapshots, writeSnapshotToStore],
-  )
 
   // Auto-play timer
   useEffect(() => {
