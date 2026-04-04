@@ -1,307 +1,144 @@
-//web-client/src/components/replay/ReplayPage.tsx
+// web-client/src/components/replay/ReplayPage.tsx
 
-import { useState, useEffect, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { useGameStore } from '@/store/gameStore.ts'
-import { SpectatorContext } from '../../contexts/SpectatorContext'
-import { GameBoard } from '../game/GameBoard'
-import { CombatArrows } from '../combat/CombatArrows'
-import type { SpectatingState } from '@/store/slices'
-import type { SpectatorStateUpdate } from '../admin/ReplayViewer'
-import { reconstructSnapshots, type PublicReplayData } from '@/replay/reconstructSnapshots.ts'
+"use client"; // This must be a client component
 
-const HEADER_HEIGHT = 55
+import React, { useState, useEffect, useCallback } from 'react';
+import { GameBoard } from '../game/GameBoard'; // Assuming GameBoard is in this relative path
+import { CombatArrows } from '../combat/CombatArrows';
+import { SpectatorContext } from '../../contexts/SpectatorContext';
 
-export default function ReplayPage(props: ArgentumReplayPlayerProps){
-  const { gameId } = useParams<{ gameId: string }>()
-  const navigate = useNavigate()
+// Import the data types we defined in our server component
+import type { SpectatorStateUpdate, ReplayCardData } from '@/app/admin/argentum-viewer/[matchId]/page';
 
-  const [snapshots, setSnapshots] = useState<SpectatorStateUpdate[]>([])
-  const [metadata, setMetadata] = useState<PublicReplayData['metadata'] | null>(null)
-  const [currentStep, setCurrentStep] = useState(0)
-  const [autoPlay, setAutoPlay] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
-  const setSpectatingState = useGameStore((s) => s.setSpectatingState)
-
-  const writeSnapshotToStore = useCallback(
-    (snapshot: SpectatorStateUpdate) => {
-      const state: SpectatingState = {
-        gameSessionId: snapshot.gameSessionId,
-        gameState: snapshot.gameState as SpectatingState['gameState'],
-        player1Id: snapshot.player1Id,
-        player2Id: snapshot.player2Id,
-        player1Name: snapshot.player1Name ?? 'Player 1',
-        player2Name: snapshot.player2Name ?? 'Player 2',
-        player1: snapshot.player1 as SpectatingState['player1'],
-        player2: snapshot.player2 as SpectatingState['player2'],
-        currentPhase: snapshot.currentPhase,
-        activePlayerId: snapshot.activePlayerId,
-        priorityPlayerId: snapshot.priorityPlayerId,
-        combat: snapshot.combat as SpectatingState['combat'],
-        decisionStatus: snapshot.decisionStatus as SpectatingState['decisionStatus'],
-        isReplay: true,
-      }
-      setSpectatingState(state)
-    },
-    [setSpectatingState],
-  )
-
-
-  // Auto-play timer
-  useEffect(() => {
-    if (!autoPlay) return
-    const timer = setInterval(() => {
-      setCurrentStep((prev) => {
-        const next = prev + 1
-        if (next >= snapshots.length) {
-          setAutoPlay(false)
-          return prev
-        }
-        writeSnapshotToStore(snapshots[next]!)
-        return next
-      })
-    }, 1000)
-    return () => clearInterval(timer)
-  }, [autoPlay, snapshots, writeSnapshotToStore])
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') { e.preventDefault(); goToStep(currentStep - 1) }
-      else if (e.key === 'ArrowRight') { e.preventDefault(); goToStep(currentStep + 1) }
-      else if (e.key === ' ') { e.preventDefault(); setAutoPlay((p) => !p) }
-      else if (e.key === 'Escape') { navigate('/') }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [goToStep, currentStep, navigate])
-
-  const handleShare = async () => {
-    try {
-      await navigator.clipboard.writeText(window.location.href)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // Fallback: select text
-    }
-  }
-
-  if (loading) {
-    return (
-      <div style={styles.centered}>
-        <div style={styles.spinner} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        <p style={styles.loadingText}>Loading replay...</p>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div style={styles.centered}>
-        <p style={styles.errorText}>{error}</p>
-        <button onClick={() => navigate('/')} style={styles.backButton}>
-          Go to Home
-        </button>
-      </div>
-    )
-  }
-
-  const currentSnapshot = snapshots[currentStep]
-  if (!currentSnapshot) return null
-
-  return (
-    <SpectatorContext.Provider
-      value={{
-        isSpectating: true,
-        player1Id: currentSnapshot.player1Id,
-        player2Id: currentSnapshot.player2Id,
-        player1Name: currentSnapshot.player1Name ?? 'Player 1',
-        player2Name: currentSnapshot.player2Name ?? 'Player 2',
-      }}
-    >
-      <div style={styles.replayContainer}>
-        <div style={styles.replayHeader}>
-          <button onClick={() => navigate('/')} style={styles.backButton}>
-            Back
-          </button>
-          <div style={styles.replayControls}>
-            <button onClick={() => goToStep(currentStep - 1)} disabled={currentStep === 0} style={styles.controlButton} title="Previous (Left Arrow)">
-              Prev
-            </button>
-            <button onClick={() => setAutoPlay(!autoPlay)} style={styles.controlButton} title="Play/Pause (Space)">
-              {autoPlay ? 'Pause' : 'Play'}
-            </button>
-            <button onClick={() => goToStep(currentStep + 1)} disabled={currentStep >= snapshots.length - 1} style={styles.controlButton} title="Next (Right Arrow)">
-              Next
-            </button>
-          </div>
-          <div style={styles.scrubberContainer}>
-            <input
-              type="range"
-              min={0}
-              max={snapshots.length - 1}
-              value={currentStep}
-              onChange={(e) => goToStep(Number(e.target.value))}
-              style={styles.scrubber}
-            />
-            <span style={styles.stepCounter}>
-              {currentStep + 1} / {snapshots.length}
-            </span>
-          </div>
-          <div style={styles.replayInfo}>
-            <span style={styles.replayLabel}>Replay</span>
-            <span style={styles.matchupText}>
-              {metadata?.player1Name ?? currentSnapshot.player1Name} vs {metadata?.player2Name ?? currentSnapshot.player2Name}
-            </span>
-            {metadata?.winnerName && (
-              <span style={styles.winnerText}>Winner: {metadata.winnerName}</span>
-            )}
-          </div>
-          <button onClick={handleShare} style={styles.shareButton} title="Copy link to clipboard">
-            {copied ? 'Copied!' : 'Share'}
-          </button>
-        </div>
-        <div style={styles.gameBoardContainer}>
-          <GameBoard spectatorMode topOffset={HEADER_HEIGHT} />
-        </div>
-      </div>
-      <CombatArrows />
-    </SpectatorContext.Provider>
-  )
+// 1. Define the props interface. This is the contract with our Server Component.
+interface ArgentumReplayPlayerProps {
+  initialGameStates: SpectatorStateUpdate[];
+  matchId: string;
+  cardDataMap: Record<string, ReplayCardData>; // Use a plain object for client components
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  centered: {
-    minHeight: '100vh',
-    backgroundColor: '#0a0a12',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-  },
-  spinner: {
-    width: 40,
-    height: 40,
-    border: '3px solid #333',
-    borderTopColor: '#888',
-    borderRadius: '50%',
-    animation: 'spin 1s linear infinite',
-  },
-  loadingText: {
-    color: '#888',
-    fontSize: 16,
-  },
-  errorText: {
-    color: '#ef4444',
-    fontSize: 16,
-  },
-  replayContainer: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#0a0a12',
-    display: 'flex',
-    flexDirection: 'column',
-    zIndex: 1500,
-  },
-  replayHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '10px 16px',
-    borderBottom: '1px solid #1a1a25',
-    backgroundColor: '#0d0d15',
-    flexShrink: 0,
-    zIndex: 1600,
-    gap: 16,
-  },
-  backButton: {
-    padding: '8px 16px',
-    fontSize: 13,
-    backgroundColor: 'transparent',
-    color: '#888',
-    border: '1px solid #333',
-    borderRadius: 6,
-    cursor: 'pointer',
-    flexShrink: 0,
-  },
-  replayControls: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-  },
-  controlButton: {
-    padding: '6px 14px',
-    fontSize: 13,
-    backgroundColor: '#1a1a2e',
-    color: '#ccc',
-    border: '1px solid #2a2a3e',
-    borderRadius: 4,
-    cursor: 'pointer',
-  },
-  scrubberContainer: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    flex: 1,
-    minWidth: 0,
-  },
-  scrubber: {
-    flex: 1,
-    minWidth: 80,
-    height: 4,
-    appearance: 'none' as const,
-    WebkitAppearance: 'none' as const,
-    background: '#2a2a3e',
-    borderRadius: 2,
-    outline: 'none',
-    cursor: 'pointer',
-    accentColor: '#4fc3f7',
-  },
-  stepCounter: {
-    color: '#888',
-    fontSize: 13,
-    minWidth: 70,
-    flexShrink: 0,
-  },
-  replayInfo: {
-    textAlign: 'right',
-    flexShrink: 0,
-  },
-  replayLabel: {
-    display: 'block',
-    color: '#666',
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: '0.1em',
-  },
-  matchupText: {
-    color: '#aaa',
-    fontSize: 13,
-  },
-  winnerText: {
-    display: 'block',
-    color: '#4fc3f7',
-    fontSize: 11,
-  },
-  shareButton: {
-    padding: '8px 16px',
-    fontSize: 13,
-    backgroundColor: '#1e40af',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 6,
-    cursor: 'pointer',
-    flexShrink: 0,
-  },
-  gameBoardContainer: {
-    flex: 1,
-    position: 'relative',
-    overflow: 'hidden',
-  },
+// ============================================================================
+// Replay UI Components (Header, Controls) - We can build these out more later
+// ============================================================================
+
+interface ReplayControlsProps {
+    onScrub: (step: number) => void;
+    onPlayPause: () => void;
+    isPlaying: boolean;
+    currentStep: number;
+    totalSteps: number;
 }
+
+function ReplayHeader(props: ReplayControlsProps) {
+    // This is a simplified version of the original header
+    return (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1600, background: '#0d0d15', color: 'white', padding: '10px 16px', borderBottom: '1px solid #1a1a25', display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <input
+                    type="range"
+                    min={0}
+                    max={props.totalSteps > 0 ? props.totalSteps - 1 : 0}
+                    value={props.currentStep}
+                    onChange={(e) => props.onScrub(Number(e.target.value))}
+                    style={{ flex: 1 }}
+                />
+                <span style={{ fontSize: 13, minWidth: '70px' }}>
+                    Step {props.currentStep + 1} / {props.totalSteps}
+                </span>
+            </div>
+            <button onClick={props.onPlayPause} style={{ padding: '6px 14px', fontSize: 13, background: '#1a1a2e', border: '1px solid #2a2a3e', borderRadius: 4, cursor: 'pointer', color: '#ccc' }}>
+                {props.isPlaying ? 'Pause' : 'Play'}
+            </button>
+        </div>
+    );
+}
+
+// ============================================================================
+// The Main Adapted Replay Component
+// ============================================================================
+
+// 2. Change the function signature to accept props and export as default.
+export default function ReplayPage({ initialGameStates, matchId, cardDataMap }: ArgentumReplayPlayerProps) {
+    const [currentStep, setCurrentStep] = useState(0);
+    const [autoPlay, setAutoPlay] = useState(false);
+    
+    // 3. REMOVED: The original useEffect for data fetching is gone.
+
+    // 4. This state management logic for playback is kept from the original file.
+    useEffect(() => {
+        if (!autoPlay || initialGameStates.length === 0) return;
+
+        const timer = setInterval(() => {
+            setCurrentStep((prev) => {
+                const next = prev + 1;
+                if (next >= initialGameStates.length) {
+                    setAutoPlay(false);
+                    return prev;
+                }
+                return next;
+            });
+        }, 1000); // 1 second per step
+        return () => clearInterval(timer);
+    }, [autoPlay, initialGameStates.length]);
+
+    // 5. This keyboard control logic is also kept for a better user experience.
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                setCurrentStep(prev => Math.max(0, prev - 1));
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                setCurrentStep(prev => Math.min(initialGameStates.length - 1, prev + 1));
+            } else if (e.key === ' ') {
+                e.preventDefault();
+                setAutoPlay((p) => !p);
+            }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [initialGameStates.length]);
+
+    const currentSnapshot = initialGameStates[currentStep];
+
+    if (!currentSnapshot) {
+        return <div style={{ color: 'white', padding: '20px' }}>Loading replay state...</div>;
+    }
+
+    const HEADER_HEIGHT = 55;
+
+    // 6. We now pass the current snapshot directly to GameBoard as a prop,
+    //    instead of relying on a global Zustand store.
+    return (
+        <SpectatorContext.Provider
+            value={{
+                isSpectating: true,
+                player1Id: currentSnapshot.player1Id,
+                player2Id: currentSnapshot.player2Id,
+                player1Name: currentSnapshot.player1Name,
+                player2Name: currentSnapshot.player2Name,
+            }}
+        >
+            <div style={{ position: 'fixed', inset: 0, background: '#0a0a12' }}>
+                <ReplayHeader
+                    currentStep={currentStep}
+                    totalSteps={initialGameStates.length}
+                    isPlaying={autoPlay}
+                    onPlayPause={() => setAutoPlay(p => !p)}
+                    onScrub={setCurrentStep}
+                />
+                <div style={{ flex: 1, position: 'relative', overflow: 'hidden', paddingTop: `${HEADER_HEIGHT}px` }}>
+                    <GameBoard
+                        spectatorMode={true}
+                        topOffset={HEADER_HEIGHT}
+                        // PASSING PROPS DIRECTLY:
+                        snapshot={currentSnapshot} 
+                        cardDataMap={cardDataMap}
+                    />
+                </div>
+            </div>
+            <CombatArrows snapshot={currentSnapshot} />
+        </SpectatorContext.Provider>
+    );
+}
+
