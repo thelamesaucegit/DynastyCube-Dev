@@ -125,7 +125,7 @@ const [deckWarnings, setDeckWarnings] = useState<string[]>([]);
         });
 
         if (result.success) {
-            setSuccess(`Match scheduled! Sim ID: ${result.simMatchId}`);
+            setSuccess(`Match scheduled for ${new Date(matchDate).toLocaleString()}. The sim will trigger automatically.`);
             setDeckWarnings(result.deckWarnings || []);
             // Reset form
             setTeam1Id(""); setTeam2Id("");
