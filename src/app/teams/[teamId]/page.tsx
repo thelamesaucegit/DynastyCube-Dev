@@ -6,7 +6,7 @@ import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { use } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getTeamsWithMembers } from "@/app/actions/teamActions";
+import { getTeamsWithMembers, getTeamByShortName } from "@/app/actions/teamActions";
 import { getTeamDraftPicks, getTeamDecks } from "@/app/actions/draftActions";
 import { refundDraftPick } from "@/app/actions/cubucksActions";
 import { DraftInterface } from "@/app/components/DraftInterface";
@@ -59,7 +59,8 @@ interface TeamMember {
 }
 
 interface Team {
-  id: string;
+  id: string;         // UUID primary key
+  short_name: string; // URL slug e.g. 'shards', 'ninja'
   name: string;
   emoji: string;
   motto: string;
@@ -104,22 +105,37 @@ export default function TeamPage({ params }: TeamPageProps) {
   const loadTeamData = async () => {
     setLoading(true);
     try {
-      const { session: activeSession } = await getActiveDraftSession();
+      // Phase 1: Resolve short_name → team UUID (needed for FK queries)
+      const [{ team: foundTeam }, { session: activeSession }, seasonResult] = await Promise.all([
+        getTeamByShortName(teamId),
+        getActiveDraftSession(),
+        getCurrentSeason(),
+      ]);
+
+      setTeam(foundTeam || null);
+
       const sessionId = activeSession?.id || null;
       setActiveDraftSessionId(sessionId);
 
-      const [teams, picksResult, decksResult, rolesResult, membersResult, seasonResult, previewResult] = await Promise.all([
-        getTeamsWithMembers(),
-        getTeamDraftPicks(teamId, sessionId!),
-        getTeamDecks(teamId),
-        getCurrentUserRolesForTeam(teamId),
-        getTeamMembersWithRoles(teamId),
-        getCurrentSeason(),
-        getAutoDraftPreview(teamId, sessionId!),
-      ]);
+      if (!foundTeam) {
+        setLoading(false);
+        return;
+      }
 
-      const foundTeam = teams.find((t) => t.id === teamId);
-      setTeam(foundTeam || null);
+      // Phase 2: Load team data using UUID (foundTeam.id) for all FK queries
+      const teamUUID = foundTeam.id;
+      const [teams, picksResult, decksResult, rolesResult, membersResult, previewResult] = await Promise.all([
+        getTeamsWithMembers(),
+        getTeamDraftPicks(teamUUID, sessionId!),
+        getTeamDecks(teamUUID),
+        getCurrentUserRolesForTeam(teamUUID),
+        getTeamMembersWithRoles(teamUUID),
+        getAutoDraftPreview(teamUUID, sessionId!),
+      ]);
+      // Update team with members included (getTeamsWithMembers enriches members)
+      const teamWithMembers = teams.find((t) => t.id === teamUUID);
+      if (teamWithMembers) setTeam(teamWithMembers);
+
       setDraftPicks(picksResult.picks);
       setDecks(decksResult.decks);
       setUserRoles(rolesResult.roles);
@@ -128,7 +144,7 @@ export default function TeamPage({ params }: TeamPageProps) {
       const fetchedPhase = seasonResult.season?.phase || null;
       setSeasonPhase(fetchedPhase);
 
-      const isMember = foundTeam?.members?.some((m) => m.user_id === user?.id) || rolesResult.roles.length > 0;
+      const isMember = (teamWithMembers ?? foundTeam)?.members?.some((m) => m.user_id === user?.id) || rolesResult.roles.length > 0;
 
       let defaultTab: TabType = "picks";
       if (fetchedPhase === "preseason" || fetchedPhase === "draft") {
@@ -174,12 +190,12 @@ export default function TeamPage({ params }: TeamPageProps) {
   }
 
   const handleDraftComplete = async () => {
-    if (!activeDraftSessionId) return;
-    const { picks } = await getTeamDraftPicks(teamId, activeDraftSessionId);
+    if (!activeDraftSessionId || !team) return;
+    const { picks } = await getTeamDraftPicks(team.id, activeDraftSessionId);
     setDraftPicks(picks);
     setCubucksRefreshKey((prev) => prev + 1);
-    
-    const preview = await getAutoDraftPreview(teamId, activeDraftSessionId);
+
+    const preview = await getAutoDraftPreview(team.id, activeDraftSessionId);
     setDraftPreview(preview);
   };
 

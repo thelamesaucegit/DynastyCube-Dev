@@ -218,6 +218,7 @@ export default function HistoryPage() {
         filters={filters}
         viewMode={viewMode}
         isAdmin={isAdmin}
+        isHistorian={isHistorian}
         editMode={editMode}
         onFilterChange={handleFilterChange}
         onViewModeChange={setViewMode}
