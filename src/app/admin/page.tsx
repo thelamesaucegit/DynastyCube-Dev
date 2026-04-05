@@ -154,7 +154,7 @@ export default function AdminPage() {
           Simulated Match Scheduler
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Schedule and trigger simulated matches between teams using their current decklists.
+          Schedule simulated matches between teams using their current decklists.
         </p>
       </div>
       <SimMatchScheduler activeSeasonNumber={stats.activeSeasonNumber} />
