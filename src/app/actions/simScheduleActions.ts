@@ -223,8 +223,6 @@ export async function getScheduledSimMatches(filters?: {
  *   2. Resolve week_id from season_number + week_number (for deck lookup)
  *   3. Fetch decklists from deck_submissions (or use overrides)
  *   4. Insert row into `schedule`
- *   5. Trigger /api/match-runner
- *   6. Write sim_match_id back to schedule row
  */
 export async function createScheduledSimMatch(params: {
     team1_id: string;
