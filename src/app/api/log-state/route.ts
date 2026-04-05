@@ -5,17 +5,12 @@ import { NextResponse } from 'next/server';
 
 // Ensure these environment variables are set in your deployment environment (e.g., DigitalOcean App Platform)
 // and in a .env.local file for local development.
-const SUPABASE_URL = process.env.SUPABASE_URL!;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY!;
+
 
 // This is a server-side only Supabase client. It uses the powerful service_role key
 // which should never be exposed to the browser.
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-});
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+
 
 // Define the shape of the data we expect to receive from the Java logger
 // This provides type safety and prevents 'any' types.
