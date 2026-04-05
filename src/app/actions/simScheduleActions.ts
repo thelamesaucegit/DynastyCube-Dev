@@ -35,6 +35,42 @@ export interface DeckLookupResult {
     error?: string;
 }
 
+/** Fetch test decklist from test_decklists table by player slot */
+async function fetchTestDecklist(slot: 1 | 2): Promise<string | null> {
+    const supabase = createServiceClient();
+    const { data } = await supabase
+        .from('test_decklists')
+        .select('decklist')
+        .eq('player_slot', slot)
+        .maybeSingle();
+    return data?.decklist ?? null;
+}
+
+/** 
+ * Resolve a deck override string:
+ * - "test" (case-insensitive) → fetch from test_decklists for given slot
+ * - Plain list without [metadata] header → auto-wrap in .dck format
+ * - Already formatted .dck string → return as-is
+ */
+async function resolveDeckOverride(
+    content: string,
+    testSlot: 1 | 2,
+    teamId: string
+): Promise<string | null> {
+    let raw = content.trim();
+
+    if (raw.toLowerCase() === 'test') {
+        const testContent = await fetchTestDecklist(testSlot);
+        if (!testContent) return null;
+        raw = testContent.trim();
+    }
+
+    if (!raw.includes('[metadata]')) {
+        return `[metadata]\nName=${teamId}\n\n[Main]\n${raw}`;
+    }
+
+    return raw;
+}
 /**
  * Fetch a team's current active decklist from deck_submissions.
  * 
@@ -223,8 +259,6 @@ export async function getScheduledSimMatches(filters?: {
  *   2. Resolve week_id from season_number + week_number (for deck lookup)
  *   3. Fetch decklists from deck_submissions (or use overrides)
  *   4. Insert row into `schedule`
- *   5. Trigger /api/match-runner
- *   6. Write sim_match_id back to schedule row
  */
 export async function createScheduledSimMatch(params: {
     team1_id: string;
@@ -265,106 +299,74 @@ export async function createScheduledSimMatch(params: {
 
     const deckWarnings: string[] = [];
 
-    // 3. Get decklists
-    let deck1: string;
-    let deck2: string;
+    // 3. Process and validate deck overrides
+    let deck1Override: string | null = null;
+    let deck2Override: string | null = null;
 
     if (params.deck1_override) {
-        deck1 = params.deck1_override;
+        const resolved = await resolveDeckOverride(params.deck1_override, 1, params.team1_id);
+        if (!resolved) {
+            return { success: false, error: 'Could not resolve deck override for Team 1. If using "test", ensure test_decklists slot 1 exists.' };
+        }
+        deck1Override = resolved;
     } else {
         const result = await getTeamCurrentDecklist(params.team1_id, weekId ?? undefined);
         if (!result.decklist) {
-            return { 
-                success: false, 
-                error: `No active decklist found for Team 1. ${result.error || "Please provide a manual deck override."}` 
-            };
+            return { success: false, error: `No active decklist found for Team 1. ${result.error ?? 'Please provide a manual deck override.'}` };
         }
-        deck1 = result.decklist;
         if (result.source === 'latest_submission') {
-            deckWarnings.push(`Team 1: No submission found for Week ${params.week_number} — using most recent submission (${new Date(result.submittedAt!).toLocaleDateString()}).`);
+            deckWarnings.push(`Team 1: No submission for Week ${params.week_number} — will use most recent submission at sim time.`);
+        } else if (result.source === 'none') {
+            deckWarnings.push(`Team 1: No deck submission found — will build from deck cards at sim time.`);
         }
     }
 
     if (params.deck2_override) {
-        deck2 = params.deck2_override;
+        const resolved = await resolveDeckOverride(params.deck2_override, 2, params.team2_id);
+        if (!resolved) {
+            return { success: false, error: 'Could not resolve deck override for Team 2. If using "test", ensure test_decklists slot 2 exists.' };
+        }
+        deck2Override = resolved;
     } else {
         const result = await getTeamCurrentDecklist(params.team2_id, weekId ?? undefined);
         if (!result.decklist) {
-            return { 
-                success: false, 
-                error: `No active decklist found for Team 2. ${result.error || "Please provide a manual deck override."}` 
-            };
+            return { success: false, error: `No active decklist found for Team 2. ${result.error ?? 'Please provide a manual deck override.'}` };
         }
-        deck2 = result.decklist;
         if (result.source === 'latest_submission') {
-            deckWarnings.push(`Team 2: No submission found for Week ${params.week_number} — using most recent submission (${new Date(result.submittedAt!).toLocaleDateString()}).`);
+            deckWarnings.push(`Team 2: No submission for Week ${params.week_number} — will use most recent submission at sim time.`);
+        } else if (result.source === 'none') {
+            deckWarnings.push(`Team 2: No deck submission found — will build from deck cards at sim time.`);
         }
     }
 
-    // 4. Insert into schedule
+    // 4. Insert into schedule — cron job reads these values at sim time
     const { data: scheduleRow, error: scheduleError } = await supabase
-        .from("schedule")
+        .from('schedule')
         .insert({
             team1_id: params.team1_id,
             team2_id: params.team2_id,
             season_number: params.season_number,
             week_number: params.week_number,
             match_date: params.match_date,
-            status: "scheduled",
+            status: 'scheduled',
+            team1_ai_profile: params.team1_ai_profile,
+            team2_ai_profile: params.team2_ai_profile,
+            deck1_override: deck1Override,
+            deck2_override: deck2Override,
         })
-        .select("id")
+        .select('id')
         .single();
 
     if (scheduleError || !scheduleRow) {
-        return { success: false, error: scheduleError?.message || "Failed to create schedule entry" };
-    }
-
-    // 5. Trigger the match runner API
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : 'http://localhost:3000';
-
-    let simMatchId: string | undefined;
-    try {
-        const response = await fetch(`${appUrl}/api/match-runner`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                deck1: { content: deck1, aiProfile: params.team1_ai_profile },
-                deck2: { content: deck2, aiProfile: params.team2_ai_profile },
-                team1Id: params.team1_id,
-                team2Id: params.team2_id,
-            }),
-        });
-
-        if (!response.ok) {
-            const errorBody = await response.json().catch(() => ({}));
-            return { success: false, error: (errorBody as { error?: string }).error || "Match runner API returned an error" };
-        }
-
-        const result = await response.json() as { matchId?: string };
-        simMatchId = result.matchId;
-    } catch (e) {
-        const msg = e instanceof Error ? e.message : "Unknown error contacting match runner";
-        return { success: false, error: msg };
-    }
-
-    // 6. Write sim_match_id back to the schedule row
-    if (simMatchId) {
-        await supabase
-            .from("schedule")
-            .update({ sim_match_id: simMatchId })
-            .eq("id", scheduleRow.id);
+        return { success: false, error: scheduleError?.message ?? 'Failed to create schedule entry' };
     }
 
     return {
         success: true,
         scheduleId: scheduleRow.id,
-        simMatchId,
         deckWarnings: deckWarnings.length > 0 ? deckWarnings : undefined,
     };
 }
-
 /**
  * Delete a scheduled sim match (admin only).
  * The linked sim_match row is preserved — only the schedule entry is removed.
