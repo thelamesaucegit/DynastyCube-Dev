@@ -174,23 +174,22 @@ export const metadata = {
   title: "Match Replay | The Dynasty Cube",
 };
 
-export default async function ReplayPage({ params }: { params: Promise<{ matchId: string }> }) {
-  const { matchId } = await params;
+export default async function ReplayPage({ params }: { params: { matchId: string } }) { // 1. Correct params type
+  const { matchId } = params;
+  
   const { gameStates, team1Id, team2Id } = await getMatchReplayData(matchId);
 
   if (!gameStates || gameStates.length === 0) {
     return notFound();
   }
 
-  const cardDataMap = await getCardDataMap(gameStates);
-
-const [team1, team2, cardDataMap] = await Promise.all([
+  // 2. Fetch all three data sources in one go.
+  const [team1, team2, cardDataMap] = await Promise.all([
       getTeamData(team1Id),
       getTeamData(team2Id),
       getCardDataMap(gameStates)
   ]);
 
-  // 3. Pass all the fetched data down to the client component.
   return (
     <main className="w-full h-screen bg-gray-800">
       <ArgentumReplayPlayer 
