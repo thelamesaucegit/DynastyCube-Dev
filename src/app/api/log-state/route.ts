@@ -9,7 +9,7 @@ import { NextResponse } from 'next/server';
 
 // This is a server-side only Supabase client. It uses the powerful service_role key
 // which should never be exposed to the browser.
-  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+  const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 
 
 // Define the shape of the data we expect to receive from the Java logger
