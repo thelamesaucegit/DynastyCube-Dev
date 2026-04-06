@@ -18,7 +18,7 @@ export default function Footer() {
               Not affiliated with Wizards of the Coast. Magic: The Gathering is a trademark of Wizards of the Coast LLC.
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Card data provided by{" "}
+              Card data and images from{" "}
               <a
                 href="https://scryfall.com/"
                 target="_blank"
@@ -27,7 +27,7 @@ export default function Footer() {
               >
                 Scryfall
               </a>
-              . Cube data from{" "}
+              . Cube ELO data from{" "}
               <a
                 href="https://cubecobra.com/"
                 target="_blank"
@@ -35,6 +35,24 @@ export default function Footer() {
                 className="hover:text-foreground transition-colors underline"
               >
                 Cube Cobra
+              </a>
+              . Match Simulation via{" "}
+              <a
+                href="https://github.com/Card-Forge/forge"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-foreground transition-colors underline"
+              >
+                Forge
+              </a>
+              . Match rendering thanks to{" "}
+              <a
+                href="https://github.com/wingedsheep/argentum-engine"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-foreground transition-colors underline"
+              >
+                Argentum by wingedsheep
               </a>
               .
             </p>
@@ -79,7 +97,7 @@ export default function Footer() {
               </li>
               <li>
                 <a
-                  href="https://cubecobra.com"
+                  href="https://cubecobra.com/cube/about/TheDynastyCube"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-foreground transition-colors"
@@ -89,7 +107,7 @@ export default function Footer() {
               </li>
               <li>
                 <Link href="/glossary" className="hover:text-foreground transition-colors">
-                  Glossary & FAQ
+                  Glossary
                 </Link>
               </li>
               <li>
