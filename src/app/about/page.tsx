@@ -168,7 +168,7 @@ export default async function AboutPage() {
           <div>
             <h3 className="text-xl font-semibold mb-2">3. The Off-Season</h3>
             <p className="text-muted-foreground">
-              After the Championship, the Multiverse shifts. Older cards become harder to retain in your pool, and the <em>next</em> chronological Magic set is injected into the Draft Pool. The Teams then convene to vote on new rules, shaping the environment for the coming Season.
+              After the Championship, The Cube shifts. Older cards become harder to retain, and the <em>next</em> chronological Magic set is added the Draft Pool. The Teams then convene to vote on new rules, shaping the environment for the coming Season.
             </p>
           </div>
         </div>
@@ -183,7 +183,7 @@ export default async function AboutPage() {
               The Factions
             </h2>
             <p className="text-muted-foreground">
-              Participants are separated into 8 distinct factions. Together, team members collaborate in private channels to discuss draft strategies, evaluate trades, build their decks, and vote on the future rules of the league.
+              Participants are separated into distinct factions. Together, team members collaborate on draft strategies, evaluate trades, build their decks, and vote on the future rules of the league.
             </p>
           </div>
         </div>
