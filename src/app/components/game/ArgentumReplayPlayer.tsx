@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect } from 'react';
 // Correctly import your existing GameBoard component
-import { GameBoard } from '../../../web-client/src/components/game/GameBoard'; 
+import { GameBoard } from '@/components/game/GameBoard'; 
 import type { SpectatorStateUpdate, ReplayCardData } from '@/app/admin/argentum-viewer/[matchId]/page';
 import { Button } from '@/app/components/ui/button';
 import { Slider } from '@/app/components/ui/slider';
