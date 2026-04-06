@@ -15,14 +15,50 @@ import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
 interface ArgentumReplayPlayerProps {
   initialGameStates: SpectatorStateUpdate[];
   cardDataMap: Record<string, ReplayCardData>;
+   team1: Team | null;
+  team2: Team | null;
 }
-
+interface PlayerDisplayInfo {
+  logName: string;
+  team: Team;
+}
 export function ArgentumReplayPlayer({ initialGameStates, cardDataMap }: ArgentumReplayPlayerProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
 
   const totalStates = initialGameStates.length;
-  const currentSnapshot = initialGameStates[currentIndex];
+const { player1, player2 } = useMemo(() => {
+    if (!team1 || !team2 || !initialGameStates?.[0]) {
+      return { player1: null, player2: null };
+    }
+    
+    const firstState = initialGameStates[0];
+    let p1Info: PlayerDisplayInfo | null = null;
+    let p2Info: PlayerDisplayInfo | null = null;
+
+    // Use the player1Name/player2Name fields from the snapshot to find the matching team
+    if (firstState.player1Name.includes(team1.id)) p1Info = { logName: firstState.player1Name, team: team1 };
+    else if (firstState.player1Name.includes(team2.id)) p1Info = { logName: firstState.player1Name, team: team2 };
+    
+    if (firstState.player2Name.includes(team1.id)) p2Info = { logName: firstState.player2Name, team: team1 };
+    else if (firstState.player2Name.includes(team2.id)) p2Info = { logName: firstState.player2Name, team: team2 };
+
+    return { player1: p1Info, player2: p2Info };
+  }, [initialGameStates, team1, team2]);
+  
+  const currentSnapshot = useMemo(() => {
+    const originalSnapshot = initialGameStates[currentIndex];
+    if (!originalSnapshot) return null;
+
+    // If we have mapped the team data, overwrite the names with human-readable ones.
+    // Otherwise, fall back to the original log names.
+    return {
+      ...originalSnapshot,
+      player1Name: player1?.team.name ?? originalSnapshot.player1Name,
+      player2Name: player2?.team.name ?? originalSnapshot.player2Name,
+    };
+  }, [currentIndex, initialGameStates, player1, player2]);
+
 
   // This logic for play/pause and the slider is correct.
   useEffect(() => {
