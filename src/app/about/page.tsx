@@ -79,7 +79,7 @@ export default async function AboutPage() {
           The Three Pillars
         </h2>
         <p className="text-lg text-muted-foreground">
-          At its core, The Dynasty Cube combines a normal cube draft with the long-term planning of a dynasty sports league and the evolving horror of a community-driven simulation.
+          At its core, The Dynasty Cube combines a normal cube draft with the long-term planning of a dynasty sports league and the evolving horror of a community-driven "e-splort" simulation.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
