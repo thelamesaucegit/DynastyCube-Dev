@@ -3,7 +3,7 @@
 'use client'; // This is a Client Component because it uses state and interactivity.
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { GameBoard } from '@/web-client/components/game/GameBoard'; // Assuming GameBoard is exported from here
+import { GameBoard } from '../../../../web-client/src/components/game/GameBoard'; // Assuming GameBoard is exported from here
 import type { SpectatorStateUpdate, ReplayCardData } from '@/app/admin/argentum-viewer/[matchId]/page';
 import { Button } from '@/app/components/ui/button';
 import { Slider } from '@/app/components/ui/slider';
