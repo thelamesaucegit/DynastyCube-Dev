@@ -18,43 +18,32 @@ interface LogStateRequestBody {
 }
 
 export async function POST(request: Request) {
-  // LOG 1: Log that the endpoint was hit.
-  console.log('[API /log-state] Received a POST request.');
+ try {
+    // Get the Match ID from the custom header.
+    const matchId = request.headers.get('x-match-id');
+    // The body is now an array of state objects.
+    const states = await request.json();
 
-  try {
-    const body = (await request.json()) as LogStateRequestBody;
-    const { matchId, state } = body;
-
-    // LOG 2: Log the received payload to ensure it's not empty or malformed.
-    console.log(`[API /log-state] Parsed payload for matchId: ${matchId}`);
-
-    if (!matchId || !state) {
-      console.error('[API /log-state] Validation failed: Missing matchId or state.');
-      return NextResponse.json({ error: 'Missing matchId or state payload' }, { status: 400 });
+    if (!matchId || !Array.isArray(states) || states.length === 0) {
+      return NextResponse.json({ error: 'Missing X-Match-ID header or valid states array payload' }, { status: 400 });
     }
 
-    // LOG 3: Log that we are about to call the database function.
-    console.log(`[API /log-state] Calling Supabase RPC 'append_to_match_logs' for matchId: ${matchId}`);
+    // The queue and debounce logic remains the same, but it now queues the entire batch.
+    if (!matchQueues.has(matchId)) {
+      matchQueues.set(matchId, []);
+    }
+    // Add all states from the incoming batch to our server-side queue.
+    matchQueues.get(matchId)!.push(...states);
 
-    const { error } = await supabase.rpc('append_to_match_logs', {
-        match_id_to_append: matchId,
-        new_state_to_append: state
-    });
-
-    if (error) {
-      // LOG 4: Log the specific database error if it occurs.
-      console.error('[API /log-state] Supabase RPC error:', error);
-      return NextResponse.json({ error: 'Failed to write log to database', details: error.message }, { status: 500 });
+    if (!isProcessing.get(matchId)) {
+      isProcessing.set(matchId, true);
+      setTimeout(() => processQueue(matchId), 50); 
     }
 
-    // LOG 5: Log success.
-    console.log(`[API /log-state] Successfully processed log for matchId: ${matchId}`);
-    return NextResponse.json({ message: 'Log received and processed successfully' });
+    return NextResponse.json({ message: 'Batch queued successfully' });
 
-  } catch (err: unknown) {
-    // LOG 6: Log if the incoming request body isn't valid JSON.
-    const error = err as Error;
-    console.error('[API /log-state] Failed to parse request body:', error);
-    return NextResponse.json({ error: 'Invalid request body', details: error.message }, { status: 400 });
+  } catch (err: any) {
+    console.error('[API /log-state] Batch processing error:', err);
+    return NextResponse.json({ error: 'Invalid batch request', details: err.message }, { status: 400 });
   }
 }
