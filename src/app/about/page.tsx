@@ -113,7 +113,7 @@ export default async function AboutPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="text-muted-foreground">
-              Inspired by <a href="https://en.wikipedia.org/wiki/Blaseball" target="_blank" rel="noreferrer" className="underline underline-offset-4 hover:text-foreground">Blaseball</a>, your decisions echo beyond the draft. Between seasons, Teams vote on new rules. Cards heavily drafted become harder to retain. The game plays you back.
+              Inspired by <a href="https://en.wikipedia.org/wiki/Blaseball" target="_blank" rel="noreferrer" className="underline underline-offset-4 hover:text-foreground">Blaseball</a>, your decisions echo beyond the draft. Between seasons, Teams vote on new rules. Cards heavily drafted become harder to retain. The game Evolves.
             </CardContent>
           </Card>
         </div>
