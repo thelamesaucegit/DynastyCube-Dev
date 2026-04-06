@@ -1,10 +1,10 @@
 // src/app/components/game/ArgentumReplayPlayer.tsx
 
-'use client'; // This is a Client Component because it uses state and interactivity.
+'use client'; 
 
-import React, { useState, useEffect, useMemo } from 'react';
-// GameBoard will be imported from web-client once integrated
-// import { GameBoard } from '../../../../web-client/src/components/game/GameBoard';
+import React, { useState, useEffect } from 'react';
+// Correctly import your existing GameBoard component
+import { GameBoard } from '../../../web-client/src/components/game/GameBoard'; 
 import type { SpectatorStateUpdate, ReplayCardData } from '@/app/admin/argentum-viewer/[matchId]/page';
 import { Button } from '@/app/components/ui/button';
 import { Slider } from '@/app/components/ui/slider';
@@ -22,89 +22,65 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap }: Argentu
   const totalStates = initialGameStates.length;
   const currentSnapshot = initialGameStates[currentIndex];
 
-  // Play/Pause functionality
+  // This logic for play/pause and the slider is correct.
   useEffect(() => {
-    if (!isPlaying) {
-      return;
-    }
-
+    if (!isPlaying) return;
     const interval = setInterval(() => {
-      setCurrentIndex((prevIndex) => {
-        if (prevIndex >= totalStates - 1) {
-          setIsPlaying(false); // Stop at the end
-          return prevIndex;
-        }
-        return prevIndex + 1;
-      });
-    }, 1500); // Change state every 1.5 seconds
-
+      setCurrentIndex(prev => (prev < totalStates - 1 ? prev + 1 : prev));
+      if (currentIndex >= totalStates - 1) setIsPlaying(false);
+    }, 1500);
     return () => clearInterval(interval);
-  }, [isPlaying, totalStates]);
+  }, [isPlaying, totalStates, currentIndex]);
 
   const handleSliderChange = (value: number[]) => {
     setCurrentIndex(value[0]);
   };
 
-  const handlePlayPause = () => {
-    setIsPlaying((prev) => !prev);
-  };
-  
-  const handleSkipBack = () => {
-    setCurrentIndex(0);
-    setIsPlaying(false);
-  }
-
-  const handleSkipForward = () => {
-    setCurrentIndex(totalStates - 1);
-    setIsPlaying(false);
-  }
-
-  // Placeholder until GameBoard is integrated from web-client
-  const memoizedGameBoard = useMemo(() => {
-    const players = currentSnapshot?.gameState?.players ?? [];
-    return (
-      <div className="flex items-center justify-center h-full text-white text-center p-8">
-        <div>
-          <p className="text-lg font-semibold text-yellow-400 mb-4">3D Game Board (web-client integration pending)</p>
-          <p className="text-sm text-gray-400">Turn {currentSnapshot?.gameState?.turnNumber ?? 0} — {currentSnapshot?.gameState?.currentPhase}</p>
-          {players.map(p => (
-            <p key={p.playerId} className="text-sm text-gray-300 mt-1">{p.name}: {p.life} life</p>
-          ))}
-        </div>
-      </div>
-    );
-  }, [currentIndex, cardDataMap, initialGameStates]);
+  const handlePlayPause = () => setIsPlaying(prev => !prev);
+  const handleSkipBack = () => setCurrentIndex(0);
+  const handleSkipForward = () => setCurrentIndex(totalStates - 1);
 
   if (!currentSnapshot) {
-    return <div className="text-white">Loading replay...</div>;
+    return <div className="text-white p-8">Loading replay state...</div>;
   }
   
-  const { turnNumber, currentPhase, currentStep } = currentSnapshot.gameState;
+  const { turnNumber, currentPhase } = currentSnapshot.gameState;
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#111827]">
+    <div className="flex flex-col h-screen w-full bg-background">
       {/* Game Board takes up most of the space */}
-      <div className="flex-grow overflow-hidden">
-        {memoizedGameBoard}
+      <div className="flex-grow overflow-hidden relative">
+        {/*
+          * RENDER YOUR EXISTING GAMEBOARD
+          * We pass the props it expects:
+          * - spectatorMode: true (this is a replay)
+          * - snapshot: the single, current game state
+          * - cardDataMap: the map of card images
+        */}
+        <GameBoard
+          spectatorMode={true}
+          snapshot={currentSnapshot}
+          cardDataMap={cardDataMap}
+        />
       </div>
 
       {/* Replay Controls Footer */}
-      <footer className="flex-shrink-0 bg-gray-900/80 backdrop-blur-sm border-t border-gray-700 p-4 shadow-lg">
-        <div className="max-w-4xl mx-auto flex items-center gap-4 text-white">
-          <div className="flex items-center gap-3">
-             <Button onClick={handleSkipBack} variant="ghost" size="icon">
+      <footer className="flex-shrink-0 bg-gray-900/80 backdrop-blur-sm border-t border-gray-700 p-4 shadow-lg z-50">
+        <div className="max-w-5xl mx-auto flex items-center gap-4 text-white">
+          <div className="flex items-center gap-2">
+             <Button onClick={handleSkipBack} variant="ghost" size="icon" disabled={currentIndex === 0}>
               <SkipBack className="h-5 w-5" />
             </Button>
-            <Button onClick={handlePlayPause} variant="ghost" size="icon" className="w-10 h-10">
+            <Button onClick={handlePlayPause} variant="outline" size="icon" className="w-10 h-10">
               {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
             </Button>
-             <Button onClick={handleSkipForward} variant="ghost" size="icon">
+             <Button onClick={handleSkipForward} variant="ghost" size="icon" disabled={currentIndex === totalStates - 1}>
               <SkipForward className="h-5 w-5" />
             </Button>
           </div>
           
           <div className="flex-grow flex items-center gap-4">
-             <span className="text-sm font-mono w-16 text-right">
+             <span className="text-sm font-mono w-20 text-centertabular-nums">
               {currentIndex + 1} / {totalStates}
             </span>
             <Slider
@@ -117,10 +93,9 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap }: Argentu
             />
           </div>
           
-          <div className="hidden md:flex items-center gap-4 text-sm font-semibold w-64 justify-end">
-            <span className="text-gray-400">Turn: {turnNumber > 0 ? turnNumber : 'Mulligan'}</span>
+          <div className="hidden md:flex items-center text-sm font-semibold w-48 justify-end">
+            <span className="text-gray-400 mr-2">Turn: {turnNumber > 0 ? turnNumber : 'M'}</span>
             <span className="capitalize">{currentPhase?.toLowerCase().replace(/_/g, ' ')}</span>
-            <span className="text-gray-400 capitalize">{currentStep?.toLowerCase().replace(/_/g, ' ')}</span>
           </div>
         </div>
       </footer>
