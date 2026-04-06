@@ -1,0 +1,2038 @@
+/**
+ * GameUI styles.
+ * Styles for connection overlay, lobby, and tournament screens.
+ */
+
+/* =========================================================================
+ * Connection Overlay
+ * ========================================================================= */
+.connectionOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-overlay-darker) center center / cover no-repeat;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: var(--text-primary);
+  pointer-events: auto;
+  gap: var(--space-6);
+  padding: var(--space-4);
+  overflow-y: auto;
+}
+
+@media (max-width: 639px) {
+  .connectionOverlay {
+    gap: var(--space-4);
+    padding: var(--space-1);
+  }
+}
+
+.contentBackdrop {
+  margin: auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-5) var(--space-8);
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+@media (max-width: 639px) {
+  .contentBackdrop {
+    gap: var(--space-4);
+    padding: var(--space-6) var(--space-4);
+  }
+}
+
+/* =========================================================================
+ * Set Button Progress (in lobby set selection)
+ * ========================================================================= */
+.settingsButtonWithProgress {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  text-align: left;
+  gap: 6px;
+  padding: 7px var(--space-3) 6px;
+}
+
+.setButtonName {
+  white-space: nowrap;
+}
+
+.setButtonFooter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.setButtonProgressBar {
+  display: block;
+  flex: 1;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.setButtonProgressFill {
+  display: block;
+  height: 100%;
+  background: rgba(130, 160, 255, 0.7);
+  border-radius: 2px;
+}
+
+.settingsButtonActive .setButtonProgressFill {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.setButtonProgress {
+  font-size: 10px;
+  color: var(--text-disabled);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.setButtonCardCount {
+  display: block;
+  font-size: 10px;
+  color: var(--text-disabled);
+}
+
+/* =========================================================================
+ * Lobby Overlay
+ * ========================================================================= */
+.lobbyOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--gradient-page) center center / cover no-repeat;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: var(--text-primary);
+  padding: var(--space-4);
+  overflow-y: auto;
+}
+
+@media (max-width: 639px) {
+  .lobbyOverlay {
+    padding: var(--space-1);
+  }
+}
+
+.lobbyContent {
+  width: 100%;
+  max-width: 560px;
+  margin: auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  padding: var(--space-5) var(--space-6);
+}
+
+@media (max-width: 639px) {
+  .lobbyContent {
+    max-width: 100%;
+  }
+}
+
+/* =========================================================================
+ * Tournament Overlay
+ * ========================================================================= */
+.tournamentOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--bg-overlay-darker);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  gap: var(--space-4);
+  padding: var(--space-4);
+  overflow: auto;
+}
+
+@media (max-width: 639px) {
+  .tournamentOverlay {
+    padding: var(--space-1);
+  }
+}
+
+/* ── Tournament layout: single centered column ── */
+.trnSection {
+  width: 100%;
+  max-width: 600px;
+}
+
+.trnHeader {
+  width: 100%;
+  max-width: 600px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.trnHeaderTop {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.trnTitle {
+  margin: 0;
+  font-size: var(--font-2xl);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.trnRound {
+  color: var(--text-muted);
+  font-size: var(--font-md);
+  white-space: nowrap;
+}
+
+.trnToolbar {
+  display: flex;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+.trnToolbarBtn {
+  padding: var(--space-1) var(--space-3);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  color: var(--text-disabled);
+  background: transparent;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.trnToolbarBtn:hover {
+  color: var(--text-tertiary);
+  background-color: rgba(255, 255, 255, 0.04);
+  border-color: var(--border-medium);
+}
+
+/* Action zone — groups next-match + ready + bye into a card */
+.trnActionZone {
+  width: 100%;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+}
+
+/* Ready row — horizontal with count inline */
+.trnReadyRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.trnFooter {
+  width: 100%;
+  max-width: 600px;
+  display: flex;
+  justify-content: center;
+  padding-top: var(--space-2);
+}
+
+@media (max-width: 639px) {
+  .trnHeader {
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .trnHeaderTop {
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .trnTitle {
+    font-size: var(--font-xl);
+  }
+
+  .trnRound {
+    font-size: var(--font-sm);
+  }
+
+  .trnActionZone {
+    padding: var(--space-3);
+  }
+
+  .trnReadyRow {
+    justify-content: center;
+  }
+}
+
+/* =========================================================================
+ * Title
+ * ========================================================================= */
+.title {
+  margin: 0;
+  font-size: var(--font-3xl);
+}
+
+.commitHash {
+  font-size: 11px;
+  color: var(--text-disabled);
+  font-family: ui-monospace, monospace;
+  letter-spacing: 0.04em;
+  opacity: 0.5;
+  margin-top: calc(-1 * var(--space-4));
+}
+
+.lobbyTitle {
+  margin: 0 0 var(--space-1) 0;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.02em;
+  background: var(--gradient-title);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-size: var(--font-2xl);
+}
+
+@media (max-width: 639px) {
+  .lobbyTitle {
+    font-size: var(--font-xl);
+  }
+}
+
+/* =========================================================================
+ * Error Message
+ * ========================================================================= */
+.errorMessage {
+  color: var(--color-error);
+  font-size: var(--font-md);
+}
+
+/* =========================================================================
+ * Input Group
+ * ========================================================================= */
+.inputGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: center;
+  width: 100%;
+  max-width: 480px;
+}
+
+.inputLabel {
+  color: var(--text-muted);
+  font-size: var(--font-md);
+}
+
+.textInput {
+  background-color: var(--bg-surface-5);
+  color: var(--text-primary);
+  border: 1px solid var(--border-solid-medium);
+  border-radius: var(--radius-lg);
+  text-align: center;
+  width: 100%;
+  max-width: 250px;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-lg);
+}
+
+@media (max-width: 639px) {
+  .textInput {
+    padding: var(--space-2) var(--space-3);
+  }
+}
+
+.textInput:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.sessionInput {
+  composes: textInput;
+  text-align: left;
+  max-width: none;
+  flex: 1;
+  min-width: 320px;
+  font-family: monospace;
+  letter-spacing: 0.02em;
+  font-size: var(--font-md);
+}
+
+@media (max-width: 639px) {
+  .sessionInput {
+    min-width: 0;
+    font-size: var(--font-sm);
+  }
+}
+
+/* =========================================================================
+ * Buttons
+ * ========================================================================= */
+.primaryButton {
+  background-color: var(--color-primary);
+  color: var(--text-primary);
+  border: none;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  width: 100%;
+  max-width: 200px;
+  padding: var(--space-3) var(--space-6);
+  font-size: var(--font-lg);
+}
+
+@media (max-width: 639px) {
+  .primaryButton {
+    padding: var(--space-2) var(--space-5);
+  }
+}
+
+.primaryButton:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.primaryButton:disabled {
+  background-color: var(--bg-surface-6);
+  cursor: not-allowed;
+}
+
+.tournamentButton {
+  composes: primaryButton;
+  background-color: var(--color-warning-light);
+}
+
+.aiButton {
+  composes: primaryButton;
+  background: linear-gradient(180deg, #8b5cf6 0%, #6d28d9 100%);
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+}
+
+.joinButton {
+  composes: primaryButton;
+  background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+  white-space: nowrap;
+  max-width: 100px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
+}
+
+.joinButton:disabled {
+  background-color: var(--bg-surface-6);
+}
+
+@media (max-width: 639px) {
+  .joinButton {
+    max-width: none;
+  }
+}
+
+.cancelButton {
+  margin-top: var(--space-5);
+  background-color: var(--color-error-darker);
+  color: var(--text-primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-md);
+}
+
+.cancelButton:hover {
+  filter: brightness(1.1);
+}
+
+.leaveButton {
+  background-color: transparent;
+  color: var(--text-disabled);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--font-md);
+}
+
+.leaveButton:hover {
+  background-color: var(--bg-surface-6);
+  color: var(--text-tertiary);
+}
+
+.leaveButtonConfirm {
+  composes: leaveButton;
+  border-color: rgba(239, 83, 80, 0.5);
+  color: #ef5350;
+}
+
+.leaveButtonConfirm:hover {
+  background-color: rgba(239, 83, 80, 0.12);
+  color: #ff6b6b;
+}
+
+.returnButton {
+  composes: leaveButton;
+  background-color: var(--color-warning-light);
+  color: var(--text-primary);
+  border: none;
+  padding: var(--space-3) var(--space-6);
+  font-size: var(--font-lg);
+}
+
+/* =========================================================================
+ * Mode Toggle
+ * ========================================================================= */
+.modeToggle {
+  display: flex;
+  background-color: var(--bg-surface-5);
+  border-radius: var(--radius-lg);
+  padding: var(--space-1);
+  gap: var(--space-1);
+}
+
+.modeButton {
+  background-color: transparent;
+  color: var(--text-muted);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: var(--font-weight-normal);
+  transition: all var(--transition-fast);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-md);
+}
+
+@media (max-width: 639px) {
+  .modeButton {
+    padding: var(--space-2) var(--space-3);
+  }
+}
+
+.modeButtonActive {
+  background-color: var(--color-accent);
+  color: #000;
+  font-weight: var(--font-weight-semibold);
+}
+
+/* =========================================================================
+ * Divider
+ * ========================================================================= */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-disabled);
+}
+
+.dividerLine {
+  width: 40px;
+  height: 1px;
+  background-color: var(--text-disabled);
+}
+
+.dividerText {
+  font-size: var(--font-sm);
+}
+
+/* =========================================================================
+ * Join Row
+ * ========================================================================= */
+.joinRow {
+  display: flex;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+@media (max-width: 639px) {
+  .joinRow {
+    flex-direction: column;
+  }
+}
+
+/* =========================================================================
+ * Replay Link Button
+ * ========================================================================= */
+.replayLinkButton {
+  background-color: transparent;
+  color: var(--text-disabled);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-sm);
+}
+
+.replayLinkButton:hover {
+  background-color: var(--bg-surface-6);
+  color: var(--text-tertiary);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* =========================================================================
+ * Mode Description
+ * ========================================================================= */
+.modeDescription {
+  color: var(--text-disabled);
+  font-size: var(--font-sm);
+  margin: 0;
+  text-align: center;
+}
+
+/* =========================================================================
+ * Waiting Section
+ * ========================================================================= */
+.waitingSection {
+  text-align: center;
+  width: 100%;
+  max-width: 520px;
+}
+
+.waitingTitle {
+  font-size: var(--font-md);
+}
+
+.waitingSubtitle {
+  color: var(--text-muted);
+  font-size: var(--font-md);
+}
+
+/* =========================================================================
+ * Invite Code Box
+ * ========================================================================= */
+.inviteBox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  background-color: var(--bg-panel-light);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: var(--space-3);
+  min-width: 0;
+}
+
+@media (max-width: 639px) {
+  .inviteBox {
+    padding: var(--space-2) var(--space-3);
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+.inviteBoxCopied {
+  background-color: rgba(79, 195, 247, 0.08);
+  border-color: rgba(79, 195, 247, 0.3);
+}
+
+.inviteCode {
+  font-family: monospace;
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.04em;
+  font-size: var(--font-lg);
+  word-break: break-all;
+  user-select: all;
+}
+
+@media (max-width: 639px) {
+  .inviteCode {
+    font-size: 14px;
+  }
+}
+
+.inviteCopyLabel {
+  color: var(--text-faint);
+  font-size: 12px;
+  transition: color 0.2s;
+}
+
+.inviteCopyLabelCopied {
+  color: var(--color-accent);
+}
+
+/* =========================================================================
+ * Lobby Header
+ * ========================================================================= */
+.lobbyHeader {
+  text-align: center;
+  margin-bottom: var(--space-2);
+}
+
+.lobbyFormat {
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: var(--space-2);
+}
+
+.lobbyFormatSealed {
+  color: var(--color-warning-light);
+}
+
+.lobbyFormatDraft {
+  color: var(--color-accent-dark);
+}
+
+.lobbySubtitle {
+  color: var(--text-faint);
+  font-size: var(--font-sm);
+  margin: 0;
+}
+
+/* =========================================================================
+ * Settings Panel
+ * ========================================================================= */
+.settingsPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background-color: var(--bg-panel-light);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+}
+
+.settingsRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.settingsRow:last-child {
+  border-bottom: none;
+}
+
+.settingsLabel {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.settingsButtons {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.settingsButton {
+  padding: 5px var(--space-3);
+  font-size: var(--font-sm);
+  background-color: var(--bg-surface-4);
+  color: var(--text-muted);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: var(--font-weight-normal);
+}
+
+.settingsButtonActive {
+  background-color: var(--color-warning-light);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.settingsButtonDraft {
+  background-color: var(--color-accent-dark);
+}
+
+/* Draft type picker with descriptions */
+.draftTypeOptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.draftTypeButton {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 6px var(--space-3);
+  font-size: var(--font-sm);
+  background-color: var(--bg-surface-4);
+  color: var(--text-muted);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  min-width: 140px;
+  flex: 1 1 140px;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.draftTypeButton:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.draftTypeButton.settingsButtonActive {
+  color: var(--text-primary);
+  border-color: var(--color-accent-dark);
+}
+
+.draftTypeButton.settingsButtonActive .draftTypeDesc {
+  opacity: 0.85;
+}
+
+.draftTypeName {
+  font-weight: var(--font-weight-semibold);
+}
+
+.draftTypeDesc {
+  font-size: var(--font-xs);
+  opacity: 0.7;
+  line-height: 1.3;
+}
+
+.settingsSelect {
+  padding: 5px var(--space-2);
+  font-size: var(--font-sm);
+  background-color: var(--bg-surface-4);
+  color: var(--text-primary);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  outline: none;
+}
+
+.boosterDistribution {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.boosterDistributionRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.boosterDistributionSetName {
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.boosterDistributionControls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.boosterDistributionBtn {
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-base);
+  font-weight: var(--font-weight-semibold);
+  background-color: var(--bg-surface-4);
+  color: var(--text-muted);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.boosterDistributionBtn:hover:not(:disabled) {
+  background-color: var(--bg-surface-3);
+  color: var(--text-primary);
+}
+
+.boosterDistributionBtn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.boosterDistributionCount {
+  width: 26px;
+  text-align: center;
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.boosterDistributionTotal {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding-top: 4px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+
+.boosterDistributionTotalCount {
+  width: 82px;
+  text-align: center;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+
+/* Set selection grid — block grouping */
+.setSelectionGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  justify-content: flex-end;
+  align-items: flex-start;
+}
+
+.blockGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px 6px 8px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-md);
+}
+
+.blockLabel {
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.7;
+  line-height: 1;
+}
+
+.blockSets {
+  display: flex;
+  gap: var(--space-1);
+}
+
+
+/* =========================================================================
+ * Player List
+ * ========================================================================= */
+.playerListPanel {
+  background-color: var(--bg-panel-light);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.playerListHeader {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-medium);
+  background-color: var(--bg-panel-light);
+}
+
+.playerListTitle {
+  font-size: var(--font-md);
+  font-weight: var(--font-weight-semibold);
+  color: #ccc;
+}
+
+.playerCount {
+  color: var(--border-solid-medium);
+  font-size: var(--font-sm);
+}
+
+.playerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background-color var(--transition-fast);
+}
+
+.playerRow:last-child {
+  border-bottom: none;
+}
+
+.playerInfo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.statusDotOnline {
+  background-color: #00cc44;
+  box-shadow: 0 0 6px rgba(0, 204, 68, 0.4);
+}
+
+.statusDotOffline {
+  background-color: var(--color-error);
+  box-shadow: 0 0 6px rgba(255, 68, 68, 0.4);
+}
+
+.playerName {
+  font-size: var(--font-md);
+  color: var(--text-secondary);
+}
+
+.hostBadge {
+  font-size: 9px;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-warning-light);
+  background-color: rgba(230, 81, 0, 0.12);
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.playerStatus {
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-normal);
+}
+
+.playerStatusDisconnected {
+  color: var(--color-error);
+}
+
+.playerStatusReady {
+  color: #4caf50;
+  font-weight: var(--font-weight-medium);
+}
+
+.playerStatusJoined {
+  color: var(--text-faint);
+}
+
+.playerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.removeAiButton {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: var(--radius-sm);
+  color: #ef4444;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.removeAiButton:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.8);
+}
+
+.emptyPlayerList {
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  color: var(--border-solid-dark);
+  font-size: var(--font-sm);
+}
+
+.addAiButton {
+  width: 100%;
+  padding: var(--space-2) var(--space-4);
+  background: transparent;
+  border: 1px dashed rgba(139, 92, 246, 0.5);
+  border-radius: var(--radius-md);
+  color: #a78bfa;
+  font-size: var(--font-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.addAiButton:hover {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: rgba(139, 92, 246, 0.8);
+}
+
+/* =========================================================================
+ * Actions Row
+ * ========================================================================= */
+.actionsRow {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.startButton {
+  flex: 1;
+  padding: 13px var(--space-5);
+  font-size: var(--font-md);
+  font-weight: var(--font-weight-semibold);
+  background: var(--gradient-warning);
+  color: var(--text-primary);
+  border: none;
+  border-radius: var(--radius-xl);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  box-shadow: 0 2px 12px rgba(230, 81, 0, 0.3);
+}
+
+.startButton:disabled {
+  background: var(--bg-surface-4);
+  color: var(--border-solid-medium);
+  border: 1px solid var(--border-light);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.waitingHint {
+  color: var(--border-solid-medium);
+  font-size: var(--font-sm);
+  text-align: center;
+  margin: 0;
+}
+
+/* =========================================================================
+ * Tournament Standings Table
+ * ========================================================================= */
+.standingsTable {
+  width: 100%;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: linear-gradient(180deg, rgba(20, 20, 30, 0.95) 0%, rgba(15, 15, 22, 0.98) 100%);
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Record column (merged W-L-D) */
+.standingsRecord {
+  font-size: 14px;
+  font-family: ui-monospace, monospace;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.standingsTableInner {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.standingsHeader {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: linear-gradient(180deg, rgba(40, 40, 55, 1) 0%, rgba(30, 30, 42, 1) 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.standingsTh {
+  padding: var(--space-3) var(--space-3);
+  text-align: center;
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.standingsThLeft {
+  composes: standingsTh;
+  text-align: left;
+  padding-left: var(--space-4);
+}
+
+.standingsTd {
+  padding: var(--space-3) var(--space-3);
+  text-align: center;
+  font-size: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background-color var(--transition-fast);
+}
+
+.standingsTdLeft {
+  composes: standingsTd;
+  text-align: left;
+  padding-left: var(--space-4);
+}
+
+.standingsRow {
+  transition: background-color var(--transition-fast);
+}
+
+.standingsRow:last-child td {
+  border-bottom: none;
+}
+
+.standingsRowMe {
+  background: linear-gradient(90deg, rgba(37, 99, 235, 0.15) 0%, rgba(37, 99, 235, 0.08) 100%);
+}
+
+.standingsRowMe:hover {
+  background: linear-gradient(90deg, rgba(37, 99, 235, 0.2) 0%, rgba(37, 99, 235, 0.12) 100%);
+}
+
+.standingsRow:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+/* Rank column with podium styling */
+.standingsRank {
+  font-weight: var(--font-weight-bold);
+  min-width: 32px;
+}
+
+.standingsRankFirst {
+  color: #ffd700;
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.4);
+}
+
+.standingsRankSecond {
+  color: #c0c0c0;
+  text-shadow: 0 0 6px rgba(192, 192, 192, 0.3);
+}
+
+.standingsRankThird {
+  color: #cd7f32;
+  text-shadow: 0 0 6px rgba(205, 127, 50, 0.3);
+}
+
+.standingsWins {
+  color: var(--color-success-light);
+  font-weight: var(--font-weight-semibold);
+}
+
+.standingsLosses {
+  color: #ef5350;
+  font-weight: var(--font-weight-medium);
+}
+
+.standingsDraws {
+  color: var(--text-muted);
+  font-weight: var(--font-weight-normal);
+}
+
+.standingsPoints {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-highlight);
+  font-size: 15px;
+}
+
+.standingsGwr {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: ui-monospace, monospace;
+}
+
+.meIndicator {
+  color: var(--color-accent);
+  margin-left: var(--space-2);
+  font-size: 12px;
+  font-weight: var(--font-weight-normal);
+  opacity: 0.9;
+}
+
+.disconnectedIndicator {
+  display: inline-block;
+  background-color: rgba(239, 83, 80, 0.2);
+  color: #ef5350;
+  margin-left: var(--space-2);
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.tiedIndicator {
+  color: var(--text-disabled);
+  margin-left: 2px;
+  font-size: 12px;
+}
+
+/* Standing row tooltip - shows instantly on hover */
+.standingsTooltip {
+  position: fixed;
+  background: linear-gradient(135deg, rgba(30, 30, 42, 0.98) 0%, rgba(20, 20, 30, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  min-width: 200px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: var(--z-tooltip);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.tooltipName {
+  font-weight: var(--font-weight-semibold);
+  font-size: 14px;
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tooltipStat {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 2px 0;
+  color: var(--text-secondary);
+}
+
+.tooltipStatLabel {
+  color: var(--text-muted);
+}
+
+.tooltipStatValue {
+  font-weight: var(--font-weight-medium);
+  font-family: ui-monospace, monospace;
+}
+
+.tooltipTiebreaker {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  color: var(--color-highlight);
+}
+
+/* =========================================================================
+ * Tournament Status Boxes
+ * ========================================================================= */
+.statusBox {
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-md);
+  text-align: center;
+}
+
+.statusBoxBye {
+  background-color: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  border-radius: var(--radius-lg);
+  color: var(--color-highlight);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-md);
+  padding: var(--space-4) var(--space-6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.byeIcon {
+  font-size: 14px;
+}
+
+.statusBoxWaiting {
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-6);
+  color: var(--text-muted);
+}
+
+.statusBoxMatch {
+  background-color: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.15);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+}
+
+.statusBoxMatchLabel {
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  margin-bottom: var(--space-1);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.statusBoxMatchOpponent {
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-lg);
+  color: var(--text-primary);
+}
+
+/* =========================================================================
+ * Ready Button
+ * ========================================================================= */
+.readyButton {
+  padding: var(--space-3) var(--space-6);
+  font-size: var(--font-md);
+  font-weight: var(--font-weight-semibold);
+  background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
+  color: #1a1a1a;
+  border: none;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  white-space: nowrap;
+}
+
+.readyButton:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.readyButton:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.readyButton:disabled {
+  background: linear-gradient(180deg, rgba(22, 163, 74, 0.3) 0%, rgba(21, 128, 61, 0.25) 100%);
+  border: 2px solid rgba(34, 197, 94, 0.4);
+  color: var(--color-success-light);
+  cursor: default;
+  box-shadow: none;
+}
+
+.readyCount {
+  color: var(--text-disabled);
+  font-size: var(--font-sm);
+  margin: 0;
+  margin-left: auto;
+}
+
+.editDeckButton {
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--font-md);
+  font-weight: var(--font-weight-medium);
+  background: linear-gradient(180deg, rgba(60, 60, 80, 0.9) 0%, rgba(45, 45, 60, 0.9) 100%);
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+
+.editDeckButton:hover {
+  background: linear-gradient(180deg, rgba(75, 75, 100, 0.95) 0%, rgba(55, 55, 75, 0.95) 100%);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: var(--text-primary);
+}
+
+.viewDeckButton {
+  padding: var(--space-2) var(--space-5);
+  font-size: var(--font-md);
+  font-weight: var(--font-weight-medium);
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-xl);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.viewDeckButton:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: var(--text-secondary);
+}
+
+/* =========================================================================
+ * Deck Viewer Modal
+ * ========================================================================= */
+.deckViewerBackdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+}
+
+.deckViewerPanel {
+  background: linear-gradient(180deg, rgba(25, 25, 38, 0.98) 0%, rgba(18, 18, 28, 0.99) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  width: 100%;
+  max-width: 420px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.deckViewerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.deckViewerTitle {
+  font-size: var(--font-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.deckViewerClose {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 18px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  line-height: 1;
+}
+
+.deckViewerClose:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.deckViewerBody {
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-5);
+  flex: 1;
+}
+
+.deckViewerStats {
+  display: flex;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.deckViewerStat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.deckViewerStatValue {
+  font-size: var(--font-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+}
+
+.deckViewerStatLabel {
+  font-size: 10px;
+  color: var(--text-disabled);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.deckViewerGroup {
+  margin-bottom: var(--space-3);
+}
+
+.deckViewerGroupHeader {
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-1);
+  padding-bottom: var(--space-1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.deckViewerRow {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+}
+
+.deckViewerRow:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.deckViewerCount {
+  width: 22px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.deckViewerCardName {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-right: var(--space-2);
+}
+
+.deckViewerManaCost {
+  flex-shrink: 0;
+}
+
+.deckViewerLandsSection {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.deckViewerLandRow {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 var(--space-1);
+}
+
+.deckViewerLandName {
+  flex: 1;
+  font-size: 13px;
+  color: #a1887f;
+}
+
+.deckViewerLandCount {
+  font-size: 12px;
+  font-weight: var(--font-weight-bold);
+  color: var(--text-muted);
+}
+
+/* =========================================================================
+ * Share Link Button
+ * ========================================================================= */
+.shareLinkButton {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-medium);
+  background: transparent;
+  color: var(--text-disabled);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.shareLinkButton:hover {
+  background-color: var(--bg-surface-6);
+  color: var(--text-tertiary);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* =========================================================================
+ * Disconnected Players
+ * ========================================================================= */
+.disconnectedBanner {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.disconnectedPlayer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background-color: rgba(255, 60, 60, 0.1);
+  border: 1px solid rgba(255, 60, 60, 0.3);
+  border-radius: var(--radius-md);
+}
+
+.disconnectedName {
+  color: #ff6b6b;
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-medium);
+  flex: 1;
+}
+
+.disconnectedTimer {
+  color: #ff9999;
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.addTimeButton {
+  padding: 2px 8px;
+  font-size: var(--font-xs);
+  background: transparent;
+  color: #66bb6a;
+  border: 1px solid rgba(102, 187, 106, 0.4);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.addTimeButton:hover {
+  background-color: rgba(102, 187, 106, 0.15);
+}
+
+.kickButton {
+  padding: 2px 8px;
+  font-size: var(--font-xs);
+  background: transparent;
+  color: #ff6b6b;
+  border: 1px solid rgba(255, 107, 107, 0.4);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.kickButton:hover {
+  background-color: rgba(255, 107, 107, 0.15);
+}
+
+/* =========================================================================
+ * Active Matches
+ * ========================================================================= */
+.matchesSection {
+  width: 100%;
+}
+
+.matchesSectionTitle {
+  margin: 0 0 var(--space-3) 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.matchesList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.matchButton {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  background: linear-gradient(135deg, rgba(30, 30, 45, 0.9) 0%, rgba(25, 25, 38, 0.9) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.matchButton:hover {
+  background: linear-gradient(135deg, rgba(40, 40, 60, 0.95) 0%, rgba(35, 35, 50, 0.95) 100%);
+  border-color: rgba(79, 195, 247, 0.3);
+  transform: translateX(2px);
+}
+
+.matchPlayers {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.matchPlayerName {
+  font-weight: var(--font-weight-medium);
+  font-size: 14px;
+}
+
+.matchVs {
+  color: var(--text-disabled);
+  font-size: 12px;
+}
+
+.matchScore {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 14px;
+  font-family: ui-monospace, monospace;
+}
+
+.matchLifeHigh {
+  color: var(--color-success-light);
+  font-weight: var(--font-weight-semibold);
+}
+
+.matchLifeLow {
+  color: #ef5350;
+  font-weight: var(--font-weight-semibold);
+}
+
+.matchScoreDash {
+  color: var(--text-disabled);
+}
+
+.matchWatch {
+  color: var(--color-accent);
+  margin-left: var(--space-3);
+  font-size: 12px;
+  opacity: 0.8;
+  transition: opacity var(--transition-fast);
+}
+
+.matchButton:hover .matchWatch {
+  opacity: 1;
+}
+
+/* =========================================================================
+ * Last Round Results
+ * ========================================================================= */
+.resultsSection {
+  width: 100%;
+}
+
+.resultsSectionTitle {
+  composes: matchesSectionTitle;
+}
+
+.resultRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  background: rgba(20, 20, 28, 0.6);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-1);
+  font-size: var(--font-sm);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.resultOutcome {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-sm);
+}
+
+/* =========================================================================
+ * Fullscreen Button
+ * ========================================================================= */
+.fullscreenButton {
+  position: fixed;
+  top: var(--space-3);
+  left: var(--space-3);
+  z-index: var(--z-controls);
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-sm);
+}
+
+@media (max-width: 639px) {
+  .fullscreenButton {
+    top: var(--space-2);
+    left: var(--space-2);
+    padding: var(--space-1) var(--space-2);
+  }
+}
+
+.fullscreenButton:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* =========================================================================
+ * Standings Player Name (truncation for long names)
+ * ========================================================================= */
+.standingsPlayerName {
+  display: inline-block;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* =========================================================================
+ * Tournament Standings - Small Screen Responsive
+ * ========================================================================= */
+@media (max-width: 639px) {
+  .standingsTable {
+    border-radius: var(--radius-lg);
+  }
+
+  .standingsTh {
+    padding: var(--space-2) var(--space-1);
+    font-size: 10px;
+    letter-spacing: 0;
+  }
+
+  .standingsThLeft {
+    padding-left: var(--space-2);
+  }
+
+  .standingsTd {
+    padding: var(--space-2) var(--space-1);
+    font-size: 13px;
+  }
+
+  .standingsTdLeft {
+    padding-left: var(--space-2);
+  }
+
+  .standingsPlayerName {
+    max-width: 90px;
+  }
+
+  .standingsRank {
+    min-width: 24px;
+  }
+
+  .standingsPoints {
+    font-size: 13px;
+  }
+
+  .standingsGwr {
+    font-size: 11px;
+  }
+
+  .meIndicator {
+    font-size: 10px;
+    margin-left: 2px;
+  }
+
+  .disconnectedIndicator {
+    font-size: 9px;
+    padding: 1px 4px;
+    margin-left: 2px;
+  }
+
+  .resultRow {
+    font-size: var(--font-xs);
+    padding: var(--space-2);
+    gap: var(--space-1);
+  }
+
+  .resultOutcome {
+    font-size: 11px;
+    padding: 2px 6px;
+    flex-shrink: 0;
+  }
+
+  .statusBoxBye,
+  .statusBoxMatch,
+  .statusBoxWaiting {
+    padding: var(--space-3) var(--space-4);
+    font-size: var(--font-sm);
+  }
+
+  .readyButton {
+    padding: 10px var(--space-6);
+    font-size: var(--font-md);
+  }
+
+  .disconnectedPlayer {
+    gap: var(--space-2);
+    padding: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  .disconnectedName {
+    font-size: var(--font-xs);
+  }
+
+  .matchButton {
+    padding: var(--space-2) var(--space-3);
+    flex-wrap: wrap;
+    gap: var(--space-1);
+  }
+
+  .matchPlayers {
+    gap: var(--space-2);
+  }
+
+  .matchPlayerName {
+    font-size: 13px;
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .matchScore {
+    font-size: 13px;
+  }
+}
+
+/* =========================================================================
+ * Attribution
+ * ========================================================================= */
+.attribution {
+  position: absolute;
+  bottom: 8px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.25);
+  pointer-events: auto;
+}
+
+.attributionLink {
+  color: rgba(255, 255, 255, 0.35);
+  text-decoration: none;
+}
+
+.attributionLink:hover {
+  color: rgba(255, 255, 255, 0.6);
+  text-decoration: underline;
+}
