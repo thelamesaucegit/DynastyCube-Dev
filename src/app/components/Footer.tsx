@@ -12,7 +12,7 @@ export default function Footer() {
           <div className="md:col-span-2">
             <h3 className="font-bold text-lg mb-2">Dynasty Cube</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              A collaborative, living draft league where the multiverse itself shapes destiny.
+              A collaborative, living draft league where you shape destiny.
             </p>
             <p className="text-xs text-muted-foreground">
               Not affiliated with Wizards of the Coast. Magic: The Gathering is a trademark of Wizards of the Coast LLC.
