@@ -232,7 +232,7 @@ export default async function AboutPage() {
         <div className="max-w-2xl mx-auto space-y-4 mb-8">
           <h2 className="text-3xl font-bold">Shape the Multiverse</h2>
           <p className="text-muted-foreground text-lg">
-            The Dynasty Cube is more than just a draft—it&apos;s a living community. Whether you&apos;re strategizing in private team channels, negotiating blockbuster trades with rivals, or voting on the cosmic rules that will shape the next era, your voice matters.
+            The Dynasty Cube is more than just a draft—it&apos;s a living community. Whether you&apos;re strategizing with your Team members, negotiating blockbuster trades with rivals, or voting on rules and mechanics that will shape the next era, your voice matters.
           </p>
         </div>
         
