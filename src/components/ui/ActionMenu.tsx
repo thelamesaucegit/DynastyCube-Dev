@@ -1,13 +1,13 @@
 import { useEffect, useCallback, useMemo, useState } from 'react'
-import { useGameStore } from '@/store/gameStore.ts'
-import { useCardActions } from '@/hooks/useLegalActions.ts'
-import { useInteraction } from '@/hooks/useInteraction.ts'
+import { useGameStore } from '@/store/gameStore'
+import { useCardActions } from '@/hooks/useLegalActions'
+import { useInteraction } from '@/hooks/useInteraction'
 import type { LegalActionInfo, ClientCard } from '@/types'
 import { ManaCost, AbilityText } from './ManaSymbols'
 import { ManaCostProgress } from './ManaCostProgress'
-import { useViewingPlayer } from '@/store/selectors.ts'
+import { useViewingPlayer } from '@/store/selectors'
 import { isManaPoolEmpty } from '@/types'
-import { getCardImageUrl } from '@/utils/cardImages.ts'
+import { getCardImageUrl } from '@/utils/cardImages'
 import styles from './ActionMenu.module.css'
 
 /**
@@ -40,7 +40,7 @@ function buildActionOptions(
   if (!cardInfo) return options
 
   // Debug: log all action types received
-  if (import.meta.env.DEV) {
+  if (process.env.NODE_ENV !== 'production') {
     console.log('buildActionOptions - legalActions:', legalActions.map(a => ({
       actionType: a.actionType,
       'action.type': a.action.type,
@@ -60,7 +60,7 @@ function buildActionOptions(
   const playLandAction = legalActions.find((a) => a.action.type === 'PlayLand')
 
   // Debug: log found actions
-  if (import.meta.env.DEV) {
+  if (process.env.NODE_ENV !== 'production') {
     console.log('buildActionOptions - found:', { castAction: !!castAction, morphAction: !!morphAction, cycleAction: !!cycleAction, playLandAction: !!playLandAction })
     // Extra debug for cycling
     legalActions.forEach((a, i) => {
@@ -246,7 +246,7 @@ export function ActionMenu() {
   const shouldShowModal = hasMultiplePotentialOptions || hasSingleAction
 
   // Debug logging - always log when card is selected
-  if (import.meta.env.DEV && selectedCardId) {
+  if (process.env.NODE_ENV !== 'production' && selectedCardId) {
     console.log('ActionMenu render:', {
       selectedCardId,
       cardActionsCount: cardActions.length,

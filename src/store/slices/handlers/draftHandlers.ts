@@ -1,8 +1,8 @@
 /**
  * Handlers for draft, sealed, and deck building messages.
  */
-import type { MessageHandlers } from '@/network/messageHandlers.ts'
-import { trackEvent } from '@/utils/analytics.ts'
+import type { MessageHandlers } from '@/network/messageHandlers'
+import { trackEvent } from '@/utils/analytics'
 import { loadDeckState } from '../shared'
 import type { SetState, GetState } from './types'
 

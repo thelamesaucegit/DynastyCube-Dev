@@ -21,13 +21,13 @@
     "paths": {
       "@/*": ["./src/*"],
       "@/components/*": ["./src/app/components/*", "./src/components/*"],
-      "@/hooks/*": ["./src/app/hooks/*"],
-      "@/styles/*": ["./src/app/styles/*"],
-      "@/utils/*": ["./src/app/utils/*"],
+      "@/hooks/*": ["./src/app/hooks/*", "./src/hooks/*"],
+      "@/styles/*": ["./src/app/styles/*", "./src/styles/*"],
+      "@/utils/*": ["./src/app/utils/*", "./src/utils/*"],
             "@web-client/*": ["./web-client/src/*"]
 
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "web-client"]
+  "exclude": ["node_modules", "web-client", "src/App.tsx", "src/main.tsx", "src/components/replay/ReplayPage.tsx", "src/components/tournament/TournamentEntryPage.tsx"]
 }

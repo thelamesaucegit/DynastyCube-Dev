@@ -1,11 +1,11 @@
 /**
  * Handlers for gameplay messages: state updates, mulligan, game lifecycle, and errors.
  */
-import type { MessageHandlers } from '@/network/messageHandlers.ts'
+import type { MessageHandlers } from '@/network/messageHandlers'
 import type { EntityId } from '@/types'
 import type { ClientGameState, ClientEvent, LegalActionInfo, PendingDecision, OpponentDecisionStatus, PriorityModeValue, Step } from '@/types'
-import { trackEvent, setInGame } from '@/utils/analytics.ts'
-import { applyStateDelta } from '@/network/deltaApplicator.ts'
+import { trackEvent, setInGame } from '@/utils/analytics'
+import { applyStateDelta } from '@/network/deltaApplicator'
 import { getWebSocket, clearLobbyId } from '../shared'
 import type { SetState, GetState } from './types'
 

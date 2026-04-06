@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { useGameStore } from '@/store/gameStore.ts'
+import { useGameStore } from '@/store/gameStore'
 import type { ChooseNumberDecision } from '@/types'
 import { ManaSymbol } from '../ui/ManaSymbols'
 import styles from './DecisionUI.module.css'
@@ -252,6 +252,10 @@ export function ChooseNumberDecisionUI({
   // Check if this is a mana distribution prompt
   const manaDistribution = useMemo(() => parseManaDistributionPrompt(decision.prompt), [decision.prompt])
 
+  // Hooks must be called unconditionally before any early returns
+  const [selectedNumber, setSelectedNumber] = useState(decision.minValue)
+  const submitNumberDecision = useGameStore((s) => s.submitNumberDecision)
+
   if (manaDistribution) {
     return (
       <ManaDistributionUI
@@ -262,10 +266,6 @@ export function ChooseNumberDecisionUI({
       />
     )
   }
-
-  // Default number selection UI
-  const [selectedNumber, setSelectedNumber] = useState(decision.minValue)
-  const submitNumberDecision = useGameStore((s) => s.submitNumberDecision)
 
   const handleConfirm = () => {
     submitNumberDecision(selectedNumber)

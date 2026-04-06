@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useGameStore, ConvokeCreatureSelection } from '@/store/gameStore.ts'
+import { useGameStore, ConvokeCreatureSelection } from '@/store/gameStore'
 import type { ConvokeCreatureInfo } from '@/types'
 
 // Color symbol mappings for mana display

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useGameStore, type RevealAnimation } from '@/store/gameStore.ts'
-import { useResponsive } from '@/hooks/useResponsive.ts'
-import { getCardImageUrl } from '@/utils/cardImages.ts'
+import { useGameStore, type RevealAnimation } from '@/store/gameStore'
+import { useResponsive } from '@/hooks/useResponsive'
+import { getCardImageUrl } from '@/utils/cardImages'
 
 const ANIMATION_DURATION = 2000 // ms total
 const SCALE_IN_DURATION = 200

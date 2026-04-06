@@ -1,7 +1,7 @@
 /**
  * Handlers for lobby and tournament messages.
  */
-import type { MessageHandlers } from '@/network/messageHandlers.ts'
+import type { MessageHandlers } from '@/network/messageHandlers'
 import type { LobbyState } from '../types'
 import { saveLobbyId, clearLobbyId, clearDeckState } from '../shared'
 import type { SetState, GetState } from './types'

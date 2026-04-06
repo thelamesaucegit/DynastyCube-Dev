@@ -1,0 +1,67 @@
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #1a1a1a;
+    color: #e0e0e0;
+  }
+  
+  .nav {
+    background-color: rgba(26, 26, 26, 0.95);
+    border-bottom-color: #333;
+  }
+  
+  .nav-link {
+    color: #e0e0e0;
+  }
+  
+  .nav-link:hover {
+    color: #66b3ff;
+    background-color: #333;
+  }
+  
+  .nav-link:visited {
+    color: #e0e0e0;
+  }
+  
+  .nav-link:visited:hover {
+    color: #66b3ff;
+  }
+  
+  .menu-toggle {
+    border-color: #555;
+    color: #e0e0e0;
+  }
+  
+  .menu-toggle:hover {
+    background-color: #333;
+  }
+  
+  .nav-menu {
+    background-color: #1a1a1a;
+    border-color: #333;
+  }
+  
+  h1 {
+    color: #fff;
+  }
+  
+  .subtitle {
+    color: #ccc;
+  }
+  
+  .construction-notice {
+    color: #e0e0e0;
+  }
+  
+  a {
+    color: #66b3ff;
+  }
+  
+  a:hover {
+    color: #99ccff;
+  }
+  
+  a:visited {
+    color: #cc99ff;
+  }
+}

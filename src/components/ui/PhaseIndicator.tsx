@@ -1,6 +1,6 @@
 import { Phase, Step, StepDisplayNames } from '@/types'
-import { useResponsive } from '@/hooks/useResponsive.ts'
-import type { PriorityMode } from '@/store/selectors.ts'
+import { useResponsive } from '@/hooks/useResponsive'
+import type { PriorityMode } from '@/store/selectors'
 
 interface PhaseIndicatorProps {
   phase: Phase

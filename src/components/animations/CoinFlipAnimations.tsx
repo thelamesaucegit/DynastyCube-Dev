@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useGameStore, type CoinFlipAnimation } from '@/store/gameStore.ts'
+import { useGameStore, type CoinFlipAnimation } from '@/store/gameStore'
 
 const ANIMATION_DURATION = 2000 // ms total
 const SCALE_IN_DURATION = 200

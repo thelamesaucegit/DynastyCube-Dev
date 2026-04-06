@@ -1,10 +1,10 @@
 //web-client/src/components/spectating/SpectatorView.tsx
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useGameStore } from '@/store/gameStore.ts'
+import { useGameStore } from '@/store/gameStore'
 import type { SpectatorPlayerState, SpectatorCardInfo, SpectatorCombatState } from '../../types/messages'
-import { useResponsive } from '@/hooks/useResponsive.ts'
-import { getCardImageUrl, getScryfallFallbackUrl } from '@/utils/cardImages.ts'
+import { useResponsive } from '@/hooks/useResponsive'
+import { getCardImageUrl, getScryfallFallbackUrl } from '@/utils/cardImages'
 
 interface Point {
   x: number

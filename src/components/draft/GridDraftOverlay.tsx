@@ -1,9 +1,9 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
-import { useGameStore } from '@/store/gameStore.ts'
+import { useGameStore } from '@/store/gameStore'
 import type { GridDraftState } from '@/store/slices'
 import type { SealedCardInfo, LobbySettings } from '@/types'
-import { useResponsive } from '@/hooks/useResponsive.ts'
-import { getCardImageUrl } from '@/utils/cardImages.ts'
+import { useResponsive } from '@/hooks/useResponsive'
+import { getCardImageUrl } from '@/utils/cardImages'
 import { ManaCost } from '../ui/ManaSymbols'
 import { SetSynergiesButton } from './SetSynergiesOverlay'
 
@@ -911,7 +911,7 @@ function OpponentCardsOverlay({ playerName, cards, onClose, onHover }: {
         }}>
           <div>
             <div style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>
-              {playerName}'s Cards
+              {playerName}&apos;s Cards
             </div>
             <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 2 }}>
               {cards.length} cards — {creatureCount}C / {spellCount}S
@@ -939,7 +939,7 @@ function OpponentCardsOverlay({ playerName, cards, onClose, onHover }: {
           fontWeight: 600,
           textAlign: 'center',
         }}>
-          Viewing opponent's picked cards
+          Viewing opponent&apos;s picked cards
         </div>
 
         {/* Card list */}

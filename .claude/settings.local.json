@@ -79,12 +79,12 @@
       "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" checkout -B Toxics-Work origin/main)",
       "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" log --oneline origin/main..origin/claude/jovial-chaum)",
       "Bash(git -C \"Z:/home/itstoxicqt/Documents/Projects/DynastyCube-Dev/.claude/worktrees/jovial-chaum\" cherry-pick 5fa55b2)",
-      "Bash(gh pr:*)",
-      "Bash(git worktree:*)",
-      "Bash(cat:*)",
-      "Bash(git show:*)",
+      "Bash(git checkout:*)",
       "Bash(git pull:*)",
-      "Bash(git stash:*)"
+      "Bash(npm info:*)",
+      "Bash(gh api:*)",
+      "Bash(npx next:*)",
+      "Bash(xargs sed:*)"
     ]
   }
 }

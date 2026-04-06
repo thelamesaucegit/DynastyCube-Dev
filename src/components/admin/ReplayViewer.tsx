@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useGameStore } from '@/store/gameStore.ts'
+import { useGameStore } from '@/store/gameStore'
 import { SpectatorContext } from '../../contexts/SpectatorContext'
 import { GameBoard } from '../game/GameBoard'
 import { CombatArrows } from '../combat/CombatArrows'
 import type { SpectatingState } from '@/store/slices'
-import { reconstructSnapshots, type ReplayData } from '@/replay/reconstructSnapshots.ts'
+import { reconstructSnapshots, type ReplayData } from '@/replay/reconstructSnapshots'
 
 // ============================================================================
 // Types
@@ -412,7 +412,8 @@ function ReplayView({
           </div>
         </div>
         <div style={styles.gameBoardContainer}>
-          <GameBoard spectatorMode topOffset={HEADER_HEIGHT} />
+          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+          <GameBoard spectatorMode topOffset={HEADER_HEIGHT} snapshot={snapshot as any} cardDataMap={{}} />
         </div>
       </div>
       <CombatArrows />

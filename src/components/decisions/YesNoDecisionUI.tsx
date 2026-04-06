@@ -1,6 +1,6 @@
-import { useGameStore } from '@/store/gameStore.ts'
+import { useGameStore } from '@/store/gameStore'
 import type { YesNoDecision, ClientGameState } from '@/types'
-import { getCardImageUrl } from '@/utils/cardImages.ts'
+import { getCardImageUrl } from '@/utils/cardImages'
 import { AbilityText } from '../ui/ManaSymbols'
 import styles from './DecisionUI.module.css'
 

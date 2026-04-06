@@ -2,10 +2,10 @@
 
 'use client'; 
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 // Correctly import your existing GameBoard component
 import { GameBoard } from '@/components/game/GameBoard'; 
-import type { SpectatorStateUpdate, ReplayCardData } from '@/app/admin/argentum-viewer/[matchId]/page';
+import type { SpectatorStateUpdate, ReplayCardData, Team } from '@/app/admin/argentum-viewer/[matchId]/page';
 import { Button } from '@/app/components/ui/button';
 import { Slider } from '@/app/components/ui/slider';
 import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
@@ -22,7 +22,7 @@ interface PlayerDisplayInfo {
   logName: string;
   team: Team;
 }
-export function ArgentumReplayPlayer({ initialGameStates, cardDataMap }: ArgentumReplayPlayerProps) {
+export function ArgentumReplayPlayer({ initialGameStates, cardDataMap, team1, team2 }: ArgentumReplayPlayerProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
 

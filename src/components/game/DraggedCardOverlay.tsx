@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useGameStore } from '@/store/gameStore.ts'
-import { getCardImageUrl } from '@/utils/cardImages.ts'
+import { useGameStore } from '@/store/gameStore'
+import { getCardImageUrl } from '@/utils/cardImages'
 
 interface Point {
   x: number

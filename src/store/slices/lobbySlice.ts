@@ -18,7 +18,7 @@ import {
   createAddDisconnectTimeMessage,
   createKickPlayerMessage,
 } from '@/types'
-import { trackEvent } from '@/utils/analytics.ts'
+import { trackEvent } from '@/utils/analytics'
 import { getWebSocket, clearLobbyId, clearDeckState, loadLobbyId } from './shared'
 
 export interface LobbySliceState {

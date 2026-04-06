@@ -1,8 +1,8 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
-import { useGameStore, type DraftState } from '@/store/gameStore.ts'
+import { useGameStore, type DraftState } from '@/store/gameStore'
 import type { SealedCardInfo, LobbySettings } from '@/types'
-import { useResponsive } from '@/hooks/useResponsive.ts'
-import { getCardImageUrl } from '@/utils/cardImages.ts'
+import { useResponsive } from '@/hooks/useResponsive'
+import { getCardImageUrl } from '@/utils/cardImages'
 import { ManaCost } from '../ui/ManaSymbols'
 import { SetSynergiesButton } from './SetSynergiesOverlay'
 

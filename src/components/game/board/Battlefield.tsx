@@ -1,10 +1,10 @@
-import { useBattlefieldCards, groupCards, selectGameState, selectViewingPlayerId } from '@/store/selectors.ts'
-import { useGameStore } from '@/store/gameStore.ts'
+import { useBattlefieldCards, groupCards, selectGameState, selectViewingPlayerId } from '@/store/selectors'
+import { useGameStore } from '@/store/gameStore'
 import { useResponsiveContext } from './shared'
 import { styles } from './styles'
 import { CardStack } from '../card'
 import { GameCard } from '../card'
-import { GroupedCard } from '@/store/selectors.ts'
+import { GroupedCard } from '@/store/selectors'
 import type { ClientCard } from '@/types'
 
 /**

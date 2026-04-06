@@ -17,10 +17,12 @@ import { createAnimationSlice } from './animationSlice'
 import { createPipelineSlice } from './pipelineSlice'
 import type { SliceCreator } from '../types'
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface UISliceState {
   // Re-exported from sub-slices for backward compatibility
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface UISliceActions {
   // Re-exported from sub-slices for backward compatibility
 }

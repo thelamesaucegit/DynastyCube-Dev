@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useGameStore, type DrawAnimation } from '@/store/gameStore.ts'
-import { useResponsive } from '@/hooks/useResponsive.ts'
-import { getCardImageUrl, getScryfallFallbackUrl } from '@/utils/cardImages.ts'
+import { useGameStore, type DrawAnimation } from '@/store/gameStore'
+import { useResponsive } from '@/hooks/useResponsive'
+import { getCardImageUrl, getScryfallFallbackUrl } from '@/utils/cardImages'
 
 const ANIMATION_DURATION = 500 // ms
 

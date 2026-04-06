@@ -1,4 +1,4 @@
-import { useGameStore } from '@/store/gameStore.ts'
+import { useGameStore } from '@/store/gameStore'
 import type { ChooseTargetsDecision } from '@/types'
 import styles from './DecisionUI.module.css'
 
@@ -26,7 +26,7 @@ export function PlayerTargetingUI({
         {decision.prompt}
       </div>
       <div className={styles.hint}>
-        Click a player's life total
+        Click a player&apos;s life total
       </div>
       {decision.canCancel && (
         <div className={styles.buttonContainerSmall}>

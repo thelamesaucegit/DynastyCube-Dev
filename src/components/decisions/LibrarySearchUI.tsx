@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
-import { useGameStore } from '@/store/gameStore.ts'
+import { useGameStore } from '@/store/gameStore'
 import type { EntityId, SearchLibraryDecision } from '@/types'
-import { type ResponsiveSizes } from '@/hooks/useResponsive.ts'
+import { type ResponsiveSizes } from '@/hooks/useResponsive'
 import { ZoneSelectionUI, type ZoneCardInfo } from './ZoneSelectionUI'
 
 interface LibrarySearchUIProps {
