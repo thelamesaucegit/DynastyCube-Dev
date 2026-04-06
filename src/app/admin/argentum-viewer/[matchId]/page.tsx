@@ -8,7 +8,13 @@ import { notFound } from 'next/navigation';
 // ============================================================================
 // TYPE DEFINITIONS — data contract from the Argentum Java logger
 // ============================================================================
-
+export interface Team {
+  id: string;
+  name: string;
+  emoji: string;
+  primary_color: string | null;
+  secondary_color: string | null;
+}
 export interface ReplayCardData {
   image_url: string | null;
   image_url_2: string | null;
@@ -100,20 +106,38 @@ function getSupabase() {
 }
 
 
-async function getMatchReplayData(matchId: string): Promise<SpectatorStateUpdate[] | null> {
+async function getMatchReplayData(matchId: string): Promise<{ gameStates: SpectatorStateUpdate[] | null, team1Id: string | null, team2Id: string | null }> {
   const { data, error } = await getSupabase()
     .from('sim_matches')
-    .select('argentum_game_states')
+    .select('argentum_game_states, team1_id, team2_id')
     .eq('id', matchId)
-    .single() as { data: { argentum_game_states: unknown } | null; error: unknown };
+    .single();
 
-  if (error || !data || !data.argentum_game_states) {
-    console.error(`Error fetching replay data for match ${matchId}:`, error);
-    return null;
+  if (error || !data) {
+    console.error(`Error fetching match data for ${matchId}:`, error);
+    return { gameStates: null, team1Id: null, team2Id: null };
   }
-  return data.argentum_game_states as SpectatorStateUpdate[];
-}
 
+  return {
+    gameStates: data.argentum_game_states as SpectatorStateUpdate[],
+    team1Id: data.team1_id,
+    team2Id: data.team2_id,
+  };
+}
+async function getTeamData(teamId: string | null): Promise<Team | null> {
+    if (!teamId) return null;
+    const { data, error } = await getSupabase()
+        .from('teams')
+        .select('*')
+        .eq('id', teamId)
+        .single();
+    
+    if (error) {
+        console.error(`Error fetching team data for ${teamId}:`, error);
+        return null;
+    }
+    return data as Team;
+}
 async function getCardDataMap(gameStates: SpectatorStateUpdate[]): Promise<Record<string, ReplayCardData>> {
     // ... (This function is correct and does not need to change)
     const allCardNames = new Set<string>();
@@ -150,26 +174,30 @@ export const metadata = {
   title: "Match Replay | The Dynasty Cube",
 };
 
-export default async function ReplayPage({ params }: { params: Promise<{ matchId: string }> }) {
-  const { matchId } = await params;
-  const gameStates = await getMatchReplayData(matchId);
+export default async function ReplayPage({ params }: { params: { matchId: string } }) { // 1. Correct params type
+  const { matchId } = params;
+  
+  const { gameStates, team1Id, team2Id } = await getMatchReplayData(matchId);
 
   if (!gameStates || gameStates.length === 0) {
     return notFound();
   }
 
-  const cardDataMap = await getCardDataMap(gameStates);
+  // 2. Fetch all three data sources in one go.
+  const [team1, team2, cardDataMap] = await Promise.all([
+      getTeamData(team1Id),
+      getTeamData(team2Id),
+      getCardDataMap(gameStates)
+  ]);
 
-  // v-v-v-v- THIS IS THE FINAL CHANGE v-v-v-v-
-  // Remove the placeholder message and render the actual replay player component,
-  // passing it the data we just fetched.
   return (
     <main className="w-full h-screen bg-gray-800">
       <ArgentumReplayPlayer 
         initialGameStates={gameStates} 
         cardDataMap={cardDataMap} 
+        team1={team1}
+        team2={team2}
       />
     </main>
   );
-  // ^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
 }
