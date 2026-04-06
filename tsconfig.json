@@ -24,7 +24,7 @@
       "@/hooks/*": ["./src/app/hooks/*"],
       "@/styles/*": ["./src/app/styles/*"],
       "@/utils/*": ["./src/app/utils/*"],
-            "@web-client/*": ["web-client/src/*"]
+            "@web-client/*": ["./web-client/src/*"]
 
     }
   },

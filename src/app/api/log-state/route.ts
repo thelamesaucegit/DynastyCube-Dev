@@ -2,15 +2,17 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
-const SUPABASE_URL = process.env.SUPABASE_URL!;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY!;
-
-const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
+let _supabaseAdmin: ReturnType<typeof createClient> | null = null;
+function getSupabaseAdmin() {
+  if (!_supabaseAdmin) {
+    _supabaseAdmin = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    );
   }
-});
+  return _supabaseAdmin;
+}
 
 // ============================================================================
 // 1. DEFINE A STRONG TYPE FOR OUR PAYLOADS
@@ -40,7 +42,8 @@ async function processQueue(matchId: string) {
 
   console.log(`[Queue Worker] Processing ${statesToProcess.length} states for match ${matchId}`);
 
-  const { error } = await supabaseAdmin.rpc('append_to_match_logs_batch', {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (getSupabaseAdmin() as any).rpc('append_to_match_logs_batch', {
       match_id_to_append: matchId,
       new_states_to_append: statesToProcess
   });
