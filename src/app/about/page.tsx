@@ -79,7 +79,7 @@ export default async function AboutPage() {
           The Three Pillars
         </h2>
         <p className="text-lg text-muted-foreground">
-          At its core, The Dynasty Cube combines a normal cube draft with the long-term planning of a dynasty sports league and the evolving horror of a community-driven simulation.
+          At its core, The Dynasty Cube combines a normal cube draft with the long-term planning of a dynasty sports league and the evolving horror of a community-driven "e-splort" simulation.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -162,13 +162,13 @@ export default async function AboutPage() {
           <div>
             <h3 className="text-xl font-semibold mb-2">2. The Season</h3>
             <p className="text-muted-foreground">
-              Over the coming weeks, teams will construct their decks from their drafted pools and play scheduled matches to determine the rankings, leading up to the Championship match. During this time, Teams collaborate on strategies and may actively trade cards with one another—trades do not need to be equal.
+              Over the coming weeks, teams will construct their decks from their drafted pools and play scheduled matches to determine the rankings, leading up to the Championship match. During this time, Teams collaborate on strategies and may actively trade cards and other resources with one another.
             </p>
           </div>
           <div>
             <h3 className="text-xl font-semibold mb-2">3. The Off-Season</h3>
             <p className="text-muted-foreground">
-              After the Championship, the Multiverse shifts. Older cards become harder to retain in your pool, and the <em>next</em> chronological Magic set is injected into the Draft Pool. The Teams then convene to vote on new rules, shaping the environment for the coming Season.
+              After the Championship, The Cube shifts. Older cards become harder to retain, and the <em>next</em> chronological Magic set is added the Draft Pool. The Teams then convene to vote on new rules, shaping the environment for the coming Season.
             </p>
           </div>
         </div>
@@ -183,7 +183,7 @@ export default async function AboutPage() {
               The Factions
             </h2>
             <p className="text-muted-foreground">
-              Participants are separated into 8 distinct factions. Together, team members collaborate in private channels to discuss draft strategies, evaluate trades, build their decks, and vote on the future rules of the league.
+              Participants are separated into distinct factions. Together, team members collaborate on draft strategies, evaluate trades, build their decks, and vote on the future rules of the league.
             </p>
           </div>
         </div>
@@ -232,7 +232,7 @@ export default async function AboutPage() {
         <div className="max-w-2xl mx-auto space-y-4 mb-8">
           <h2 className="text-3xl font-bold">Shape the Multiverse</h2>
           <p className="text-muted-foreground text-lg">
-            The Dynasty Cube is more than just a draft—it&apos;s a living community. Whether you&apos;re strategizing in private team channels, negotiating blockbuster trades with rivals, or voting on the cosmic rules that will shape the next era, your voice matters.
+            The Dynasty Cube is more than just a draft—it&apos;s a living community. Whether you&apos;re strategizing with your Team members, negotiating blockbuster trades with rivals, or voting on rules and mechanics that will shape the next era, your voice matters.
           </p>
         </div>
         
