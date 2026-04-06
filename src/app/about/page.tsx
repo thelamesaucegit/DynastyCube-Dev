@@ -162,7 +162,7 @@ export default async function AboutPage() {
           <div>
             <h3 className="text-xl font-semibold mb-2">2. The Season</h3>
             <p className="text-muted-foreground">
-              Over the coming weeks, teams will construct their decks from their drafted pools and play scheduled matches to determine the rankings, leading up to the Championship match. During this time, Teams collaborate on strategies and may actively trade cards with one another—trades do not need to be equal.
+              Over the coming weeks, teams will construct their decks from their drafted pools and play scheduled matches to determine the rankings, leading up to the Championship match. During this time, Teams collaborate on strategies and may actively trade cards and other resources with one another.
             </p>
           </div>
           <div>
