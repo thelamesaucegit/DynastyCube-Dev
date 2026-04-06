@@ -91,17 +91,21 @@ export interface SpectatorStateUpdate {
 // ============================================================================
 // PAGE COMPONENT
 // ============================================================================
-const SUPABASE_URL = process.env.SUPABASE_URL!;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY!;
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+let _supabase: ReturnType<typeof createClient> | null = null;
+function getSupabase() {
+  if (!_supabase) {
+    _supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+  }
+  return _supabase;
+}
 
 
 async function getMatchReplayData(matchId: string): Promise<SpectatorStateUpdate[] | null> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('sim_matches')
     .select('argentum_game_states')
     .eq('id', matchId)
-    .single();
+    .single() as { data: { argentum_game_states: unknown } | null; error: unknown };
 
   if (error || !data || !data.argentum_game_states) {
     console.error(`Error fetching replay data for match ${matchId}:`, error);
@@ -119,10 +123,11 @@ async function getCardDataMap(gameStates: SpectatorStateUpdate[]): Promise<Recor
         });
     });
 
-    const { data, error } = await supabase
+    type CardRow = { card_name: string; image_url: string | null; image_url_2: string | null; image_url_3: string | null; is_token: boolean };
+    const { data, error } = await getSupabase()
         .from('card_pools')
         .select('card_name, image_url, image_url_2, image_url_3, is_token')
-        .in('card_name', Array.from(allCardNames));
+        .in('card_name', Array.from(allCardNames)) as { data: CardRow[] | null; error: unknown };
 
     if (error) {
         console.error('Error fetching card data:', error);
@@ -130,7 +135,7 @@ async function getCardDataMap(gameStates: SpectatorStateUpdate[]): Promise<Recor
     }
 
     const cardDataMap: Record<string, ReplayCardData> = {};
-    data.forEach(card => {
+    (data ?? []).forEach(card => {
         cardDataMap[card.card_name] = {
             image_url: card.image_url,
             image_url_2: card.image_url_2,
@@ -145,8 +150,8 @@ export const metadata = {
   title: "Match Replay | The Dynasty Cube",
 };
 
-export default async function ReplayPage({ params }: { params: { matchId: string } }) {
-  const { matchId } = params;
+export default async function ReplayPage({ params }: { params: Promise<{ matchId: string }> }) {
+  const { matchId } = await params;
   const gameStates = await getMatchReplayData(matchId);
 
   if (!gameStates || gameStates.length === 0) {

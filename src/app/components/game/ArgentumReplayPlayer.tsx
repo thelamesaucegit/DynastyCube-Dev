@@ -3,7 +3,8 @@
 'use client'; // This is a Client Component because it uses state and interactivity.
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { GameBoard } from '../../../../web-client/src/components/game/GameBoard'; // Assuming GameBoard is exported from here
+// GameBoard will be imported from web-client once integrated
+// import { GameBoard } from '../../../../web-client/src/components/game/GameBoard';
 import type { SpectatorStateUpdate, ReplayCardData } from '@/app/admin/argentum-viewer/[matchId]/page';
 import { Button } from '@/app/components/ui/button';
 import { Slider } from '@/app/components/ui/slider';
@@ -58,13 +59,19 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap }: Argentu
     setIsPlaying(false);
   }
 
-  // Memoize the game board to prevent unnecessary re-renders
+  // Placeholder until GameBoard is integrated from web-client
   const memoizedGameBoard = useMemo(() => {
+    const players = currentSnapshot?.gameState?.players ?? [];
     return (
-      <GameBoard
-        snapshot={currentSnapshot}
-        cardDataMap={cardDataMap}
-      />
+      <div className="flex items-center justify-center h-full text-white text-center p-8">
+        <div>
+          <p className="text-lg font-semibold text-yellow-400 mb-4">3D Game Board (web-client integration pending)</p>
+          <p className="text-sm text-gray-400">Turn {currentSnapshot?.gameState?.turnNumber ?? 0} — {currentSnapshot?.gameState?.currentPhase}</p>
+          {players.map(p => (
+            <p key={p.playerId} className="text-sm text-gray-300 mt-1">{p.name}: {p.life} life</p>
+          ))}
+        </div>
+      </div>
     );
   }, [currentIndex, cardDataMap, initialGameStates]);
 
