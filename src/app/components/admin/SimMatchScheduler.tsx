@@ -358,7 +358,7 @@ const [deckWarnings, setDeckWarnings] = useState<string[]>([]);
                     disabled={submitting}
                     className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:cursor-not-allowed"
                 >
-                    {submitting ? "Scheduling & Starting Sim..." : "Schedule & Run Sim"}
+                    {submitting ? "Scheduling Sim..." : "Schedule Sim"}
                 </button>
             </form>
 
