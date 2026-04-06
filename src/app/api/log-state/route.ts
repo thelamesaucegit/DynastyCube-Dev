@@ -42,8 +42,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ message: 'Batch queued successfully' });
 
-  } catch (err: any) {
-    console.error('[API /log-state] Batch processing error:', err);
-    return NextResponse.json({ error: 'Invalid batch request', details: err.message }, { status: 400 });
+  } catch (err: unknown) {
+ console.error('[API /log-state] General error:', err);
+    
+    // Perform a type check to safely access the error message
+    const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+    
+    return NextResponse.json({ error: 'Invalid request', details: errorMessage }, { status: 400 });
   }
 }
