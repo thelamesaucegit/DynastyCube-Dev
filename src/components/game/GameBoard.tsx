@@ -9,9 +9,9 @@ import { useInteraction } from '@/hooks/useInteraction';
 import type { SpectatorStateUpdate, ReplayClientPlayer, ReplayCardData, ClientPlayer as LiveClientPlayer } from '@/app/admin/argentum-viewer/[matchId]/page';
 import { useViewingPlayer, useOpponent, useStackCards, selectPriorityMode, useGhostCards, useRevealedLibraryTopCard } from '@/store/selectors';
 import { hand, getNextStep, StepShortNames, entityId } from '@/types';
-import { useResponsive, ResponsiveContext } from '@/hooks/useResponsive';
+import { useResponsive } from '@/hooks/useResponsive';
 import { getCardImageUrl } from '@/app/utils/cardUtils';
-
+import { ResponsiveContext } from './board/utils'; 
 // Import UI Components
 import { StepStrip } from '../ui/StepStrip';
 import { ManaPool } from '../ui/ManaPool';
