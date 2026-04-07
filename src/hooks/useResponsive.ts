@@ -1,4 +1,6 @@
-import { useState, useEffect, useMemo } from 'react'
+//src/hooks/useResponsive.ts
+
+import React, { useState, useEffect, useMemo, createContext } from 'react';
 
 export interface ViewportSize {
   width: number
@@ -46,6 +48,10 @@ export interface ResponsiveSizes {
   isMobile: boolean
   isTablet: boolean
 }
+export const ResponsiveContext = createContext<ResponsiveSizes | null>(null);
+
+// 3. Create and export the Provider component. This is what GameBoard will use.
+export const ResponsiveContextProvider = ResponsiveContext.Provider;
 
 /**
  * Calculate the optimal card width to fit N cards in available width.
