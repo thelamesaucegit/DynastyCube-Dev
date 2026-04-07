@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react'
-import { useGameStore } from '@/store/gameStore.ts'
+import { useGameStore } from '@/store/gameStore'
 import type { EntityId, ChooseOptionDecision } from '@/types'
-import { useResponsive } from '@/hooks/useResponsive.ts'
-import { getCardImageUrl } from '@/utils/cardImages.ts'
+import { useResponsive } from '@/hooks/useResponsive'
+import { getCardImageUrl } from '@/utils/cardImages'
 import { DecisionCardPreview } from './DecisionComponents'
 import styles from './DecisionUI.module.css'
 

@@ -1,8 +1,8 @@
 /**
  * Shared utilities and WebSocket instance for store slices.
  */
-import { GameWebSocket } from '@/network/websocket.ts'
-import type { MessageHandlers } from '@/network/messageHandlers.ts'
+import { GameWebSocket } from '@/network/websocket'
+import type { MessageHandlers } from '@/network/messageHandlers'
 
 // WebSocket singleton instance
 let wsInstance: GameWebSocket | null = null

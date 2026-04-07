@@ -1,8 +1,8 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
-import { useGameStore, type WinstonDraftState } from '@/store/gameStore.ts'
+import { useGameStore, type WinstonDraftState } from '@/store/gameStore'
 import type { SealedCardInfo, LobbySettings } from '@/types'
-import { useResponsive } from '@/hooks/useResponsive.ts'
-import { getCardImageUrl } from '@/utils/cardImages.ts'
+import { useResponsive } from '@/hooks/useResponsive'
+import { getCardImageUrl } from '@/utils/cardImages'
 import { ManaCost } from '../ui/ManaSymbols'
 import { SetSynergiesButton } from './SetSynergiesOverlay'
 
@@ -789,7 +789,7 @@ function OpponentKnownCardsOverlay({ opponentName, knownCards, unknownCount, onC
         }}>
           <div>
             <div style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>
-              {opponentName}'s Cards
+              {opponentName}&apos;s Cards
             </div>
             <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 2 }}>
               {totalKnown} known / {unknownCount} unknown
@@ -816,7 +816,7 @@ function OpponentKnownCardsOverlay({ opponentName, knownCards, unknownCount, onC
           fontSize: 12,
           textAlign: 'center',
         }}>
-          Showing opponent cards you've seen in piles
+          Showing opponent cards you&apos;ve seen in piles
         </div>
 
         {/* Card list */}
@@ -881,7 +881,7 @@ function OpponentKnownCardsOverlay({ opponentName, knownCards, unknownCount, onC
               textAlign: 'center', color: 'rgba(255,255,255,0.3)',
               padding: 20, fontSize: 13,
             }}>
-              No known cards — opponent picked {unknownCount} card{unknownCount !== 1 ? 's' : ''} from piles you haven't seen
+              No known cards — opponent picked {unknownCount} card{unknownCount !== 1 ? 's' : ''} from piles you haven&apos;t seen
             </div>
           )}
           {/* Unknown cards count */}
@@ -895,7 +895,7 @@ function OpponentKnownCardsOverlay({ opponentName, knownCards, unknownCount, onC
               fontSize: 12,
               textAlign: 'center',
             }}>
-              + {unknownCount} unknown card{unknownCount !== 1 ? 's' : ''} from piles you haven't seen
+              + {unknownCount} unknown card{unknownCount !== 1 ? 's' : ''} from piles you haven&apos;t seen
             </div>
           )}
         </div>

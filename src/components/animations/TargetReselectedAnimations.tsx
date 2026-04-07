@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useGameStore, type TargetReselectedAnimation } from '@/store/gameStore.ts'
+import { useGameStore, type TargetReselectedAnimation } from '@/store/gameStore'
 
 const ANIMATION_DURATION = 2000 // ms — longer than damage since it has text to read
 

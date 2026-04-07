@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { useGameStore } from '@/store/gameStore.ts'
+import { useGameStore } from '@/store/gameStore'
 import type { EntityId, SplitPilesDecision } from '@/types'
-import { calculateFittingCardWidth, type ResponsiveSizes } from '@/hooks/useResponsive.ts'
-import { getCardImageUrl } from '@/utils/cardImages.ts'
+import { calculateFittingCardWidth, type ResponsiveSizes } from '@/hooks/useResponsive'
+import { getCardImageUrl } from '@/utils/cardImages'
 import styles from './DecisionUI.module.css'
 
 /**

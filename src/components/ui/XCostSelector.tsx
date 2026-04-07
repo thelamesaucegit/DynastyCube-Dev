@@ -1,4 +1,4 @@
-import { useGameStore } from '@/store/gameStore.ts'
+import { useGameStore } from '@/store/gameStore'
 
 /**
  * MTG Arena-style X cost selector overlay.

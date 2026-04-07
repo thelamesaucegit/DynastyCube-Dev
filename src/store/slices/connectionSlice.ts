@@ -2,9 +2,9 @@
  * Connection slice - handles WebSocket connection state and authentication.
  */
 import type { SliceCreator, EntityId } from './types'
-import type { ConnectionStatus } from '@/network/websocket.ts'
-import { GameWebSocket, getWebSocketUrl } from '@/network/websocket.ts'
-import { handleServerMessage, createLoggingHandlers } from '@/network/messageHandlers.ts'
+import type { ConnectionStatus } from '@/network/websocket'
+import { GameWebSocket, getWebSocketUrl } from '@/network/websocket'
+import { handleServerMessage, createLoggingHandlers } from '@/network/messageHandlers'
 import { createConnectMessage, ErrorCode } from '@/types'
 import {
   getWebSocket,
@@ -55,7 +55,7 @@ export const createConnectionSlice: SliceCreator<ConnectionSlice> = (set, get) =
 
     // Build message handlers from the full store
     const handlers = createMessageHandlers(set, get)
-    const wrappedHandlers = import.meta.env.DEV
+    const wrappedHandlers = process.env.NODE_ENV !== 'production'
       ? createLoggingHandlers(handlers)
       : handlers
 

@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react'
-import { useGameStore } from '@/store/gameStore.ts'
+import { useGameStore } from '@/store/gameStore'
 import type { EntityId } from '@/types'
-import { calculateFittingCardWidth, type ResponsiveSizes } from '@/hooks/useResponsive.ts'
-import { getCardImageUrl } from '@/utils/cardImages.ts'
+import { calculateFittingCardWidth, type ResponsiveSizes } from '@/hooks/useResponsive'
+import { getCardImageUrl } from '@/utils/cardImages'
 
 /**
  * Card info for zone selection - works with both visible cards and hidden cards.

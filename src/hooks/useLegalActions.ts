@@ -78,7 +78,7 @@ export function useCardActions(cardId: EntityId | null): LegalActionInfo[] {
     if (!cardId) return []
 
     // Debug: log cycling actions and their cardIds
-    if (import.meta.env.DEV) {
+    if (process.env.NODE_ENV !== 'production') {
       const cyclingActions = legalActions.filter(a => a.action.type === 'CycleCard')
       if (cyclingActions.length > 0) {
         console.log('useCardActions - looking for cardId:', cardId)

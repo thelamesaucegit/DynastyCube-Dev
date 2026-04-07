@@ -1,4 +1,4 @@
-import { useGameStore } from '@/store/gameStore.ts'
+import { useGameStore } from '@/store/gameStore'
 import type { EntityId } from '@/types'
 import { entityId } from '@/types'
 

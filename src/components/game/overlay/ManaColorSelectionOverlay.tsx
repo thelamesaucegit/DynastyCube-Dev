@@ -1,4 +1,4 @@
-import { useGameStore } from '@/store/gameStore.ts'
+import { useGameStore } from '@/store/gameStore'
 
 /**
  * Color styles for the five Magic colors.

@@ -112,7 +112,7 @@ export function useInteraction() {
       const actions = getCardActions(cardId)
 
       // Debug logging
-      if (import.meta.env.DEV) {
+      if (process.env.NODE_ENV !== 'production') {
         console.log('handleCardClick:', cardId, 'result:', result.type, 'actions:', actions)
       }
 
@@ -165,7 +165,7 @@ export function useInteraction() {
       const actions = getCardActions(cardId)
 
       // Debug logging
-      if (import.meta.env.DEV) {
+      if (process.env.NODE_ENV !== 'production') {
         console.log('handleDoubleClick:', cardId, 'actions:', actions.length)
       }
 

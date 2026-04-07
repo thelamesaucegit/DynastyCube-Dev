@@ -1,4 +1,4 @@
-import { useGameStore } from '@/store/gameStore.ts'
+import { useGameStore } from '@/store/gameStore'
 import type { ChooseColorDecision } from '@/types'
 import { ColorDisplayNames } from '@/types'
 import styles from './DecisionUI.module.css'

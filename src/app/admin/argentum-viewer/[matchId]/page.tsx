@@ -118,10 +118,11 @@ async function getMatchReplayData(matchId: string): Promise<{ gameStates: Specta
     return { gameStates: null, team1Id: null, team2Id: null };
   }
 
+  const row = data as unknown as { argentum_game_states: SpectatorStateUpdate[]; team1_id: string; team2_id: string };
   return {
-    gameStates: data.argentum_game_states as SpectatorStateUpdate[],
-    team1Id: data.team1_id,
-    team2Id: data.team2_id,
+    gameStates: row.argentum_game_states,
+    team1Id: row.team1_id,
+    team2Id: row.team2_id,
   };
 }
 async function getTeamData(teamId: string | null): Promise<Team | null> {
@@ -174,8 +175,8 @@ export const metadata = {
   title: "Match Replay | The Dynasty Cube",
 };
 
-export default async function ReplayPage({ params }: { params: { matchId: string } }) { // 1. Correct params type
-  const { matchId } = params;
+export default async function ReplayPage({ params }: { params: Promise<{ matchId: string }> }) {
+  const { matchId } = await params;
   
   const { gameStates, team1Id, team2Id } = await getMatchReplayData(matchId);
 

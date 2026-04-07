@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useGameStore } from '@/store/gameStore.ts'
-import { useStackCards } from '@/store/selectors.ts'
+import { useGameStore } from '@/store/gameStore'
+import { useStackCards } from '@/store/selectors'
 import type { EntityId, ClientChosenTarget } from '@/types'
 
 interface Point {

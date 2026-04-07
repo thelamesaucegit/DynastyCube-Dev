@@ -12,7 +12,7 @@ import {
   createWinstonSkipPileMessage,
   createGridDraftPickMessage,
 } from '@/types'
-import { trackEvent } from '@/utils/analytics.ts'
+import { trackEvent } from '@/utils/analytics'
 import { getWebSocket, saveDeckState } from './shared'
 
 export interface DraftSliceState {

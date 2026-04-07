@@ -1,7 +1,7 @@
 /**
  * Composes all domain-specific handler modules into a single MessageHandlers object.
  */
-import type { MessageHandlers } from '@/network/messageHandlers.ts'
+import type { MessageHandlers } from '@/network/messageHandlers'
 import { createConnectionHandlers } from './connectionHandlers'
 import { createGameplayHandlers } from './gameplayHandlers'
 import { createDraftHandlers } from './draftHandlers'

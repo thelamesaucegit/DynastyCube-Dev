@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react'
-import { useGameStore } from '@/store/gameStore.ts'
+import { useGameStore } from '@/store/gameStore'
 import type { EntityId, OrderObjectsDecision, SearchCardInfo, ClientCard } from '@/types'
-import { calculateFittingCardWidth, type ResponsiveSizes } from '@/hooks/useResponsive.ts'
-import { getCardImageUrl } from '@/utils/cardImages.ts'
+import { calculateFittingCardWidth, type ResponsiveSizes } from '@/hooks/useResponsive'
+import { getCardImageUrl } from '@/utils/cardImages'
 
 interface OrderBlockersUIProps {
   decision: OrderObjectsDecision

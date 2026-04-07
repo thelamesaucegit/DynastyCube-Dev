@@ -25,8 +25,8 @@ import type {
   SealedCardInfo,
   Step,
 } from '@/types'
-import type { ConnectionStatus } from '@/network/websocket.ts'
-import type { CounterRemovalCreatureInfo, SpectatorCombatState, SpectatorDecisionStatus } from '@/types/messages.ts'
+import type { ConnectionStatus } from '@/network/websocket'
+import type { CounterRemovalCreatureInfo, SpectatorCombatState, SpectatorDecisionStatus } from '@/types/messages'
 
 // Re-export for convenience
 export type { EntityId, ConnectionStatus }

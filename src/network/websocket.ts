@@ -230,7 +230,7 @@ export class GameWebSocket {
  */
 export function getWebSocketUrl(): string {
   // In development, use Vite proxy
-  if (import.meta.env.DEV) {
+  if (process.env.NODE_ENV !== 'production') {
     return `ws://${window.location.host}/game`
   }
 
