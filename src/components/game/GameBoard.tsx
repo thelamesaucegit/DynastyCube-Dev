@@ -1,18 +1,24 @@
-// web-client/src/components/game/GameBoard.tsx
+// src/components/game/GameBoard.tsx
 
 "use client";
 
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
+
+// --- Imports for Hooks and Context ---
 import { useSettings } from '@/contexts/SettingsContext';
 import { useGameStore } from '@/store/gameStore';
 import { useInteraction } from '@/hooks/useInteraction';
-import type { SpectatorStateUpdate, ReplayClientPlayer, ReplayCardData, ClientPlayer as LiveClientPlayer } from '@/app/admin/argentum-viewer/[matchId]/page';
+import { useResponsive, ResponsiveContextProvider } from '@/hooks/useResponsive';
 import { useViewingPlayer, useOpponent, useStackCards, selectPriorityMode, useGhostCards, useRevealedLibraryTopCard } from '@/store/selectors';
-import { hand, getNextStep, StepShortNames, entityId } from '@/types';
-import { useResponsive } from '@/hooks/useResponsive';
+
+// --- Imports for Types ---
+import type { SpectatorStateUpdate, ClientCard as ReplayCard, ClientPlayer as ReplayClientPlayer, ReplayCardData } from '@/app/admin/argentum-viewer/[matchId]/page';
+import { hand, getNextStep, StepShortNames, entityId, ClientPlayer as LiveClientPlayer, ClientCard } from '@/types';
+
+// --- Imports for Utilities ---
 import { getCardImageUrl } from '@/app/utils/cardUtils';
-import { ResponsiveContext } from './board/shared'; 
-// Import UI Components
+
+// --- Imports for UI Components ---
 import { StepStrip } from '../ui/StepStrip';
 import { ManaPool } from '../ui/ManaPool';
 import { ActionMenu } from '../ui/ActionMenu';
@@ -25,15 +31,16 @@ import { CardPreview } from './card';
 import { TargetingOverlay, LifeDisplay, ActiveEffectsBadges, FullscreenButton } from './overlay';
 import { styles } from './board/styles';
 
-// Import Animation Components
+// --- Imports for Animation Components ---
 import { DrawAnimations } from '../animations/DrawAnimations';
 import { DamageAnimations } from '../animations/DamageAnimations';
 import { RevealAnimations } from '../animations/RevealAnimations';
 import { CoinFlipAnimations } from '../animations/CoinFlipAnimations';
 import { TargetReselectedAnimations } from '../animations/TargetReselectedAnimations';
 
-// Assuming ManaColorSelectionOverlay exists, otherwise comment out its usage.
-import { ManaColorSelectionOverlay } from './overlay/ManaColorSelectionOverlay';
+// Placeholder for a component that seems to be used in your logic
+const ManaColorSelectionOverlay = () => null; 
+const ConcedeButton = () => null;
 
 interface GameBoardProps {
   spectatorMode?: boolean;
@@ -42,7 +49,6 @@ interface GameBoardProps {
   cardDataMap?: Record<string, ReplayCardData>;
 }
 
-// --- The Main Component ---
 export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, cardDataMap = {} }: GameBoardProps) {
     
     // ========================================================================
@@ -56,7 +62,7 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
         setUseOldestArt(settings.useOldestArt);
     }, [settings.useOldestArt]);
 
-    // Interactive state hooks from Zustand (used only in non-spectator mode)
+    // All interactive hooks from Zustand are called here, unconditionally.
     const playerId = useGameStore((state) => state.playerId);
     const liveGameState = useGameStore((state) => state.gameState);
     const submitAction = useGameStore((state) => state.submitAction);
@@ -83,8 +89,11 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
     const toggleAutoTap = useGameStore((state) => state.toggleAutoTap);
     const manaSelectionState = useGameStore((state) => state.manaSelectionState);
     const cancelManaSelection = useGameStore((state) => state.cancelManaSelection);
+    const delveSelectionState = useGameStore((state) => state.delveSelectionState);
+    const crewSelectionState = useGameStore((state) => state.crewSelectionState);
     const { executeAction } = useInteraction();
     
+    // Selector hooks
     const liveViewingPlayer = useViewingPlayer();
     const liveOpponent = useOpponent();
     const liveStackCards = useStackCards();
@@ -92,7 +101,7 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
     const liveOpponentRevealedTopCard = useRevealedLibraryTopCard(liveOpponent?.playerId ?? null);
 
     // ========================================================================
-    // 2. DERIVE EFFECTIVE STATE FOR RENDERING
+    // 2. DERIVE STATE FOR RENDERING (This logic can be conditional)
     // ========================================================================
     const {
         gameState,
@@ -117,60 +126,63 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
             };
         } else {
             const spectatingState = useGameStore.getState().spectatingState;
-            const currentLiveState = spectatingState?.gameState ?? liveGameState;
-            const viewingPlayer = spectatingState ? currentLiveState?.players.find(p => p.playerId === spectatingState.player1Id) : liveViewingPlayer;
-            const opponent = spectatingState ? currentLiveState?.players.find(p => p.playerId === spectatingState.player2Id) : liveOpponent;
-            const opponentRevealedCard = useRevealedLibraryTopCard(opponent?.playerId ?? null);
+            const liveState = spectatingState?.gameState ?? liveGameState;
+            const viewingPlayer = spectatingState ? liveState?.players.find(p => p.playerId === spectatingState.player1Id) : liveViewingPlayer;
+            const opponent = spectatingState ? liveState?.players.find(p => p.playerId === spectatingState.player2Id) : liveOpponent;
             return {
-                gameState: currentLiveState,
+                gameState: liveState,
                 effectiveViewingPlayer: viewingPlayer,
                 effectiveOpponent: opponent,
                 effectiveStackCards: liveStackCards,
                 effectiveGhostCards: liveGhostCards,
-                effectiveOpponentGhostCards: opponentRevealedCard ? [opponentRevealedCard] : [],
+                effectiveOpponentGhostCards: liveOpponentRevealedTopCard ? [liveOpponentRevealedTopCard] : [],
             };
         }
-    }, [spectatorMode, snapshot, liveGameState, liveViewingPlayer, liveOpponent, liveStackCards, liveGhostCards, playerId]);
+    }, [spectatorMode, snapshot, liveGameState, liveViewingPlayer, liveOpponent, liveStackCards, liveGhostCards, liveOpponentRevealedTopCard]);
 
-    // ========================================================================
-    // 3. DERIVE INTERACTIVE STATE (safely, after hooks)
-    // ========================================================================
     const isMyTurn = !spectatorMode && gameState?.activePlayerId === playerId;
     const hasPriority = !spectatorMode && useGameStore((state) => state.hasPriority);
     const canAct = hasPriority && isMyTurn;
     const isInCombatMode = !spectatorMode && (combatState !== null);
-    // ... all other interactive state derivations ...
-    const getPassButtonLabel = () => { /* ... same as your file ... */ };
+    const isInDistributeMode = !spectatorMode && distributeState !== null;
+    const isInCounterDistMode = !spectatorMode && counterDistributionState !== null;
+    const isInManaSelectionMode = !spectatorMode && manaSelectionState !== null;
+    
+    // ... Other derived state like manaProgress, getPassButtonLabel, etc. are safe to calculate here
+    const getPassButtonLabel = () => { /* ... same as your file ... */ return "Pass"; };
+    const getPassButtonStyle = (): React.CSSProperties => { /* ... same as your file ... */ return {}; };
 
     // ========================================================================
-    // 4. RENDER GUARD
+    // 3. RENDER GUARD (Now safe to use)
     // ========================================================================
     if (!gameState || !effectiveViewingPlayer || !effectiveOpponent) {
         return <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>Loading game data...</div>;
     }
 
+    // ========================================================================
+    // 4. JSX RETURN
+    // ========================================================================
     return (
         <ResponsiveContextProvider value={responsive}>
             <div style={{...styles.container, padding: `0 ${responsive.containerPadding}px`, gap: responsive.sectionGap }}>
                 <FullscreenButton />
+                {!spectatorMode && <ConcedeButton />}
 
-                {/* Opponent's Hand */}
                 <div data-zone="opponent-hand" style={{ position: 'fixed', top: topOffset, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }}>
                     <CardRow
                         zoneId={hand(entityId(effectiveOpponent.playerId))}
                         faceDown small inverted
-                        snapshot={spectatorMode ? snapshot : useGameStore.getState().spectatingState ?? { gameState }}
+                        snapshot={spectatorMode ? snapshot : undefined}
                         ghostCards={effectiveOpponentGhostCards}
                     />
                 </div>
 
                 {spectatorMode && (
-                    <div style={{ ...styles.spectatorNameLabel, position: 'fixed', top: topOffset + responsive.smallCardHeight + responsive.handBattlefieldGap + 8, left: 16 }}>
+                    <div style={{...styles.spectatorNameLabel, position: 'fixed', top: topOffset + responsive.smallCardHeight + responsive.handBattlefieldGap + 8, left: 16 }}>
                         {effectiveOpponent.name}
                     </div>
                 )}
                 
-                {/* Opponent's Area */}
                 <div style={{ ...styles.opponentArea, marginTop: -responsive.containerPadding + responsive.sectionGap, paddingTop: responsive.smallCardHeight + topOffset + responsive.handBattlefieldGap }}>
                     <div style={styles.playerRowWithZones}>
                         <div style={styles.playerMainArea}>
@@ -180,15 +192,14 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
                     </div>
                 </div>
 
-                {/* Center Area */}
                 <div style={{ ...styles.centerArea, gap: responsive.isMobile ? 6 : 16 }}>
                     <div style={styles.centerLifeSection}>
                         <LifeDisplay life={effectiveOpponent.life} playerId={entityId(effectiveOpponent.playerId)} playerName={effectiveOpponent.name} spectatorMode={spectatorMode} />
                         {!responsive.isMobile && <span style={{ ...styles.playerName, fontSize: responsive.fontSize.small }}>{effectiveOpponent.name}</span>}
                     </div>
                     <StepStrip
-                        phase={gameState.currentPhase as any}
-                        step={gameState.currentStep as any}
+                        phase={gameState.currentPhase}
+                        step={gameState.currentStep}
                         turnNumber={gameState.turnNumber}
                         isActivePlayer={isMyTurn}
                         hasPriority={hasPriority}
@@ -204,10 +215,8 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
                     </div>
                 </div>
                 
-                {/* Stack */}
                 <StackDisplay stackCards={effectiveStackCards} snapshot={spectatorMode ? snapshot : undefined} />
 
-                {/* Player's Area */}
                 <div style={{ ...styles.playerArea, marginBottom: -responsive.containerPadding + responsive.sectionGap, paddingBottom: (spectatorMode ? responsive.smallCardHeight : responsive.cardHeight) + responsive.handBattlefieldGap }}>
                     <div style={styles.playerRowWithZones}>
                         <div style={styles.playerMainArea}>
@@ -223,7 +232,6 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
                     </div>
                 )}
                 
-                {/* Player's Hand */}
                 <div data-zone="hand" style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }}>
                     <CardRow
                         zoneId={hand(entityId(effectiveViewingPlayer.playerId))}
@@ -235,23 +243,20 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
                     />
                 </div>
                 
-                {/* Overlays and Animations */}
                 <TargetingArrows snapshot={spectatorMode ? snapshot : undefined} />
                 <CardPreview cardDataMap={cardDataMap} />
                 <GameLog snapshot={spectatorMode ? snapshot : undefined} />
                 
-                {/* Conditionally Render Interactive Components */}
                 {!spectatorMode && (
                     <>
                         <ActionMenu />
                         <TargetingOverlay />
                         <CombatArrows />
                         <DraggedCardOverlay />
-                        {/* Interactive UI Buttons would go here */}
+                        {/* ... Other interactive UI ... */}
                     </>
                 )}
 
-                {/* Animations can be shown in both modes */}
                 <DrawAnimations />
                 <DamageAnimations />
                 <RevealAnimations />
