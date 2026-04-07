@@ -5,20 +5,15 @@ import { notFound } from 'next/navigation';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
 import { getMatchReplayData, getTeamData } from '@/app/admin/argentum-viewer/data-actions';
 import { getCardDataForReplay } from '@/app/actions/cardActions';
+import type { Team, ReplayCardData } from '@/types/replay-types'; // Assuming you created this file
 
 export const metadata = {
   title: "Match Replay | The Dynasty Cube",
 };
 
-// ========================================================================
-// THIS IS THE DEFINITIVE FIX
-// We are reverting to the signature your build system expects.
-// ========================================================================
 export default async function ReplayPage({ params }: { params: Promise<{ matchId: string }> }) {
-  // Because `params` is a Promise, we MUST await it to get the value.
   const { matchId } = await params;
 
-  // The rest of the logic is correct as it was.
   const { gameStates, team1Id, team2Id } = await getMatchReplayData(matchId);
 
   if (!gameStates || gameStates.length === 0) {
@@ -32,17 +27,23 @@ export default async function ReplayPage({ params }: { params: Promise<{ matchId
     }
   });
   
-  const [team1, team2, cardDataMap] = await Promise.all([
+  const [team1, team2, cardDataMapFromAction] = await Promise.all([
       getTeamData(team1Id),
       getTeamData(team2Id),
       getCardDataForReplay(Array.from(allCardNames))
   ]);
   
+  // ========================================================================
+  // THIS IS THE DEFINITIVE FIX
+  // Convert the Map object returned by the action into a plain Record object.
+  // ========================================================================
+  const cardDataMap: Record<string, ReplayCardData> = Object.fromEntries(cardDataMapFromAction);
+  
   return (
     <main className="w-full h-screen bg-gray-800">
       <ArgentumReplayPlayer 
         initialGameStates={gameStates} 
-        cardDataMap={cardDataMap} 
+        cardDataMap={cardDataMap} // Now passing the correctly typed object
         team1={team1}
         team2={team2}
       />
