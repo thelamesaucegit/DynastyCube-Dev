@@ -38,7 +38,7 @@ import { RevealAnimations } from '../animations/RevealAnimations';
 import { CoinFlipAnimations } from '../animations/CoinFlipAnimations';
 import { TargetReselectedAnimations } from '../animations/TargetReselectedAnimations';
 
-// Placeholder for a component that seems to be used in your logic
+// Placeholders for components from your file
 const ManaColorSelectionOverlay = () => null; 
 const ConcedeButton = () => null;
 
@@ -124,20 +124,21 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
                 effectiveGhostCards: [],
                 effectiveOpponentGhostCards: [],
             };
-        } else {
-            const spectatingState = useGameStore.getState().spectatingState;
-            const liveState = spectatingState?.gameState ?? liveGameState;
-            const viewingPlayer = spectatingState ? liveState?.players.find(p => p.playerId === spectatingState.player1Id) : liveViewingPlayer;
-            const opponent = spectatingState ? liveState?.players.find(p => p.playerId === spectatingState.player2Id) : liveOpponent;
-            return {
-                gameState: liveState,
-                effectiveViewingPlayer: viewingPlayer,
-                effectiveOpponent: opponent,
-                effectiveStackCards: liveStackCards,
-                effectiveGhostCards: liveGhostCards,
-                effectiveOpponentGhostCards: liveOpponentRevealedTopCard ? [liveOpponentRevealedTopCard] : [],
-            };
         }
+        
+        // Logic for live interactive mode
+        const spectatingState = useGameStore.getState().spectatingState;
+        const currentLiveState = spectatingState?.gameState ?? liveGameState;
+        const viewingPlayer = spectatingState ? currentLiveState?.players.find(p => p.playerId === spectatingState.player1Id) : liveViewingPlayer;
+        const opponent = spectatingState ? currentLiveState?.players.find(p => p.playerId === spectatingState.player2Id) : liveOpponent;
+        return {
+            gameState: currentLiveState,
+            effectiveViewingPlayer: viewingPlayer,
+            effectiveOpponent: opponent,
+            effectiveStackCards: liveStackCards,
+            effectiveGhostCards: liveGhostCards,
+            effectiveOpponentGhostCards: liveOpponentRevealedTopCard ? [liveOpponentRevealedTopCard] : [],
+        };
     }, [spectatorMode, snapshot, liveGameState, liveViewingPlayer, liveOpponent, liveStackCards, liveGhostCards, liveOpponentRevealedTopCard]);
 
     const isMyTurn = !spectatorMode && gameState?.activePlayerId === playerId;
@@ -145,15 +146,99 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
     const canAct = hasPriority && isMyTurn;
     const isInCombatMode = !spectatorMode && (combatState !== null);
     const isInDistributeMode = !spectatorMode && distributeState !== null;
+    const distributeTotalAllocated = distributeState ? Object.values(distributeState.distribution).reduce((sum, v) => sum + v, 0) : 0;
+    const distributeRemaining = distributeState ? distributeState.totalAmount - distributeTotalAllocated : 0;
     const isInCounterDistMode = !spectatorMode && counterDistributionState !== null;
     const isInManaSelectionMode = !spectatorMode && manaSelectionState !== null;
     
-    // ... Other derived state like manaProgress, getPassButtonLabel, etc. are safe to calculate here
-    const getPassButtonLabel = () => { /* ... same as your file ... */ return "Pass"; };
-    const getPassButtonStyle = (): React.CSSProperties => { /* ... same as your file ... */ return {}; };
+    const manaProgress = useMemo(() => {
+      if (!manaSelectionState) return null;
+      const symbols = manaSelectionState.manaCost.match(/\{([^}]+)\}/g);
+      if (!symbols) return { satisfied: 0, total: 0, entries: [] };
+      const coloredReqs: string[] = [];
+      let genericCount = 0;
+      for (const match of symbols) {
+        const inner = match.slice(1, -1);
+        const num = parseInt(inner, 10);
+        if (!isNaN(num)) {
+          genericCount += num;
+        } else if (inner !== 'X') {
+          coloredReqs.push(inner);
+        }
+      }
+      if (manaSelectionState.xValue > 0) genericCount += manaSelectionState.xValue;
+      const total = coloredReqs.length + genericCount;
+      const sources: { colors: readonly string[] }[] = [];
+      for (const id of manaSelectionState.selectedSources) {
+        const colors = manaSelectionState.sourceColors[id] ?? [];
+        const manaAmount = manaSelectionState.sourceManaAmounts?.[id] ?? 1;
+        for (let i = 0; i < manaAmount; i++) {
+          sources.push({ colors: colors.length > 0 ? colors : ['C'] });
+        }
+      }
+      const sortedSources = [...sources].sort((a, b) => a.colors.length - b.colors.length);
+      const remainingColorReqs: Record<string, number> = {};
+      for (const c of coloredReqs) { remainingColorReqs[c] = (remainingColorReqs[c] ?? 0) + 1; }
+      let remainingGeneric = genericCount;
+      const colorSatisfied: Record<string, number> = {};
+      let satisfied = 0;
+      for (const source of sortedSources) {
+        let assigned = false;
+        for (const color of source.colors) {
+          if ((remainingColorReqs[color] ?? 0) > 0) {
+            remainingColorReqs[color]--;
+            colorSatisfied[color] = (colorSatisfied[color] ?? 0) + 1;
+            satisfied++;
+            assigned = true;
+            break;
+          }
+        }
+        if (!assigned && remainingGeneric > 0) {
+          remainingGeneric--;
+          colorSatisfied['1'] = (colorSatisfied['1'] ?? 0) + 1;
+          satisfied++;
+        }
+      }
+      const colorRequired: Record<string, number> = {};
+      for (const c of coloredReqs) { colorRequired[c] = (colorRequired[c] ?? 0) + 1; }
+      if (genericCount > 0) colorRequired['1'] = genericCount;
+      const entries = Object.entries(colorRequired).sort(([a], [b]) => {
+        if (a === '1' && b !== '1') return 1;
+        if (a !== '1' && b === '1') return -1;
+        return a.localeCompare(b);
+      });
+      return { satisfied, total, entries, colorSatisfied };
+    }, [manaSelectionState]);
+
+    const counterTotalAllocated = counterDistributionState ? Object.values(counterDistributionState.distribution).reduce<number>((sum, v) => sum + v, 0) : 0;
+    
+    const getPassButtonLabel = () => {
+        if (nextStopPoint) return nextStopPoint;
+        if (liveStackCards.length > 0) return 'Resolve';
+        if (!isMyTurn) return 'Pass';
+        if (!gameState) return 'Pass';
+        const nextStep = getNextStep(gameState.currentStep);
+        if (nextStep) {
+            if (nextStep === 'END') return 'End Turn';
+            return `Pass to ${StepShortNames[nextStep]}`;
+        }
+        return 'Pass';
+    };
+    
+    const getPassButtonStyle = (): React.CSSProperties => {
+        if (liveStackCards.length > 0) return { backgroundColor: '#c76e00', borderColor: '#e08000' };
+        if (priorityMode === 'ownTurn') return { backgroundColor: '#1976d2', borderColor: '#4fc3f7' };
+        return { backgroundColor: '#f57c00', borderColor: '#ffc107' };
+    };
+
+    const handleConfirmManaSelection = () => {
+      if (spectatorMode || !manaSelectionState) return;
+      // This is where you would call your submitAction for confirming mana
+      console.log("Confirming mana selection...");
+    };
 
     // ========================================================================
-    // 3. RENDER GUARD (Now safe to use)
+    // 3. RENDER GUARD
     // ========================================================================
     if (!gameState || !effectiveViewingPlayer || !effectiveOpponent) {
         return <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>Loading game data...</div>;
@@ -164,7 +249,7 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
     // ========================================================================
     return (
         <ResponsiveContextProvider value={responsive}>
-            <div style={{...styles.container, padding: `0 ${responsive.containerPadding}px`, gap: responsive.sectionGap }}>
+            <div style={{ ...styles.container, padding: `0 ${responsive.containerPadding}px`, gap: responsive.sectionGap }}>
                 <FullscreenButton />
                 {!spectatorMode && <ConcedeButton />}
 
@@ -178,7 +263,7 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
                 </div>
 
                 {spectatorMode && (
-                    <div style={{...styles.spectatorNameLabel, position: 'fixed', top: topOffset + responsive.smallCardHeight + responsive.handBattlefieldGap + 8, left: 16 }}>
+                    <div style={{ ...styles.spectatorNameLabel, position: 'fixed', top: topOffset + responsive.smallCardHeight + responsive.handBattlefieldGap + 8, left: 16 }}>
                         {effectiveOpponent.name}
                     </div>
                 )}
@@ -246,14 +331,13 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
                 <TargetingArrows snapshot={spectatorMode ? snapshot : undefined} />
                 <CardPreview cardDataMap={cardDataMap} />
                 <GameLog snapshot={spectatorMode ? snapshot : undefined} />
-                
+
                 {!spectatorMode && (
                     <>
                         <ActionMenu />
                         <TargetingOverlay />
                         <CombatArrows />
                         <DraggedCardOverlay />
-                        {/* ... Other interactive UI ... */}
                     </>
                 )}
 
@@ -262,6 +346,34 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
                 <RevealAnimations />
                 <CoinFlipAnimations />
                 <TargetReselectedAnimations />
+                
+                {isInManaSelectionMode && manaSelectionState && (
+                    <div style={{ position: 'fixed', bottom: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end', zIndex: 100 }}>
+                        {manaProgress && (
+                            <div style={{ backgroundColor: 'rgba(0, 0, 0, 0.9)', border: `1px solid ${manaProgress.satisfied >= manaProgress.total ? 'rgba(74, 222, 128, 0.5)' : 'rgba(255, 255, 255, 0.2)'}`, borderRadius: 8, padding: responsive.isMobile ? '8px 12px' : '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                                {manaProgress.entries.map(([symbol, required]) => {
+                                    const fulfilled = manaProgress.colorSatisfied?.[symbol] ?? 0;
+                                    return (
+                                        <div key={symbol} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                                            <ManaSymbol symbol={symbol} size={18} />
+                                            <span style={{ color: fulfilled >= required ? '#4ade80' : fulfilled > 0 ? '#fbbf24' : '#888', fontWeight: 600, fontSize: responsive.fontSize.normal }}>
+                                                {fulfilled}/{required}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <button onClick={cancelManaSelection} style={{ padding: responsive.isMobile ? '10px 20px' : '12px 24px', fontSize: responsive.fontSize.normal, fontWeight: 600, backgroundColor: 'rgba(40, 40, 40, 0.9)', color: '#ccc', border: '2px solid #555', borderRadius: 8, cursor: 'pointer' }}>
+                                Cancel
+                            </button>
+                            <button onClick={handleConfirmManaSelection} style={{ padding: responsive.isMobile ? '10px 20px' : '12px 24px', fontSize: responsive.fontSize.normal, fontWeight: 600, backgroundColor: 'rgba(22, 101, 52, 0.9)', color: '#4ade80', border: '2px solid #4ade80', borderRadius: 8, cursor: 'pointer' }}>
+                                Confirm
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </ResponsiveContextProvider>
     );
