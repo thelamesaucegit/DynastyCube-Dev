@@ -10,11 +10,11 @@ import { useResponsive, ResponsiveContextProvider } from '@/hooks/useResponsive'
 import { useViewingPlayer, useOpponent, useStackCards, selectPriorityMode, useGhostCards, useRevealedLibraryTopCard } from '@/store/selectors';
 
 
-//, StepShortNames, entityId, ClientPlayer as LiveClientPlayer } from '@/types';
+//, , entityId, ClientPlayer as LiveClientPlayer } from '@/types';
 import {ClientPlayer as ReplayClientPlayer, ClientCard as ReplayCard, ClientCard} from '@/types/gameState';
 import {SpectatorStateUpdate, ReplayCardData} from '@/types/replay-types';
 import {hand} from '@/types/entities';
-import {getNextStep} from '@/types/enums';
+import {getNextStep, StepShortNames} from '@/types/enums';
 
 import { getCardImageUrl } from '@/app/utils/cardUtils';
 
