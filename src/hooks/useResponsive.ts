@@ -1,3 +1,5 @@
+//src/hooks/useResponsive.ts
+
 import React, { useState, useEffect, useMemo, createContext } from 'react';
 
 export interface ViewportSize {
