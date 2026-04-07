@@ -8,7 +8,9 @@ import { useGameStore } from '@/store/gameStore';
 import { useInteraction } from '@/hooks/useInteraction';
 import { useResponsive, ResponsiveContextProvider } from '@/hooks/useResponsive';
 import { useViewingPlayer, useOpponent, useStackCards, selectPriorityMode, useGhostCards, useRevealedLibraryTopCard } from '@/store/selectors';
-import {SpectatorStateUpdate, ReplayCardData, ClientCard as ReplayCard, ClientPlayer as ReplayClientPlayer, hand, getNextStep, StepShortNames, entityId, ClientPlayer as LiveClientPlayer, ClientCard } from '@/types';
+//import {, ReplayCardData, ClientCard as ReplayCard, ClientPlayer as ReplayClientPlayer, hand, getNextStep, StepShortNames, entityId, ClientPlayer as LiveClientPlayer, ClientCard } from '@/types';
+import {SpectatorStateUpdate, } from '@/types';
+
 import { getCardImageUrl } from '@/app/utils/cardUtils';
 
 // UI Component Imports
