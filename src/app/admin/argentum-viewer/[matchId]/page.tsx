@@ -4,8 +4,9 @@ import { createClient } from '@supabase/supabase-js';
 import React from 'react';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer'; // <-- IMPORT OUR PLAYER
 import { notFound } from 'next/navigation';
-import type { ClientCard } from '@/types/gameState';
-import { getCardDataForReplay, ReplayCardData } from '@/app/actions/cardActions'; // Use your existing server action
+
+import type { ClientGameState } from '@/types/gameState';
+import { getCardDataForReplay, ReplayCardData } from '@/app/actions/cardActions';
 
 
 
