@@ -4,6 +4,8 @@ import { createClient } from '@supabase/supabase-js';
 import React from 'react';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer'; // <-- IMPORT OUR PLAYER
 import { notFound } from 'next/navigation';
+import type { ClientCard } from '@/types/gameState';
+
 
 // ============================================================================
 // TYPE DEFINITIONS — data contract from the Argentum Java logger
@@ -27,20 +29,7 @@ export interface TargetInfo {
   type: 'Card' | 'Player' | 'Other';
 }
 
-export interface ClientCard {
-  entityId: string;
-  name: string;
-  imageUri: string | null;
-  cardTypes: string[];
-  isTapped: boolean;
-  isAttacking: boolean;
-  isBlocking: boolean;
-  power: number | null;
-  toughness: number | null;
-  damage: number;
-  attachedTo: string | null;
-  targets: TargetInfo[];
-}
+
 
 export interface ClientPlayer {
   playerId: string;
