@@ -5,6 +5,8 @@ import React from 'react';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer'; // <-- IMPORT OUR PLAYER
 import { notFound } from 'next/navigation';
 import type { ClientCard } from '@/types/gameState';
+import { getCardDataForReplay, ReplayCardData } from '@/app/actions/cardActions'; // Use your existing server action
+
 
 
 // ============================================================================
@@ -173,11 +175,18 @@ export default async function ReplayPage({ params }: { params: Promise<{ matchId
     return notFound();
   }
 
+  const allCardNames = new Set<string>();
+  gameStates.forEach(state => {
+    for (const card of Object.values(state.gameState.cards)) {
+      allCardNames.add(card.name);
+    }
+  });
+  
   // 2. Fetch all three data sources in one go.
   const [team1, team2, cardDataMap] = await Promise.all([
       getTeamData(team1Id),
       getTeamData(team2Id),
-      getCardDataMap(gameStates)
+      getCardDataForReplay(Array.from(allCardNames))
   ]);
 
   return (
