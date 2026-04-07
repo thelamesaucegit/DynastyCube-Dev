@@ -32,8 +32,6 @@ export interface TargetInfo {
   type: 'Card' | 'Player' | 'Other';
 }
 
-
-
 export interface ClientPlayer {
   playerId: string;
   name: string;
@@ -55,21 +53,6 @@ export interface CombatGroup {
 export interface CombatState {
   groups: CombatGroup[];
   attackers: string[];
-}
-
-export interface ClientGameState {
-  cards: Record<string, ClientCard>;
-  zones: ClientZone[];
-  players: ClientPlayer[];
-  currentPhase: string;
-  currentStep: string;
-  activePlayerId: string;
-  priorityPlayerId: string | null;
-  turnNumber: number;
-  isGameOver: boolean;
-  winnerId: string | null;
-  combat: CombatState | null;
-  gameLog: string[];
 }
 
 export interface SpectatorStateUpdate {
@@ -96,7 +79,6 @@ function getSupabase() {
   }
   return _supabase;
 }
-
 
 async function getMatchReplayData(matchId: string): Promise<{ gameStates: SpectatorStateUpdate[] | null, team1Id: string | null, team2Id: string | null }> {
   const { data, error } = await getSupabase()
