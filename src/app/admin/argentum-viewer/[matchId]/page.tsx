@@ -20,12 +20,6 @@ export interface Team {
   primary_color: string | null;
   secondary_color: string | null;
 }
-export interface ReplayCardData {
-  image_url: string | null;
-  image_url_2: string | null;
-  image_url_3: string | null;
-  is_token: boolean;
-}
 
 export interface TargetInfo {
   entityId: string;
