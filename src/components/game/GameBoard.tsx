@@ -8,10 +8,7 @@ import { useGameStore } from '@/store/gameStore';
 import { useInteraction } from '@/hooks/useInteraction';
 import { useResponsive, ResponsiveContextProvider } from '@/hooks/useResponsive';
 import { useViewingPlayer, useOpponent, useStackCards, selectPriorityMode, useGhostCards, useRevealedLibraryTopCard } from '@/store/selectors';
-
-
-//, , , ClientPlayer as LiveClientPlayer } from '@/types';
-import {ClientPlayer as ReplayClientPlayer, ClientCard as ReplayCard, ClientCard} from '@/types/gameState';
+import {ClientPlayer as ReplayClientPlayer, ClientCard as ReplayCard, ClientCard, ClientPlayer as LiveClientPlayer } from '@/types/gameState';
 import {SpectatorStateUpdate, ReplayCardData} from '@/types/replay-types';
 import {hand, entityId} from '@/types/entities';
 import {getNextStep, StepShortNames} from '@/types/enums';
