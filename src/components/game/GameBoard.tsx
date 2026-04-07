@@ -11,7 +11,7 @@ import { useViewingPlayer, useOpponent, useStackCards, selectPriorityMode, useGh
 import { hand, getNextStep, StepShortNames, entityId } from '@/types';
 import { useResponsive } from '@/hooks/useResponsive';
 import { getCardImageUrl } from '@/app/utils/cardUtils';
-import { ResponsiveContext } from './board/utils'; 
+import { ResponsiveContext } from './board/shared'; 
 // Import UI Components
 import { StepStrip } from '../ui/StepStrip';
 import { ManaPool } from '../ui/ManaPool';
