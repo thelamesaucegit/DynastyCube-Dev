@@ -3,19 +3,23 @@
 "use client";
 
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
+
+// --- Imports for Hooks and Context ---
 import { useSettings } from '@/contexts/SettingsContext';
 import { useGameStore } from '@/store/gameStore';
 import { useInteraction } from '@/hooks/useInteraction';
 import { useResponsive, ResponsiveContextProvider } from '@/hooks/useResponsive';
 import { useViewingPlayer, useOpponent, useStackCards, selectPriorityMode, useGhostCards, useRevealedLibraryTopCard } from '@/store/selectors';
-import {ClientPlayer as ReplayClientPlayer, ClientCard as ReplayCard, ClientCard, ClientPlayer as LiveClientPlayer } from '@/types/gameState';
-import {SpectatorStateUpdate, ReplayCardData} from '@/types/replay-types';
-import {hand, entityId} from '@/types/entities';
-import {getNextStep, StepShortNames} from '@/types/enums';
 
+// --- Imports for Types ---
+import { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
+import { hand, entityId } from '@/types/entities';
+import { getNextStep, StepShortNames, ClientPlayer as LiveClientPlayer, ClientCard } from '@/types';
+
+// --- Imports for Utilities ---
 import { getCardImageUrl } from '@/app/utils/cardUtils';
 
-// UI Component Imports
+// --- Imports for UI Components ---
 import { StepStrip } from '../ui/StepStrip';
 import { ManaPool } from '../ui/ManaPool';
 import { ActionMenu } from '../ui/ActionMenu';
@@ -26,17 +30,16 @@ import { GameLog } from './GameLog';
 import { Battlefield, CardRow, StackDisplay, ZonePile } from './board';
 import { CardPreview } from './card';
 import { TargetingOverlay, LifeDisplay, ActiveEffectsBadges, FullscreenButton } from './overlay';
-import { ManaSymbol } from '../ui/ManaSymbols'; // The missing import
+import { ManaSymbol } from '../ui/ManaSymbols';
 import { styles } from './board/styles';
 
-// Animation Component Imports
+// --- Imports for Animation Components ---
 import { DrawAnimations } from '../animations/DrawAnimations';
 import { DamageAnimations } from '../animations/DamageAnimations';
 import { RevealAnimations } from '../animations/RevealAnimations';
 import { CoinFlipAnimations } from '../animations/CoinFlipAnimations';
 import { TargetReselectedAnimations } from '../animations/TargetReselectedAnimations';
 
-// Placeholders for components from your file
 const ManaColorSelectionOverlay = () => null; 
 const ConcedeButton = () => null;
 
@@ -49,7 +52,6 @@ interface GameBoardProps {
 
 export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, cardDataMap = {} }: GameBoardProps) {
     
-    // --- 1. UNCONDITIONAL HOOKS ---
     const settings = useSettings();
     const responsive = useResponsive(topOffset);
     const [useOldestArt, setUseOldestArt] = useState(false);
@@ -57,14 +59,12 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
 
     const allLiveState = useGameStore(state => state);
     const { executeAction } = useInteraction();
-    
     const liveViewingPlayer = useViewingPlayer();
     const liveOpponent = useOpponent();
     const liveStackCards = useStackCards();
     const liveGhostCards = useGhostCards(allLiveState.playerId ?? null);
     const liveOpponentRevealedTopCard = useRevealedLibraryTopCard(liveOpponent?.playerId ?? null);
 
-    // --- 2. DERIVE A SINGLE, AUTHORITATIVE STATE FOR RENDERING ---
     const {
         gameState,
         effectiveViewingPlayer,
@@ -76,13 +76,18 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
         if (spectatorMode && snapshot) {
             const p1 = snapshot.gameState.players.find(p => p.playerId === snapshot.player1Id);
             const p2 = snapshot.gameState.players.find(p => p.playerId === snapshot.player2Id);
-            const stackZone = snapshot.gameState.zones.find(z => z.type === 'Stack');
+            
+            // v-v-v-v- THIS IS THE DEFINITIVE FIX v-v-v-v-
+            // Access the zone type via the correct nested property
+            const stackZone = snapshot.gameState.zones.find(z => z.zoneId.zoneType === 'Stack');
+            // ^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
+            
             const stack = stackZone ? stackZone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [];
             return {
                 gameState: snapshot.gameState,
                 effectiveViewingPlayer: p1,
                 effectiveOpponent: p2,
-                effectiveStackCards: stack as ClientCard[],
+                effectiveStackCards: stack,
                 effectiveGhostCards: [],
                 effectiveOpponentGhostCards: [],
             };
@@ -104,7 +109,6 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
 
     const isMyTurn = !spectatorMode && gameState?.activePlayerId === allLiveState.playerId;
     
-    // --- RENDER GUARD ---
     if (!gameState || !effectiveViewingPlayer || !effectiveOpponent) {
         return <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>Loading game data...</div>;
     }
