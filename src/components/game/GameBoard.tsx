@@ -10,6 +10,7 @@ import { useResponsive, ResponsiveContextProvider } from '@/hooks/useResponsive'
 import { useViewingPlayer, useOpponent, useStackCards, selectPriorityMode, useGhostCards, useRevealedLibraryTopCard } from '@/store/selectors';
 //import type { , ClientCard as ReplayCard, ClientPlayer as ReplayClientPlayer,  } from '@/app/admin/argentum-viewer/[matchId]/page';
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
+import type { ClientCard as ReplayCard}    from '@/types/gameState';
 import { hand, getNextStep, StepShortNames, entityId, ClientPlayer as LiveClientPlayer, ClientCard } from '@/types';
 import { getCardImageUrl } from '@/app/utils/cardUtils';
 
