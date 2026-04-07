@@ -3,7 +3,7 @@
 import React from 'react';
 import { notFound } from 'next/navigation';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
-import { getMatchReplayData, getTeamData } from './data-actions';
+import { getMatchReplayData, getTeamData } from '@app/admin/argentum-viewer/data-actions';
 import { getCardDataForReplay } from '@/app/actions/cardActions';
 
 export const metadata = {
