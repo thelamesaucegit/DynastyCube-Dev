@@ -1,3 +1,5 @@
+//src/types/gameState.ts
+
 import { AbilityFlag, Color, CounterType, Keyword, Phase, Step, ZoneType } from './enums'
 import { EntityId, ZoneId } from './entities'
 import { ClientEvent } from './events'

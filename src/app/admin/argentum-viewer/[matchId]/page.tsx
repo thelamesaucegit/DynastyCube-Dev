@@ -4,6 +4,10 @@ import { createClient } from '@supabase/supabase-js';
 import React from 'react';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer'; // <-- IMPORT OUR PLAYER
 import { notFound } from 'next/navigation';
+import type { ClientCard } from '@/types/gameState';
+import { getCardDataForReplay, ReplayCardData } from '@/app/actions/cardActions'; // Use your existing server action
+
+
 
 // ============================================================================
 // TYPE DEFINITIONS — data contract from the Argentum Java logger
@@ -27,20 +31,7 @@ export interface TargetInfo {
   type: 'Card' | 'Player' | 'Other';
 }
 
-export interface ClientCard {
-  entityId: string;
-  name: string;
-  imageUri: string | null;
-  cardTypes: string[];
-  isTapped: boolean;
-  isAttacking: boolean;
-  isBlocking: boolean;
-  power: number | null;
-  toughness: number | null;
-  damage: number;
-  attachedTo: string | null;
-  targets: TargetInfo[];
-}
+
 
 export interface ClientPlayer {
   playerId: string;
@@ -184,11 +175,18 @@ export default async function ReplayPage({ params }: { params: Promise<{ matchId
     return notFound();
   }
 
+  const allCardNames = new Set<string>();
+  gameStates.forEach(state => {
+    for (const card of Object.values(state.gameState.cards)) {
+      allCardNames.add(card.name);
+    }
+  });
+  
   // 2. Fetch all three data sources in one go.
   const [team1, team2, cardDataMap] = await Promise.all([
       getTeamData(team1Id),
       getTeamData(team2Id),
-      getCardDataMap(gameStates)
+      getCardDataForReplay(Array.from(allCardNames))
   ]);
 
   return (
