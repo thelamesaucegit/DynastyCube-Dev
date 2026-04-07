@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 // Correctly import your existing GameBoard component
 import { GameBoard } from '@/components/game/GameBoard'; 
-import type { SpectatorStateUpdate, ReplayCardData, Team } from '@/app/admin/argentum-viewer/[matchId]/page';
+import type { SpectatorStateUpdate, ReplayCardData, Team } from '@/types/replay-types';
 import { Button } from '@/app/components/ui/button';
 import { Slider } from '@/app/components/ui/slider';
 import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
