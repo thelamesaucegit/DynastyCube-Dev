@@ -26,6 +26,13 @@ export interface TargetInfo {
   type: 'Card' | 'Player' | 'Other';
 }
 
+export interface ReplayCardData {
+  name: string;
+  card_type: string;
+  image_url: string | null;
+  oldest_image_url: string | null; // This is the correct second property
+}
+
 export interface ClientPlayer {
   playerId: string;
   name: string;
@@ -108,7 +115,6 @@ async function getTeamData(teamId: string | null): Promise<Team | null> {
     return data as Team;
 }
 async function getCardDataMap(gameStates: SpectatorStateUpdate[]): Promise<Record<string, ReplayCardData>> {
-    // ... (This function is correct and does not need to change)
     const allCardNames = new Set<string>();
     gameStates.forEach(state => {
         Object.values(state.gameState.cards).forEach(card => {
@@ -116,11 +122,11 @@ async function getCardDataMap(gameStates: SpectatorStateUpdate[]): Promise<Recor
         });
     });
 
-    type CardRow = { card_name: string; image_url: string | null; image_url_2: string | null; image_url_3: string | null; is_token: boolean };
+    // We select the columns that match the ReplayCardData interface from cardActions.ts
     const { data, error } = await getSupabase()
         .from('card_pools')
-        .select('card_name, image_url, image_url_2, image_url_3, is_token')
-        .in('card_name', Array.from(allCardNames)) as { data: CardRow[] | null; error: unknown };
+        .select('card_name, card_type, image_url, oldest_image_url') // Select the correct columns
+        .in('card_name', Array.from(allCardNames));
 
     if (error) {
         console.error('Error fetching card data:', error);
@@ -129,11 +135,12 @@ async function getCardDataMap(gameStates: SpectatorStateUpdate[]): Promise<Recor
 
     const cardDataMap: Record<string, ReplayCardData> = {};
     (data ?? []).forEach(card => {
+        // Construct the object using the correct field names
         cardDataMap[card.card_name] = {
+            name: card.card_name, // This field was missing
+            card_type: card.card_type, // This field was missing
             image_url: card.image_url,
-            image_url_2: card.image_url_2,
-            image_url_3: card.image_url_3,
-            is_token: card.is_token,
+            oldest_image_url: card.oldest_image_url,
         };
     });
     return cardDataMap;
@@ -143,8 +150,10 @@ export const metadata = {
   title: "Match Replay | The Dynasty Cube",
 };
 
-export default async function ReplayPage({ params }: { params: Promise<{ matchId: string }> }) {
-  const { matchId } = await params;
+// In src/app/admin/argentum-viewer/[matchId]/page.tsx
+
+export default async function ReplayPage({ params }: { params: { matchId: string } }) { // Corrected params type
+  const { matchId } = params;
   
   const { gameStates, team1Id, team2Id } = await getMatchReplayData(matchId);
 
@@ -152,18 +161,12 @@ export default async function ReplayPage({ params }: { params: Promise<{ matchId
     return notFound();
   }
 
-  const allCardNames = new Set<string>();
-  gameStates.forEach(state => {
-    for (const card of Object.values(state.gameState.cards)) {
-      allCardNames.add(card.name);
-    }
-  });
-  
-  // 2. Fetch all three data sources in one go.
+  // Fetch all necessary data in parallel using the CORRECT functions.
+  // getCardDataMap is the local function we just corrected.
   const [team1, team2, cardDataMap] = await Promise.all([
       getTeamData(team1Id),
       getTeamData(team2Id),
-      getCardDataForReplay(Array.from(allCardNames))
+      getCardDataMap(gameStates) // Use the local, corrected function
   ]);
 
   return (
