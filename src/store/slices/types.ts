@@ -1,3 +1,5 @@
+//src/store/slices/types.ts
+
 /**
  * Shared types for store slices.
  */
