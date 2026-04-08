@@ -15,7 +15,7 @@ import { StepStrip } from '../ui/StepStrip';
 import { TargetingArrows } from '../targeting/TargetingArrows';
 import { GameLog } from './GameLog';
 import { Battlefield, StackDisplay, ZonePile } from './board';
-import { HandZone } from './board/HandZone';
+import { HandZone, CardRow } from './board/HandZone';
 import { CardPreview } from './card';
 import { LifeDisplay, FullscreenButton } from './overlay';
 import { styles } from './board/styles';
