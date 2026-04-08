@@ -8,6 +8,7 @@ import { useGameStore } from '@/store/gameStore';
 // --- Imports for Hooks and Context ---
 import { useSettings } from '@/contexts/SettingsContext';
 import { useResponsive, ResponsiveContextProvider } from '@/hooks/useResponsive';
+import { useViewingPlayer, useOpponent } from '@/store/selectors';
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
 import { hand, entityId, ClientPlayer as LiveClientPlayer } from '@/types';
 
@@ -39,6 +40,13 @@ interface GameBoardProps {
 export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, cardDataMap = {} }: GameBoardProps) {
     const responsive = useResponsive(topOffset);
 
+    // --- THIS IS THE FIX ---
+    // All hooks are called at the top level, unconditionally.
+    const liveViewingPlayer = useViewingPlayer();
+    const liveOpponent = useOpponent();
+    const liveGameState = useGameStore((state) => state.gameState);
+    // --- END FIX ---
+
     const {
         effectiveViewingPlayer,
         effectiveOpponent,
@@ -48,16 +56,13 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
             const p2 = snapshot.gameState.players.find(p => p.playerId === snapshot.player2Id);
             return { effectiveViewingPlayer: p1, effectiveOpponent: p2 };
         }
-        const livePlayer = useGameStore.getState().getViewingPlayer();
-        const liveOpponent = useGameStore.getState().getOpponent();
-        return { effectiveViewingPlayer: livePlayer, effectiveOpponent: liveOpponent };
-    }, [snapshot, spectatorMode]);
+        return { effectiveViewingPlayer: liveViewingPlayer, effectiveOpponent: liveOpponent };
+    }, [snapshot, spectatorMode, liveViewingPlayer, liveOpponent]);
 
     if (spectatorMode && (!snapshot || !effectiveViewingPlayer || !effectiveOpponent)) {
         return <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>Loading replay data...</div>;
     }
 
-    const liveGameState = useGameStore((state) => state.gameState);
     const isMyTurn = !spectatorMode && liveGameState?.activePlayerId === useGameStore.getState().playerId;
 
     return (
@@ -127,7 +132,7 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
                         <div style={{ ...styles.opponentArea, marginTop: -responsive.containerPadding + responsive.sectionGap, paddingTop: responsive.smallCardHeight + topOffset + responsive.handBattlefieldGap }}>
                             <div style={styles.playerRowWithZones}>
                                 <div style={styles.playerMainArea}><Battlefield isOpponent={true} /></div>
-                                {effectiveOpponent && <ZonePile player={effectiveOpponent} isOpponent={true} />}
+                                {effectiveOpponent && <ZonePile player={effectiveOpponent as LiveClientPlayer} isOpponent={true} />}
                             </div>
                         </div>
 
@@ -142,7 +147,7 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
                         <div style={{ ...styles.playerArea, marginBottom: -responsive.containerPadding + responsive.sectionGap, paddingBottom: responsive.cardHeight + responsive.handBattlefieldGap }}>
                             <div style={styles.playerRowWithZones}>
                                 <div style={styles.playerMainArea}><Battlefield isOpponent={false} /></div>
-                                {effectiveViewingPlayer && <ZonePile player={effectiveViewingPlayer} />}
+                                {effectiveViewingPlayer && <ZonePile player={effectiveViewingPlayer as LiveClientPlayer} />}
                             </div>
                         </div>
                         
