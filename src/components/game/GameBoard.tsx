@@ -2,192 +2,30 @@
 
 "use client";
 
-import React, { useMemo, useState, useEffect } from 'react';
-import { useGameStore } from '@/store/gameStore';
-
-// --- Imports for Hooks and Context ---
-import { useSettings } from '@/contexts/SettingsContext';
-import { useResponsive, ResponsiveContextProvider } from '@/hooks/useResponsive';
+import React from 'react';
+import { LiveGameBoard } from './LiveGameBoard';
+import { ReplayGameBoard } from './ReplayGameBoard';
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
-import { hand, entityId, ClientPlayer as LiveClientPlayer } from '@/types';
-
-// --- Imports for UI Components ---
-import { StepStrip } from '../ui/StepStrip';
-import { GameLog } from './GameLog';
-import { CardPreview as LiveCardPreview } from './card'; // Renamed to avoid conflict
-import { LifeDisplay, FullscreenButton, ConcedeButton, ActionMenu, TargetingOverlay, ManaColorSelectionOverlay } from './overlay';
-import { DraggedCardOverlay } from './DraggedCardOverlay';
-import { styles } from './board/styles';
-
-// --- Correctly import ALL component versions ---
-import { Battlefield } from './board/Battlefield';
-import { ZonePile } from './board/ZonePiles';
-import { StackDisplay } from './board/StackZone';
-import { CardRow } from './board/HandZone';
-import { TargetingArrows } from '../targeting/TargetingArrows';
-import { CombatArrows } from '../combat/CombatArrows';
-import { DrawAnimations, DamageAnimations, RevealAnimations, CoinFlipAnimations, TargetReselectedAnimations } from '../animations';
-
-// --- Import ALL NEW Replay-Specific Components ---
-import { ReplayBattlefield } from './board/ReplayBattlefield';
-import { ReplayZonePile } from './board/ReplayZonePiles';
-import { ReplayStackDisplay } from './board/ReplayStackZone';
-import { ReplayTargetingArrows } from '../targeting/ReplayTargetingArrows';
-import { ReplayGameLog } from './ReplayGameLog';
 
 interface GameBoardProps {
-  spectatorMode?: boolean;
+  spectatorMode?: boolean; // This prop now acts as the primary switch
   topOffset?: number;
   snapshot?: SpectatorStateUpdate;
   cardDataMap?: Record<string, ReplayCardData>;
 }
 
 export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, cardDataMap = {} }: GameBoardProps) {
-    const responsive = useResponsive(topOffset);
-
-    const { effectiveViewingPlayer, effectiveOpponent } = useMemo(() => {
-        if (spectatorMode && snapshot) {
-            const p1 = snapshot.gameState.players.find(p => p.playerId === snapshot.player1Id);
-            const p2 = snapshot.gameState.players.find(p => p.playerId === snapshot.player2Id);
-            return { effectiveViewingPlayer: p1, effectiveOpponent: p2 };
-        }
-        // In live mode, these would be derived from useGameStore selectors
-        const livePlayer = useGameStore.getState().getViewingPlayer();
-        const liveOpponent = useGameStore.getState().getOpponent();
-        return { effectiveViewingPlayer: livePlayer, effectiveOpponent: liveOpponent };
-    }, [snapshot, spectatorMode]);
-
-    if (spectatorMode && (!snapshot || !effectiveViewingPlayer || !effectiveOpponent)) {
-        return <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>Loading replay data...</div>;
+  
+  if (spectatorMode) {
+    // We are in REPLAY mode. Render the pure ReplayGameBoard.
+    // It requires a snapshot to exist.
+    if (!snapshot) {
+      return <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>Loading replay data...</div>;
     }
-    
-    // This is only used for live mode.
-    const liveGameState = useGameStore((state) => state.gameState);
-    const isMyTurn = !spectatorMode && liveGameState?.activePlayerId === useGameStore.getState().playerId;
-
-    return (
-        <ResponsiveContextProvider value={responsive}>
-            <div style={{ ...styles.container, padding: `0 ${responsive.containerPadding}px`, gap: responsive.sectionGap }}>
-                <FullscreenButton />
-                
-                {spectatorMode && snapshot && effectiveOpponent && effectiveViewingPlayer ? (
-                    // --- REPLAY MODE ---
-                    <>
-                        <div data-zone="opponent-hand" style={{ position: 'fixed', top: topOffset, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }}>
-                            <CardRow zoneId={hand(entityId(effectiveOpponent.playerId))} faceDown small inverted snapshot={snapshot} cardDataMap={cardDataMap} />
-                        </div>
-                        <div style={{...styles.spectatorNameLabel, position: 'fixed', top: topOffset + responsive.smallCardHeight + responsive.handBattlefieldGap + 8, left: 16 }}>{effectiveOpponent.name}</div>
-                        
-                        <div style={{ ...styles.opponentArea, marginTop: -responsive.containerPadding + responsive.sectionGap, paddingTop: responsive.smallCardHeight + topOffset + responsive.handBattlefieldGap }}>
-                            <div style={styles.playerRowWithZones}>
-                                <div style={styles.playerMainArea}><ReplayBattlefield isOpponent={true} snapshot={snapshot} cardDataMap={cardDataMap} /></div>
-                                <ReplayZonePile player={effectiveOpponent} isOpponent={true} snapshot={snapshot} cardDataMap={cardDataMap} />
-                            </div>
-                        </div>
-
-                        <div style={{ ...styles.centerArea, gap: responsive.isMobile ? 6 : 16 }}>
-                            <div style={styles.centerLifeSection}><LifeDisplay life={effectiveOpponent.life} playerId={entityId(effectiveOpponent.playerId)} playerName={effectiveOpponent.name} spectatorMode={true} /></div>
-                            <StepStrip
-                                phase={snapshot.gameState.currentPhase}
-                                step={snapshot.gameState.currentStep}
-                                turnNumber={snapshot.gameState.turnNumber}
-                                isActivePlayer={false}
-                                isSpectator={true}
-                                hasPriority={false}
-                                priorityMode={'ownTurn'}
-                                stopOverrides={{ myTurnStops: [], opponentTurnStops: [] }}
-                                onToggleStop={() => {}}
-                                activePlayerName={snapshot.gameState.players.find(p => p.playerId === snapshot.gameState.activePlayerId)?.name}
-                            />
-                            <div style={styles.centerLifeSection}><LifeDisplay life={effectiveViewingPlayer.life} isPlayer playerId={entityId(effectiveViewingPlayer.playerId)} playerName={effectiveViewingPlayer.name} spectatorMode={true} /></div>
-                        </div>
-                        
-                        <ReplayStackDisplay snapshot={snapshot} cardDataMap={cardDataMap} />
-                        
-                        <div style={{ ...styles.playerArea, marginBottom: -responsive.containerPadding + responsive.sectionGap, paddingBottom: responsive.smallCardHeight + responsive.handBattlefieldGap }}>
-                            <div style={styles.playerRowWithZones}>
-                                <div style={styles.playerMainArea}><ReplayBattlefield isOpponent={false} snapshot={snapshot} cardDataMap={cardDataMap} /></div>
-                                <ReplayZonePile player={effectiveViewingPlayer} isOpponent={false} snapshot={snapshot} cardDataMap={cardDataMap} />
-                            </div>
-                        </div>
-                        
-                        <div style={{...styles.spectatorNameLabel, position: 'fixed', bottom: responsive.smallCardHeight + responsive.handBattlefieldGap + 8, left: 16 }}>{effectiveViewingPlayer.name}</div>
-                        
-                        <div data-zone="hand" style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }}>
-                            <CardRow zoneId={hand(entityId(effectiveViewingPlayer.playerId))} faceDown={true} small={true} interactive={false} snapshot={snapshot} cardDataMap={cardDataMap} />
-                        </div>
-                        
-                        <ReplayTargetingArrows snapshot={snapshot} />
-                        {/* No CardPreview is rendered at this level. It is handled inside the Replay... components. */}
-                        <ReplayGameLog snapshot={snapshot} />
-                    </>
-                ) : (
-                    // --- LIVE MODE ---
-                    <>
-                        <ConcedeButton />
-                        {effectiveOpponent && (
-                            <div data-zone="opponent-hand" style={{ position: 'fixed', top: topOffset, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }}>
-                                <CardRow zoneId={hand(entityId(effectiveOpponent.playerId))} faceDown small inverted ghostCards={liveGameState.getOpponentRevealedTopCard() ? [liveGameState.getOpponentRevealedTopCard()!] : []} />
-                            </div>
-                        )}
-                        <div style={{ ...styles.opponentArea, marginTop: -responsive.containerPadding + responsive.sectionGap, paddingTop: responsive.smallCardHeight + topOffset + responsive.handBattlefieldGap }}>
-                            <div style={styles.playerRowWithZones}>
-                                <div style={styles.playerMainArea}><Battlefield isOpponent={true} /></div>
-                                {effectiveOpponent && <ZonePile player={effectiveOpponent} isOpponent={true} />}
-                            </div>
-                        </div>
-                        <div style={{ ...styles.centerArea, gap: responsive.isMobile ? 6 : 16 }}>
-                            {effectiveOpponent && (
-                                <div style={styles.centerLifeSection}>
-                                    <LifeDisplay life={effectiveOpponent.life} playerId={effectiveOpponent.playerId} playerName={effectiveOpponent.name} />
-                                    {/* ... other live mode elements ... */}
-                                </div>
-                            )}
-                            {liveGameState.gameState && (
-                                <StepStrip
-                                    phase={liveGameState.gameState.currentPhase}
-                                    step={liveGameState.gameState.currentStep}
-                                    turnNumber={liveGameState.gameState.turnNumber}
-                                    isActivePlayer={isMyTurn}
-                                    hasPriority={liveGameState.hasPriority}
-                                    priorityMode={liveGameState.priorityMode}
-                                    stopOverrides={liveGameState.stopOverrides}
-                                    onToggleStop={liveGameState.toggleStopOverride}
-                                />
-                            )}
-                            {effectiveViewingPlayer && (
-                                <div style={styles.centerLifeSection}>
-                                    <LifeDisplay life={effectiveViewingPlayer.life} isPlayer playerId={effectiveViewingPlayer.playerId} playerName={effectiveViewingPlayer.name} />
-                                    {/* ... other live mode elements ... */}
-                                </div>
-                            )}
-                        </div>
-                        <StackDisplay />
-                        <div style={{ ...styles.playerArea, marginBottom: -responsive.containerPadding + responsive.sectionGap, paddingBottom: responsive.cardHeight + responsive.handBattlefieldGap }}>
-                            <div style={styles.playerRowWithZones}>
-                                <div style={styles.playerMainArea}><Battlefield isOpponent={false} /></div>
-                                {effectiveViewingPlayer && <ZonePile player={effectiveViewingPlayer} />}
-                            </div>
-                        </div>
-                        <div data-zone="hand" style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }}>
-                            {effectiveViewingPlayer && <CardRow zoneId={hand(entityId(effectiveViewingPlayer.playerId))} interactive ghostCards={liveGameState.getGhostCards()} />}
-                        </div>
-                        <TargetingArrows />
-                        <LiveCardPreview />
-                        <GameLog />
-                        <ActionMenu />
-                        <TargetingOverlay />
-                        <ManaColorSelectionOverlay />
-                        <CombatArrows />
-                        <DraggedCardOverlay />
-                        <DrawAnimations />
-                        <DamageAnimations />
-                        <RevealAnimations />
-                        <CoinFlipAnimations />
-                        <TargetReselectedAnimations />
-                    </>
-                )}
-            </div>
-        </ResponsiveContextProvider>
-    );
+    return <ReplayGameBoard snapshot={snapshot} cardDataMap={cardDataMap} topOffset={topOffset} />;
+  } else {
+    // We are in LIVE mode. Render the original LiveGameBoard.
+    // It uses its own internal hooks and does not need props passed down.
+    return <LiveGameBoard topOffset={topOffset} />;
+  }
 }
