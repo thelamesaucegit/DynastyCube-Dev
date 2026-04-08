@@ -1,37 +1,55 @@
-//src/components/game/board/StackZone.tsx
+// src/components/game/board/StackZone.tsx
 
-import { useGameStore } from '@/store/gameStore'
-import { useStackCards } from '@/store/selectors'
-import type { EntityId } from '@/types'
-import { getCardImageUrl } from '@/utils/cardImages'
-import { ActiveEffectBadges } from '../card/CardOverlays'
-import { AbilityText } from '../../ui/ManaSymbols'
-import { useResponsiveContext, handleImageError } from './shared'
-import { styles } from './styles'
+"use client";
 
-/**
- * Stack display - shows spells/abilities waiting to resolve.
- * Cards stack on top of each other like a physical pile.
- * Also shows a combat trigger indicator when a YesNo decision is pending.
- */
-export function StackDisplay() {
-  const stackCards = useStackCards()
-  const responsive = useResponsiveContext()
-  const hoverCard = useGameStore((state) => state.hoverCard)
-  const targetingState = useGameStore((state) => state.targetingState)
-  const addTarget = useGameStore((state) => state.addTarget)
-  const removeTarget = useGameStore((state) => state.removeTarget)
-  const decisionSelectionState = useGameStore((state) => state.decisionSelectionState)
-  const toggleDecisionSelection = useGameStore((state) => state.toggleDecisionSelection)
-  const pendingDecision = useGameStore((state) => state.pendingDecision)
-  const gameState = useGameStore((state) => state.gameState)
+import React, { useMemo } from 'react';
+import { useGameStore } from '@/store/gameStore';
+import { useStackCards } from '@/store/selectors';
+import type { EntityId, ClientCard } from '@/types';
+import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
+import { getCardImageUrl } from '@/utils/cardImages';
+import { ActiveEffectBadges } from '../card/CardOverlays';
+import { AbilityText } from '../../ui/ManaSymbols';
+import { useResponsiveContext, handleImageError } from './shared';
+import { styles } from './styles';
 
-  // Trigger YesNo: show source card in stack area when a triggered ability has a triggering entity
-  const isTriggerYesNo = pendingDecision?.type === 'YesNoDecision'
-    && !!pendingDecision.context.triggeringEntityId
+// --- UPDATED PROPS ---
+interface StackDisplayProps {
+  snapshot?: SpectatorStateUpdate;
+  cardDataMap?: Record<string, ReplayCardData>;
+}
 
-  const showStack = stackCards.length > 0 || isTriggerYesNo
-  if (!showStack) return null
+export function StackDisplay({ snapshot, cardDataMap }: StackDisplayProps) {
+  const responsive = useResponsiveContext();
+
+  // --- DATA DERIVATION ---
+  const liveStackCards = useStackCards();
+  const livePendingDecision = useGameStore((state) => state.pendingDecision);
+  const liveGameState = useGameStore((state) => state.gameState);
+
+  const { stackCards, pendingDecision, gameState } = useMemo(() => {
+    if (snapshot) {
+      // REPLAY MODE: Derive from snapshot
+      const stackZone = snapshot.gameState.zones.find(z => z.zoneId.zoneType === 'Stack');
+      const stack = stackZone ? stackZone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [];
+      // Note: pendingDecision is not available in replay logs, so it will be null.
+      return { stackCards: stack, pendingDecision: null, gameState: snapshot.gameState };
+    }
+    // LIVE MODE: Use hooks
+    return { stackCards: liveStackCards, pendingDecision: livePendingDecision, gameState: liveGameState };
+  }, [snapshot, liveStackCards, livePendingDecision, liveGameState]);
+  
+  // All interactive hooks remain for live mode
+  const hoverCard = useGameStore((state) => state.hoverCard);
+  const targetingState = useGameStore((state) => state.targetingState);
+  const addTarget = useGameStore((state) => state.addTarget);
+  const removeTarget = useGameStore((state) => state.removeTarget);
+  const decisionSelectionState = useGameStore((state) => state.decisionSelectionState);
+  const toggleDecisionSelection = useGameStore((state) => state.toggleDecisionSelection);
+
+  const isTriggerYesNo = pendingDecision?.type === 'YesNoDecision' && !!pendingDecision.context.triggeringEntityId;
+  const showStack = stackCards.length > 0 || isTriggerYesNo;
+  if (!showStack) return null;
 
   const handleStackItemClick = (cardId: EntityId) => {
     // Decision-time targeting (e.g., cycling Complicate → ChooseTargetsDecision for stack spells)
