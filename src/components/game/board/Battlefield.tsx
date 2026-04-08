@@ -40,6 +40,11 @@ export function Battlefield({ isOpponent, spectatorMode, snapshot, cardDataMap }
   const getLinkedExileForCard = (cardId: string) => useGameStore.getState().getLinkedExileForCard(cardId);
   const viewingPlayerId = useGameStore(selectViewingPlayerId);
 
+  // --- THIS IS THE FIX ---
+  // Hooks are called at the top level, unconditionally.
+  const liveBattlefieldCards = useBattlefieldCards(isOpponent);
+  // --- END FIX ---
+
   const { lands, creatures, planeswalkers, other } = useMemo(() => {
     let battlefieldCards: readonly ClientCard[] = [];
     if (spectatorMode && snapshot) {
@@ -47,7 +52,8 @@ export function Battlefield({ isOpponent, spectatorMode, snapshot, cardDataMap }
       const zone = snapshot.gameState.zones.find(z => z.zoneId.zoneType === 'Battlefield' && z.zoneId.ownerId === playerId);
       battlefieldCards = zone ? zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [];
     } else {
-      battlefieldCards = useBattlefieldCards(isOpponent);
+      // The hook's result is *used* inside the memo, but the hook itself is called outside.
+      battlefieldCards = liveBattlefieldCards;
     }
     
     const lands = battlefieldCards.filter(c => c.cardTypes.includes('Land'));
@@ -55,7 +61,7 @@ export function Battlefield({ isOpponent, spectatorMode, snapshot, cardDataMap }
     const planeswalkers = battlefieldCards.filter(c => c.cardTypes.includes('Planeswalker'));
     const other = battlefieldCards.filter(c => !c.cardTypes.includes('Land') && !c.cardTypes.includes('Creature') && !c.cardTypes.includes('Planeswalker'));
     return { lands, creatures, planeswalkers, other };
-  }, [snapshot, isOpponent, spectatorMode, useBattlefieldCards]);
+  }, [snapshot, isOpponent, spectatorMode, liveBattlefieldCards]);
 
   const groupedLands = useMemo(() => groupCards(lands), [lands]);
   const toSingles = (cards: readonly ClientCard[]) => cards.map((card) => ({ card, count: 1, cardIds: [card.id] as const, cards: [card] as const }));
