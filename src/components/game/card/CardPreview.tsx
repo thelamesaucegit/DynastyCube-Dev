@@ -1,3 +1,5 @@
+//src/components/game/card/CardPreview.tsx
+
 import { useState, useEffect } from 'react'
 import { useGameStore } from '@/store/gameStore'
 import { selectGameState } from '@/store/selectors'
