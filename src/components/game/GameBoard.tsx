@@ -15,7 +15,7 @@ import { StepStrip } from '../ui/StepStrip';
 import { TargetingArrows } from '../targeting/TargetingArrows';
 import { GameLog } from './GameLog';
 import { Battlefield, StackDisplay, ZonePile } from './board';
-import {  CardRow } from './board/HandZone';
+import { HandFan, CardRow } from './board/HandZone';
 import { CardPreview } from './card';
 import { LifeDisplay, FullscreenButton } from './overlay';
 import { styles } from './board/styles';
@@ -61,9 +61,9 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
             <div style={{ ...styles.container, padding: `0 ${responsive.containerPadding}px`, gap: responsive.sectionGap }}>
                 <FullscreenButton />
                 
-                {/* Opponent's Hand */}
-                <div data-zone="opponent-hand" style={{ position: 'fixed', top: topOffset, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }}>
-                    <HandZone
+                {/* Opponent's  */}
+                <div data-zone="opponent-" style={{ position: 'fixed', top: topOffset, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }}>
+                    <HandFan
                         zoneId={hand(entityId(effectiveOpponent.playerId))}
                         faceDown small inverted
                         snapshot={snapshot}
@@ -123,7 +123,7 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
                 
                 {/* Player's Hand */}
                 <div data-zone="hand" style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }}>
-                    <HandZone
+                    <HandFan
                         zoneId={hand(entityId(effectiveViewingPlayer.playerId))}
                         faceDown={spectatorMode}
                         small={spectatorMode}
