@@ -1,5 +1,7 @@
 // src/components/game/board/HandZone.tsx
 
+"use client";
+
 import React, { useState, useMemo } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import { useZoneCards, useZone } from '@/store/selectors';
