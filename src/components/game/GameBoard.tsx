@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useMemo, useState, useEffect } from 'react';
-
+import { useGameStore } from '@/store/gameStore'
 // --- Imports for Hooks and Context ---
 import { useSettings } from '@/contexts/SettingsContext';
 import { useResponsive, ResponsiveContextProvider } from '@/hooks/useResponsive';
