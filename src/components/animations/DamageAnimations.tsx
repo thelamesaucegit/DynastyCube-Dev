@@ -1,3 +1,5 @@
+//src/components/animations/DamageAnimations.tsx
+
 import { useEffect, useState, useCallback } from 'react'
 import { useGameStore, type DamageAnimation } from '@/store/gameStore'
 

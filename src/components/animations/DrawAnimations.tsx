@@ -1,3 +1,5 @@
+//src/components/animations/DrawAnimations.tsx
+
 import { useEffect, useState, useCallback } from 'react'
 import { useGameStore, type DrawAnimation } from '@/store/gameStore'
 import { useResponsive } from '@/hooks/useResponsive'

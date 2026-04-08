@@ -1,3 +1,5 @@
+//src/components/animations/CoinFlipAnimations.tsx
+
 import { useEffect, useState, useCallback } from 'react'
 import { useGameStore, type CoinFlipAnimation } from '@/store/gameStore'
 
