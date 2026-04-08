@@ -1,3 +1,5 @@
+//src/components/game/board/ZonePiles.tsx
+
 import React, { useState, useEffect } from 'react'
 import { useGameStore } from '@/store/gameStore'
 import { useZoneCards, useStackCards } from '@/store/selectors'
