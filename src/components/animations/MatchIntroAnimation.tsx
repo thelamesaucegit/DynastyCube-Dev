@@ -1,3 +1,5 @@
+//src/components/animations/MatchIntroAnimation.tsx
+
 import { useEffect, useState } from 'react'
 import { useGameStore } from '@/store/gameStore'
 import styles from './MatchIntroAnimation.module.css'
