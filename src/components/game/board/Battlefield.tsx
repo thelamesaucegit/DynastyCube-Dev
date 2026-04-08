@@ -1,92 +1,96 @@
-import { useBattlefieldCards, groupCards, selectGameState, selectViewingPlayerId } from '@/store/selectors'
-import { useGameStore } from '@/store/gameStore'
-import { useResponsiveContext } from './shared'
-import { styles } from './styles'
-import { CardStack } from '../card'
-import { GameCard } from '../card'
-import { GroupedCard } from '@/store/selectors'
-import type { ClientCard } from '@/types'
+// src/components/game/board/Battlefield.tsx
 
-/**
- * Battlefield area with two rows per player, each using a 3-column grid:
- *
- *   Front row: [planeswalkers (right-aligned)] | [creatures (centered)] | [spacer]
- *   Back row:  [enchantments/artifacts (right-aligned)] | [lands (centered)] | [spacer]
- *
- * For player: front row on top (toward center), back row on bottom (near hand).
- * For opponent: back row on top (near hand), front row on bottom (toward center).
- */
-export function Battlefield({ isOpponent, spectatorMode = false }: { isOpponent: boolean; spectatorMode?: boolean }) {
-  const {
-    playerLands,
-    playerCreatures,
-    playerPlaneswalkers,
-    playerOther,
-    opponentLands,
-    opponentCreatures,
-    opponentPlaneswalkers,
-    opponentOther,
-  } = useBattlefieldCards()
-  const gameState = useGameStore(selectGameState)
-  const responsive = useResponsiveContext()
+"use client";
 
-  const lands = isOpponent ? opponentLands : playerLands
-  const creatures = isOpponent ? opponentCreatures : playerCreatures
-  const planeswalkers = isOpponent ? opponentPlaneswalkers : playerPlaneswalkers
-  const other = isOpponent ? opponentOther : playerOther
+import React, { useMemo } from 'react';
+import { useGameStore } from '@/store/gameStore';
+import { useBattlefieldCards, selectViewingPlayerId } from '@/store/selectors';
+import { useResponsiveContext } from './shared';
+import { styles } from './styles';
+import { CardStack } from '../card';
+import { GameCard } from '../card';
+import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
+import type { ClientCard, GroupedCard } from '@/types';
 
-  // Group identical lands, display creatures/planeswalkers/other individually
-  const groupedLands = groupCards(lands)
-  const toSingles = (cards: typeof creatures) => cards.map((card) => ({
-    card,
-    count: 1,
-    cardIds: [card.id] as const,
-    cards: [card] as const,
-  }))
-  const groupedCreatures = toSingles(creatures)
-  const groupedPlaneswalkers = toSingles(planeswalkers)
-  const groupedOther = toSingles(other)
+// Helper function to group cards by name
+function groupCards(cards: readonly ClientCard[]): GroupedCard[] {
+    const groups: Record<string, ClientCard[]> = {};
+    for (const card of cards) {
+        if (!groups[card.name]) { groups[card.name] = []; }
+        groups[card.name]!.push(card);
+    }
+    return Object.values(groups).map((cardGroup) => ({
+        card: cardGroup[0]!,
+        count: cardGroup.length,
+        cardIds: cardGroup.map(c => c.id),
+        cards: cardGroup,
+    }));
+}
 
-  // Resolve attachment cards for a permanent
+interface BattlefieldProps {
+  isOpponent: boolean;
+  spectatorMode?: boolean;
+  snapshot?: SpectatorStateUpdate;
+  cardDataMap?: Record<string, ReplayCardData>;
+}
+
+export function Battlefield({ isOpponent, spectatorMode, snapshot, cardDataMap }: BattlefieldProps) {
+  const responsive = useResponsiveContext();
+  const getAttachmentsForCard = (cardId: string) => useGameStore.getState().getAttachmentsForCard(cardId);
+  const getLinkedExileForCard = (cardId: string) => useGameStore.getState().getLinkedExileForCard(cardId);
+  const viewingPlayerId = useGameStore(selectViewingPlayerId);
+
+  const { lands, creatures, planeswalkers, other } = useMemo(() => {
+    let battlefieldCards: readonly ClientCard[] = [];
+    if (spectatorMode && snapshot) {
+      const playerId = isOpponent ? snapshot.player2Id : snapshot.player1Id;
+      const zone = snapshot.gameState.zones.find(z => z.zoneId.zoneType === 'Battlefield' && z.zoneId.ownerId === playerId);
+      battlefieldCards = zone ? zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [];
+    } else {
+      battlefieldCards = useBattlefieldCards(isOpponent);
+    }
+    
+    const lands = battlefieldCards.filter(c => c.cardTypes.includes('Land'));
+    const creatures = battlefieldCards.filter(c => c.cardTypes.includes('Creature'));
+    const planeswalkers = battlefieldCards.filter(c => c.cardTypes.includes('Planeswalker'));
+    const other = battlefieldCards.filter(c => !c.cardTypes.includes('Land') && !c.cardTypes.includes('Creature') && !c.cardTypes.includes('Planeswalker'));
+    return { lands, creatures, planeswalkers, other };
+  }, [snapshot, isOpponent, spectatorMode, useBattlefieldCards]);
+
+  const groupedLands = useMemo(() => groupCards(lands), [lands]);
+  const toSingles = (cards: readonly ClientCard[]) => cards.map((card) => ({ card, count: 1, cardIds: [card.id] as const, cards: [card] as const }));
+  const groupedCreatures = useMemo(() => toSingles(creatures), [creatures]);
+  const groupedPlaneswalkers = useMemo(() => toSingles(planeswalkers), [planeswalkers]);
+  const groupedOther = useMemo(() => toSingles(other), [other]);
+  
   const getAttachments = (card: ClientCard): ClientCard[] => {
-    if (!gameState || card.attachments.length === 0) return []
-    return card.attachments
-      .map((id) => gameState.cards[id])
-      .filter((c): c is ClientCard => c != null)
-  }
+    if (snapshot) {
+      return Object.values(snapshot.gameState.cards).filter(c => c.attachedTo === card.id);
+    }
+    return getAttachmentsForCard(card.id);
+  };
 
-  // Resolve linked exile cards for a permanent (e.g., Suspension Field exiling a creature)
   const getLinkedExile = (card: ClientCard): ClientCard[] => {
-    if (!gameState || !card.linkedExile || card.linkedExile.length === 0) return []
-    return card.linkedExile
-      .map((id) => gameState.cards[id])
-      .filter((c): c is ClientCard => c != null)
-  }
+    if (snapshot && card.linkedExile) {
+      return card.linkedExile.map(id => snapshot.gameState.cards[id]).filter((c): c is ClientCard => !!c);
+    }
+    return getLinkedExileForCard(card.id);
+  };
 
-  const hasCreatures = groupedCreatures.length > 0
-  const hasPlaneswalkers = groupedPlaneswalkers.length > 0
-  const hasLands = groupedLands.length > 0
-  const hasOther = groupedOther.length > 0
-  const hasFrontRow = hasCreatures || hasPlaneswalkers
-  const hasBackRow = hasLands || hasOther
-  const showDivider = hasFrontRow && hasBackRow
+  const hasCreatures = groupedCreatures.length > 0;
+  const hasPlaneswalkers = groupedPlaneswalkers.length > 0;
+  const hasLands = groupedLands.length > 0;
+  const hasOther = groupedOther.length > 0;
+  const hasFrontRow = hasCreatures || hasPlaneswalkers;
+  const hasBackRow = hasLands || hasOther;
+  const showDivider = hasFrontRow && hasBackRow;
+  
+  const interactive = !spectatorMode && !isOpponent;
+  const attachmentPeek = responsive.isMobile ? 12 : 16;
+  const cardHeight = Math.round(responsive.battlefieldCardWidth * 1.4);
 
-  const viewingPlayerId = useGameStore(selectViewingPlayerId)
-  const interactive = !spectatorMode && !isOpponent
-
-  // How much of each attachment card peeks out from behind its parent
-  const attachmentPeek = responsive.isMobile ? 12 : 16
-  const cardHeight = Math.round(responsive.battlefieldCardWidth * 1.4)
-
-  /**
-   * Renders a permanent with any attached cards (auras, equipment) stacked underneath.
-   * Works for any permanent type - creatures, lands, planeswalkers, etc.
-   *
-   * Untapped: attachments peek vertically from above the parent card.
-   * Tapped: attachments peek horizontally to the right of the parent card.
-   */
   const renderWithAttachments = (group: GroupedCard) => {
-    const attachments = [...getAttachments(group.card), ...getLinkedExile(group.card)]
+    const attachments = [...getAttachments(group.card), ...getLinkedExile(group.card)];
     if (attachments.length === 0) {
       return (
         <CardStack
@@ -94,154 +98,66 @@ export function Battlefield({ isOpponent, spectatorMode = false }: { isOpponent:
           group={group}
           interactive={interactive}
           isOpponentCard={isOpponent}
+          cardDataMap={cardDataMap}
         />
-      )
+      );
     }
-
-    const parentTapped = group.card.isTapped
-    const totalPeek = attachments.length * attachmentPeek
-    // When tapped, cards rotate 90deg so their visual width becomes the height
-    const cardVisualWidth = parentTapped ? cardHeight + 8 : responsive.battlefieldCardWidth
-
-    // Tapped: attachments peek horizontally (left offset) to avoid overlap with the rotation gap
-    // Untapped: attachments peek vertically (top offset) from above the parent card
-    const containerWidth = parentTapped ? cardVisualWidth + totalPeek : cardVisualWidth
-    const containerHeight = parentTapped ? cardHeight : cardHeight + totalPeek
+    
+    const parentTapped = group.card.isTapped;
+    const totalPeek = attachments.length * attachmentPeek;
+    const cardVisualWidth = parentTapped ? cardHeight + 8 : responsive.battlefieldCardWidth;
+    const containerWidth = parentTapped ? cardVisualWidth + totalPeek : cardVisualWidth;
+    const containerHeight = parentTapped ? cardHeight : cardHeight + totalPeek;
 
     return (
-      <div
-        key={group.cardIds[0]}
-        style={{
-          position: 'relative',
-          width: containerWidth,
-          height: containerHeight,
-        }}
-      >
-        {/* Attachments peek from the parent card */}
+      <div key={group.cardIds[0]} style={{ position: 'relative', width: containerWidth, height: containerHeight }}>
         {attachments.map((attachment, index) => {
-          // Attachments controlled by the player are interactive even on the opponent's battlefield
-          // (e.g., aura cast on opponent's creature — caster can still activate abilities)
-          const attachmentInteractive = !spectatorMode && attachment.controllerId === viewingPlayerId
+          const attachmentInteractive = !spectatorMode && attachment.controllerId === viewingPlayerId;
           return (
-            <div
-              key={attachment.id}
-              style={{
-                position: 'absolute',
-                left: parentTapped ? index * attachmentPeek : 0,
-                top: parentTapped ? 0 : index * attachmentPeek,
-                zIndex: index,
-                pointerEvents: 'none',
-              }}
-            >
+            <div key={attachment.id} style={{ position: 'absolute', left: parentTapped ? index * attachmentPeek : 0, top: parentTapped ? 0 : index * attachmentPeek, zIndex: index, pointerEvents: 'none' }}>
               <GameCard
                 card={attachment}
                 interactive={attachmentInteractive}
                 battlefield
                 isOpponentCard={isOpponent}
                 forceTapped={parentTapped}
+                cardDataMap={cardDataMap}
               />
             </div>
-          )
+          );
         })}
-        {/* Main card, on top */}
-        <div style={{
-          position: 'absolute',
-          left: parentTapped ? totalPeek : 0,
-          top: parentTapped ? 0 : totalPeek,
-          zIndex: attachments.length + 1,
-          pointerEvents: 'none',
-        }}>
+        <div style={{ position: 'absolute', left: parentTapped ? totalPeek : 0, top: parentTapped ? 0 : totalPeek, zIndex: attachments.length + 1, pointerEvents: 'none' }}>
           <CardStack
             group={group}
             interactive={interactive}
             isOpponentCard={isOpponent}
+            cardDataMap={cardDataMap}
           />
         </div>
       </div>
-    )
-  }
+    );
+  };
 
-  /**
-   * Renders a 3-column grid row:
-   *   [side items (right-aligned)] | [center items (centered)] | [spacer]
-   * Used for both the creature row and the land row.
-   */
-  const renderGridRow = (
-    centerItems: readonly GroupedCard[],
-    sideItems: readonly GroupedCard[],
-    extra?: React.CSSProperties,
-  ) => (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '1fr auto 1fr',
-      alignItems: 'end',
-      width: '100%',
-      ...extra,
-    }}>
-      {/* Left column: empty spacer to balance the grid */}
+  const renderGridRow = (centerItems: readonly GroupedCard[], sideItems: readonly GroupedCard[], extra?: React.CSSProperties) => (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'end', width: '100%', ...extra }}>
       <div />
-
-      {/* Center column: main items */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'flex-end',
-        flexWrap: 'wrap',
-        gap: responsive.cardGap,
-      }}>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-end', flexWrap: 'wrap', gap: responsive.cardGap }}>
         {centerItems.map((group) => renderWithAttachments(group))}
       </div>
-
-      {/* Right column: side items (e.g. planeswalkers), left-aligned with separator */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'flex-start',
-        alignItems: 'flex-end',
-        flexWrap: 'wrap',
-        gap: responsive.cardGap,
-        paddingLeft: sideItems.length > 0 && centerItems.length > 0 ? responsive.cardGap : 0,
-      }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'flex-end', flexWrap: 'wrap', gap: responsive.cardGap, paddingLeft: sideItems.length > 0 && centerItems.length > 0 ? responsive.cardGap : 0 }}>
         {sideItems.length > 0 && centerItems.length > 0 && (
-          <div style={{
-            width: 1,
-            alignSelf: 'stretch',
-            backgroundColor: '#555',
-            marginRight: responsive.cardGap,
-            borderRadius: 1,
-          }} />
+          <div style={{ width: 1, alignSelf: 'stretch', backgroundColor: '#555', marginRight: responsive.cardGap, borderRadius: 1 }} />
         )}
         {sideItems.map((group) => renderWithAttachments(group))}
       </div>
     </div>
-  )
+  );
 
-  const renderDivider = () => showDivider ? (
-    <div
-      style={{
-        width: '40%',
-        height: 1,
-        backgroundColor: '#444',
-        margin: '6px 0',
-      }}
-    />
-  ) : null
-
-  const frontRow = renderGridRow(
-    groupedCreatures,
-    groupedPlaneswalkers,
-    { minHeight: responsive.battlefieldCardHeight + responsive.battlefieldRowPadding },
-  )
+  const renderDivider = () => showDivider ? <div style={{ width: '40%', height: 1, backgroundColor: '#444', margin: '6px 0' }} /> : null;
+  const frontRow = renderGridRow(groupedCreatures, groupedPlaneswalkers, { minHeight: responsive.battlefieldCardHeight + responsive.battlefieldRowPadding });
 
   return (
-    <div
-      data-zone={isOpponent ? 'opponent-battlefield' : 'player-battlefield'}
-      style={{
-        ...styles.battlefieldArea,
-        justifyContent: isOpponent ? 'flex-start' : 'flex-end',
-        gap: 0,
-      }}
-    >
-      {/* For player: front row (top, toward center), then back row (bottom, near hand) */}
+    <div data-zone={isOpponent ? 'opponent-battlefield' : 'player-battlefield'} style={{ ...styles.battlefieldArea, justifyContent: isOpponent ? 'flex-start' : 'flex-end', gap: 0 }}>
       {!isOpponent && (
         <>
           {frontRow}
@@ -249,8 +165,6 @@ export function Battlefield({ isOpponent, spectatorMode = false }: { isOpponent:
           {renderGridRow(groupedLands, groupedOther, { marginBottom: -40 })}
         </>
       )}
-
-      {/* For opponent: back row (top, near hand), then front row (bottom, toward center) */}
       {isOpponent && (
         <>
           {renderGridRow(groupedLands, groupedOther, { marginTop: -40 })}
@@ -259,5 +173,5 @@ export function Battlefield({ isOpponent, spectatorMode = false }: { isOpponent:
         </>
       )}
     </div>
-  )
+  );
 }

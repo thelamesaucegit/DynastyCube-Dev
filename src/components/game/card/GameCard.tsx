@@ -1,3 +1,5 @@
+//src/components/game/card/GameCard.tsx
+
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useGameStore } from '@/store/gameStore'
 import { useHasLegalActions } from '@/store/selectors'
