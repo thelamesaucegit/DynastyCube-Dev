@@ -6,9 +6,10 @@ import React from 'react';
 import { LiveGameBoard } from './LiveGameBoard';
 import { ReplayGameBoard } from './ReplayGameBoard';
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
+import { SettingsProvider } from '@/contexts/SettingsContext'; // Import settings provider
 
 interface GameBoardProps {
-  spectatorMode?: boolean; // This prop now acts as the primary switch
+  spectatorMode?: boolean; // This is the primary switch for replay vs. live
   topOffset?: number;
   snapshot?: SpectatorStateUpdate;
   cardDataMap?: Record<string, ReplayCardData>;
@@ -22,10 +23,16 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
     if (!snapshot) {
       return <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>Loading replay data...</div>;
     }
-    return <ReplayGameBoard snapshot={snapshot} cardDataMap={cardDataMap} topOffset={topOffset} />;
+    // Wrap with SettingsProvider so Replay components can access useOldestArt
+    return (
+        <SettingsProvider>
+            <ReplayGameBoard snapshot={snapshot} cardDataMap={cardDataMap} topOffset={topOffset} />
+        </SettingsProvider>
+    );
   } else {
     // We are in LIVE mode. Render the original LiveGameBoard.
-    // It uses its own internal hooks and does not need props passed down.
+    // It uses its own internal hooks and does not need these props.
+    // SettingsProvider is likely already wrapped around this at a higher level in your app.
     return <LiveGameBoard topOffset={topOffset} />;
   }
 }
