@@ -1,4 +1,4 @@
-//web-client/src/components/game/GameLog.tsx
+//src/components/game/GameLog.tsx
 
 import { useGameStore, type LogEntry } from '@/store/gameStore'
 import React, { useState, useRef, useEffect } from 'react'
