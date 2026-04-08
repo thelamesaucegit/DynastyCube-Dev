@@ -3,6 +3,7 @@
 "use server";
 
 import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
+import { getSeasonStandingsFromStats } from './weeklyMatchupActions';
 
 // ============================================================================
 // TYPES
@@ -271,182 +272,233 @@ export async function getSeasonStandings(
 // DRAFT ORDER GENERATION
 // ============================================================================
 
-export async function generateDraftOrder(
-  seasonId: string
-): Promise<{
-  success: boolean;
-  order?: DraftOrderEntry[];
-  message?: string;
-  error?: string;
+export type DraftOrderType = 'random' | 'manual' | 'previous_season';
+
+export interface DraftTeamSelection {
+    teamId: string;
+    teamName: string;
+    emoji: string;
+    pickPosition: number;
+}
+
+/**
+ * Get all teams, split into participating and non-participating
+ * for the draft order selection UI.
+ */
+export async function getTeamsForDraftSelection(seasonId: string): Promise<{
+    participating: DraftOrderEntry[];
+    available: Array<{ id: string; name: string; emoji: string }>;
+    error?: string;
 }> {
-  try {
-    const supabase = await createServerClient();
-    const admin = await verifyAdmin(supabase);
-    if (!admin.authorized) {
-      return { success: false, error: admin.error };
+    try {
+        const supabase = await createServerClient();
+
+        const [{ order }, teamsResult] = await Promise.all([
+            getDraftOrder(seasonId),
+            supabase.from('teams')
+                .select('id, name, emoji')
+                .eq('is_hidden', false)
+                .order('name'),
+        ]);
+
+        if (teamsResult.error) return { participating: [], available: [], error: teamsResult.error.message };
+
+        const participatingIds = new Set(order.map(o => o.team_id));
+        const available = (teamsResult.data ?? []).filter(t => !participatingIds.has(t.id));
+
+        return { participating: order, available };
+    } catch (e) {
+        return { participating: [], available: [], error: 'Unexpected error' };
     }
+}
 
-    const { count: existingCount } = await supabase
-      .from("draft_order")
-      .select("*", { count: "exact", head: true })
-      .eq("season_id", seasonId);
-
-    if (existingCount && existingCount > 0) {
-      return {
-        success: false,
-        error: "Draft order already exists for this season. Use regenerate to re-roll.",
-      };
+export async function generateDraftOrder(
+    seasonId: string,
+    options?: {
+        orderType?: DraftOrderType;
+        teamIds?: string[];        // which teams to include (required for manual/random)
+        manualOrder?: string[];    // team IDs in desired pick order (manual only)
     }
+): Promise<{
+    success: boolean;
+    order?: DraftOrderEntry[];
+    message?: string;
+    error?: string;
+}> {
+    try {
+        const supabase = await createServerClient();
+        const admin = await verifyAdmin(supabase);
+        if (!admin.authorized) return { success: false, error: admin.error };
 
-    const { data: targetSeason, error: seasonError } = await supabase
-      .from("seasons")
-      .select("id, season_number, season_name")
-      .eq("id", seasonId)
-      .single();
+        const { count: existingCount } = await supabase
+            .from('draft_order')
+            .select('*', { count: 'exact', head: true })
+            .eq('season_id', seasonId);
 
-    if (seasonError || !targetSeason) {
-      return { success: false, error: "Season not found" };
+        if (existingCount && existingCount > 0) {
+            return { success: false, error: 'Draft order already exists. Use regenerate to replace it.' };
+        }
+
+        const { data: targetSeason, error: seasonError } = await supabase
+            .from('seasons')
+            .select('id, season_number, season_name')
+            .eq('id', seasonId)
+            .single();
+
+        if (seasonError || !targetSeason) return { success: false, error: 'Season not found' };
+
+        const orderType = options?.orderType ?? 'previous_season';
+
+        // Fetch participating teams
+        let teamsToInclude: Array<{ id: string; name: string; emoji: string }>;
+
+        if (options?.teamIds && options.teamIds.length > 0) {
+            const { data } = await supabase
+                .from('teams')
+                .select('id, name, emoji')
+                .in('id', options.teamIds);
+            teamsToInclude = data ?? [];
+        } else {
+            // Default: all non-hidden teams
+            const { data } = await supabase
+                .from('teams')
+                .select('id, name, emoji')
+                .eq('is_hidden', false)
+                .order('name');
+            teamsToInclude = data ?? [];
+        }
+
+        if (teamsToInclude.length === 0) return { success: false, error: 'No teams found' };
+
+        const { settings } = await getDraftSettings();
+        const maxTeams = parseInt(settings.max_teams || String(teamsToInclude.length), 10);
+
+        // Build ordered list based on orderType
+        let orderedTeams: Array<{ id: string; name: string; emoji: string; lotteryNumber: number }>;
+        const lotteryNumbers = shuffleArray(Array.from({ length: maxTeams }, (_, i) => i + 1))
+            .slice(0, teamsToInclude.length);
+
+        if (orderType === 'manual') {
+            if (!options?.manualOrder || options.manualOrder.length === 0) {
+                return { success: false, error: 'Manual order requires manualOrder array' };
+            }
+            // Use the provided order directly
+            orderedTeams = options.manualOrder.map((teamId, idx) => {
+                const team = teamsToInclude.find(t => t.id === teamId);
+                if (!team) throw new Error(`Team ${teamId} not found in participating teams`);
+                return { ...team, lotteryNumber: lotteryNumbers[idx] };
+            });
+
+        } else if (orderType === 'random') {
+            const shuffled = shuffleArray(teamsToInclude);
+            orderedTeams = shuffled.map((team, idx) => ({
+                ...team,
+                lotteryNumber: lotteryNumbers[idx],
+            }));
+
+        } else {
+            // previous_season — worst record picks first
+            const { data: previousSeason } = await supabase
+                .from('seasons')
+                .select('id, season_name')
+                .eq('season_number', targetSeason.season_number - 1)
+                .single();
+
+            let standingsMap = new Map<string, { win_pct: number }>();
+
+            if (previousSeason) {
+                // Try team_season_stats first (more detailed)
+                const { standings } = await getSeasonStandingsFromStats(previousSeason.id);
+                if (standings.length > 0) {
+                    standings.forEach(s => standingsMap.set(s.team_id, { win_pct: s.win_pct }));
+                } else {
+                    // Fallback to matches table (legacy)
+                    const { standings: legacyStandings } = await getSeasonStandings(previousSeason.id);
+                    legacyStandings.forEach(s => standingsMap.set(s.team_id, { win_pct: s.win_pct }));
+                }
+            }
+
+            const teamsWithStats = teamsToInclude.map((team, idx) => ({
+                ...team,
+                win_pct: standingsMap.get(team.id)?.win_pct ?? 0,
+                lotteryNumber: lotteryNumbers[idx],
+            }));
+
+            // Sort worst first; lottery tiebreaker
+            teamsWithStats.sort((a, b) => {
+                if (a.win_pct !== b.win_pct) return a.win_pct - b.win_pct;
+                return a.lotteryNumber - b.lotteryNumber;
+            });
+
+            orderedTeams = teamsWithStats;
+        }
+
+        // Determine which teams had lottery tiebreakers
+        const winPctGroups = new Map<number, number>();
+        if (orderType === 'previous_season') {
+            orderedTeams.forEach(t => {
+                const wp = (t as typeof t & { win_pct?: number }).win_pct ?? 0;
+                winPctGroups.set(wp, (winPctGroups.get(wp) ?? 0) + 1);
+            });
+        }
+
+        const insertRows = orderedTeams.map((team, idx) => ({
+            season_id: seasonId,
+            team_id: team.id,
+            pick_position: idx + 1,
+            previous_season_wins: 0,
+            previous_season_losses: 0,
+            previous_season_win_pct: (team as typeof team & { win_pct?: number }).win_pct ?? 0,
+            lottery_number: team.lotteryNumber,
+            is_lottery_winner: (winPctGroups.get((team as typeof team & { win_pct?: number }).win_pct ?? 0) ?? 0) > 1,
+        }));
+
+        const { data: inserted, error: insertError } = await supabase
+            .from('draft_order')
+            .insert(insertRows)
+            .select('*, team:teams(id, name, emoji)');
+
+        if (insertError) return { success: false, error: insertError.message };
+
+        const modeLabel = orderType === 'manual' ? 'manual order'
+            : orderType === 'random' ? 'random lottery'
+            : 'previous season standings';
+
+        return {
+            success: true,
+            order: inserted ?? [],
+            message: `Draft order generated for ${targetSeason.season_name} using ${modeLabel}. ${orderedTeams.length} teams.`,
+        };
+
+    } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'Unexpected error' };
     }
-
-    const { data: previousSeason } = await supabase
-      .from("seasons")
-      .select("id, season_number, season_name")
-      .eq("season_number", targetSeason.season_number - 1)
-      .single();
-
-    const { data: teams, error: teamsError } = await supabase
-      .from("teams")
-      .select("id, name, emoji")
-      .order("name");
-
-    if (teamsError || !teams || teams.length === 0) {
-      return { success: false, error: "No teams found" };
-    }
-
-    const { settings } = await getDraftSettings();
-    const maxTeams = parseInt(settings.max_teams || String(teams.length), 10);
-
-    let standings: SeasonStanding[];
-    if (previousSeason) {
-      const { standings: prevStandings, error: standingsError } =
-        await getSeasonStandings(previousSeason.id);
-      if (standingsError) {
-        return { success: false, error: `Failed to get previous season standings: ${standingsError}` };
-      }
-      standings = prevStandings;
-    } else {
-      standings = teams.map((team: { id: string; name: string; emoji: string }) => ({
-        team_id: team.id,
-        team_name: team.name,
-        emoji: team.emoji,
-        wins: 0,
-        losses: 0,
-        win_pct: 0,
-      }));
-    }
-
-    const standingsMap = new Map<string, SeasonStanding>();
-    standings.forEach((s) => standingsMap.set(s.team_id, s));
-
-    const lotteryNumbers = shuffleArray(
-      Array.from({ length: maxTeams }, (_, i) => i + 1)
-    ).slice(0, teams.length);
-
-    const teamEntries = teams.map((team: { id: string; name: string; emoji: string }, index: number) => {
-      const standing = standingsMap.get(team.id) || {
-        wins: 0,
-        losses: 0,
-        win_pct: 0,
-      };
-      return {
-        team_id: team.id,
-        team_name: team.name,
-        emoji: team.emoji,
-        wins: standing.wins,
-        losses: standing.losses,
-        win_pct: standing.win_pct,
-        lottery_number: lotteryNumbers[index],
-      };
-    });
-
-    teamEntries.sort((a, b) => {
-      if (a.win_pct !== b.win_pct) {
-        return a.win_pct - b.win_pct;
-      }
-      return a.lottery_number - b.lottery_number;
-    });
-
-    const winPctGroups = new Map<number, number>();
-    teamEntries.forEach((entry) => {
-      winPctGroups.set(entry.win_pct, (winPctGroups.get(entry.win_pct) || 0) + 1);
-    });
-
-    const insertRows = teamEntries.map((entry, index) => ({
-      season_id: seasonId,
-      team_id: entry.team_id,
-      pick_position: index + 1,
-      previous_season_wins: entry.wins,
-      previous_season_losses: entry.losses,
-      previous_season_win_pct: entry.win_pct,
-      lottery_number: entry.lottery_number,
-      is_lottery_winner: (winPctGroups.get(entry.win_pct) || 0) > 1,
-    }));
-
-    const { data: inserted, error: insertError } = await supabase
-      .from("draft_order")
-      .insert(insertRows)
-      .select(`*, team:teams(id, name, emoji)`);
-
-    if (insertError) {
-      console.error("Error inserting draft order:", insertError);
-      return { success: false, error: `Failed to save draft order: ${insertError.message}` };
-    }
-
-    const previousSeasonName = previousSeason
-      ? previousSeason.season_name
-      : "none (Season 1)";
-
-    return {
-      success: true,
-      order: inserted || [],
-      message: `Draft order generated for ${targetSeason.season_name} based on ${previousSeasonName} standings. ${teamEntries.length} teams ordered.`,
-    };
-  } catch (error) {
-    console.error("Unexpected error generating draft order:", error);
-    return { success: false, error: "An unexpected error occurred" };
-  }
 }
 
 export async function regenerateDraftOrder(
-  seasonId: string
-): Promise<{
-  success: boolean;
-  order?: DraftOrderEntry[];
-  message?: string;
-  error?: string;
-}> {
-  try {
-    const supabase = await createServerClient();
-    const admin = await verifyAdmin(supabase);
-    if (!admin.authorized) {
-      return { success: false, error: admin.error };
+    seasonId: string,
+    options?: {
+        orderType?: DraftOrderType;
+        teamIds?: string[];
+        manualOrder?: string[];
     }
+): Promise<{ success: boolean; order?: DraftOrderEntry[]; message?: string; error?: string }> {
+    try {
+        const supabase = await createServerClient();
+        const admin = await verifyAdmin(supabase);
+        if (!admin.authorized) return { success: false, error: admin.error };
 
-    const { error: deleteError } = await supabase
-      .from("draft_order")
-      .delete()
-      .eq("season_id", seasonId);
+        const { error: deleteError } = await supabase
+            .from('draft_order')
+            .delete()
+            .eq('season_id', seasonId);
 
-    if (deleteError) {
-      console.error("Error deleting existing draft order:", deleteError);
-      return { success: false, error: `Failed to clear existing order: ${deleteError.message}` };
+        if (deleteError) return { success: false, error: deleteError.message };
+
+        return generateDraftOrder(seasonId, options);
+    } catch (e) {
+        return { success: false, error: 'Unexpected error' };
     }
-
-    return generateDraftOrder(seasonId);
-  } catch (error) {
-    console.error("Unexpected error regenerating draft order:", error);
-    return { success: false, error: "An unexpected error occurred" };
-  }
 }
 
 // ============================================================================
