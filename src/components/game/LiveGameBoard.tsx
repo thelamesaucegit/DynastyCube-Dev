@@ -6,7 +6,7 @@ import { useMemo, useCallback } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import { useInteraction } from '@/hooks/useInteraction';
 import { useViewingPlayer, useOpponent, useStackCards, selectPriorityMode, useGhostCards, useRevealedLibraryTopCard } from '@/store/selectors';
-import { hand, getNextStep, StepShortNames, ClientPlayer as LiveClientPlayer } from '@/types';
+import { hand, getNextStep, StepShortNames } from '@/types';
 import { useResponsive, ResponsiveContextProvider } from '@/hooks/useResponsive';
 
 // Import all the original UI components it needs
@@ -21,6 +21,7 @@ import { DrawAnimations, DamageAnimations, RevealAnimations, CoinFlipAnimations,
 import { Battlefield, CardRow, StackDisplay, ZonePile } from './board';
 import { CardPreview } from './card';
 import { TargetingOverlay, ManaColorSelectionOverlay, LifeDisplay, ActiveEffectsBadges, ConcedeButton, FullscreenButton } from './overlay';
+import { ManaSymbol } from '../ui/ManaSymbols';
 import { styles } from './board/styles';
 
 interface LiveGameBoardProps {
@@ -89,8 +90,21 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
   const opponentRevealedTopCard = useRevealedLibraryTopCard(opponent?.playerId ?? null);
   const opponentGhostCards = useMemo(() => (opponentRevealedTopCard ? [opponentRevealedTopCard] : []), [opponentRevealedTopCard]);
 
-  const effectiveViewingPlayer = spectatingState ? (gameState?.players.find(p => p.playerId === spectatingState.player1Id) ?? null) : viewingPlayer;
-  const effectiveOpponent = spectatingState ? (gameState?.players.find(p => p.playerId === spectatingState.player2Id) ?? null) : opponent;
+  // --- THIS IS THE FIX ---
+  const effectiveViewingPlayer = useMemo(() => {
+    if (spectatingState && spectatingState.gameState) {
+      return spectatingState.gameState.players.find(p => p.playerId === spectatingState.player1Id) ?? null;
+    }
+    return viewingPlayer;
+  }, [spectatingState, viewingPlayer]);
+  
+  const effectiveOpponent = useMemo(() => {
+    if (spectatingState && spectatingState.gameState) {
+      return spectatingState.gameState.players.find(p => p.playerId === spectatingState.player2Id) ?? null;
+    }
+    return opponent;
+  }, [spectatingState, opponent]);
+  // --- END FIX ---
 
   if (!gameState || !playerId || !viewingPlayer) {
     return null;
