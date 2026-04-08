@@ -6,6 +6,8 @@ import React, { useMemo } from 'react';
 import type { ClientCard } from '@/types';
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
 import { getCardImageUrl } from '@/utils/cardImages';
+import { CardPreview } from '@/app/components/CardPreview'; // <-- IMPORT YOUR SITE'S PREVIEW
+import { ReplayGameCard } from '../card/ReplayGameCard'; // <-- Import our simple card
 import { ActiveEffectBadges } from '../card/CardOverlays';
 import { AbilityText } from '../../ui/ManaSymbols';
 import { useResponsiveContext, handleImageError } from './shared';
@@ -39,18 +41,24 @@ export function ReplayStackDisplay({ snapshot, cardDataMap }: ReplayStackDisplay
         </div>
         <div style={styles.stackItems}>
           {stackCards.map((card, index) => (
-            <div key={card.id} data-card-id={card.id} style={{ ...styles.stackItem, marginTop: index === 0 ? 0 : -stackImageHeight + cardOffset, zIndex: index + 1 }}>
-              <img
-                src={getCardImageUrl(card.name, cardDataMap?.[card.name]?.image_url ?? card.imageUri, 'small')}
-                alt={card.name}
-                style={{ ...styles.stackItemImage, width: stackImageWidth, height: stackImageHeight }}
-                title={card.name}
-                onError={(e) => handleImageError(e, card.name, 'small')}
+            const cardImageData = cardDataMap[card.name];
+            return (
+              <CardPreview
+                key={card.id}
+                card={{
+                  card_name: card.name,
+                  image_url: cardImageData?.image_url,
+                  oldest_image_url: cardImageData?.oldest_image_url,
+                }}
+              >
+                <div style={{ ...styles.stackItem, marginTop: index === 0 ? 0 : -stackImageHeight + cardOffset, zIndex: index + 1 }}>
+                  <img src={getCardImageUrl(card.name, cardImageData?.image_url ?? card.imageUri, 'small')} alt={card.name} style={{ ...styles.stackItemImage, width: stackImageWidth, height: stackImageHeight }} title={card.name} onError={(e) => handleImageError(e, card.name, 'small')} />
               />
               {card.chosenX != null && <div style={styles.stackXBadge}>X={card.chosenX}</div>}
               {card.wasKicked && <div style={styles.stackKickedBadge}>Kicked</div>}
               {card.activeEffects && card.activeEffects.length > 0 && <div style={styles.stackActiveEffects}><ActiveEffectBadges effects={card.activeEffects} /></div>}
             </div>
+          </CardPreview>
           ))}
           {topCard && <div style={{ color: '#e0d4f0', fontSize: responsive.isMobile ? 10 : 11, fontWeight: 600, marginTop: 4, textAlign: 'center', maxWidth: responsive.isMobile ? 80 : 100, lineHeight: 1.2 }}>{topCard.name}</div>}
         </div>
