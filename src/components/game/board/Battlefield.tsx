@@ -1,59 +1,81 @@
-import { useBattlefieldCards, groupCards, selectGameState, selectViewingPlayerId } from '@/store/selectors'
-import { useGameStore } from '@/store/gameStore'
-import { useResponsiveContext } from './shared'
-import { styles } from './styles'
-import { CardStack } from '../card'
-import { GameCard } from '../card'
-import { GroupedCard } from '@/store/selectors'
-import type { ClientCard } from '@/types'
+// src/components/game/board/Battlefield.tsx
 
-/**
- * Battlefield area with two rows per player, each using a 3-column grid:
- *
- *   Front row: [planeswalkers (right-aligned)] | [creatures (centered)] | [spacer]
- *   Back row:  [enchantments/artifacts (right-aligned)] | [lands (centered)] | [spacer]
- *
- * For player: front row on top (toward center), back row on bottom (near hand).
- * For opponent: back row on top (near hand), front row on bottom (toward center).
- */
-export function Battlefield({ isOpponent, spectatorMode = false }: { isOpponent: boolean; spectatorMode?: boolean }) {
-  const {
-    playerLands,
-    playerCreatures,
-    playerPlaneswalkers,
-    playerOther,
-    opponentLands,
-    opponentCreatures,
-    opponentPlaneswalkers,
-    opponentOther,
-  } = useBattlefieldCards()
-  const gameState = useGameStore(selectGameState)
-  const responsive = useResponsiveContext()
+"use client";
 
-  const lands = isOpponent ? opponentLands : playerLands
-  const creatures = isOpponent ? opponentCreatures : playerCreatures
-  const planeswalkers = isOpponent ? opponentPlaneswalkers : playerPlaneswalkers
-  const other = isOpponent ? opponentOther : playerOther
+import React, { useMemo } from 'react';
+import { useGameStore } from '@/store/gameStore';
+import { useBattlefieldCards, useOpponent, useViewingPlayer } from '@/store/selectors';
+import { useResponsiveContext } from './shared';
+import { styles } from './styles';
+import { CardStack } from '../card';
+import { GameCard } from '../card';
+import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
+import type { ClientCard, GroupedCard } from '@/types';
 
-  // Group identical lands, display creatures/planeswalkers/other individually
-  const groupedLands = groupCards(lands)
-  const toSingles = (cards: typeof creatures) => cards.map((card) => ({
-    card,
-    count: 1,
-    cardIds: [card.id] as const,
-    cards: [card] as const,
-  }))
-  const groupedCreatures = toSingles(creatures)
-  const groupedPlaneswalkers = toSingles(planeswalkers)
-  const groupedOther = toSingles(other)
+// Helper function to group cards by name
+function groupCards(cards: readonly ClientCard[]): GroupedCard[] {
+    const groups: Record<string, ClientCard[]> = {};
+    for (const card of cards) {
+        if (!groups[card.name]) { groups[card.name] = []; }
+        groups[card.name]!.push(card);
+    }
+    return Object.values(groups).map((cardGroup) => ({
+        card: cardGroup[0]!,
+        count: cardGroup.length,
+        cardIds: cardGroup.map(c => c.id),
+        cards: cardGroup,
+    }));
+}
 
-  // Resolve attachment cards for a permanent
+// --- UPDATED PROPS ---
+interface BattlefieldProps {
+  isOpponent: boolean;
+  spectatorMode?: boolean;
+  snapshot?: SpectatorStateUpdate;
+  cardDataMap?: Record<string, ReplayCardData>;
+}
+
+export function Battlefield({ isOpponent, spectatorMode, snapshot, cardDataMap }: BattlefieldProps) {
+  const responsive = useResponsiveContext();
+  const getAttachmentsForCard = (cardId: string) => useGameStore.getState().getAttachmentsForCard(cardId);
+  const getLinkedExileForCard = (cardId: string) => useGameStore.getState().getLinkedExileForCard(cardId);
+
+  // --- DATA DERIVATION LOGIC ---
+  const { lands, creatures, planeswalkers, other } = useMemo(() => {
+    if (spectatorMode && snapshot) {
+      // REPLAY MODE: Derive from snapshot
+      const playerId = isOpponent ? snapshot.player2Id : snapshot.player1Id;
+      const zone = snapshot.gameState.zones.find(z => z.zoneId.zoneType === 'Battlefield' && z.zoneId.ownerId === playerId);
+      const battlefieldCards = zone ? zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [];
+      
+      const lands = battlefieldCards.filter(c => c.cardTypes.includes('Land'));
+      const creatures = battlefieldCards.filter(c => c.cardTypes.includes('Creature'));
+      const planeswalkers = battlefieldCards.filter(c => c.cardTypes.includes('Planeswalker'));
+      const other = battlefieldCards.filter(c => !c.cardTypes.includes('Land') && !c.cardTypes.includes('Creature') && !c.cardTypes.includes('Planeswalker'));
+      return { lands, creatures, planeswalkers, other };
+    } else {
+      // LIVE MODE: Use existing hooks
+      const liveCards = useBattlefieldCards(isOpponent);
+      const lands = liveCards.filter(c => c.cardTypes.includes('Land'));
+      const creatures = liveCards.filter(c => c.cardTypes.includes('Creature'));
+      const planeswalkers = liveCards.filter(c => c.cardTypes.includes('Planeswalker'));
+      const other = liveCards.filter(c => !c.cardTypes.includes('Land') && !c.cardTypes.includes('Creature') && !c.cardTypes.includes('Planeswalker'));
+      return { lands, creatures, planeswalkers, other };
+    }
+  }, [snapshot, isOpponent, spectatorMode]);
+
+  const groupedLands = useMemo(() => groupCards(lands), [lands]);
+  const toSingles = (cards: readonly ClientCard[]) => cards.map((card) => ({ card, count: 1, cardIds: [card.id] as const, cards: [card] as const }));
+  const groupedCreatures = useMemo(() => toSingles(creatures), [creatures]);
+  const groupedPlaneswalkers = useMemo(() => toSingles(planeswalkers), [planeswalkers]);
+  const groupedOther = useMemo(() => toSingles(other), [other]);
+
   const getAttachments = (card: ClientCard): ClientCard[] => {
-    if (!gameState || card.attachments.length === 0) return []
-    return card.attachments
-      .map((id) => gameState.cards[id])
-      .filter((c): c is ClientCard => c != null)
-  }
+      if (snapshot) {
+        return Object.values(snapshot.gameState.cards).filter(c => c.attachedTo === card.id);
+      }
+      return getAttachmentsForCard(card.id);
+  };
 
   // Resolve linked exile cards for a permanent (e.g., Suspension Field exiling a creature)
   const getLinkedExile = (card: ClientCard): ClientCard[] => {
