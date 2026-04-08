@@ -1,3 +1,5 @@
+//src/components/game/overlay/TargetingOverlay.tsx
+
 import React from 'react'
 import { useGameStore } from '@/store/gameStore'
 import type { ClientCard, EntityId } from '@/types'

@@ -27,7 +27,7 @@ import { StackDisplay } from './board/StackZone';
 import { ReplayStackDisplay } from './board/ReplayStackZone';
 import { CardRow } from './board/HandZone';
 import { TargetingArrows } from '../targeting/TargetingArrows';
-import { ReplayTargetingArrows } from '../targeting/ReplayTargetingArrows'; // <-- IMPORT THE NEW COMPONENT
+import { ReplayTargetingArrows } from '../targeting/ReplayTargetingArrows';
 
 interface GameBoardProps {
   spectatorMode?: boolean;
@@ -111,10 +111,7 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
                             <CardRow zoneId={hand(entityId(effectiveViewingPlayer.playerId))} faceDown={true} small={true} interactive={false} snapshot={snapshot} cardDataMap={cardDataMap} />
                         </div>
                         
-                        {/* v-v-v-v- THIS IS THE FIX v-v-v-v- */}
                         <ReplayTargetingArrows snapshot={snapshot} />
-                        {/* ^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^ */}
-                        
                         <CardPreview cardDataMap={cardDataMap} />
                         <GameLog snapshot={snapshot} />
                     </>
