@@ -1,3 +1,6 @@
+//src/components/animations/RevealAnimations.tsx
+
+
 import { useEffect, useState, useCallback } from 'react'
 import { useGameStore, type RevealAnimation } from '@/store/gameStore'
 import { useResponsive } from '@/hooks/useResponsive'
