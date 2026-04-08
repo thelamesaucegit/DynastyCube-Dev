@@ -63,7 +63,7 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
                 
                 {/* Opponent's  */}
                 <div data-zone="opponent-" style={{ position: 'fixed', top: topOffset, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }}>
-                    <HandFan
+                    <CardRow
                         zoneId={hand(entityId(effectiveOpponent.playerId))}
                         faceDown small inverted
                         snapshot={snapshot}
@@ -123,7 +123,7 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
                 
                 {/* Player's Hand */}
                 <div data-zone="hand" style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }}>
-                    <HandFan
+                    <CardRow
                         zoneId={hand(entityId(effectiveViewingPlayer.playerId))}
                         faceDown={spectatorMode}
                         small={spectatorMode}
