@@ -147,4 +147,66 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
                         )}
                         <div style={{ ...styles.opponentArea, marginTop: -responsive.containerPadding + responsive.sectionGap, paddingTop: responsive.smallCardHeight + topOffset + responsive.handBattlefieldGap }}>
                             <div style={styles.playerRowWithZones}>
-                
+                                <div style={styles.playerMainArea}><Battlefield isOpponent={true} /></div>
+                                {effectiveOpponent && <ZonePile player={effectiveOpponent} isOpponent={true} />}
+                            </div>
+                        </div>
+                        <div style={{ ...styles.centerArea, gap: responsive.isMobile ? 6 : 16 }}>
+                            {effectiveOpponent && (
+                                <div style={styles.centerLifeSection}>
+                                    <LifeDisplay life={effectiveOpponent.life} playerId={effectiveOpponent.playerId} playerName={effectiveOpponent.name} />
+                                    {!responsive.isMobile && <span style={{ ...styles.playerName, fontSize: responsive.fontSize.small }}>{effectiveOpponent.name}</span>}
+                                    {!responsive.isMobile && <ActiveEffectsBadges effects={effectiveOpponent.activeEffects} />}
+                                    {!responsive.isMobile && effectiveOpponent.manaPool && <ManaPool manaPool={effectiveOpponent.manaPool} />}
+                                </div>
+                            )}
+                            {liveGameState.gameState && (
+                                <StepStrip
+                                    phase={liveGameState.gameState.currentPhase}
+                                    step={liveGameState.gameState.currentStep}
+                                    turnNumber={liveGameState.gameState.turnNumber}
+                                    isActivePlayer={isMyTurn}
+                                    hasPriority={liveGameState.hasPriority}
+                                    priorityMode={liveGameState.priorityMode}
+                                    stopOverrides={liveGameState.stopOverrides}
+                                    onToggleStop={liveGameState.toggleStopOverride}
+                                />
+                            )}
+                            {effectiveViewingPlayer && (
+                                <div style={styles.centerLifeSection}>
+                                    <LifeDisplay life={effectiveViewingPlayer.life} isPlayer playerId={effectiveViewingPlayer.playerId} playerName={effectiveViewingPlayer.name} />
+                                    {!responsive.isMobile && <span style={{ ...styles.playerName, fontSize: responsive.fontSize.small }}>{effectiveViewingPlayer.name}</span>}
+                                    {!responsive.isMobile && <ActiveEffectsBadges effects={effectiveViewingPlayer.activeEffects} />}
+                                    {!responsive.isMobile && effectiveViewingPlayer.manaPool && <ManaPool manaPool={effectiveViewingPlayer.manaPool} />}
+                                </div>
+                            )}
+                        </div>
+                        <StackDisplay />
+                        <div style={{ ...styles.playerArea, marginBottom: -responsive.containerPadding + responsive.sectionGap, paddingBottom: responsive.cardHeight + responsive.handBattlefieldGap }}>
+                            <div style={styles.playerRowWithZones}>
+                                <div style={styles.playerMainArea}><Battlefield isOpponent={false} /></div>
+                                {effectiveViewingPlayer && <ZonePile player={effectiveViewingPlayer} />}
+                            </div>
+                        </div>
+                        <div data-zone="hand" style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }}>
+                            {liveGameState.playerId && <CardRow zoneId={hand(liveGameState.playerId)} interactive ghostCards={liveGameState.getGhostCards()} />}
+                        </div>
+                        <TargetingArrows />
+                        <LiveCardPreview />
+                        <GameLog />
+                        <ActionMenu />
+                        <TargetingOverlay />
+                        <ManaColorSelectionOverlay />
+                        <CombatArrows />
+                        <DraggedCardOverlay />
+                        <DrawAnimations />
+                        <DamageAnimations />
+                        <RevealAnimations />
+                        <CoinFlipAnimations />
+                        <TargetReselectedAnimations />
+                    </>
+                )}
+            </div>
+        </ResponsiveContextProvider>
+    );
+}
