@@ -88,7 +88,7 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
                                 isSpectator={true}
                                 // Provide dummy values for the missing required props
                                 hasPriority={false}
-                                priorityMode={'auto'}
+                                priorityMode={'ownTurn'}
                                 stopOverrides={{}}
                                 onToggleStop={() => {}}
                             />
