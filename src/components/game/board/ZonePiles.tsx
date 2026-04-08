@@ -12,7 +12,6 @@ import { CARD_BACK_IMAGE_URL, getCardImageUrl } from '@/utils/cardImages';
 import { useResponsiveContext, handleImageError } from './shared';
 import { styles } from './styles';
 
-// --- UPDATED PROPS ---
 interface ZonePileProps {
   player: ClientPlayer;
   isOpponent?: boolean;
@@ -24,7 +23,7 @@ interface ZoneBrowserProps {
   cards: readonly ClientCard[];
   onClose: () => void;
   cardDataMap?: Record<string, ReplayCardData>;
-  zoneName: 'Graveyard' | 'Exile'; // To differentiate styling
+  zoneName: 'Graveyard' | 'Exile';
 }
 
 export function ZonePile({ player, isOpponent = false, snapshot, cardDataMap = {} }: ZonePileProps) {
@@ -32,6 +31,14 @@ export function ZonePile({ player, isOpponent = false, snapshot, cardDataMap = {
   const [browsingGraveyard, setBrowsingGraveyard] = useState(false);
   const [browsingExile, setBrowsingExile] = useState(false);
   
+  // --- THIS IS THE FIX ---
+  // All hooks are called at the top level, unconditionally.
+  const liveGraveyardCards = useZoneCards(graveyard(player.playerId));
+  const liveExileCards = useZoneCards(exile(player.playerId));
+  const liveStackCards = useStackCards();
+  const hoverCard = useGameStore((state) => state.hoverCard);
+  // --- END FIX ---
+
   const { librarySize, graveyardCards, exileCards, targetedGraveyardCards } = useMemo(() => {
     if (snapshot) {
       const getZoneData = (type: 'Graveyard' | 'Exile' | 'Library') => {
@@ -56,16 +63,13 @@ export function ZonePile({ player, isOpponent = false, snapshot, cardDataMap = {
       return { librarySize: libData.size, graveyardCards: gyData.cards, exileCards: exData.cards, targetedGraveyardCards: targetedGY };
     } 
     
-    const liveGY = useZoneCards(graveyard(player.playerId));
-    const liveExile = useZoneCards(exile(player.playerId));
-    const liveStack = useStackCards();
-    const targeted = liveStack.flatMap(sc => sc.targets ?? []).filter(t => t.type === 'Card').map(t => liveGY.find(c => c.id === t.cardId)).filter((c): c is ClientCard => !!c);
-    return { librarySize: player.librarySize, graveyardCards: liveGY, exileCards: liveExile, targetedGraveyardCards: targeted };
-  }, [snapshot, player, useZoneCards, useStackCards]);
+    // The hooks' results are *used* inside the memo, but the hooks themselves are called outside.
+    const targeted = liveStackCards.flatMap(sc => sc.targets ?? []).filter(t => t.type === 'Card').map(t => liveGraveyardCards.find(c => c.id === t.cardId)).filter((c): c is ClientCard => !!c);
+    return { librarySize: player.librarySize, graveyardCards: liveGraveyardCards, exileCards: liveExileCards, targetedGraveyardCards: targeted };
+  }, [snapshot, player.playerId, player.librarySize, liveGraveyardCards, liveExileCards, liveStackCards]);
 
   const topGraveyardCard = graveyardCards[graveyardCards.length - 1];
   const topExileCard = exileCards[exileCards.length - 1];
-  const hoverCard = useGameStore((state) => state.hoverCard);
 
   const pileStyle = {
     width: responsive.pileWidth,
@@ -165,7 +169,7 @@ function ZoneBrowser({ zoneName, cards, onClose, cardDataMap }: ZoneBrowserProps
             </div>
           ))}
         </div>
-        <div style={{ display: 'flex', gap: 16, marginTop: 16 }}>
+        <div style={{ display: 'flex', gap: 16, marginTop: 16, justifyContent: 'center' }}>
           <button onClick={() => setMinimized(true)} style={{...restoreButtonStyle, position: 'relative', bottom: 'auto', left: 'auto', transform: 'none' }}>View Battlefield</button>
           <button onClick={onClose} style={{ padding: responsive.isMobile ? '10px 20px' : '12px 28px', fontSize: responsive.fontSize.normal, backgroundColor: '#333', color: '#aaa', border: '1px solid #555', borderRadius: 8, cursor: 'pointer' }}>Close</button>
         </div>
