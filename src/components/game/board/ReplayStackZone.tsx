@@ -6,12 +6,11 @@ import React, { useMemo } from 'react';
 import type { ClientCard } from '@/types';
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
 import { getCardImageUrl } from '@/utils/cardImages';
-import { CardPreview } from '@/app/components/CardPreview'; // <-- IMPORT YOUR SITE'S PREVIEW
-import { ReplayGameCard } from '../card/ReplayGameCard'; // <-- Import our simple card
 import { ActiveEffectBadges } from '../card/CardOverlays';
 import { AbilityText } from '../../ui/ManaSymbols';
 import { useResponsiveContext, handleImageError } from './shared';
 import { styles } from './styles';
+import { CardPreview } from '@/app/components/CardPreview'; // <-- IMPORT YOUR SITE'S PREVIEW
 
 interface ReplayStackDisplayProps {
   snapshot: SpectatorStateUpdate;
@@ -40,8 +39,8 @@ export function ReplayStackDisplay({ snapshot, cardDataMap }: ReplayStackDisplay
           Stack ({stackCards.length})
         </div>
         <div style={styles.stackItems}>
-          {stackCards.map((card, index) => (
-            const cardImageData = cardDataMap[card.name];
+          {stackCards.map((card, index) => {
+            const cardImageData = cardDataMap?.[card.name];
             return (
               <CardPreview
                 key={card.id}
@@ -51,15 +50,21 @@ export function ReplayStackDisplay({ snapshot, cardDataMap }: ReplayStackDisplay
                   oldest_image_url: cardImageData?.oldest_image_url,
                 }}
               >
-                <div style={{ ...styles.stackItem, marginTop: index === 0 ? 0 : -stackImageHeight + cardOffset, zIndex: index + 1 }}>
-                  <img src={getCardImageUrl(card.name, cardImageData?.image_url ?? card.imageUri, 'small')} alt={card.name} style={{ ...styles.stackItemImage, width: stackImageWidth, height: stackImageHeight }} title={card.name} onError={(e) => handleImageError(e, card.name, 'small')} />
-              />
-              {card.chosenX != null && <div style={styles.stackXBadge}>X={card.chosenX}</div>}
-              {card.wasKicked && <div style={styles.stackKickedBadge}>Kicked</div>}
-              {card.activeEffects && card.activeEffects.length > 0 && <div style={styles.stackActiveEffects}><ActiveEffectBadges effects={card.activeEffects} /></div>}
-            </div>
-          </CardPreview>
-          ))}
+                <div data-card-id={card.id} style={{ ...styles.stackItem, marginTop: index === 0 ? 0 : -stackImageHeight + cardOffset, zIndex: index + 1 }}>
+                  <img
+                    src={getCardImageUrl(card.name, cardImageData?.image_url ?? card.imageUri, 'small')}
+                    alt={card.name}
+                    style={{ ...styles.stackItemImage, width: stackImageWidth, height: stackImageHeight }}
+                    title={card.name}
+                    onError={(e) => handleImageError(e, card.name, 'small')}
+                  />
+                  {card.chosenX != null && <div style={styles.stackXBadge}>X={card.chosenX}</div>}
+                  {card.wasKicked && <div style={styles.stackKickedBadge}>Kicked</div>}
+                  {card.activeEffects && card.activeEffects.length > 0 && <div style={styles.stackActiveEffects}><ActiveEffectBadges effects={card.activeEffects} /></div>}
+                </div>
+              </CardPreview>
+            );
+          })}
           {topCard && <div style={{ color: '#e0d4f0', fontSize: responsive.isMobile ? 10 : 11, fontWeight: 600, marginTop: 4, textAlign: 'center', maxWidth: responsive.isMobile ? 80 : 100, lineHeight: 1.2 }}>{topCard.name}</div>}
         </div>
       </div>
@@ -70,7 +75,7 @@ export function ReplayStackDisplay({ snapshot, cardDataMap }: ReplayStackDisplay
         if (!displayText) return null;
         return (
           <div style={{ padding: '6px 10px', backgroundColor: 'rgba(30, 18, 50, 0.85)', borderRadius: 6, border: '1px solid rgba(150, 100, 200, 0.3)', maxWidth: 160, boxShadow: '0 2px 8px rgba(0, 0, 0, 0.4)' }}>
-            <div style={{ color: '#b8a8cc', fontSize: 9, lineHeight: 1.35, textAlign: 'center', whiteSpace: 'pre-line', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 5, WebkitBoxOrient: 'vertical' }}>
+            <div style={{ color: '#b8a8cc', fontSize: 9, lineHeight: 1.35, textAlign: 'center', whiteSpace: 'pre-line', overflow: 'hidden', display: '-webkit-box', WebkitBoxOrient: 'vertical' }}>
               <AbilityText text={displayText} size={10} />
             </div>
           </div>
