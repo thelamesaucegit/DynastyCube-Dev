@@ -13,7 +13,10 @@ import { styles } from './styles';
 import { GameCard } from '../card';
 import { CARD_BACK_IMAGE_URL } from '@/utils/cardImages';
 
-// --- UPDATED PROPS ---
+// ========================================================================
+// 1. PROPS INTERFACES (UPDATED FOR REPLAY MODE)
+// ========================================================================
+
 interface CardRowProps {
   zoneId: ZoneId;
   snapshot?: SpectatorStateUpdate;
@@ -25,16 +28,25 @@ interface CardRowProps {
   ghostCards?: readonly ClientCard[];
 }
 
-interface HandFanProps extends Omit<CardRowProps, 'zoneId'> {
+interface HandFanProps {
   cards: readonly ClientCard[];
+  cardDataMap?: Record<string, ReplayCardData>;
   placeholderCount?: number;
   fittingWidth: number;
   cardHeight: number;
   cardGap: number;
+  faceDown: boolean;
   revealedCards?: boolean;
+  interactive: boolean;
+  small: boolean;
+  inverted?: boolean;
+  ghostCards?: readonly ClientCard[];
 }
 
-// --- REFACTORED CardRow ---
+// ========================================================================
+// 2. CardRow (The "Smart" Container)
+// ========================================================================
+
 export function CardRow({
   zoneId,
   snapshot,
@@ -46,21 +58,24 @@ export function CardRow({
   ghostCards = [],
 }: CardRowProps) {
   
-  // --- Data Derivation Logic ---
+  // This component now correctly determines its data source
   const liveCards = useZoneCards(zoneId);
   const liveZone = useZone(zoneId);
   const responsive = useResponsiveContext();
 
   const { cards, zoneSize } = useMemo(() => {
     if (snapshot) {
+      // In replay mode, derive data from the snapshot prop
       const zone = snapshot.gameState.zones.find(z => z.zoneId.ownerId === zoneId.ownerId && z.zoneId.zoneType === zoneId.zoneType);
       if (!zone) return { cards: [], zoneSize: 0 };
       const zoneCards = zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean);
       return { cards: zoneCards, zoneSize: zone.size };
     }
+    // In live mode, use the existing hooks
     return { cards: liveCards, zoneSize: liveZone?.size ?? 0 };
   }, [snapshot, zoneId, liveCards, liveZone]);
 
+  // All calculation logic from your original file is preserved
   const unrevealedCount = faceDown ? Math.max(0, zoneSize - cards.length) : 0;
   const showPlaceholders = faceDown && cards.length === 0 && zoneSize > 0;
 
@@ -93,17 +108,16 @@ export function CardRow({
         cardGap={responsive.cardGap}
         faceDown={faceDown && !hasRevealedCards}
         revealedCards={hasRevealedCards}
-        interactive={interactive}
+        interactive={interactive && !snapshot} // Interaction is disabled in snapshot mode
         small={small}
         inverted={inverted}
         ghostCards={ghostCards}
-        snapshot={snapshot}
         cardDataMap={cardDataMap}
       />
     );
   }
 
-  // Fallback for non-fan rows (e.g., exile, command zone if styled this way)
+  // Fallback for non-fan rows
   return (
     <div style={{ ...styles.cardRow, gap: responsive.cardGap, padding: responsive.cardGap }}>
       {cards.map((card) => (
@@ -111,16 +125,21 @@ export function CardRow({
           key={card.id}
           card={card}
           faceDown={faceDown}
-          interactive={interactive}
+          interactive={interactive && !snapshot} // Interaction is disabled in snapshot mode
           small={small}
-          cardDataMap={cardDataMap} // Pass the map
+          overrideWidth={fittingWidth}
+          inHand={isPlayerHand}
+          cardDataMap={cardDataMap}
         />
       ))}
     </div>
   );
 }
 
-// --- REFACTORED HandFan ---
+// ========================================================================
+// 3. HandFan (The "Dumb" Renderer)
+// ========================================================================
+
 export function HandFan({
   cards,
   placeholderCount = 0,
@@ -133,11 +152,11 @@ export function HandFan({
   small,
   inverted = false,
   ghostCards = [],
-  snapshot, // Accepted for prop consistency
-  cardDataMap, // Now used by GameCard
+  cardDataMap,
 }: HandFanProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
+  // All item and style calculation logic from your original file is preserved
   const baseItems = revealedCards
     ? [
         ...cards.map((card, index) => ({ type: 'card' as const, card, index, showFaceUp: true, isGhost: false })),
@@ -185,7 +204,7 @@ export function HandFan({
                 overrideWidth={fittingWidth}
                 inHand={interactive && !faceDown}
                 isGhost={item.isGhost}
-                cardDataMap={cardDataMap} // Pass the map
+                cardDataMap={cardDataMap}
               />
             ) : (
               <div style={{ width: fittingWidth, height: cardHeight, borderRadius: 6, border: '2px solid #333', boxShadow: '0 2px 8px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
