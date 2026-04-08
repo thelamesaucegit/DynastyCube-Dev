@@ -89,7 +89,7 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
                                 // Provide dummy values for the missing required props
                                 hasPriority={false}
                                 priorityMode={'ownTurn'}
-                                stopOverrides={{}}
+                                stopOverrides={{ myTurnStops: [], opponentTurnStops: [] }}
                                 onToggleStop={() => {}}
                             />
                             {/* ^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^ */}
