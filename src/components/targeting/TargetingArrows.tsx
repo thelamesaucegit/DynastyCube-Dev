@@ -1,3 +1,5 @@
+//src/components/targeting/TargetingArrows.tsx
+
 import { useEffect, useState } from 'react'
 import { useGameStore } from '@/store/gameStore'
 import { useStackCards } from '@/store/selectors'
