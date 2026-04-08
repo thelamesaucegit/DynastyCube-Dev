@@ -404,7 +404,7 @@ export async function generateDraftOrder(
                 .eq('season_number', targetSeason.season_number - 1)
                 .single();
 
-            let standingsMap = new Map<string, { win_pct: number }>();
+const standingsMap = new Map<string, { win_pct: number }>();
 
             if (previousSeason) {
                 // Try team_season_stats first (more detailed)
