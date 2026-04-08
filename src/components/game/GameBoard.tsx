@@ -57,36 +57,42 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
     // In spectator mode, this is just a fallback.
     const isMyTurn = !spectatorMode && snapshot?.gameState.activePlayerId === useGameStore.getState().playerId;
 
-    return (
+        return (
         <ResponsiveContextProvider value={responsive}>
             <div style={{ ...styles.container, padding: `0 ${responsive.containerPadding}px`, gap: responsive.sectionGap }}>
                 <FullscreenButton />
                 
                 {spectatorMode && snapshot && effectiveOpponent && effectiveViewingPlayer ? (
-                    // ===================================================
-                    // --- REPLAY MODE (uses Replay-prefixed components) ---
-                    // ===================================================
+                    // --- REPLAY MODE ---
                     <>
                         <div data-zone="opponent-hand" style={{ position: 'fixed', top: topOffset, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }}>
                             <CardRow zoneId={hand(entityId(effectiveOpponent.playerId))} faceDown small inverted snapshot={snapshot} cardDataMap={cardDataMap} />
                         </div>
-                        
-                        <div style={{...styles.spectatorNameLabel, position: 'fixed', top: topOffset + responsive.smallCardHeight + responsive.handBattlefieldGap + 8, left: 16 }}>
-                            {effectiveOpponent.name}
-                        </div>
+                        <div style={{...styles.spectatorNameLabel, position: 'fixed', top: topOffset + responsive.smallCardHeight + responsive.handBattlefieldGap + 8, left: 16 }}>{effectiveOpponent.name}</div>
                         
                         <div style={{ ...styles.opponentArea, marginTop: -responsive.containerPadding + responsive.sectionGap, paddingTop: responsive.smallCardHeight + topOffset + responsive.handBattlefieldGap }}>
                             <div style={styles.playerRowWithZones}>
-                                <div style={styles.playerMainArea}>
-                                    <ReplayBattlefield isOpponent={true} snapshot={snapshot} cardDataMap={cardDataMap} />
-                                </div>
+                                <div style={styles.playerMainArea}><ReplayBattlefield isOpponent={true} snapshot={snapshot} cardDataMap={cardDataMap} /></div>
                                 <ReplayZonePile player={effectiveOpponent} isOpponent={true} snapshot={snapshot} cardDataMap={cardDataMap} />
                             </div>
                         </div>
 
                         <div style={{ ...styles.centerArea, gap: responsive.isMobile ? 6 : 16 }}>
                             <div style={styles.centerLifeSection}><LifeDisplay life={effectiveOpponent.life} playerId={entityId(effectiveOpponent.playerId)} playerName={effectiveOpponent.name} spectatorMode={true} /></div>
-                            <StepStrip phase={snapshot.gameState.currentPhase} step={snapshot.gameState.currentStep} turnNumber={snapshot.gameState.turnNumber} isActivePlayer={false} isSpectator={true} />
+                            {/* v-v-v-v- THIS IS THE FIX v-v-v-v- */}
+                            <StepStrip
+                                phase={snapshot.gameState.currentPhase}
+                                step={snapshot.gameState.currentStep}
+                                turnNumber={snapshot.gameState.turnNumber}
+                                isActivePlayer={false}
+                                isSpectator={true}
+                                // Provide dummy values for the missing required props
+                                hasPriority={false}
+                                priorityMode={'auto'}
+                                stopOverrides={{}}
+                                onToggleStop={() => {}}
+                            />
+                            {/* ^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^ */}
                             <div style={styles.centerLifeSection}><LifeDisplay life={effectiveViewingPlayer.life} isPlayer playerId={entityId(effectiveViewingPlayer.playerId)} playerName={effectiveViewingPlayer.name} spectatorMode={true} /></div>
                         </div>
                         
@@ -94,16 +100,12 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
                         
                         <div style={{ ...styles.playerArea, marginBottom: -responsive.containerPadding + responsive.sectionGap, paddingBottom: responsive.smallCardHeight + responsive.handBattlefieldGap }}>
                             <div style={styles.playerRowWithZones}>
-                                <div style={styles.playerMainArea}>
-                                    <ReplayBattlefield isOpponent={false} snapshot={snapshot} cardDataMap={cardDataMap} />
-                                </div>
+                                <div style={styles.playerMainArea}><ReplayBattlefield isOpponent={false} snapshot={snapshot} cardDataMap={cardDataMap} /></div>
                                 <ReplayZonePile player={effectiveViewingPlayer} isOpponent={false} snapshot={snapshot} cardDataMap={cardDataMap} />
                             </div>
                         </div>
                         
-                        <div style={{...styles.spectatorNameLabel, position: 'fixed', bottom: responsive.smallCardHeight + responsive.handBattlefieldGap + 8, left: 16 }}>
-                            {effectiveViewingPlayer.name}
-                        </div>
+                        <div style={{...styles.spectatorNameLabel, position: 'fixed', bottom: responsive.smallCardHeight + responsive.handBattlefieldGap + 8, left: 16 }}>{effectiveViewingPlayer.name}</div>
                         
                         <div data-zone="hand" style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }}>
                             <CardRow zoneId={hand(entityId(effectiveViewingPlayer.playerId))} faceDown={true} small={true} interactive={false} snapshot={snapshot} cardDataMap={cardDataMap} />
