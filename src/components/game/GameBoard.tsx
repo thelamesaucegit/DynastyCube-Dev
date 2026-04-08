@@ -3,7 +3,8 @@
 "use client";
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { useGameStore } from '@/store/gameStore'
+import { useGameStore } from '@/store/gameStore';
+
 // --- Imports for Hooks and Context ---
 import { useSettings } from '@/contexts/SettingsContext';
 import { useResponsive, ResponsiveContextProvider } from '@/hooks/useResponsive';
@@ -12,8 +13,10 @@ import { hand, entityId, ClientPlayer as LiveClientPlayer } from '@/types';
 
 // --- Imports for UI Components ---
 import { StepStrip } from '../ui/StepStrip';
-import { TargetingArrows } from '../targeting/TargetingArrows';
 import { GameLog } from './GameLog';
+import { CardPreview } from './card';
+import { LifeDisplay, FullscreenButton } from './overlay';
+import { styles } from './board/styles';
 
 // --- Correctly import ALL component versions ---
 import { Battlefield } from './board/Battlefield';
@@ -23,10 +26,8 @@ import { ReplayZonePile } from './board/ReplayZonePiles';
 import { StackDisplay } from './board/StackZone';
 import { ReplayStackDisplay } from './board/ReplayStackZone';
 import { CardRow } from './board/HandZone';
-
-import { CardPreview } from './card';
-import { LifeDisplay, FullscreenButton } from './overlay';
-import { styles } from './board/styles';
+import { TargetingArrows } from '../targeting/TargetingArrows';
+import { ReplayTargetingArrows } from '../targeting/ReplayTargetingArrows'; // <-- IMPORT THE NEW COMPONENT
 
 interface GameBoardProps {
   spectatorMode?: boolean;
@@ -42,22 +43,24 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
         effectiveViewingPlayer,
         effectiveOpponent,
     } = useMemo(() => {
-        if (!snapshot) return { effectiveViewingPlayer: null, effectiveOpponent: null };
-        const p1 = snapshot.gameState.players.find(p => p.playerId === snapshot.player1Id);
-        const p2 = snapshot.gameState.players.find(p => p.playerId === snapshot.player2Id);
-        return { effectiveViewingPlayer: p1, effectiveOpponent: p2 };
-    }, [snapshot]);
+        if (spectatorMode && snapshot) {
+            const p1 = snapshot.gameState.players.find(p => p.playerId === snapshot.player1Id);
+            const p2 = snapshot.gameState.players.find(p => p.playerId === snapshot.player2Id);
+            return { effectiveViewingPlayer: p1, effectiveOpponent: p2 };
+        }
+        const livePlayer = useGameStore.getState().getViewingPlayer();
+        const liveOpponent = useGameStore.getState().getOpponent();
+        return { effectiveViewingPlayer: livePlayer, effectiveOpponent: liveOpponent };
+    }, [snapshot, spectatorMode]);
 
-    // Render Guard: In spectator mode, we must have snapshot data.
     if (spectatorMode && (!snapshot || !effectiveViewingPlayer || !effectiveOpponent)) {
         return <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>Loading replay data...</div>;
     }
 
-    // In live mode, the original components will pull from the store.
-    // In spectator mode, this is just a fallback.
-    const isMyTurn = !spectatorMode && snapshot?.gameState.activePlayerId === useGameStore.getState().playerId;
+    const liveGameState = useGameStore((state) => state.gameState);
+    const isMyTurn = !spectatorMode && liveGameState?.activePlayerId === useGameStore.getState().playerId;
 
-        return (
+    return (
         <ResponsiveContextProvider value={responsive}>
             <div style={{ ...styles.container, padding: `0 ${responsive.containerPadding}px`, gap: responsive.sectionGap }}>
                 <FullscreenButton />
@@ -79,20 +82,17 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
 
                         <div style={{ ...styles.centerArea, gap: responsive.isMobile ? 6 : 16 }}>
                             <div style={styles.centerLifeSection}><LifeDisplay life={effectiveOpponent.life} playerId={entityId(effectiveOpponent.playerId)} playerName={effectiveOpponent.name} spectatorMode={true} /></div>
-                            {/* v-v-v-v- THIS IS THE FIX v-v-v-v- */}
                             <StepStrip
                                 phase={snapshot.gameState.currentPhase}
                                 step={snapshot.gameState.currentStep}
                                 turnNumber={snapshot.gameState.turnNumber}
                                 isActivePlayer={false}
                                 isSpectator={true}
-                                // Provide dummy values for the missing required props
                                 hasPriority={false}
                                 priorityMode={'ownTurn'}
                                 stopOverrides={{ myTurnStops: [], opponentTurnStops: [] }}
                                 onToggleStop={() => {}}
                             />
-                            {/* ^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^ */}
                             <div style={styles.centerLifeSection}><LifeDisplay life={effectiveViewingPlayer.life} isPlayer playerId={entityId(effectiveViewingPlayer.playerId)} playerName={effectiveViewingPlayer.name} spectatorMode={true} /></div>
                         </div>
                         
@@ -111,14 +111,15 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
                             <CardRow zoneId={hand(entityId(effectiveViewingPlayer.playerId))} faceDown={true} small={true} interactive={false} snapshot={snapshot} cardDataMap={cardDataMap} />
                         </div>
                         
-                        <TargetingArrows snapshot={snapshot} />
+                        {/* v-v-v-v- THIS IS THE FIX v-v-v-v- */}
+                        <ReplayTargetingArrows snapshot={snapshot} />
+                        {/* ^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^ */}
+                        
                         <CardPreview cardDataMap={cardDataMap} />
                         <GameLog snapshot={snapshot} />
                     </>
                 ) : (
-                    // ===================================================
-                    // --- LIVE MODE (uses original components) ---
-                    // ===================================================
+                    // --- LIVE MODE ---
                     <>
                         <div data-zone="opponent-hand" style={{ position: 'fixed', top: topOffset, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }}>
                            {effectiveOpponent && <CardRow zoneId={hand(entityId(effectiveOpponent.playerId))} faceDown small inverted />}
@@ -135,7 +136,7 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
 
                         <div style={{ ...styles.centerArea, gap: responsive.isMobile ? 6 : 16 }}>
                             {effectiveOpponent && <div style={styles.centerLifeSection}><LifeDisplay life={effectiveOpponent.life} playerId={entityId(effectiveOpponent.playerId)} playerName={effectiveOpponent.name} /></div>}
-                            {snapshot && <StepStrip phase={snapshot.gameState.currentPhase} step={snapshot.gameState.currentStep} turnNumber={snapshot.gameState.turnNumber} isActivePlayer={isMyTurn} />}
+                            {liveGameState && <StepStrip phase={liveGameState.currentPhase} step={liveGameState.currentStep} turnNumber={liveGameState.turnNumber} isActivePlayer={isMyTurn} hasPriority={useGameStore.getState().hasPriority} priorityMode={useGameStore.getState().priorityMode} stopOverrides={useGameStore.getState().stopOverrides} onToggleStop={useGameStore.getState().toggleStopOverride} />}
                             {effectiveViewingPlayer && <div style={styles.centerLifeSection}><LifeDisplay life={effectiveViewingPlayer.life} isPlayer playerId={entityId(effectiveViewingPlayer.playerId)} playerName={effectiveViewingPlayer.name} /></div>}
                         </div>
                         
