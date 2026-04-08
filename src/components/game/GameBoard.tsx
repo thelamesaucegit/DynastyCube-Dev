@@ -24,7 +24,7 @@ import { CardRow } from './board/HandZone';
 import { TargetingArrows } from '../targeting/TargetingArrows';
 import { CombatArrows } from '../combat/CombatArrows';
 import { GameLog } from './GameLog';
-import { CardPreview as LiveCardPreview } from './card'; // Renamed to avoid conflict
+import { CardPreview as LiveCardPreview } from '@/app/components/CardPreview'; // Renamed to avoid conflict
 import { DrawAnimations } from '@/components/animations/DrawAnimations';
 import { DamageAnimations } from '@/components/animations/DamageAnimations';
 import { RevealAnimations } from '@/components/animations/RevealAnimations';
