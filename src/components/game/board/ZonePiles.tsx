@@ -24,6 +24,7 @@ interface ZoneBrowserProps {
   cards: readonly ClientCard[];
   onClose: () => void;
   cardDataMap?: Record<string, ReplayCardData>;
+  zoneName: 'Graveyard' | 'Exile'; // To differentiate styling
 }
 
 export function ZonePile({ player, isOpponent = false, snapshot, cardDataMap = {} }: ZonePileProps) {
@@ -31,16 +32,11 @@ export function ZonePile({ player, isOpponent = false, snapshot, cardDataMap = {
   const [browsingGraveyard, setBrowsingGraveyard] = useState(false);
   const [browsingExile, setBrowsingExile] = useState(false);
   
-  // --- DATA DERIVATION ---
   const { librarySize, graveyardCards, exileCards, targetedGraveyardCards } = useMemo(() => {
     if (snapshot) {
-      // REPLAY MODE
       const getZoneData = (type: 'Graveyard' | 'Exile' | 'Library') => {
         const zone = snapshot.gameState.zones.find(z => z.zoneId.zoneType === type && z.zoneId.ownerId === player.playerId);
-        return { 
-          cards: zone ? zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [],
-          size: zone?.size ?? 0,
-        };
+        return { cards: zone ? zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [], size: zone?.size ?? 0 };
       };
       const gyData = getZoneData('Graveyard');
       const exData = getZoneData('Exile');
@@ -50,8 +46,7 @@ export function ZonePile({ player, isOpponent = false, snapshot, cardDataMap = {
       const targetedIds = new Set<string>();
       if (stackZone) {
         stackZone.cardIds.forEach(id => {
-          const cardOnStack = snapshot.gameState.cards[id];
-          cardOnStack?.targets?.forEach(target => {
+          snapshot.gameState.cards[id]?.targets?.forEach(target => {
             if (target.type === 'Card') targetedIds.add(target.cardId);
           });
         });
@@ -61,14 +56,10 @@ export function ZonePile({ player, isOpponent = false, snapshot, cardDataMap = {
       return { librarySize: libData.size, graveyardCards: gyData.cards, exileCards: exData.cards, targetedGraveyardCards: targetedGY };
     } 
     
-    // LIVE MODE (fall back to hooks)
     const liveGY = useZoneCards(graveyard(player.playerId));
     const liveExile = useZoneCards(exile(player.playerId));
     const liveStack = useStackCards();
-    const targeted = liveStack.flatMap(stackCard => stackCard.targets ?? [])
-                               .filter(target => target.type === 'Card')
-                               .map(target => liveGY.find(c => c.id === target.cardId))
-                               .filter((c): c is ClientCard => !!c);
+    const targeted = liveStack.flatMap(sc => sc.targets ?? []).filter(t => t.type === 'Card').map(t => liveGY.find(c => c.id === t.cardId)).filter((c): c is ClientCard => !!c);
     return { librarySize: player.librarySize, graveyardCards: liveGY, exileCards: liveExile, targetedGraveyardCards: targeted };
   }, [snapshot, player, useZoneCards, useStackCards]);
 
@@ -82,9 +73,7 @@ export function ZonePile({ player, isOpponent = false, snapshot, cardDataMap = {
     borderRadius: responsive.isMobile ? 4 : 6,
   };
 
-  const verticalOffset = isOpponent
-    ? { marginTop: responsive.zonePileOffset }
-    : { marginBottom: responsive.zonePileOffset + responsive.sectionGap * 3 };
+  const verticalOffset = isOpponent ? { marginTop: responsive.zonePileOffset } : { marginBottom: responsive.zonePileOffset + responsive.sectionGap * 3 };
 
   return (
     <>
@@ -98,33 +87,14 @@ export function ZonePile({ player, isOpponent = false, snapshot, cardDataMap = {
         </div>
         
         <div style={styles.zoneStack}>
-          <div
-            data-graveyard-id={player.playerId}
-            style={{ ...styles.graveyardPile, ...pileStyle, cursor: graveyardCards.length > 0 ? 'pointer' : 'default' }}
-            onClick={() => { if (graveyardCards.length > 0) setBrowsingGraveyard(true) }}
-            onMouseEnter={() => { if (topGraveyardCard) hoverCard(topGraveyardCard.id) }}
-            onMouseLeave={() => hoverCard(null)}
-          >
-            {topGraveyardCard ? (
-              <img
-                src={getCardImageUrl(topGraveyardCard.name, cardDataMap?.[topGraveyardCard.name]?.image_url ?? topGraveyardCard.imageUri, 'normal')}
-                alt={topGraveyardCard.name}
-                style={{ ...styles.pileImage, opacity: 0.8 }}
-                onError={(e) => handleImageError(e, topGraveyardCard.name, 'normal')}
-              />
-            ) : <div style={styles.emptyPile} />}
+          <div data-graveyard-id={player.playerId} style={{ ...styles.graveyardPile, ...pileStyle, cursor: graveyardCards.length > 0 ? 'pointer' : 'default' }} onClick={() => { if (graveyardCards.length > 0) setBrowsingGraveyard(true) }} onMouseEnter={() => { if (topGraveyardCard) hoverCard(topGraveyardCard.id) }} onMouseLeave={() => hoverCard(null)}>
+            {topGraveyardCard ? <img src={getCardImageUrl(topGraveyardCard.name, cardDataMap?.[topGraveyardCard.name]?.image_url ?? topGraveyardCard.imageUri, 'normal')} alt={topGraveyardCard.name} style={{ ...styles.pileImage, opacity: 0.8 }} onError={(e) => handleImageError(e, topGraveyardCard.name, 'normal')} /> : <div style={styles.emptyPile} />}
             {graveyardCards.length > 0 && <div style={{ ...styles.pileCount, fontSize: responsive.fontSize.small }}>{graveyardCards.length}</div>}
-            
             {targetedGraveyardCards.map((card, index) => {
               const fanOffset = targetedGraveyardCards.length > 1 ? (index - (targetedGraveyardCards.length - 1) / 2) * (responsive.isMobile ? 14 : 20) : 0;
               return (
                 <div key={card.id} data-card-id={card.id} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 10 + index, boxShadow: '0 0 12px 4px rgba(255, 136, 0, 0.8)', borderRadius: responsive.isMobile ? 4 : 6, transform: `translateX(${fanOffset}px)` }}>
-                  <img
-                    src={getCardImageUrl(card.name, cardDataMap?.[card.name]?.image_url ?? card.imageUri, 'normal')}
-                    alt={card.name}
-                    style={{ ...styles.pileImage, borderRadius: responsive.isMobile ? 4 : 6 }}
-                    onError={(e) => handleImageError(e, card.name, 'normal')}
-                  />
+                  <img src={getCardImageUrl(card.name, cardDataMap?.[card.name]?.image_url ?? card.imageUri, 'normal')} alt={card.name} style={{ ...styles.pileImage, borderRadius: responsive.isMobile ? 4 : 6 }} onError={(e) => handleImageError(e, card.name, 'normal')} />
                 </div>
               );
             })}
@@ -133,34 +103,21 @@ export function ZonePile({ player, isOpponent = false, snapshot, cardDataMap = {
         </div>
         
         <div style={styles.zoneStack}>
-          <div
-            data-exile-id={player.playerId}
-            style={{ ...styles.exilePile, ...pileStyle, cursor: exileCards.length > 0 ? 'pointer' : 'default' }}
-            onClick={() => { if (exileCards.length > 0) setBrowsingExile(true) }}
-            onMouseEnter={() => { if (topExileCard) hoverCard(topExileCard.id) }}
-            onMouseLeave={() => hoverCard(null)}
-          >
-            {topExileCard ? (
-              <img
-                src={getCardImageUrl(topExileCard.name, cardDataMap?.[topExileCard.name]?.image_url ?? topExileCard.imageUri, 'normal')}
-                alt={topExileCard.name}
-                style={{ ...styles.pileImage, opacity: 0.7 }}
-                onError={(e) => handleImageError(e, topExileCard.name, 'normal')}
-              />
-            ) : <div style={styles.emptyPile} />}
+          <div data-exile-id={player.playerId} style={{ ...styles.exilePile, ...pileStyle, cursor: exileCards.length > 0 ? 'pointer' : 'default' }} onClick={() => { if (exileCards.length > 0) setBrowsingExile(true) }} onMouseEnter={() => { if (topExileCard) hoverCard(topExileCard.id) }} onMouseLeave={() => hoverCard(null)}>
+            {topExileCard ? <img src={getCardImageUrl(topExileCard.name, cardDataMap?.[topExileCard.name]?.image_url ?? topExileCard.imageUri, 'normal')} alt={topExileCard.name} style={{ ...styles.pileImage, opacity: 0.7 }} onError={(e) => handleImageError(e, topExileCard.name, 'normal')} /> : <div style={styles.emptyPile} />}
             {exileCards.length > 0 && <div style={{ ...styles.pileCount, fontSize: responsive.fontSize.small }}>{exileCards.length}</div>}
           </div>
           <span style={{ ...styles.zoneLabel, fontSize: responsive.isMobile ? 8 : 10 }}>Exile</span>
         </div>
       </div>
       
-      {browsingGraveyard && <GraveyardBrowser cards={graveyardCards} onClose={() => setBrowsingGraveyard(false)} cardDataMap={cardDataMap} />}
-      {browsingExile && <ExileBrowser cards={exileCards} onClose={() => setBrowsingExile(false)} cardDataMap={cardDataMap} />}
+      {browsingGraveyard && <ZoneBrowser zoneName="Graveyard" cards={graveyardCards} onClose={() => setBrowsingGraveyard(false)} cardDataMap={cardDataMap} />}
+      {browsingExile && <ZoneBrowser zoneName="Exile" cards={exileCards} onClose={() => setBrowsingExile(false)} cardDataMap={cardDataMap} />}
     </>
   );
 }
 
-function GraveyardBrowser({ cards, onClose, cardDataMap }: ZoneBrowserProps & { cards: readonly ClientCard[] }) {
+function ZoneBrowser({ zoneName, cards, onClose, cardDataMap }: ZoneBrowserProps) {
   const hoverCard = useGameStore((state) => state.hoverCard);
   const responsive = useResponsiveContext();
   const [minimized, setMinimized] = useState(false);
@@ -177,25 +134,28 @@ function GraveyardBrowser({ cards, onClose, cardDataMap }: ZoneBrowserProps & { 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose, minimized]);
 
+  const overlayStyle = zoneName === 'Graveyard' ? styles.graveyardOverlay : styles.exileOverlay;
+  const contentStyle = zoneName === 'Graveyard' ? styles.graveyardBrowserContent : styles.exileBrowserContent;
+  const headerStyle = zoneName === 'Graveyard' ? styles.graveyardBrowserHeader : styles.exileBrowserHeader;
+  const titleStyle = zoneName === 'Graveyard' ? styles.graveyardBrowserTitle : styles.exileBrowserTitle;
+  const closeButtonStyle = zoneName === 'Graveyard' ? styles.graveyardCloseButton : styles.exileCloseButton;
+  const gridStyle = zoneName === 'Graveyard' ? styles.graveyardCardGrid : styles.exileCardGrid;
+  const restoreButtonStyle = { position: 'fixed', bottom: 70, left: '50%', transform: 'translateX(-50%)', padding: responsive.isMobile ? '10px 16px' : '12px 24px', fontSize: responsive.fontSize.normal, color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, boxShadow: '0 4px 12px rgba(0,0,0,0.4)', zIndex: 100, display: 'flex', alignItems: 'center', gap: 8, backgroundColor: zoneName === 'Graveyard' ? '#1e40af' : '#7c3aed' };
+
   if (minimized) {
-    return <button onClick={() => setMinimized(false)} style={{...}}>↑ Return to Graveyard</button>;
+    return <button onClick={() => setMinimized(false)} style={restoreButtonStyle}>↑ Return to {zoneName}</button>;
   }
 
   return (
-    <div style={styles.graveyardOverlay} onClick={onClose}>
-      <div style={styles.graveyardBrowserContent} onClick={(e) => e.stopPropagation()}>
-        <div style={styles.graveyardBrowserHeader}>
-          <h2 style={styles.graveyardBrowserTitle}>Graveyard ({cards.length})</h2>
-          <button style={styles.graveyardCloseButton} onClick={onClose}>✕</button>
+    <div style={overlayStyle} onClick={onClose}>
+      <div style={contentStyle} onClick={(e) => e.stopPropagation()}>
+        <div style={headerStyle}>
+          <h2 style={titleStyle}>{zoneName} ({cards.length})</h2>
+          <button style={closeButtonStyle} onClick={onClose}>✕</button>
         </div>
-        <div style={styles.graveyardCardGrid}>
+        <div style={gridStyle}>
           {cards.map((card) => (
-            <div
-              key={card.id}
-              style={{ width: cardWidth, height: cardHeight, borderRadius: 6, overflow: 'hidden', flexShrink: 0 }}
-              onMouseEnter={() => hoverCard(card.id)}
-              onMouseLeave={() => hoverCard(null)}
-            >
+            <div key={card.id} style={{ width: cardWidth, height: cardHeight, borderRadius: 6, overflow: 'hidden', flexShrink: 0 }} onMouseEnter={() => hoverCard(card.id)} onMouseLeave={() => hoverCard(null)}>
               <img
                 src={getCardImageUrl(card.name, cardDataMap?.[card.name]?.image_url ?? card.imageUri, 'normal')}
                 alt={card.name}
@@ -206,62 +166,8 @@ function GraveyardBrowser({ cards, onClose, cardDataMap }: ZoneBrowserProps & { 
           ))}
         </div>
         <div style={{ display: 'flex', gap: 16, marginTop: 16 }}>
-          <button onClick={() => setMinimized(true)} style={{...}}>View Battlefield</button>
-          <button onClick={onClose} style={{...}}>Close</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ExileBrowser({ cards, onClose, cardDataMap }: ZoneBrowserProps & { cards: readonly ClientCard[] }) {
-  const hoverCard = useGameStore((state) => state.hoverCard);
-  const responsive = useResponsiveContext();
-  const [minimized, setMinimized] = useState(false);
-  const cardWidth = responsive.isMobile ? 120 : 160;
-  const cardHeight = Math.round(cardWidth * 1.4);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (minimized) { setMinimized(false); } else { onClose(); }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, minimized]);
-
-  if (minimized) {
-    return <button onClick={() => setMinimized(false)} style={{...}}>↑ Return to Exile</button>;
-  }
-
-  return (
-    <div style={styles.exileOverlay} onClick={onClose}>
-      <div style={styles.exileBrowserContent} onClick={(e) => e.stopPropagation()}>
-        <div style={styles.exileBrowserHeader}>
-          <h2 style={styles.exileBrowserTitle}>Exile ({cards.length})</h2>
-          <button style={styles.exileCloseButton} onClick={onClose}>✕</button>
-        </div>
-        <div style={styles.exileCardGrid}>
-          {cards.map((card) => (
-            <div
-              key={card.id}
-              style={{ width: cardWidth, height: cardHeight, borderRadius: 6, overflow: 'hidden', flexShrink: 0 }}
-              onMouseEnter={() => hoverCard(card.id)}
-              onMouseLeave={() => hoverCard(null)}
-            >
-              <img
-                src={getCardImageUrl(card.name, cardDataMap?.[card.name]?.image_url ?? card.imageUri, 'normal')}
-                alt={card.name}
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                onError={(e) => handleImageError(e, card.name, 'normal')}
-              />
-            </div>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 16, marginTop: 16 }}>
-          <button onClick={() => setMinimized(true)} style={{...}}>View Battlefield</button>
-          <button onClick={onClose} style={{...}}>Close</button>
+          <button onClick={() => setMinimized(true)} style={{...restoreButtonStyle, position: 'relative', bottom: 'auto', left: 'auto', transform: 'none' }}>View Battlefield</button>
+          <button onClick={onClose} style={{ padding: responsive.isMobile ? '10px 20px' : '12px 28px', fontSize: responsive.fontSize.normal, backgroundColor: '#333', color: '#aaa', border: '1px solid #555', borderRadius: 8, cursor: 'pointer' }}>Close</button>
         </div>
       </div>
     </div>
