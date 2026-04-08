@@ -1,3 +1,5 @@
+//web-client/src/components/game/board/HandZone.tsx
+
 // The file containing CardRow and HandFan components
 
 import React from 'react';

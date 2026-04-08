@@ -1,3 +1,5 @@
+//src/components/game/card/CardStack.tsx
+
 import type { GroupedCard } from '@/store/selectors'
 import { useResponsiveContext } from '../board/shared'
 import { GameCard } from './GameCard'
