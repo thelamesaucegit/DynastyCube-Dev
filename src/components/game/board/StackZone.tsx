@@ -1,3 +1,5 @@
+//src/components/game/board/StackZone.tsx
+
 import { useGameStore } from '@/store/gameStore'
 import { useStackCards } from '@/store/selectors'
 import type { EntityId } from '@/types'
