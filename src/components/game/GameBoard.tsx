@@ -25,8 +25,11 @@ import { TargetingArrows } from '../targeting/TargetingArrows';
 import { CombatArrows } from '../combat/CombatArrows';
 import { GameLog } from './GameLog';
 import { CardPreview as LiveCardPreview } from './card'; // Renamed to avoid conflict
-import { DrawAnimations, DamageAnimations, RevealAnimations, CoinFlipAnimations, TargetReselectedAnimations } from '../animations';
-
+import { DrawAnimations } from '@/components/animations/DrawAnimations';
+import { DamageAnimations } from '@/components/animations/DamageAnimations';
+import { RevealAnimations } from '@/components/animations/RevealAnimations';
+import { CoinFlipAnimations } from '@/components/animations/CoinFlipAnimations';
+import { TargetReselectedAnimations } from '@/components/animations/TargetReselectedAnimations';
 // --- Import ALL NEW Replay-Specific Components ---
 import { ReplayBattlefield } from './board/ReplayBattlefield';
 import { ReplayZonePile } from './board/ReplayZonePiles';
