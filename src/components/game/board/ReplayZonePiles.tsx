@@ -15,6 +15,7 @@ interface ReplayZonePileProps {
   isOpponent?: boolean;
   snapshot: SpectatorStateUpdate;
   cardDataMap: Record<string, ReplayCardData>;
+  useOldestArt: boolean;
 }
 
 interface ReplayZoneBrowserProps {
@@ -22,6 +23,7 @@ interface ReplayZoneBrowserProps {
   onClose: () => void;
   cardDataMap: Record<string, ReplayCardData>;
   zoneName: 'Graveyard' | 'Exile';
+  useOldestArt: boolean;
 }
 
 export function ReplayZonePile({ player, isOpponent = false, snapshot, cardDataMap }: ReplayZonePileProps) {
