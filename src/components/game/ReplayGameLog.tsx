@@ -4,9 +4,9 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import type { SpectatorStateUpdate } from '@/types/replay-types';
-import type { ClientEvent, EntityId } from '@/types'; // Assuming LogEntry is similar to ClientEvent
+import type { ClientEvent, EntityId } from '@/types';
 
-// --- RE-IMPLEMENTED STYLES (to make this a standalone component) ---
+// --- RE-IMPLEMENTED STYLES ---
 const styles: Record<string, React.CSSProperties> = {
   toggleButton: { position: 'fixed', bottom: 12, left: 12, zIndex: 500, padding: '6px 12px', fontSize: 12, backgroundColor: 'rgba(20, 20, 40, 0.85)', color: '#aaa', border: '1px solid #444', borderRadius: 6, cursor: 'pointer' },
   panel: { position: 'fixed', bottom: 12, left: 12, zIndex: 500, width: 'min(320px, calc(100vw - 24px))', maxHeight: 300, display: 'flex', flexDirection: 'column', backgroundColor: 'rgba(10, 10, 25, 0.92)', border: '1px solid #333', borderRadius: 8, overflow: 'hidden' },
@@ -19,6 +19,7 @@ const styles: Record<string, React.CSSProperties> = {
   turnSeparator: { fontSize: 11, padding: '6px 0 4px', lineHeight: 1.4, textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontWeight: 600, borderBottom: '1px solid rgba(255,255,255,0.1)', borderTop: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'rgba(255,255,255,0.04)', marginTop: 2, marginBottom: 2 },
 };
 
+// --- THIS IS THE FIX ---
 // A helper function to safely extract the relevant player ID from any event type.
 function getEventPlayerId(event: ClientEvent): EntityId | null {
     switch (event.type) {
@@ -68,21 +69,21 @@ function getEventPlayerId(event: ClientEvent): EntityId | null {
             return null;
     }
 }
+// --- END FIX ---
 
-// --- REPLAY-SPECIFIC PROPS ---
 interface ReplayGameLogProps {
   snapshot: SpectatorStateUpdate;
 }
 
-// LogEntryRow is a pure component, it can be reused directly
 function LogEntryRow({ entry, viewingPlayerId }: { entry: ClientEvent; viewingPlayerId: string }) {
-  if (entry.type === 'turnChanged' ) {
+  if (entry.type === 'turnChanged') {
     return <div style={styles.turnSeparator}>{entry.description}</div>;
-  
   }
   
-  const isPlayer = entry.playerId === viewingPlayerId;
-  const color = entry.type === 'system' ? '#999' : entry.playerId === null ? '#888' : isPlayer ? '#5bc0de' : '#e07050';
+  const eventPlayerId = getEventPlayerId(entry);
+  const isPlayer = eventPlayerId === viewingPlayerId;
+  
+  const color = eventPlayerId === null ? '#999' : isPlayer ? '#5bc0de' : '#e07050';
   
   return <div style={{ ...styles.entry, color }}>{entry.description}</div>;
 }
@@ -92,7 +93,7 @@ export function ReplayGameLog({ snapshot }: ReplayGameLogProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   
   const logEntries = snapshot.gameState.gameLog ?? [];
-  const viewingPlayerId = snapshot.player1Id; // In replay, p1 is always the "viewer"
+  const viewingPlayerId = snapshot.player1Id;
 
   useEffect(() => {
     if (expanded && scrollRef.current) {
@@ -119,7 +120,7 @@ export function ReplayGameLog({ snapshot }: ReplayGameLogProps) {
           <div style={styles.empty}>No events yet</div>
         ) : (
           logEntries.map((entry, i) => (
-            <LogEntryRow key={i} entry={entry} viewingPlayerId={viewingPlayerId} />
+            <LogEntryRow key={`${entry.type}-${i}`} entry={entry} viewingPlayerId={viewingPlayerId} />
           ))
         )}
       </div>
