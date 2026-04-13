@@ -3,7 +3,6 @@
 "use client";
 
 import React, { useState, useMemo } from 'react';
-import { useGameStore } from '@/store/gameStore';
 import { useZoneCards, useZone } from '@/store/selectors';
 import type { ZoneId, ClientCard } from '@/types';
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
@@ -14,9 +13,10 @@ import { GameCard } from '../card';
 import { CARD_BACK_IMAGE_URL } from '@/utils/cardImages';
 
 // ========================================================================
-// PROPS INTERFACES - CORRECTED
+// PROPS INTERFACES - DEFINITIVELY CORRECTED
 // ========================================================================
 
+// The main router component accepts props for BOTH modes, all optional where applicable.
 interface CardRowProps {
   zoneId: ZoneId;
   snapshot?: SpectatorStateUpdate;
@@ -28,14 +28,27 @@ interface CardRowProps {
   ghostCards?: readonly ClientCard[];
 }
 
-// Omit now works correctly on a non-duplicated interface
-interface LiveCardRowProps extends Omit<CardRowProps, 'snapshot' | 'cardDataMap'> {}
-
-interface ReplayCardRowProps extends Omit<CardRowProps, 'ghostCards' | 'interactive'> {
-    snapshot: SpectatorStateUpdate;
-    cardDataMap: Record<string, ReplayCardData>;
+// LiveCardRow ONLY knows about props relevant to a live game.
+interface LiveCardRowProps {
+  zoneId: ZoneId;
+  faceDown?: boolean;
+  interactive?: boolean;
+  small?: boolean;
+  inverted?: boolean;
+  ghostCards?: readonly ClientCard[];
 }
 
+// ReplayCardRow ONLY knows about props relevant to a replay.
+interface ReplayCardRowProps {
+    zoneId: ZoneId;
+    snapshot: SpectatorStateUpdate;
+    cardDataMap: Record<string, ReplayCardData>;
+    faceDown?: boolean;
+    small?: boolean;
+    inverted?: boolean;
+}
+
+// HandFan is a "dumb" component and its props are correct.
 interface HandFanProps {
   cards: readonly ClientCard[];
   cardDataMap?: Record<string, ReplayCardData>;
@@ -56,9 +69,11 @@ interface HandFanProps {
 // ========================================================================
 
 export function CardRow(props: CardRowProps) {
-  if (props.snapshot) {
-    return <ReplayCardRow {...props} snapshot={props.snapshot} cardDataMap={props.cardDataMap ?? {}} />;
+  if (props.snapshot && props.cardDataMap) {
+    // In replay mode, render the pure component
+    return <ReplayCardRow {...props} snapshot={props.snapshot} cardDataMap={props.cardDataMap} />;
   }
+  // In live mode, render the component that uses hooks
   return <LiveCardRow {...props} />;
 }
 
@@ -101,14 +116,13 @@ function LiveCardRow({ zoneId, faceDown = false, interactive = false, small = fa
         placeholderCount={showPlaceholders ? zoneSize : unrevealedCount}
         fittingWidth={fittingWidth}
         cardHeight={cardHeight}
+        cardGap={responsive.cardGap}
         faceDown={faceDown && !hasRevealedCards}
         revealedCards={hasRevealedCards}
         interactive={interactive}
         small={small}
         inverted={inverted}
         ghostCards={ghostCards}
-        // cardGap and cardDataMap are not needed for live fan
-        cardGap={responsive.cardGap}
       />
     );
   }
