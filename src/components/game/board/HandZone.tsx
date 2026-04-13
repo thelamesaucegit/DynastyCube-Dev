@@ -16,10 +16,9 @@ import { CARD_BACK_IMAGE_URL } from '@/utils/cardImages';
 import { useSettings } from '@/contexts/SettingsContext';
 
 // ========================================================================
-// PROPS INTERFACES - DEFINITIVELY CORRECTED
+// PROPS INTERFACES
 // ========================================================================
 
-// The main router component accepts all possible props, all optional where applicable.
 interface CardRowProps {
   zoneId: ZoneId;
   snapshot?: SpectatorStateUpdate;
@@ -31,7 +30,6 @@ interface CardRowProps {
   ghostCards?: readonly ClientCard[];
 }
 
-// LiveCardRow ONLY knows about props relevant to a live game. NO OMIT.
 interface LiveCardRowProps {
   zoneId: ZoneId;
   faceDown?: boolean;
@@ -41,7 +39,6 @@ interface LiveCardRowProps {
   ghostCards?: readonly ClientCard[];
 }
 
-// ReplayCardRow ONLY knows about props relevant to a replay.
 interface ReplayCardRowProps {
     zoneId: ZoneId;
     snapshot: SpectatorStateUpdate;
@@ -51,7 +48,6 @@ interface ReplayCardRowProps {
     inverted?: boolean;
 }
 
-// HandFan is a "dumb" component and its props are correct.
 interface HandFanProps {
   cards: readonly ClientCard[];
   cardDataMap?: Record<string, ReplayCardData>;
@@ -196,7 +192,6 @@ function ReplayCardRow({ zoneId, snapshot, cardDataMap, faceDown = false, small 
     );
   }
 
-  // Fallback for a non-fan row in replay mode
   return (
     <div style={{ ...styles.cardRow, gap: responsive.cardGap, padding: responsive.cardGap }}>
       {cards.map((card) => {
@@ -212,7 +207,7 @@ function ReplayCardRow({ zoneId, snapshot, cardDataMap, faceDown = false, small 
             >
                 <ReplayGameCard
                     cardData={{
-                        name: card.name,
+                        card_name: card.name, // <-- THIS IS THE FIX
                         image_url: cardImageData?.image_url,
                         oldest_image_url: cardImageData?.oldest_image_url,
                     }}
@@ -318,7 +313,7 @@ function HandFan({
                 >
                     <ReplayGameCard
                         cardData={{
-                            name: item.card.name,
+                            card_name: item.card.name, // <-- THIS IS THE FIX
                             image_url: cardImageData?.image_url,
                             oldest_image_url: cardImageData?.oldest_image_url,
                         }}
