@@ -7,11 +7,10 @@ import { useGameStore } from '@/store/gameStore';
 import { useBattlefieldCards, selectViewingPlayerId } from '@/store/selectors';
 import { useResponsiveContext } from './shared';
 import { styles } from './styles';
-import { CardStack } from '../card';
-import { GameCard } from '../card';
-import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
+import { CardStack, GameCard } from '../card';
 import type { ClientCard } from '@/types';
 
+// This interface should be defined locally as it's not in the main types index.
 export interface GroupedCard {
   card: ClientCard;
   count: number;
@@ -19,7 +18,7 @@ export interface GroupedCard {
   cards: readonly ClientCard[];
 }
 
-// Helper function to group cards by name
+// Helper function to group cards by name - specific to this component's needs.
 function groupCards(cards: readonly ClientCard[]): GroupedCard[] {
     const groups: Record<string, ClientCard[]> = {};
     for (const card of cards) {
@@ -34,41 +33,40 @@ function groupCards(cards: readonly ClientCard[]): GroupedCard[] {
     }));
 }
 
+// This component is now ONLY for live mode. The spectatorMode prop is used for UI tweaks, not logic.
 interface BattlefieldProps {
   isOpponent: boolean;
   spectatorMode?: boolean;
-  snapshot?: SpectatorStateUpdate;
-  cardDataMap?: Record<string, ReplayCardData>;
 }
 
-export function Battlefield({ isOpponent, spectatorMode, snapshot, cardDataMap }: BattlefieldProps) {
+export function Battlefield({ isOpponent, spectatorMode }: BattlefieldProps) {
   const responsive = useResponsiveContext();
-  const getAttachmentsForCard = (cardId: string) => useGameStore.getState().getAttachmentsForCard(cardId);
-  const getLinkedExileForCard = (cardId: string) => useGameStore.getState().getLinkedExileForCard(cardId);
   const viewingPlayerId = useGameStore(selectViewingPlayerId);
+  const gameState = useGameStore((state) => state.gameState);
 
   // --- THIS IS THE FIX ---
-  // Hooks are called at the top level, unconditionally.
-  const liveBattlefieldCards = useBattlefieldCards(isOpponent);
-  // --- END FIX ---
+  // Re-implement the attachment/exile logic as selectors that read from the game state,
+  // instead of calling non-existent methods on the store.
+  const getAttachments = (cardId: string): ClientCard[] => {
+    if (!gameState) return [];
+    return Object.values(gameState.cards).filter((c): c is ClientCard => c?.attachedTo === cardId);
+  };
 
-  const { lands, creatures, planeswalkers, other } = useMemo(() => {
-    let battlefieldCards: readonly ClientCard[] = [];
-    if (spectatorMode && snapshot) {
-      const playerId = isOpponent ? snapshot.player2Id : snapshot.player1Id;
-      const zone = snapshot.gameState.zones.find(z => z.zoneId.zoneType === 'Battlefield' && z.zoneId.ownerId === playerId);
-      battlefieldCards = zone ? zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [];
-    } else {
-      // The hook's result is *used* inside the memo, but the hook itself is called outside.
-      battlefieldCards = liveBattlefieldCards;
-    }
-    
-    const lands = battlefieldCards.filter(c => c.cardTypes.includes('Land'));
-    const creatures = battlefieldCards.filter(c => c.cardTypes.includes('Creature'));
-    const planeswalkers = battlefieldCards.filter(c => c.cardTypes.includes('Planeswalker'));
-    const other = battlefieldCards.filter(c => !c.cardTypes.includes('Land') && !c.cardTypes.includes('Creature') && !c.cardTypes.includes('Planeswalker'));
-    return { lands, creatures, planeswalkers, other };
-  }, [snapshot, isOpponent, spectatorMode, liveBattlefieldCards]);
+  const getLinkedExile = (cardId: string): ClientCard[] => {
+    if (!gameState) return [];
+    const sourceCard = gameState.cards[cardId];
+    if (!sourceCard || !sourceCard.linkedExile) return [];
+    return sourceCard.linkedExile.map(id => gameState.cards[id]).filter((c): c is ClientCard => !!c);
+  };
+  // --- END FIX ---
+  
+  // This hook is for live mode and is now safe to use.
+  const { playerLands, playerCreatures, playerPlaneswalkers, playerOther, opponentLands, opponentCreatures, opponentPlaneswalkers, opponentOther } = useBattlefieldCards();
+
+  const lands = isOpponent ? opponentLands : playerLands;
+  const creatures = isOpponent ? opponentCreatures : playerCreatures;
+  const planeswalkers = isOpponent ? opponentPlaneswalkers : playerPlaneswalkers;
+  const other = isOpponent ? opponentOther : playerOther;
 
   const groupedLands = useMemo(() => groupCards(lands), [lands]);
   const toSingles = (cards: readonly ClientCard[]) => cards.map((card) => ({ card, count: 1, cardIds: [card.id] as const, cards: [card] as const }));
@@ -76,20 +74,6 @@ export function Battlefield({ isOpponent, spectatorMode, snapshot, cardDataMap }
   const groupedPlaneswalkers = useMemo(() => toSingles(planeswalkers), [planeswalkers]);
   const groupedOther = useMemo(() => toSingles(other), [other]);
   
-  const getAttachments = (card: ClientCard): ClientCard[] => {
-    if (snapshot) {
-      return Object.values(snapshot.gameState.cards).filter(c => c.attachedTo === card.id);
-    }
-    return getAttachmentsForCard(card.id);
-  };
-
-  const getLinkedExile = (card: ClientCard): ClientCard[] => {
-    if (snapshot && card.linkedExile) {
-      return card.linkedExile.map(id => snapshot.gameState.cards[id]).filter((c): c is ClientCard => !!c);
-    }
-    return getLinkedExileForCard(card.id);
-  };
-
   const hasCreatures = groupedCreatures.length > 0;
   const hasPlaneswalkers = groupedPlaneswalkers.length > 0;
   const hasLands = groupedLands.length > 0;
@@ -103,7 +87,7 @@ export function Battlefield({ isOpponent, spectatorMode, snapshot, cardDataMap }
   const cardHeight = Math.round(responsive.battlefieldCardWidth * 1.4);
 
   const renderWithAttachments = (group: GroupedCard) => {
-    const attachments = [...getAttachments(group.card), ...getLinkedExile(group.card)];
+    const attachments = [...getAttachments(group.card.id), ...getLinkedExile(group.card.id)];
     if (attachments.length === 0) {
       return (
         <CardStack
@@ -111,7 +95,6 @@ export function Battlefield({ isOpponent, spectatorMode, snapshot, cardDataMap }
           group={group}
           interactive={interactive}
           isOpponentCard={isOpponent}
-          cardDataMap={cardDataMap}
         />
       );
     }
@@ -134,7 +117,6 @@ export function Battlefield({ isOpponent, spectatorMode, snapshot, cardDataMap }
                 battlefield
                 isOpponentCard={isOpponent}
                 forceTapped={parentTapped}
-                cardDataMap={cardDataMap}
               />
             </div>
           );
@@ -144,7 +126,6 @@ export function Battlefield({ isOpponent, spectatorMode, snapshot, cardDataMap }
             group={group}
             interactive={interactive}
             isOpponentCard={isOpponent}
-            cardDataMap={cardDataMap}
           />
         </div>
       </div>
