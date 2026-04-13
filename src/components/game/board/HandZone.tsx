@@ -14,7 +14,7 @@ import { GameCard } from '../card';
 import { CARD_BACK_IMAGE_URL } from '@/utils/cardImages';
 
 // ========================================================================
-// PROPS INTERFACES
+// PROPS INTERFACES - CORRECTED
 // ========================================================================
 
 interface CardRowProps {
@@ -28,10 +28,9 @@ interface CardRowProps {
   ghostCards?: readonly ClientCard[];
 }
 
-// Props for the hook-using version
+// Omit now works correctly on a non-duplicated interface
 interface LiveCardRowProps extends Omit<CardRowProps, 'snapshot' | 'cardDataMap'> {}
 
-// Props for the pure, hook-free version
 interface ReplayCardRowProps extends Omit<CardRowProps, 'ghostCards' | 'interactive'> {
     snapshot: SpectatorStateUpdate;
     cardDataMap: Record<string, ReplayCardData>;
@@ -58,10 +57,8 @@ interface HandFanProps {
 
 export function CardRow(props: CardRowProps) {
   if (props.snapshot) {
-    // In replay mode, render the pure component that takes snapshot data
     return <ReplayCardRow {...props} snapshot={props.snapshot} cardDataMap={props.cardDataMap ?? {}} />;
   }
-  // In live mode, render the component that uses hooks
   return <LiveCardRow {...props} />;
 }
 
@@ -104,13 +101,14 @@ function LiveCardRow({ zoneId, faceDown = false, interactive = false, small = fa
         placeholderCount={showPlaceholders ? zoneSize : unrevealedCount}
         fittingWidth={fittingWidth}
         cardHeight={cardHeight}
-        cardGap={responsive.cardGap}
         faceDown={faceDown && !hasRevealedCards}
         revealedCards={hasRevealedCards}
         interactive={interactive}
         small={small}
         inverted={inverted}
         ghostCards={ghostCards}
+        // cardGap and cardDataMap are not needed for live fan
+        cardGap={responsive.cardGap}
       />
     );
   }
@@ -175,7 +173,7 @@ function ReplayCardRow({ zoneId, snapshot, cardDataMap, faceDown = false, small 
         cardGap={responsive.cardGap}
         faceDown={faceDown && !hasRevealedCards}
         revealedCards={hasRevealedCards}
-        interactive={false} // Never interactive in replay
+        interactive={false}
         small={small}
         inverted={inverted}
         cardDataMap={cardDataMap}
@@ -190,7 +188,7 @@ function ReplayCardRow({ zoneId, snapshot, cardDataMap, faceDown = false, small 
           key={card.id}
           card={card}
           faceDown={faceDown}
-          interactive={false} // Never interactive in replay
+          interactive={false}
           small={small}
           overrideWidth={fittingWidth}
           inHand={false}
@@ -221,19 +219,6 @@ export function HandFan({
 }: HandFanProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-  const baseCardCount = revealedCards
-    ? cards.length + placeholderCount
-    : (placeholderCount > 0 ? placeholderCount : cards.length);
-  const cardCount = baseCardCount + (ghostCards?.length ?? 0);
-
-  const maxRotation = Math.min(12, 40 / Math.max(cardCount, 1));
-  const maxVerticalOffset = Math.min(15, 45 / Math.max(cardCount, 1));
-  const overlapFactor = Math.max(0.5, 0.85 - (cardCount * 0.025));
-  const cardSpacing = fittingWidth * overlapFactor;
-  const totalWidth = cardSpacing * (cardCount - 1) + fittingWidth;
-  const edgeMargin = -15;
-  const rotationMultiplier = inverted ? -1 : 1;
-
   const baseItems = revealedCards
     ? [
         ...cards.map((card, index) => ({ type: 'card' as const, card, index, showFaceUp: true, isGhost: false })),
@@ -251,6 +236,15 @@ export function HandFan({
     isGhost: true,
   }));
   const items = [...baseItems, ...ghostItems];
+
+  const cardCount = items.length;
+  const maxRotation = Math.min(12, 40 / Math.max(cardCount, 1));
+  const maxVerticalOffset = Math.min(15, 45 / Math.max(cardCount, 1));
+  const overlapFactor = Math.max(0.5, 0.85 - (cardCount * 0.025));
+  const cardSpacing = fittingWidth * overlapFactor;
+  const totalWidth = cardSpacing * (cardCount - 1) + fittingWidth;
+  const edgeMargin = -15;
+  const rotationMultiplier = inverted ? -1 : 1;
 
   return (
     <div style={{ position: 'relative', width: totalWidth, height: cardHeight + maxVerticalOffset + 40, marginBottom: inverted ? 0 : edgeMargin, marginTop: inverted ? edgeMargin : 0 }}>
