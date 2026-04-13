@@ -4,7 +4,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import type { SpectatorStateUpdate } from '@/types/replay-types';
-import type { ClientEvent } from '@/types'; // Assuming LogEntry is similar to ClientEvent
+import type { ClientEvent, EntityId } from '@/types'; // Assuming LogEntry is similar to ClientEvent
 
 // --- RE-IMPLEMENTED STYLES (to make this a standalone component) ---
 const styles: Record<string, React.CSSProperties> = {
@@ -18,6 +18,56 @@ const styles: Record<string, React.CSSProperties> = {
   entry: { fontSize: 12, padding: '2px 0', lineHeight: 1.4, borderBottom: '1px solid rgba(255,255,255,0.04)' },
   turnSeparator: { fontSize: 11, padding: '6px 0 4px', lineHeight: 1.4, textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontWeight: 600, borderBottom: '1px solid rgba(255,255,255,0.1)', borderTop: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'rgba(255,255,255,0.04)', marginTop: 2, marginBottom: 2 },
 };
+
+// A helper function to safely extract the relevant player ID from any event type.
+function getEventPlayerId(event: ClientEvent): EntityId | null {
+    switch (event.type) {
+        case 'lifeChanged':
+        case 'cardDrawn':
+        case 'cardDiscarded':
+        case 'manaAdded':
+        case 'playerLost':
+        case 'coinFlipped':
+        case 'cardCycled':
+        case 'libraryShuffled':
+        case 'permanentsSacrificed':
+        case 'decisionMade':
+            return event.playerId;
+        case 'spellCast':
+            return event.casterId;
+        case 'permanentEntered':
+        case 'turnedFaceUp':
+            return event.controllerId;
+        case 'creatureAttacked':
+            return event.attackingPlayerId;
+        case 'handRevealed':
+            return event.revealingPlayerId;
+        case 'controlChanged':
+            return event.newControllerId;
+        // Events that are neutral or where the player context is complex
+        case 'damageDealt':
+        case 'statsModified':
+        case 'permanentLeft':
+        case 'creatureBlocked':
+        case 'creatureDied':
+        case 'spellResolved':
+        case 'spellCountered':
+        case 'abilityTriggered':
+        case 'abilityActivated':
+        case 'permanentTapped':
+        case 'permanentUntapped':
+        case 'counterAdded':
+        case 'counterRemoved':
+        case 'gameEnded':
+        case 'handLookedAt':
+        case 'cardsRevealed':
+        case 'turnChanged':
+        case 'abilityFizzled':
+        case 'targetReselected':
+        default:
+            return null;
+    }
+}
 
 // --- REPLAY-SPECIFIC PROPS ---
 interface ReplayGameLogProps {
