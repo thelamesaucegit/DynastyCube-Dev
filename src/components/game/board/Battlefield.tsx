@@ -8,13 +8,14 @@ import { useBattlefieldCards, selectViewingPlayerId } from '@/store/selectors';
 import { useResponsiveContext } from './shared';
 import { styles } from './styles';
 import { CardStack, GameCard } from '../card';
-import type { ClientCard } from '@/types';
+import type { ClientCard, EntityId } from '@/types'; // Import EntityId
+import { entityId } from '@/types'; // Import the factory function
 
 // This interface should be defined locally as it's not in the main types index.
 export interface GroupedCard {
   card: ClientCard;
   count: number;
-  cardIds: readonly string[];
+  cardIds: readonly EntityId[]; // Use EntityId
   cards: readonly ClientCard[];
 }
 
@@ -45,22 +46,22 @@ export function Battlefield({ isOpponent, spectatorMode }: BattlefieldProps) {
   const gameState = useGameStore((state) => state.gameState);
 
   // --- THIS IS THE FIX ---
-  // Re-implement the attachment/exile logic as selectors that read from the game state,
-  // instead of calling non-existent methods on the store.
-  const getAttachments = (cardId: string): ClientCard[] => {
+  // The functions now correctly accept and use the EntityId branded type.
+  const getAttachments = (cardId: EntityId): ClientCard[] => {
     if (!gameState) return [];
     return Object.values(gameState.cards).filter((c): c is ClientCard => c?.attachedTo === cardId);
   };
 
-  const getLinkedExile = (cardId: string): ClientCard[] => {
+  const getLinkedExile = (cardId: EntityId): ClientCard[] => {
     if (!gameState) return [];
+    // The key here is using the `entityId` factory if you were passing a raw string,
+    // but since we get an EntityId from the card object, we can use it directly.
     const sourceCard = gameState.cards[cardId];
     if (!sourceCard || !sourceCard.linkedExile) return [];
     return sourceCard.linkedExile.map(id => gameState.cards[id]).filter((c): c is ClientCard => !!c);
   };
   // --- END FIX ---
   
-  // This hook is for live mode and is now safe to use.
   const { playerLands, playerCreatures, playerPlaneswalkers, playerOther, opponentLands, opponentCreatures, opponentPlaneswalkers, opponentOther } = useBattlefieldCards();
 
   const lands = isOpponent ? opponentLands : playerLands;
@@ -69,7 +70,7 @@ export function Battlefield({ isOpponent, spectatorMode }: BattlefieldProps) {
   const other = isOpponent ? opponentOther : playerOther;
 
   const groupedLands = useMemo(() => groupCards(lands), [lands]);
-  const toSingles = (cards: readonly ClientCard[]) => cards.map((card) => ({ card, count: 1, cardIds: [card.id] as const, cards: [card] as const }));
+  const toSingles = (cards: readonly ClientCard[]) => cards.map((card) => ({ card, count: 1, cardIds: [card.id], cards: [card] as const }));
   const groupedCreatures = useMemo(() => toSingles(creatures), [creatures]);
   const groupedPlaneswalkers = useMemo(() => toSingles(planeswalkers), [planeswalkers]);
   const groupedOther = useMemo(() => toSingles(other), [other]);
