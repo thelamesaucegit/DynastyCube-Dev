@@ -9,16 +9,17 @@ import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types'
 import { calculateFittingCardWidth } from '@/hooks/useResponsive';
 import { useResponsiveContext } from './shared';
 import { styles } from './styles';
-import { GameCard } from '../card'; // Original, for LIVE mode
-import { ReplayGameCard } from '../card/ReplayGameCard'; // Our simple renderer, for REPLAY mode
-import { CardPreview } from '@/app/components/CardPreview'; // Your site-wide preview component
+import { GameCard } from '../card';
+import { ReplayGameCard } from '../card/ReplayGameCard';
+import { CardPreview } from '@/app/components/CardPreview';
 import { CARD_BACK_IMAGE_URL } from '@/utils/cardImages';
 import { useSettings } from '@/contexts/SettingsContext';
 
 // ========================================================================
-// PROPS INTERFACES - CLEANED UP
+// PROPS INTERFACES - DEFINITIVELY CORRECTED
 // ========================================================================
 
+// The main router component accepts all possible props, all optional where applicable.
 interface CardRowProps {
   zoneId: ZoneId;
   snapshot?: SpectatorStateUpdate;
@@ -30,13 +31,27 @@ interface CardRowProps {
   ghostCards?: readonly ClientCard[];
 }
 
-interface LiveCardRowProps extends Omit<CardRowProps, 'snapshot' | 'cardDataMap'> {}
-
-interface ReplayCardRowProps extends Omit<CardRowProps, 'ghostCards' | 'interactive'> {
-    snapshot: SpectatorStateUpdate;
-    cardDataMap: Record<string, ReplayCardData>;
+// LiveCardRow ONLY knows about props relevant to a live game. NO OMIT.
+interface LiveCardRowProps {
+  zoneId: ZoneId;
+  faceDown?: boolean;
+  interactive?: boolean;
+  small?: boolean;
+  inverted?: boolean;
+  ghostCards?: readonly ClientCard[];
 }
 
+// ReplayCardRow ONLY knows about props relevant to a replay.
+interface ReplayCardRowProps {
+    zoneId: ZoneId;
+    snapshot: SpectatorStateUpdate;
+    cardDataMap: Record<string, ReplayCardData>;
+    faceDown?: boolean;
+    small?: boolean;
+    inverted?: boolean;
+}
+
+// HandFan is a "dumb" component and its props are correct.
 interface HandFanProps {
   cards: readonly ClientCard[];
   cardDataMap?: Record<string, ReplayCardData>;
@@ -213,7 +228,7 @@ function ReplayCardRow({ zoneId, snapshot, cardDataMap, faceDown = false, small 
 }
 
 // ========================================================================
-// HandFan (The "Dumb" Renderer) - Now uses ReplayGameCard for replays
+// HandFan (The "Dumb" Renderer)
 // ========================================================================
 
 function HandFan({
@@ -278,7 +293,6 @@ function HandFan({
                 );
             }
 
-            // Live mode uses the original, hook-based GameCard
             if (interactive) {
                 return (
                     <GameCard
@@ -293,7 +307,6 @@ function HandFan({
                 );
             }
 
-            // Replay mode uses the simple ReplayGameCard wrapped in your site's CardPreview
             const cardImageData = cardDataMap?.[item.card.name];
             return (
                 <CardPreview
