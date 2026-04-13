@@ -9,14 +9,16 @@ import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types'
 import { calculateFittingCardWidth } from '@/hooks/useResponsive';
 import { useResponsiveContext } from './shared';
 import { styles } from './styles';
-import { GameCard } from '../card';
+import { GameCard } from '../card'; // Original, for LIVE mode
+import { ReplayGameCard } from '../card/ReplayGameCard'; // Our simple renderer, for REPLAY mode
+import { CardPreview } from '@/app/components/CardPreview'; // Your site-wide preview component
 import { CARD_BACK_IMAGE_URL } from '@/utils/cardImages';
+import { useSettings } from '@/contexts/SettingsContext';
 
 // ========================================================================
-// PROPS INTERFACES - DEFINITIVELY CORRECTED
+// PROPS INTERFACES - CLEANED UP
 // ========================================================================
 
-// The main router component accepts props for BOTH modes, all optional where applicable.
 interface CardRowProps {
   zoneId: ZoneId;
   snapshot?: SpectatorStateUpdate;
@@ -28,34 +30,20 @@ interface CardRowProps {
   ghostCards?: readonly ClientCard[];
 }
 
-// LiveCardRow ONLY knows about props relevant to a live game.
-interface LiveCardRowProps {
-  zoneId: ZoneId;
-  faceDown?: boolean;
-  interactive?: boolean;
-  small?: boolean;
-  inverted?: boolean;
-  ghostCards?: readonly ClientCard[];
-}
+interface LiveCardRowProps extends Omit<CardRowProps, 'snapshot' | 'cardDataMap'> {}
 
-// ReplayCardRow ONLY knows about props relevant to a replay.
-interface ReplayCardRowProps {
-    zoneId: ZoneId;
+interface ReplayCardRowProps extends Omit<CardRowProps, 'ghostCards' | 'interactive'> {
     snapshot: SpectatorStateUpdate;
     cardDataMap: Record<string, ReplayCardData>;
-    faceDown?: boolean;
-    small?: boolean;
-    inverted?: boolean;
 }
 
-// HandFan is a "dumb" component and its props are correct.
 interface HandFanProps {
   cards: readonly ClientCard[];
   cardDataMap?: Record<string, ReplayCardData>;
+  useOldestArt?: boolean;
   placeholderCount?: number;
   fittingWidth: number;
   cardHeight: number;
-  cardGap: number;
   faceDown: boolean;
   revealedCards?: boolean;
   interactive: boolean;
@@ -70,15 +58,13 @@ interface HandFanProps {
 
 export function CardRow(props: CardRowProps) {
   if (props.snapshot && props.cardDataMap) {
-    // In replay mode, render the pure component
     return <ReplayCardRow {...props} snapshot={props.snapshot} cardDataMap={props.cardDataMap} />;
   }
-  // In live mode, render the component that uses hooks
   return <LiveCardRow {...props} />;
 }
 
 // ========================================================================
-// LIVE COMPONENT (uses hooks)
+// LIVE COMPONENT (uses hooks and original GameCard)
 // ========================================================================
 
 function LiveCardRow({ zoneId, faceDown = false, interactive = false, small = false, inverted = false, ghostCards = [] }: LiveCardRowProps) {
@@ -116,7 +102,6 @@ function LiveCardRow({ zoneId, faceDown = false, interactive = false, small = fa
         placeholderCount={showPlaceholders ? zoneSize : unrevealedCount}
         fittingWidth={fittingWidth}
         cardHeight={cardHeight}
-        cardGap={responsive.cardGap}
         faceDown={faceDown && !hasRevealedCards}
         revealedCards={hasRevealedCards}
         interactive={interactive}
@@ -145,11 +130,12 @@ function LiveCardRow({ zoneId, faceDown = false, interactive = false, small = fa
 }
 
 // ========================================================================
-// REPLAY COMPONENT (zero hooks)
+// REPLAY COMPONENT (zero hooks, uses ReplayGameCard)
 // ========================================================================
 
 function ReplayCardRow({ zoneId, snapshot, cardDataMap, faceDown = false, small = false, inverted = false }: ReplayCardRowProps) {
   const responsive = useResponsiveContext();
+  const { useOldestArt } = useSettings();
   
   const { cards, zoneSize } = useMemo(() => {
     const zone = snapshot.gameState.zones.find(z => z.zoneId.ownerId === zoneId.ownerId && z.zoneId.zoneType === zoneId.zoneType);
@@ -181,55 +167,68 @@ function ReplayCardRow({ zoneId, snapshot, cardDataMap, faceDown = false, small 
     return (
       <HandFan
         cards={cards}
+        cardDataMap={cardDataMap}
+        useOldestArt={useOldestArt}
         placeholderCount={showPlaceholders ? zoneSize : unrevealedCount}
         fittingWidth={fittingWidth}
         cardHeight={cardHeight}
-        cardGap={responsive.cardGap}
         faceDown={faceDown && !hasRevealedCards}
         revealedCards={hasRevealedCards}
         interactive={false}
         small={small}
         inverted={inverted}
-        cardDataMap={cardDataMap}
       />
     );
   }
 
+  // Fallback for a non-fan row in replay mode
   return (
     <div style={{ ...styles.cardRow, gap: responsive.cardGap, padding: responsive.cardGap }}>
-      {cards.map((card) => (
-        <GameCard
-          key={card.id}
-          card={card}
-          faceDown={faceDown}
-          interactive={false}
-          small={small}
-          overrideWidth={fittingWidth}
-          inHand={false}
-          cardDataMap={cardDataMap}
-        />
-      ))}
+      {cards.map((card) => {
+          const cardImageData = cardDataMap[card.name];
+          return (
+            <CardPreview
+                key={card.id}
+                card={{
+                    card_name: card.name,
+                    image_url: cardImageData?.image_url,
+                    oldest_image_url: cardImageData?.oldest_image_url,
+                }}
+            >
+                <ReplayGameCard
+                    cardData={{
+                        card_name: card.name,
+                        image_url: cardImageData?.image_url,
+                        oldest_image_url: cardImageData?.oldest_image_url,
+                    }}
+                    useOldestArt={useOldestArt}
+                    width={`${fittingWidth}px`}
+                    height={`${cardHeight}px`}
+                />
+            </CardPreview>
+          );
+      })}
     </div>
   );
 }
 
 // ========================================================================
-// HandFan (The "Dumb" Renderer) - UNCHANGED
+// HandFan (The "Dumb" Renderer) - Now uses ReplayGameCard for replays
 // ========================================================================
 
-export function HandFan({
+function HandFan({
   cards,
+  cardDataMap,
+  useOldestArt,
   placeholderCount = 0,
   fittingWidth,
   cardHeight,
-  cardGap,
   faceDown,
   revealedCards = false,
   interactive,
   small,
   inverted = false,
   ghostCards = [],
-  cardDataMap,
 }: HandFanProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
@@ -270,6 +269,54 @@ export function HandFan({
         const zIndex = 50 - Math.abs(index - Math.floor(cardCount / 2));
         const key = item.type === 'card' ? item.card.id : `placeholder-${item.index}`;
 
+        const renderCard = () => {
+            if (item.type === 'placeholder') {
+                return (
+                    <div style={{ width: fittingWidth, height: cardHeight, borderRadius: 6, border: '2px solid #333', boxShadow: '0 2px 8px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
+                        <img src={CARD_BACK_IMAGE_URL} alt="Card back" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                    </div>
+                );
+            }
+
+            // Live mode uses the original, hook-based GameCard
+            if (interactive) {
+                return (
+                    <GameCard
+                        card={item.card}
+                        faceDown={faceDown && !item.showFaceUp}
+                        interactive={interactive}
+                        small={small}
+                        overrideWidth={fittingWidth}
+                        inHand={interactive && !faceDown}
+                        isGhost={item.isGhost}
+                    />
+                );
+            }
+
+            // Replay mode uses the simple ReplayGameCard wrapped in your site's CardPreview
+            const cardImageData = cardDataMap?.[item.card.name];
+            return (
+                <CardPreview
+                    card={{
+                        card_name: item.card.name,
+                        image_url: cardImageData?.image_url,
+                        oldest_image_url: cardImageData?.oldest_image_url,
+                    }}
+                >
+                    <ReplayGameCard
+                        cardData={{
+                            card_name: item.card.name,
+                            image_url: cardImageData?.image_url,
+                            oldest_image_url: cardImageData?.oldest_image_url,
+                        }}
+                        useOldestArt={useOldestArt ?? false}
+                        width={`${fittingWidth}px`}
+                        height={`${cardHeight}px`}
+                    />
+                </CardPreview>
+            );
+        };
+        
         return (
           <div
             key={key}
@@ -277,22 +324,7 @@ export function HandFan({
             onMouseEnter={() => !inverted && setHoveredIndex(index)}
             onMouseLeave={() => !inverted && setHoveredIndex(null)}
           >
-            {item.type === 'card' ? (
-              <GameCard
-                card={item.card}
-                faceDown={faceDown && !item.showFaceUp}
-                interactive={interactive}
-                small={small}
-                overrideWidth={fittingWidth}
-                inHand={interactive && !faceDown}
-                isGhost={item.isGhost}
-                cardDataMap={cardDataMap}
-              />
-            ) : (
-              <div style={{ width: fittingWidth, height: cardHeight, borderRadius: 6, border: '2px solid #333', boxShadow: '0 2px 8px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
-                <img src={CARD_BACK_IMAGE_URL} alt="Card back" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-              </div>
-            )}
+            {renderCard()}
           </div>
         );
       })}
