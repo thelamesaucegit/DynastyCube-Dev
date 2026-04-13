@@ -39,6 +39,8 @@ export const SeasonPhaseManager: React.FC = () => {
   const [endTime, setEndTime] = useState("");
   const [draftLoading, setDraftLoading] = useState(false);
 
+  
+
   const phases: SeasonPhase[] = ["preseason", "draft", "season", "playoffs", "postseason"];
 
   useEffect(() => {
@@ -61,7 +63,7 @@ export const SeasonPhaseManager: React.FC = () => {
       setLoading(false);
     }
   };
-
+const [participatingTeams, setParticipatingTeams] = useState<DraftOrderEntry[]>([]);
   const handlePhaseChange = async (newPhase: SeasonPhase) => {
     if (!season || season.phase === newPhase) return;
 
@@ -75,6 +77,7 @@ export const SeasonPhaseManager: React.FC = () => {
         ]);
         setActiveSession(sessionRes.session);
         setDraftOrderCount(orderRes.order.length);
+        setParticipatingTeams(orderRes.order);  
       } catch (err) {
         console.error("Error loading draft data:", err);
       } finally {
