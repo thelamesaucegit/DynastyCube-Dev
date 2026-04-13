@@ -10,7 +10,14 @@ import { styles } from './styles';
 import { CardStack } from '../card';
 import { GameCard } from '../card';
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
-import type { ClientCard, GroupedCard } from '@/types';
+import type { ClientCard } from '@/types';
+
+export interface GroupedCard {
+  card: ClientCard;
+  count: number;
+  cardIds: readonly string[];
+  cards: readonly ClientCard[];
+}
 
 // Helper function to group cards by name
 function groupCards(cards: readonly ClientCard[]): GroupedCard[] {
