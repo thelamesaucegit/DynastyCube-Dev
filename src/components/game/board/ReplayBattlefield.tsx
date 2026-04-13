@@ -12,6 +12,7 @@ interface ReplayBattlefieldProps {
   isOpponent: boolean;
   snapshot: SpectatorStateUpdate;
   cardDataMap: Record<string, ReplayCardData>;
+  useOldestArt: boolean;
 }
 
 export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap }: ReplayBattlefieldProps) {
