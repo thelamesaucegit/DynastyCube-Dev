@@ -365,6 +365,7 @@ export async function executeAutoDraft(
 }> {
   try {
     const supabase = adminClient ?? await createServerClient();
+
     const { status: draftStatus, error: statusError } = await getDraftStatus(draftSessionId, supabase);
     if (statusError || !draftStatus) {
       return { success: false, error: statusError || "No active draft" };
@@ -372,17 +373,81 @@ export async function executeAutoDraft(
     if (draftStatus.onTheClock.teamId !== teamId) {
       return { success: false, error: "This team is not on the clock" };
     }
+
+    // --- STEP 2.2b: Early exit if balance is 0 and no queue entries ---
+    // Algorithm picks require funds. Manual queue picks and captain/majority
+    // force picks are allowed even at 0 balance (will be handled below).
+    const { team: teamBalance } = await getTeamBalance(teamId, supabase);
+    const balance = teamBalance?.cubucks_balance ?? 0;
+
+    if (balance <= 0) {
+      const { data: queueCheck } = await supabase
+        .from("team_draft_queue")
+        .select("id")
+        .eq("team_id", teamId)
+        .limit(1);
+
+      if (!queueCheck || queueCheck.length === 0) {
+        // No queue, no funds — skip immediately without computing anything
+        const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId, supabase);
+        const pickNumber = existingPicks.length + 1;
+        const { pick: skippedPick, error: skipError } = await addSkippedPick(
+          teamId, pickNumber, draftSessionId, supabase
+        );
+        if (skipError) return { success: false, source: "skipped", error: skipError };
+
+        // Set pick_source on the skipped record
+        if (skippedPick?.id) {
+          await supabase
+            .from("team_draft_picks")
+            .update({ pick_source: "skipped" })
+            .eq("id", skippedPick.id);
+        }
+
+        const { data: teamData } = await supabase
+          .from('teams').select('name').eq('id', teamId).single();
+        supabase.channel(`draft-updates-${draftSessionId}`).send({
+          type: 'broadcast',
+          event: 'new_pick',
+          payload: { ...skippedPick, team_name: teamData?.name || 'Unknown' },
+        });
+        return { success: true, source: "skipped", pick: { cardId: "skipped", cardName: "SKIPPED", cost: 0 } };
+      }
+    }
+
+    // --- Normal flow: queue exists or balance > 0 ---
     const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId, supabase);
     const pickNumber = existingPicks.length + 1;
     const preview = await getAutoDraftPreview(teamId, draftSessionId, supabase);
     const card = preview.nextPick;
+
     if (!card) {
-      const { pick: skippedPick, error: skipError } = await addSkippedPick(teamId, pickNumber, draftSessionId, supabase);
+      const { pick: skippedPick, error: skipError } = await addSkippedPick(
+        teamId, pickNumber, draftSessionId, supabase
+      );
       if (skipError) return { success: false, source: "skipped", error: skipError };
-      const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
-      supabase.channel(`draft-updates-${draftSessionId}`).send({ type: 'broadcast', event: 'new_pick', payload: { ...skippedPick, team_name: teamData?.name || 'Unknown' } });
+
+      if (skippedPick?.id) {
+        await supabase
+          .from("team_draft_picks")
+          .update({ pick_source: "skipped" })
+          .eq("id", skippedPick.id);
+      }
+
+      const { data: teamData } = await supabase
+        .from('teams').select('name').eq('id', teamId).single();
+      supabase.channel(`draft-updates-${draftSessionId}`).send({
+        type: 'broadcast', event: 'new_pick',
+        payload: { ...skippedPick, team_name: teamData?.name || 'Unknown' },
+      });
       return { success: true, source: "skipped", pick: { cardId: "skipped", cardName: "SKIPPED", cost: 0 } };
     }
+
+    // For queue picks at 0 balance, pass cost as 0 so the RPC doesn't reject
+    const effectiveCost = (preview.source === "manual_queue" && balance <= 0)
+      ? 0
+      : card.cubucks_cost || 1;
+
     const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
       p_team_id: teamId,
       p_draft_session_id: draftSessionId,
@@ -398,33 +463,152 @@ export async function executeAutoDraft(
       p_mana_cost: card.mana_cost,
       p_cmc: card.cmc,
       p_pick_number: pickNumber,
-      p_cost: card.cubucks_cost || 1,
-      p_is_manual_pick: false,
+      p_cost: effectiveCost,
+      p_is_manual_pick: preview.source === "manual_queue",
       p_user_id: null,
     }).single();
+
     if (rpcError) {
       console.error("Atomic auto-draft failed:", rpcError);
       return { success: false, error: `Draft failed: ${rpcError.message}` };
     }
+
     const newPick = data as DraftPick;
     if (!newPick) return { success: false, error: "Draft pick could not be confirmed." };
+
+    // --- STEP 2.2a: Record pick source ---
+    const pickSource = preview.source === "manual_queue" ? "manual_queue" : "algorithm";
+    if (newPick.id) {
+      await supabase
+        .from("team_draft_picks")
+        .update({ pick_source: pickSource })
+        .eq("id", newPick.id);
+    }
+
     await supabase.from("auto_draft_log").insert({
       team_id: teamId,
       card_id: card.card_id,
       card_name: card.card_name,
       card_pool_id: card.id,
-      pick_source: preview.source === "manual_queue" ? "manual_queue" : "algorithm",
+      pick_source: pickSource,
       algorithm_details: preview.algorithmDetails ?? null,
       round_number: pickNumber,
     });
+
     await conditionallyCleanupDraftQueues(card.card_id, supabase);
+
     const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
-    supabase.channel(`draft-updates-${draftSessionId}`).send({ type: 'broadcast', event: 'new_pick', payload: { ...newPick, team_name: teamData?.name || 'Unknown' } });
-    return { success: true, pick: { cardId: card.card_id, cardName: card.card_name, cost: card.cubucks_cost || 1 }, source: preview.source, };
+    supabase.channel(`draft-updates-${draftSessionId}`).send({
+      type: 'broadcast', event: 'new_pick',
+      payload: { ...newPick, team_name: teamData?.name || 'Unknown' },
+    });
+
+    return {
+      success: true,
+      pick: { cardId: card.card_id, cardName: card.card_name, cost: effectiveCost },
+      source: preview.source,
+    };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    if (errorMessage.includes("Failed to find Server Action")) return { success: false, error: "Deployment has changed. Please refresh.", staleDeployment: true };
+    if (errorMessage.includes("Failed to find Server Action")) {
+      return { success: false, error: "Deployment has changed. Please refresh.", staleDeployment: true };
+    }
     console.error("Unhandled error in executeAutoDraft:", error);
     return { success: false, error: "An unexpected error occurred." };
+  }
+}
+
+/**
+ * Allows a team Captain or Pilot to force a draft pick immediately,
+ * bypassing the vote threshold. Allowed even at 0 balance.
+ * Records pick_source as 'captain_force'.
+ */
+export async function captainForcePick(
+  teamId: string,
+  cardPoolId: string,
+  draftSessionId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createServerClient();
+
+    // Verify user is authenticated
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) return { success: false, error: "Not authenticated" };
+
+    // Verify user has captain or pilot role on this team
+    const { data: roleData } = await supabase
+      .from("team_members")
+      .select("role")
+      .eq("team_id", teamId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!roleData || !["captain", "pilot"].includes(roleData.role ?? "")) {
+      return { success: false, error: "Only Captains and Pilots can force a pick." };
+    }
+
+    // Verify it's this team's turn
+    const { status: draftStatus } = await getDraftStatus(draftSessionId);
+    if (draftStatus?.onTheClock?.teamId !== teamId) {
+      return { success: false, error: "It is not this team's turn to pick." };
+    }
+
+    // Verify card is available
+    const { cards: availableCards } = await getAvailableCardsForDraft();
+    const card = availableCards.find(c => c.id === cardPoolId);
+    if (!card) return { success: false, error: "Card is no longer available." };
+
+    const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId);
+    const pickNumber = existingPicks.length + 1;
+
+    // Use 0 cost if balance is insufficient — captain force overrides balance gating
+    const { team: teamBalance } = await getTeamBalance(teamId);
+    const balance = teamBalance?.cubucks_balance ?? 0;
+    const effectiveCost = balance >= (card.cubucks_cost || 1) ? card.cubucks_cost || 1 : 0;
+
+    const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
+      p_team_id: teamId,
+      p_draft_session_id: draftSessionId,
+      p_card_pool_id: card.id,
+      p_card_id: card.card_id,
+      p_card_name: card.card_name,
+      p_card_set: card.card_set,
+      p_card_type: card.card_type,
+      p_rarity: card.rarity,
+      p_colors: card.colors,
+      p_image_url: card.image_url,
+      p_oldest_image_url: card.oldest_image_url,
+      p_mana_cost: card.mana_cost,
+      p_cmc: card.cmc,
+      p_pick_number: pickNumber,
+      p_cost: effectiveCost,
+      p_is_manual_pick: true,
+      p_user_id: user.id,
+    }).single();
+
+    if (rpcError) return { success: false, error: rpcError.message };
+
+    const newPick = data as DraftPick;
+    if (!newPick) return { success: false, error: "Pick could not be confirmed." };
+
+    // Record source
+    if (newPick.id) {
+      await supabase
+        .from("team_draft_picks")
+        .update({ pick_source: "captain_force" })
+        .eq("id", newPick.id);
+    }
+
+    await conditionallyCleanupDraftQueues(card.card_id);
+
+    const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
+    supabase.channel(`draft-updates-${draftSessionId}`).send({
+      type: 'broadcast', event: 'new_pick',
+      payload: { ...newPick, team_name: teamData?.name || 'Unknown' },
+    });
+
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Unexpected error" };
   }
 }

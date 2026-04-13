@@ -307,7 +307,7 @@ export async function getTeamsForDraftSelection(seasonId: string): Promise<{
         const available = (teamsResult.data ?? []).filter(t => !participatingIds.has(t.id));
 
         return { participating: order, available };
-    } catch (e) {
+    } catch {
         return { participating: [], available: [], error: 'Unexpected error' };
     }
 }

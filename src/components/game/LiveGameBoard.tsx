@@ -29,7 +29,10 @@ interface LiveGameBoardProps {
 }
 
 export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
+  const responsive = useResponsive(topOffset);
   const store = useGameStore((state) => state);
+  
+  // All hooks are called at the top level, unconditionally.
   const {
     gameState: playerGameState,
     spectatingState,
@@ -62,27 +65,8 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
     manaSelectionState,
     cancelManaSelection,
   } = store;
-
+  
   const { executeAction } = useInteraction();
-  const responsive = useResponsive(topOffset);
-
-  const handleConfirmManaSelection = useCallback(() => {
-    if (!manaSelectionState) return;
-    const { pipelineState, advancePipeline } = useGameStore.getState();
-    if (pipelineState) {
-      useGameStore.setState({ manaSelectionState: null });
-      advancePipeline({ type: 'manaSource', selectedSources: [...manaSelectionState.selectedSources] });
-      return;
-    }
-    const paymentStrategy = { type: 'Explicit' as const, manaAbilitiesToActivate: [...manaSelectionState.selectedSources] };
-    const modifiedAction = { ...manaSelectionState.action, paymentStrategy } as import('../../types').GameAction;
-    const { availableManaSources: _, autoTapPreview: _2, ...restActionInfo } = manaSelectionState.actionInfo;
-    const modifiedActionInfo: import('../../types').LegalActionInfo = { ...restActionInfo, action: modifiedAction };
-    cancelManaSelection();
-    executeAction(modifiedActionInfo);
-  }, [manaSelectionState, cancelManaSelection, executeAction]);
-
-  const gameState = spectatingState?.gameState ?? playerGameState;
   const viewingPlayer = useViewingPlayer();
   const opponent = useOpponent();
   const stackCards = useStackCards();
@@ -90,7 +74,7 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
   const opponentRevealedTopCard = useRevealedLibraryTopCard(opponent?.playerId ?? null);
   const opponentGhostCards = useMemo(() => (opponentRevealedTopCard ? [opponentRevealedTopCard] : []), [opponentRevealedTopCard]);
 
-  // --- THIS IS THE FIX ---
+  // This logic is now safe because all hooks are called before this.
   const effectiveViewingPlayer = useMemo(() => {
     if (spectatingState && spectatingState.gameState) {
       return spectatingState.gameState.players.find(p => p.playerId === spectatingState.player1Id) ?? null;
@@ -104,7 +88,8 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
     }
     return opponent;
   }, [spectatingState, opponent]);
-  // --- END FIX ---
+
+  const gameState = spectatingState?.gameState ?? playerGameState;
 
   if (!gameState || !playerId || !viewingPlayer) {
     return null;
