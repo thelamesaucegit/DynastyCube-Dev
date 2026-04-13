@@ -43,7 +43,6 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
     clearAttackers,
     clearBlockerAssignments,
     attackWithAll,
-    priorityMode,
     nextStopPoint,
     priorityMode,
     cyclePriorityMode,
