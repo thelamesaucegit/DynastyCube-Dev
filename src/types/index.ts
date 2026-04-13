@@ -1,3 +1,5 @@
+//src/types/index.ts
+
 // Enums
 export {
   Phase,
