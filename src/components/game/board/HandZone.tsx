@@ -14,7 +14,7 @@ import { GameCard } from '../card';
 import { CARD_BACK_IMAGE_URL } from '@/utils/cardImages';
 
 // ========================================================================
-// 1. PROPS INTERFACES (UPDATED FOR REPLAY MODE)
+// PROPS INTERFACES
 // ========================================================================
 
 interface CardRowProps {
@@ -26,8 +26,15 @@ interface CardRowProps {
   small?: boolean;
   inverted?: boolean;
   ghostCards?: readonly ClientCard[];
-    snapshot?: SpectatorStateUpdate;
-  cardDataMap?: Record<string, ReplayCardData>;
+}
+
+// Props for the hook-using version
+interface LiveCardRowProps extends Omit<CardRowProps, 'snapshot' | 'cardDataMap'> {}
+
+// Props for the pure, hook-free version
+interface ReplayCardRowProps extends Omit<CardRowProps, 'ghostCards' | 'interactive'> {
+    snapshot: SpectatorStateUpdate;
+    cardDataMap: Record<string, ReplayCardData>;
 }
 
 interface HandFanProps {
@@ -46,38 +53,28 @@ interface HandFanProps {
 }
 
 // ========================================================================
-// 2. CardRow (The "Smart" Container)
+// ROUTER COMPONENT
 // ========================================================================
 
-export function CardRow({
-  zoneId,
-  snapshot,
-  cardDataMap,
-  faceDown = false,
-  interactive = false,
-  small = false,
-  inverted = false,
-  ghostCards = [],
-}: CardRowProps) {
-  
-  // This component now correctly determines its data source
-  const liveCards = useZoneCards(zoneId);
-  const liveZone = useZone(zoneId);
+export function CardRow(props: CardRowProps) {
+  if (props.snapshot) {
+    // In replay mode, render the pure component that takes snapshot data
+    return <ReplayCardRow {...props} snapshot={props.snapshot} cardDataMap={props.cardDataMap ?? {}} />;
+  }
+  // In live mode, render the component that uses hooks
+  return <LiveCardRow {...props} />;
+}
+
+// ========================================================================
+// LIVE COMPONENT (uses hooks)
+// ========================================================================
+
+function LiveCardRow({ zoneId, faceDown = false, interactive = false, small = false, inverted = false, ghostCards = [] }: LiveCardRowProps) {
+  const cards = useZoneCards(zoneId);
+  const zone = useZone(zoneId);
   const responsive = useResponsiveContext();
-
-  const { cards, zoneSize } = useMemo(() => {
-    if (snapshot) {
-      // In replay mode, derive data from the snapshot prop
-      const zone = snapshot.gameState.zones.find(z => z.zoneId.ownerId === zoneId.ownerId && z.zoneId.zoneType === zoneId.zoneType);
-      if (!zone) return { cards: [], zoneSize: 0 };
-      const zoneCards = zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean);
-      return { cards: zoneCards, zoneSize: zone.size };
-    }
-    // In live mode, use the existing hooks
-    return { cards: liveCards, zoneSize: liveZone?.size ?? 0 };
-  }, [snapshot, zoneId, liveCards, liveZone]);
-
-  // All calculation logic from your original file is preserved
+  
+  const zoneSize = zone?.size ?? 0;
   const unrevealedCount = faceDown ? Math.max(0, zoneSize - cards.length) : 0;
   const showPlaceholders = faceDown && cards.length === 0 && zoneSize > 0;
 
@@ -110,16 +107,14 @@ export function CardRow({
         cardGap={responsive.cardGap}
         faceDown={faceDown && !hasRevealedCards}
         revealedCards={hasRevealedCards}
-        interactive={interactive && !snapshot} // Interaction is disabled in snapshot mode
+        interactive={interactive}
         small={small}
         inverted={inverted}
         ghostCards={ghostCards}
-        cardDataMap={cardDataMap}
       />
     );
   }
 
-  // Fallback for non-fan rows
   return (
     <div style={{ ...styles.cardRow, gap: responsive.cardGap, padding: responsive.cardGap }}>
       {cards.map((card) => (
@@ -127,10 +122,78 @@ export function CardRow({
           key={card.id}
           card={card}
           faceDown={faceDown}
-          interactive={interactive && !snapshot} // Interaction is disabled in snapshot mode
+          interactive={interactive}
           small={small}
           overrideWidth={fittingWidth}
           inHand={isPlayerHand}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ========================================================================
+// REPLAY COMPONENT (zero hooks)
+// ========================================================================
+
+function ReplayCardRow({ zoneId, snapshot, cardDataMap, faceDown = false, small = false, inverted = false }: ReplayCardRowProps) {
+  const responsive = useResponsiveContext();
+  
+  const { cards, zoneSize } = useMemo(() => {
+    const zone = snapshot.gameState.zones.find(z => z.zoneId.ownerId === zoneId.ownerId && z.zoneId.zoneType === zoneId.zoneType);
+    if (!zone) return { cards: [], zoneSize: 0 };
+    const zoneCards = zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean);
+    return { cards: zoneCards, zoneSize: zone.size };
+  }, [snapshot, zoneId]);
+  
+  const unrevealedCount = faceDown ? Math.max(0, zoneSize - cards.length) : 0;
+  const showPlaceholders = faceDown && cards.length === 0 && zoneSize > 0;
+
+  if (cards.length === 0 && !showPlaceholders && unrevealedCount === 0) {
+    return <div style={{ ...styles.emptyZone, fontSize: responsive.fontSize.small }}>No cards</div>;
+  }
+    
+  const sideZoneWidth = responsive.pileWidth + 20;
+  const availableWidth = responsive.viewportWidth - (responsive.containerPadding * 2) - (sideZoneWidth * 2);
+  const totalCardCount = faceDown ? zoneSize : cards.length;
+  const cardCount = showPlaceholders ? zoneSize : totalCardCount;
+  const baseWidth = small ? responsive.smallCardWidth : responsive.cardWidth;
+  const minWidth = small ? 30 : 45;
+  const fittingWidth = calculateFittingCardWidth(cardCount, availableWidth, responsive.cardGap, baseWidth, minWidth);
+
+  const cardHeight = Math.round(fittingWidth * 1.4);
+  const hasRevealedCards = faceDown && cards.length > 0;
+  const shouldShowFan = (faceDown && inverted) || (faceDown && !inverted);
+
+  if (shouldShowFan) {
+    return (
+      <HandFan
+        cards={cards}
+        placeholderCount={showPlaceholders ? zoneSize : unrevealedCount}
+        fittingWidth={fittingWidth}
+        cardHeight={cardHeight}
+        cardGap={responsive.cardGap}
+        faceDown={faceDown && !hasRevealedCards}
+        revealedCards={hasRevealedCards}
+        interactive={false} // Never interactive in replay
+        small={small}
+        inverted={inverted}
+        cardDataMap={cardDataMap}
+      />
+    );
+  }
+
+  return (
+    <div style={{ ...styles.cardRow, gap: responsive.cardGap, padding: responsive.cardGap }}>
+      {cards.map((card) => (
+        <GameCard
+          key={card.id}
+          card={card}
+          faceDown={faceDown}
+          interactive={false} // Never interactive in replay
+          small={small}
+          overrideWidth={fittingWidth}
+          inHand={false}
           cardDataMap={cardDataMap}
         />
       ))}
@@ -139,7 +202,7 @@ export function CardRow({
 }
 
 // ========================================================================
-// 3. HandFan (The "Dumb" Renderer)
+// HandFan (The "Dumb" Renderer) - UNCHANGED
 // ========================================================================
 
 export function HandFan({
@@ -158,7 +221,19 @@ export function HandFan({
 }: HandFanProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-  // All item and style calculation logic from your original file is preserved
+  const baseCardCount = revealedCards
+    ? cards.length + placeholderCount
+    : (placeholderCount > 0 ? placeholderCount : cards.length);
+  const cardCount = baseCardCount + (ghostCards?.length ?? 0);
+
+  const maxRotation = Math.min(12, 40 / Math.max(cardCount, 1));
+  const maxVerticalOffset = Math.min(15, 45 / Math.max(cardCount, 1));
+  const overlapFactor = Math.max(0.5, 0.85 - (cardCount * 0.025));
+  const cardSpacing = fittingWidth * overlapFactor;
+  const totalWidth = cardSpacing * (cardCount - 1) + fittingWidth;
+  const edgeMargin = -15;
+  const rotationMultiplier = inverted ? -1 : 1;
+
   const baseItems = revealedCards
     ? [
         ...cards.map((card, index) => ({ type: 'card' as const, card, index, showFaceUp: true, isGhost: false })),
@@ -168,17 +243,14 @@ export function HandFan({
       ? Array.from({ length: placeholderCount }, (_, i) => ({ type: 'placeholder' as const, index: i }))
       : cards.map((card, index) => ({ type: 'card' as const, card, index, showFaceUp: false, isGhost: false }));
 
-  const ghostItems = ghostCards.map((card, i) => ({ type: 'card' as const, card, index: baseItems.length + i, showFaceUp: true, isGhost: true }));
+  const ghostItems = (ghostCards ?? []).map((card, i) => ({
+    type: 'card' as const,
+    card,
+    index: baseItems.length + i,
+    showFaceUp: true,
+    isGhost: true,
+  }));
   const items = [...baseItems, ...ghostItems];
-  const cardCount = items.length;
-
-  const maxRotation = Math.min(12, 40 / Math.max(cardCount, 1));
-  const maxVerticalOffset = Math.min(15, 45 / Math.max(cardCount, 1));
-  const overlapFactor = Math.max(0.5, 0.85 - (cardCount * 0.025));
-  const cardSpacing = fittingWidth * overlapFactor;
-  const totalWidth = cardSpacing * (cardCount - 1) + fittingWidth;
-  const edgeMargin = -15;
-  const rotationMultiplier = inverted ? -1 : 1;
 
   return (
     <div style={{ position: 'relative', width: totalWidth, height: cardHeight + maxVerticalOffset + 40, marginBottom: inverted ? 0 : edgeMargin, marginTop: inverted ? edgeMargin : 0 }}>
