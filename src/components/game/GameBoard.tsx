@@ -15,6 +15,12 @@ interface GameBoardProps {
   cardDataMap?: Record<string, ReplayCardData>;
 }
 
+function ReplayGameBoardWrapper({ snapshot, cardDataMap, topOffset }: { snapshot: SpectatorStateUpdate, cardDataMap: Record<string, ReplayCardData>, topOffset: number }) {
+  const { useOldestArt } = useSettings();
+  // Now we can pass useOldestArt down as a prop
+  return <ReplayGameBoard snapshot={snapshot} cardDataMap={cardDataMap} topOffset={topOffset} useOldestArt={useOldestArt} />;
+}
+
 export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, cardDataMap = {} }: GameBoardProps) {
   
   if (spectatorMode) {
@@ -26,7 +32,7 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
     // Wrap with SettingsProvider so Replay components can access useOldestArt
     return (
         <SettingsProvider>
-            <ReplayGameBoard snapshot={snapshot} cardDataMap={cardDataMap} topOffset={topOffset} />
+            <ReplayGameBoardWrapper snapshot={snapshot} cardDataMap={cardDataMap} topOffset={topOffset} />
         </SettingsProvider>
     );
   } else {
