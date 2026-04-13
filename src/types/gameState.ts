@@ -229,6 +229,7 @@ export interface ClientZone {
 export interface ClientPlayer {
   readonly playerId: EntityId
   readonly name: string
+    readonly team_name?: string;
   readonly life: number
   readonly poisonCounters: number
   readonly handSize: number
