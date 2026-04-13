@@ -517,3 +517,98 @@ export async function executeAutoDraft(
     return { success: false, error: "An unexpected error occurred." };
   }
 }
+
+/**
+ * Allows a team Captain or Pilot to force a draft pick immediately,
+ * bypassing the vote threshold. Allowed even at 0 balance.
+ * Records pick_source as 'captain_force'.
+ */
+export async function captainForcePick(
+  teamId: string,
+  cardPoolId: string,
+  draftSessionId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createServerClient();
+
+    // Verify user is authenticated
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) return { success: false, error: "Not authenticated" };
+
+    // Verify user has captain or pilot role on this team
+    const { data: roleData } = await supabase
+      .from("team_members")
+      .select("role")
+      .eq("team_id", teamId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!roleData || !["captain", "pilot"].includes(roleData.role ?? "")) {
+      return { success: false, error: "Only Captains and Pilots can force a pick." };
+    }
+
+    // Verify it's this team's turn
+    const { status: draftStatus } = await getDraftStatus(draftSessionId);
+    if (draftStatus?.onTheClock?.teamId !== teamId) {
+      return { success: false, error: "It is not this team's turn to pick." };
+    }
+
+    // Verify card is available
+    const { cards: availableCards } = await getAvailableCardsForDraft();
+    const card = availableCards.find(c => c.id === cardPoolId);
+    if (!card) return { success: false, error: "Card is no longer available." };
+
+    const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId);
+    const pickNumber = existingPicks.length + 1;
+
+    // Use 0 cost if balance is insufficient — captain force overrides balance gating
+    const { team: teamBalance } = await getTeamBalance(teamId);
+    const balance = teamBalance?.cubucks_balance ?? 0;
+    const effectiveCost = balance >= (card.cubucks_cost || 1) ? card.cubucks_cost || 1 : 0;
+
+    const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
+      p_team_id: teamId,
+      p_draft_session_id: draftSessionId,
+      p_card_pool_id: card.id,
+      p_card_id: card.card_id,
+      p_card_name: card.card_name,
+      p_card_set: card.card_set,
+      p_card_type: card.card_type,
+      p_rarity: card.rarity,
+      p_colors: card.colors,
+      p_image_url: card.image_url,
+      p_oldest_image_url: card.oldest_image_url,
+      p_mana_cost: card.mana_cost,
+      p_cmc: card.cmc,
+      p_pick_number: pickNumber,
+      p_cost: effectiveCost,
+      p_is_manual_pick: true,
+      p_user_id: user.id,
+    }).single();
+
+    if (rpcError) return { success: false, error: rpcError.message };
+
+    const newPick = data as DraftPick;
+    if (!newPick) return { success: false, error: "Pick could not be confirmed." };
+
+    // Record source
+    if (newPick.id) {
+      await supabase
+        .from("team_draft_picks")
+        .update({ pick_source: "captain_force" })
+        .eq("id", newPick.id);
+    }
+
+    await conditionallyCleanupDraftQueues(card.card_id);
+
+    const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
+    supabase.channel(`draft-updates-${draftSessionId}`).send({
+      type: 'broadcast', event: 'new_pick',
+      payload: { ...newPick, team_name: teamData?.name || 'Unknown' },
+    });
+
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Unexpected error" };
+  }
+}
