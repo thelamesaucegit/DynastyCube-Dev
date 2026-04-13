@@ -98,22 +98,22 @@ export async function addSkippedPick(
 ): Promise<{ success: boolean; pick?: DraftPick; error?: string }> {
   const supabase = adminClient ?? await createServerClient();
   try {
-    const skippedPickData = {
-      team_id: teamId,
-      draft_session_id: draftSessionId,
-      card_id: "skipped-pick",
-      card_name: "SKIPPED",
-      pick_number: pickNumber,
-      drafted_by: null,
-    };
-    const { data: newPick, error } = await supabase.from("team_draft_picks").insert(skippedPickData).select().single();
-    if (error) {
-      console.error("Error adding skipped pick:", error);
-      return { success: false, error: error.message };
-    }
+    const { data: newPick, error } = await supabase
+      .from("team_draft_picks")
+      .insert({
+        team_id: teamId,
+        draft_session_id: draftSessionId,
+        card_id: "skipped-pick",
+        card_name: "SKIPPED",
+        pick_number: pickNumber,
+        drafted_by: null,
+        pick_source: "skipped",    // ← added
+      })
+      .select()
+      .single();
+    if (error) return { success: false, error: error.message };
     return { success: true, pick: newPick };
-  } catch (error) {
-    console.error("Unexpected error adding skipped pick:", error);
+  } catch {
     return { success: false, error: "An unexpected error occurred" };
   }
 }
