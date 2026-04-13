@@ -45,7 +45,7 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
     attackWithAll,
     priorityMode,
     nextStopPoint,
-    serverPriorityMode,
+    priorityMode,
     cyclePriorityMode,
     opponentDecisionStatus,
     stopOverrides,
@@ -282,7 +282,7 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
             <button onClick={toggleAutoTap} title={autoTapEnabled ? 'Auto Tap: Lands are tapped automatically. Click to switch to manual mana selection.' : 'Manual Tap: You choose which lands to tap. Click to switch to auto tap.'} style={{ ...styles.floatingBarButton, backgroundColor: autoTapEnabled ? 'rgba(40, 40, 40, 0.8)' : 'rgba(245, 158, 11, 0.9)', color: autoTapEnabled ? '#999' : '#000', border: autoTapEnabled ? '1px solid #555' : '1px solid #f59e0b', cursor: 'pointer', transition: 'all 0.2s' }}>
               <i className="ms ms-land" style={{ fontSize: 14 }} />
             </button>
-            <button onClick={cyclePriorityMode} title={serverPriorityMode === 'fullControl' ? 'Full Control: You receive priority at every step. Click to switch to Auto.' : serverPriorityMode === 'stops' ? 'Stops: Pauses on opponent spells/abilities and combat damage. Click to switch to Full Control.' : 'Auto: Smart auto-passing. Click to switch to Stops.'} style={{ ...styles.floatingBarButton, width: 'auto', padding: '0 8px', backgroundColor: serverPriorityMode === 'fullControl' ? 'rgba(79, 195, 247, 0.9)' : serverPriorityMode === 'stops' ? 'rgba(245, 158, 11, 0.9)' : 'rgba(40, 40, 40, 0.8)', color: serverPriorityMode === 'fullControl' ? '#000' : serverPriorityMode === 'stops' ? '#000' : '#999', border: serverPriorityMode === 'fullControl' ? '1px solid #4fc3f7' : serverPriorityMode === 'stops' ? '1px solid #f59e0b' : '1px solid #555', cursor: 'pointer', transition: 'all 0.2s' }}>
+            <button onClick={cyclePriorityMode} title={priorityMode === 'fullControl' ? 'Full Control: You receive priority at every step. Click to switch to Auto.' : priorityMode === 'stops' ? 'Stops: Pauses on opponent spells/abilities and combat damage. Click to switch to Full Control.' : 'Auto: Smart auto-passing. Click to switch to Stops.'} style={{ ...styles.floatingBarButton, width: 'auto', padding: '0 8px', backgroundColor: serverPriorityMode === 'fullControl' ? 'rgba(79, 195, 247, 0.9)' : serverPriorityMode === 'stops' ? 'rgba(245, 158, 11, 0.9)' : 'rgba(40, 40, 40, 0.8)', color: serverPriorityMode === 'fullControl' ? '#000' : serverPriorityMode === 'stops' ? '#000' : '#999', border: serverPriorityMode === 'fullControl' ? '1px solid #4fc3f7' : serverPriorityMode === 'stops' ? '1px solid #f59e0b' : '1px solid #555', cursor: 'pointer', transition: 'all 0.2s' }}>
               {serverPriorityMode === 'fullControl' ? 'Full Control' : serverPriorityMode === 'stops' ? 'Stops' : 'Auto'}
             </button>
           </div>
