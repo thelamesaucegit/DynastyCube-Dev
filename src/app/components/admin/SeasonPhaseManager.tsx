@@ -1,6 +1,7 @@
 // src/app/components/admin/SeasonPhaseManager.tsx
 "use client";
 
+import type { DraftOrderEntry } from "@/app/actions/draftOrderActions";
 import React, { useState, useEffect } from "react";
 import {
   getCurrentSeason,
