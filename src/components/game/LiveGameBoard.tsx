@@ -45,7 +45,7 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
     attackWithAll,
     priorityMode,
     nextStopPoint,
-    serverPriorityMode,
+    priorityMode,
     cyclePriorityMode,
     opponentDecisionStatus,
     stopOverrides,
