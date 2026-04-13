@@ -212,7 +212,7 @@ function ReplayCardRow({ zoneId, snapshot, cardDataMap, faceDown = false, small 
             >
                 <ReplayGameCard
                     cardData={{
-                        card_name: card.name,
+                        name: card.name,
                         image_url: cardImageData?.image_url,
                         oldest_image_url: cardImageData?.oldest_image_url,
                     }}
@@ -318,7 +318,7 @@ function HandFan({
                 >
                     <ReplayGameCard
                         cardData={{
-                            card_name: item.card.name,
+                            name: item.card.name,
                             image_url: cardImageData?.image_url,
                             oldest_image_url: cardImageData?.oldest_image_url,
                         }}
