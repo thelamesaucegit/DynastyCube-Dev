@@ -26,8 +26,9 @@ interface ReplayGameLogProps {
 
 // LogEntryRow is a pure component, it can be reused directly
 function LogEntryRow({ entry, viewingPlayerId }: { entry: ClientEvent; viewingPlayerId: string }) {
-  if (entry.type === 'turn') {
+  if (entry.type === 'system' && entry.description.startsWith('Turn ')) {
     return <div style={styles.turnSeparator}>{entry.description}</div>;
+  
   }
   
   const isPlayer = entry.playerId === viewingPlayerId;
