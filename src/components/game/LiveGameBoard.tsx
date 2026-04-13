@@ -88,23 +88,6 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
     }
     return opponent;
   }, [spectatingState, opponent]);
-
-  const gameState = spectatingState?.gameState ?? playerGameState;
-
-  if (!gameState || !playerId || !viewingPlayer) {
-    return null;
-  }
-
-  const hasPriority = gameState.priorityPlayerId === viewingPlayer?.playerId;
-  const canAct = hasPriority && !opponentDecisionStatus;
-  const isMyTurn = gameState.activePlayerId === viewingPlayer?.playerId;
-  const isInCombatMode = combatState !== null;
-  const isInDistributeMode = distributeState !== null;
-  const distributeTotalAllocated = distributeState ? Object.values(distributeState.distribution).reduce((sum, v) => sum + v, 0) : 0;
-  const distributeRemaining = distributeState ? distributeState.totalAmount - distributeTotalAllocated : 0;
-  const isInCounterDistMode = counterDistributionState !== null;
-  const isInManaSelectionMode = manaSelectionState !== null;
-
   const manaProgress = useMemo(() => {
     if (!manaSelectionState) return null;
     const symbols = manaSelectionState.manaCost.match(/\{([^}]+)\}/g);
@@ -123,6 +106,23 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
     if (manaSelectionState.xValue > 0) {
       genericCount += manaSelectionState.xValue;
     }
+  const gameState = spectatingState?.gameState ?? playerGameState;
+
+  if (!gameState || !playerId || !viewingPlayer) {
+    return null;
+  }
+
+  const hasPriority = gameState.priorityPlayerId === viewingPlayer?.playerId;
+  const canAct = hasPriority && !opponentDecisionStatus;
+  const isMyTurn = gameState.activePlayerId === viewingPlayer?.playerId;
+  const isInCombatMode = combatState !== null;
+  const isInDistributeMode = distributeState !== null;
+  const distributeTotalAllocated = distributeState ? Object.values(distributeState.distribution).reduce((sum, v) => sum + v, 0) : 0;
+  const distributeRemaining = distributeState ? distributeState.totalAmount - distributeTotalAllocated : 0;
+  const isInCounterDistMode = counterDistributionState !== null;
+  const isInManaSelectionMode = manaSelectionState !== null;
+
+
     const total = coloredReqs.length + genericCount;
     const sources: { colors: readonly string[] }[] = [];
     for (const id of manaSelectionState.selectedSources) {
