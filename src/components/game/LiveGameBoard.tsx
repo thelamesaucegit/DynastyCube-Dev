@@ -5,7 +5,7 @@
 import { useMemo, useCallback } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import { useInteraction } from '@/hooks/useInteraction';
-import { useViewingPlayer, useOpponent, useStackCards, useGhostCards, useRevealedLibraryTopCard } from '@/store/selectors';
+import { useViewingPlayer, useOpponent, useStackCards, selectPriorityMode, useGhostCards, useRevealedLibraryTopCard } from '@/store/selectors';
 import { hand, getNextStep, StepShortNames } from '@/types';
 import { useResponsive, ResponsiveContextProvider } from '@/hooks/useResponsive';
 
@@ -31,7 +31,6 @@ interface LiveGameBoardProps {
 export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
   const responsive = useResponsive(topOffset);
   
-  // ALL hooks are called at the top level of the component, unconditionally.
   const store = useGameStore((state) => state);
   const {
     gameState: playerGameState,
@@ -43,7 +42,7 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
     clearAttackers,
     clearBlockerAssignments,
     attackWithAll,
-    priorityMode,
+    priorityMode: rawPriorityModeValue, // Renamed to avoid conflict
     nextStopPoint,
     cyclePriorityMode,
     opponentDecisionStatus,
@@ -71,6 +70,7 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
   const stackCards = useStackCards();
   const ghostCards = useGhostCards(playerId ?? null);
   const opponentRevealedTopCard = useRevealedLibraryTopCard(opponent?.playerId ?? null);
+  const computedPriorityMode = useGameStore(selectPriorityMode);
   
   const opponentGhostCards = useMemo(() => (opponentRevealedTopCard ? [opponentRevealedTopCard] : []), [opponentRevealedTopCard]);
 
@@ -176,9 +176,6 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
     return null;
   }
   
-  // --- THIS IS THE FIX ---
-  // All logic derived from hook state must be defined AFTER the guard clause,
-  // but BEFORE it is used by other functions like getPassButtonLabel.
   const hasPriority = gameState.priorityPlayerId === viewingPlayer.playerId;
   const canAct = hasPriority && !opponentDecisionStatus;
   const isMyTurn = gameState.activePlayerId === viewingPlayer.playerId;
@@ -193,7 +190,7 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
   const getPassButtonLabel = () => {
     if (nextStopPoint) return nextStopPoint;
     if (stackCards.length > 0) return 'Resolve';
-    if (!isMyTurn) return 'Pass'; // Now `isMyTurn` is in scope
+    if (!isMyTurn) return 'Pass';
     const nextStep = getNextStep(gameState.currentStep);
     if (nextStep) {
       if (nextStep === 'END') return 'End Turn';
@@ -204,10 +201,9 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
 
   const getPassButtonStyle = (): React.CSSProperties => {
     if (stackCards.length > 0) return { backgroundColor: '#c76e00', borderColor: '#e08000' };
-    if (priorityMode === 'ownTurn') return { backgroundColor: '#1976d2', borderColor: '#4fc3f7' };
+    if (computedPriorityMode === 'ownTurn') return { backgroundColor: '#1976d2', borderColor: '#4fc3f7' };
     return { backgroundColor: '#f57c00', borderColor: '#ffc107' };
   };
-  // --- END FIX ---
 
   return (
     <ResponsiveContextProvider value={responsive}>
@@ -247,7 +243,7 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
             turnNumber={gameState.turnNumber}
             isActivePlayer={isMyTurn}
             hasPriority={hasPriority}
-            priorityMode={priorityMode}
+            priorityMode={computedPriorityMode}
             activePlayerName={spectatingState ? gameState.players.find(p => p.playerId === gameState.activePlayerId)?.name : undefined}
             stopOverrides={stopOverrides}
             onToggleStop={toggleStopOverride}
@@ -301,8 +297,8 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
             <button onClick={toggleAutoTap} title={autoTapEnabled ? 'Auto Tap: Lands are tapped automatically. Click to switch to manual mana selection.' : 'Manual Tap: You choose which lands to tap. Click to switch to auto tap.'} style={{ ...styles.floatingBarButton, backgroundColor: autoTapEnabled ? 'rgba(40, 40, 40, 0.8)' : 'rgba(245, 158, 11, 0.9)', color: autoTapEnabled ? '#999' : '#000', border: autoTapEnabled ? '1px solid #555' : '1px solid #f59e0b', cursor: 'pointer', transition: 'all 0.2s' }}>
               <i className="ms ms-land" style={{ fontSize: 14 }} />
             </button>
-            <button onClick={cyclePriorityMode} title={priorityMode === 'fullControl' ? 'Full Control: You receive priority at every step. Click to switch to Auto.' : priorityMode === 'stops' ? 'Stops: Pauses on opponent spells/abilities and combat damage. Click to switch to Full Control.' : 'Auto: Smart auto-passing. Click to switch to Stops.'} style={{ ...styles.floatingBarButton, width: 'auto', padding: '0 8px', backgroundColor: priorityMode === 'fullControl' ? 'rgba(79, 195, 247, 0.9)' : priorityMode === 'stops' ? 'rgba(245, 158, 11, 0.9)' : 'rgba(40, 40, 40, 0.8)', color: priorityMode === 'fullControl' ? '#000' : priorityMode === 'stops' ? '#000' : '#999', border: priorityMode === 'fullControl' ? '1px solid #4fc3f7' : priorityMode === 'stops' ? '1px solid #f59e0b' : '1px solid #555', cursor: 'pointer', transition: 'all 0.2s' }}>
-              {priorityMode === 'fullControl' ? 'Full Control' : priorityMode === 'stops' ? 'Stops' : 'Auto'}
+            <button onClick={cyclePriorityMode} title={rawPriorityModeValue === 'fullControl' ? 'Full Control: You receive priority at every step. Click to switch to Auto.' : rawPriorityModeValue === 'stops' ? 'Stops: Pauses on opponent spells/abilities and combat damage. Click to switch to Full Control.' : 'Auto: Smart auto-passing. Click to switch to Stops.'} style={{ ...styles.floatingBarButton, width: 'auto', padding: '0 8px', backgroundColor: rawPriorityModeValue === 'fullControl' ? 'rgba(79, 195, 247, 0.9)' : rawPriorityModeValue === 'stops' ? 'rgba(245, 158, 11, 0.9)' : 'rgba(40, 40, 40, 0.8)', color: rawPriorityModeValue === 'fullControl' ? '#000' : rawPriorityModeValue === 'stops' ? '#000' : '#999', border: rawPriorityModeValue === 'fullControl' ? '1px solid #4fc3f7' : rawPriorityModeValue === 'stops' ? '1px solid #f59e0b' : '1px solid #555', cursor: 'pointer', transition: 'all 0.2s' }}>
+              {rawPriorityModeValue === 'fullControl' ? 'Full Control' : rawPriorityModeValue === 'stops' ? 'Stops' : 'Auto'}
             </button>
           </div>
         )}
