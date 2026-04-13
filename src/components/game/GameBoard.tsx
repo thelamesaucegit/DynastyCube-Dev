@@ -6,7 +6,7 @@ import React from 'react';
 import { LiveGameBoard } from './LiveGameBoard';
 import { ReplayGameBoard } from './ReplayGameBoard';
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
-import { SettingsProvider } from '@/contexts/SettingsContext'; // Import settings provider
+import { SettingsProvider, useSettings } from '@/contexts/SettingsContext'; // Import settings provider
 
 interface GameBoardProps {
   spectatorMode?: boolean; // This is the primary switch for replay vs. live
