@@ -4,8 +4,8 @@
 
 import React, { useMemo } from 'react';
 import { ResponsiveContextProvider, useResponsive } from '@/hooks/useResponsive';
-import type { SpectatorStateUpdate, ReplayCardData, ClientPlayer } from '@/types/replay-types';
-import { hand, entityId } from '@/types';
+import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
+import { hand, entityId, type ClientPlayer } from '@/types';
 
 // Import Replay-specific components that are now simple renderers
 import { ReplayBattlefield } from './board/ReplayBattlefield';
