@@ -371,15 +371,20 @@ export const SeasonPhaseManager: React.FC = () => {
               )}
 
               {/* Draft order OK — show count */}
-              {draftOrderCount !== null && draftOrderCount > 0 && (
-                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                  <div className="flex items-center gap-2 text-blue-800 dark:text-blue-200 text-sm">
-                    <span>✓</span>
-                    <span>Draft order found: <strong>{draftOrderCount} teams</strong> in queue</span>
-                  </div>
-                </div>
-              )}
-
+              {draftOrderCount !== null && draftOrderCount > 0 && participatingTeams.length > 0 && (
+  <div className="p-4 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg">
+    <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mb-2">
+      Participating Teams
+    </p>
+    <div className="flex flex-wrap gap-2">
+      {participatingTeams.map(t => (
+        <span key={t.team_id} className="text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded px-2 py-1">
+          {t.team?.emoji} {t.team?.name}
+        </span>
+      ))}
+    </div>
+  </div>
+)}
               {/* Existing session warning */}
               {activeSession && (
                 <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg">
