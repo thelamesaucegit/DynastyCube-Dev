@@ -6,7 +6,7 @@ import { useMemo, useCallback } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import { useInteraction } from '@/hooks/useInteraction';
 import { useViewingPlayer, useOpponent, useStackCards, selectPriorityMode, useGhostCards, useRevealedLibraryTopCard } from '@/store/selectors';
-import { hand, getNextStep, StepShortNames, ClientPlayer as LiveClientPlayer } from '@/types';
+import { hand, getNextStep, StepShortNames } from '@/types';
 import { useResponsive, ResponsiveContextProvider } from '@/hooks/useResponsive';
 
 // Import all the original UI components it needs
@@ -21,6 +21,7 @@ import { DrawAnimations, DamageAnimations, RevealAnimations, CoinFlipAnimations,
 import { Battlefield, CardRow, StackDisplay, ZonePile } from './board';
 import { CardPreview } from './card';
 import { TargetingOverlay, ManaColorSelectionOverlay, LifeDisplay, ActiveEffectsBadges, ConcedeButton, FullscreenButton } from './overlay';
+import { ManaSymbol } from '../ui/ManaSymbols';
 import { styles } from './board/styles';
 
 interface LiveGameBoardProps {
@@ -28,7 +29,10 @@ interface LiveGameBoardProps {
 }
 
 export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
+  const responsive = useResponsive(topOffset);
   const store = useGameStore((state) => state);
+  
+  // All hooks are called at the top level, unconditionally.
   const {
     gameState: playerGameState,
     spectatingState,
@@ -61,27 +65,8 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
     manaSelectionState,
     cancelManaSelection,
   } = store;
-
+  
   const { executeAction } = useInteraction();
-  const responsive = useResponsive(topOffset);
-
-  const handleConfirmManaSelection = useCallback(() => {
-    if (!manaSelectionState) return;
-    const { pipelineState, advancePipeline } = useGameStore.getState();
-    if (pipelineState) {
-      useGameStore.setState({ manaSelectionState: null });
-      advancePipeline({ type: 'manaSource', selectedSources: [...manaSelectionState.selectedSources] });
-      return;
-    }
-    const paymentStrategy = { type: 'Explicit' as const, manaAbilitiesToActivate: [...manaSelectionState.selectedSources] };
-    const modifiedAction = { ...manaSelectionState.action, paymentStrategy } as import('../../types').GameAction;
-    const { availableManaSources: _, autoTapPreview: _2, ...restActionInfo } = manaSelectionState.actionInfo;
-    const modifiedActionInfo: import('../../types').LegalActionInfo = { ...restActionInfo, action: modifiedAction };
-    cancelManaSelection();
-    executeAction(modifiedActionInfo);
-  }, [manaSelectionState, cancelManaSelection, executeAction]);
-
-  const gameState = spectatingState?.gameState ?? playerGameState;
   const viewingPlayer = useViewingPlayer();
   const opponent = useOpponent();
   const stackCards = useStackCards();
@@ -89,8 +74,22 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
   const opponentRevealedTopCard = useRevealedLibraryTopCard(opponent?.playerId ?? null);
   const opponentGhostCards = useMemo(() => (opponentRevealedTopCard ? [opponentRevealedTopCard] : []), [opponentRevealedTopCard]);
 
-  const effectiveViewingPlayer = spectatingState ? (gameState?.players.find(p => p.playerId === spectatingState.player1Id) ?? null) : viewingPlayer;
-  const effectiveOpponent = spectatingState ? (gameState?.players.find(p => p.playerId === spectatingState.player2Id) ?? null) : opponent;
+  // This logic is now safe because all hooks are called before this.
+  const effectiveViewingPlayer = useMemo(() => {
+    if (spectatingState && spectatingState.gameState) {
+      return spectatingState.gameState.players.find(p => p.playerId === spectatingState.player1Id) ?? null;
+    }
+    return viewingPlayer;
+  }, [spectatingState, viewingPlayer]);
+  
+  const effectiveOpponent = useMemo(() => {
+    if (spectatingState && spectatingState.gameState) {
+      return spectatingState.gameState.players.find(p => p.playerId === spectatingState.player2Id) ?? null;
+    }
+    return opponent;
+  }, [spectatingState, opponent]);
+
+  const gameState = spectatingState?.gameState ?? playerGameState;
 
   if (!gameState || !playerId || !viewingPlayer) {
     return null;
