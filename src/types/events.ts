@@ -1,3 +1,5 @@
+//src/types/events.ts
+
 import { EntityId } from './entities'
 
 /**
