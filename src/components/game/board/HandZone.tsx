@@ -26,6 +26,8 @@ interface CardRowProps {
   small?: boolean;
   inverted?: boolean;
   ghostCards?: readonly ClientCard[];
+    snapshot?: SpectatorStateUpdate;
+  cardDataMap?: Record<string, ReplayCardData>;
 }
 
 interface HandFanProps {
