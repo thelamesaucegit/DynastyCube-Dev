@@ -6,6 +6,7 @@ import React, { useMemo } from 'react';
 import { CardPreview } from '@/app/components/CardPreview'; // <-- IMPORT YOUR SITE'S PREVIEW
 import { ReplayGameCard } from '../card/ReplayGameCard'; // <-- Import our new simple card
 import type { SpectatorStateUpdate, ReplayCardData, ClientCard } from '@/types/replay-types';
+import type { ClientCard } from '@/types';
 import { styles } from './styles';
 
 interface ReplayBattlefieldProps {
