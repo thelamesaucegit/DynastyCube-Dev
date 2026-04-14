@@ -3,35 +3,40 @@
 "use client";
 
 import React from 'react';
-import type { ClientCard, ReplayCardData } from '@/types/replay-types';
-import { getCardImageUrl } from '@/app/utils/cardUtils'; // Assuming this utility exists
+import type { ReplayCardData } from '@/types/replay-types';
+import { getCardImageUrl } from '@/app/utils/cardUtils'; // Using your site's utility
 
 interface ReplayGameCardProps {
-  card: ClientCard;
-  cardData: ReplayCardData | undefined; // The image data from our map
+  cardData: ReplayCardData;
+  useOldestArt: boolean; // <-- THIS IS THE FIX
   isTapped?: boolean;
+  width?: string;
+  height?: string;
 }
 
-export function ReplayGameCard({ card, cardData, isTapped = false }: ReplayGameCardProps) {
-  // Use your existing utility to get the correct image URL
+export function ReplayGameCard({ cardData, isTapped = false, useOldestArt, width = '100px', height = '140px' }: ReplayGameCardProps) {
+  // Your existing site-wide utility should handle the logic for which URL to use.
+  // We just need to pass it the art preference.
   const imageUrl = getCardImageUrl({
-    card_name: card.name,
-    image_url: cardData?.image_url,
-    oldest_image_url: cardData?.oldest_image_url,
-  }, false); // Assuming 'useOldestArt' is false for now, can be passed as prop
+    card_name: cardData.name,
+    image_url: cardData.image_url,
+    oldest_image_url: cardData.oldest_image_url,
+  }, useOldestArt);
+
+  if (!imageUrl) {
+    // Fallback for when there's no image
+    return (
+      <div style={{ width, height, transform: isTapped ? 'rotate(90deg)' : 'none', backgroundColor: '#222', border: '1px solid #444', borderRadius: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px', textAlign: 'center', color: 'white', fontSize: '12px' }}>
+        {cardData.name}
+      </div>
+    );
+  }
 
   return (
-    <div style={{
-      width: '100px', // Example fixed width
-      height: '140px',
-      borderRadius: '5px',
-      overflow: 'hidden',
-      transform: isTapped ? 'rotate(90deg)' : 'none',
-      transition: 'transform 0.2s',
-    }}>
+    <div style={{ width, height, borderRadius: '5px', overflow: 'hidden', transform: isTapped ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>
       <img
         src={imageUrl}
-        alt={card.name}
+        alt={cardData.name}
         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
       />
     </div>
