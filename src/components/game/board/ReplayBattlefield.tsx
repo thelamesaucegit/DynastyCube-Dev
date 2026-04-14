@@ -3,8 +3,8 @@
 "use client";
 
 import React, { useMemo } from 'react';
-import { CardPreview } from '@/app/components/CardPreview'; // <-- IMPORT YOUR SITE'S PREVIEW
-import { ReplayGameCard } from '../card/ReplayGameCard'; // <-- Import our new simple card
+import { CardPreview } from '@/app/components/CardPreview';
+import { ReplayGameCard } from '../card/ReplayGameCard';
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
 import type { ClientCard } from '@/types';
 import { styles } from './styles';
@@ -13,9 +13,10 @@ interface ReplayBattlefieldProps {
   isOpponent: boolean;
   snapshot: SpectatorStateUpdate;
   cardDataMap: Record<string, ReplayCardData>;
+  useOldestArt: boolean;
 }
 
-export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap }: ReplayBattlefieldProps) {
+export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldestArt }: ReplayBattlefieldProps) {
   const battlefieldCards = useMemo(() => {
     const playerId = isOpponent ? snapshot.player2Id : snapshot.player1Id;
     const zone = snapshot.gameState.zones.find(z => z.zoneId.zoneType === 'Battlefield' && z.zoneId.ownerId === playerId);
@@ -23,10 +24,10 @@ export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap }: ReplayB
   }, [snapshot, isOpponent]);
 
   return (
-    <div style={{ ...styles.battlefieldArea, flexWrap: 'wrap', gap: '8px' }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '8px' }}>
       {battlefieldCards.map(card => {
         const cardImageData = cardDataMap[card.name];
-        if (!cardImageData) return null; // Don't render if we have no image data
+        if (!cardImageData) return null;
 
         return (
           <CardPreview
@@ -37,12 +38,18 @@ export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap }: ReplayB
               oldest_image_url: cardImageData.oldest_image_url,
             }}
           >
-            {/* The child of your CardPreview is the thing that is hovered */}
+            {/* --- THIS IS THE FIX --- */}
             <ReplayGameCard
-              card={card}
-              cardData={cardImageData}
+              cardData={{
+                name: card.name,
+                card_type: cardImageData.card_type,
+                image_url: cardImageData.image_url,
+                oldest_image_url: cardImageData.oldest_image_url,
+              }}
               isTapped={card.isTapped}
+              useOldestArt={useOldestArt}
             />
+            {/* --- END FIX --- */}
           </CardPreview>
         );
       })}
