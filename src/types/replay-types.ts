@@ -29,7 +29,7 @@ export interface Team {
 
 // This is the data we fetch from our `cardActions`
 export interface ReplayCardData {
-  card_name: string;
+  name: string;
   card_type: string;
   image_url: string | null;
   oldest_image_url: string | null;
