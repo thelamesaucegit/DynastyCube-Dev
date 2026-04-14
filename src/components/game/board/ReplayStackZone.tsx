@@ -15,6 +15,7 @@ import { CardPreview } from '@/app/components/CardPreview'; // <-- IMPORT YOUR S
 interface ReplayStackDisplayProps {
   snapshot: SpectatorStateUpdate;
   cardDataMap: Record<string, ReplayCardData>;
+  useOldestArt: boolean;
 }
 
 export function ReplayStackDisplay({ snapshot, cardDataMap }: ReplayStackDisplayProps) {

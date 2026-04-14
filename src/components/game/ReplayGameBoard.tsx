@@ -25,6 +25,7 @@ interface ReplayGameBoardProps {
   topOffset?: number;
   snapshot: SpectatorStateUpdate;
   cardDataMap: Record<string, ReplayCardData>;
+  useOldestArt: boolean;
 }
 
 export function ReplayGameBoard({ topOffset = 0, snapshot, cardDataMap }: ReplayGameBoardProps) {
