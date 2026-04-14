@@ -1,3 +1,5 @@
+//src/components/game/board/styles.ts
+
 import React from 'react'
 import { TARGET_COLOR, TARGET_COLOR_BRIGHT } from '../../../styles/targetingColors'
 
@@ -70,6 +72,24 @@ export const styles: Record<string, React.CSSProperties> = {
     padding: 0,
     lineHeight: 1,
     border: '1px solid #555',
+  },
+   restoreButtonStyle: { 
+    position: 'fixed', 
+    bottom: 70, 
+    left: '50%', 
+    transform: 'translateX(-50%)', 
+    padding: '12px 24px', 
+    fontSize: 14, 
+    color: 'white', 
+    border: 'none', 
+    borderRadius: 8, 
+    cursor: 'pointer', 
+    fontWeight: 600, 
+    boxShadow: '0 4px 12px rgba(0,0,0,0.4)', 
+    zIndex: 100, 
+    display: 'flex', 
+    alignItems: 'center', 
+    gap: 8 
   },
   combatButtonContainer: {
     position: 'fixed',
