@@ -1,3 +1,6 @@
+//src/store/slices/gameplaySlice.ts
+
+
 /**
  * Gameplay slice - handles game state, actions, events, and core game mechanics.
  */
