@@ -227,7 +227,7 @@ function ReplayCardRow({ zoneId, snapshot, cardDataMap, faceDown = false, small 
 // HandFan (The "Dumb" Renderer)
 // ========================================================================
 
-function HandFan({
+export function HandFan({ // <-- THIS IS THE FIX
   cards,
   cardDataMap,
   useOldestArt,
