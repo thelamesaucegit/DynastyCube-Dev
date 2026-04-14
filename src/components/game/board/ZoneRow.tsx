@@ -2,7 +2,8 @@
 
 import React from 'react';
 import { GameCard } from '../card/GameCard';
-import type { ClientCard, ReplayCardData } from '@/types';
+import type { ClientCard } from '@/types';
+import type {  ReplayCardData } from '@/types/replay-types';
 
 interface ZoneRowProps {
   cards: readonly ClientCard[];
