@@ -2,19 +2,20 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { ClientCard, ClientPlayer } from '@/types';
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
-import { CARD_BACK_IMAGE_URL, getCardImageUrl } from '@/utils/cardImages';
+import { CARD_BACK_IMAGE_URL, getCardImageUrl as getArgentumCardImageUrl } from '@/utils/cardImages';
+import { CardPreview } from '@/app/components/CardPreview';
 import { useResponsiveContext, handleImageError } from './shared';
 import { styles } from './styles';
-import { CardPreview } from '@/app/components/CardPreview'; // <-- IMPORT YOUR SITE'S PREVIEW
 
 interface ReplayZonePileProps {
   player: ClientPlayer;
   isOpponent?: boolean;
   snapshot: SpectatorStateUpdate;
   cardDataMap: Record<string, ReplayCardData>;
+  useOldestArt: boolean;
 }
 
 interface ReplayZoneBrowserProps {
@@ -22,9 +23,10 @@ interface ReplayZoneBrowserProps {
   onClose: () => void;
   cardDataMap: Record<string, ReplayCardData>;
   zoneName: 'Graveyard' | 'Exile';
+  useOldestArt: boolean;
 }
 
-export function ReplayZonePile({ player, isOpponent = false, snapshot, cardDataMap }: ReplayZonePileProps) {
+export function ReplayZonePile({ player, isOpponent = false, snapshot, cardDataMap, useOldestArt }: ReplayZonePileProps) {
   const responsive = useResponsiveContext();
   const [browsingGraveyard, setBrowsingGraveyard] = useState(false);
   const [browsingExile, setBrowsingExile] = useState(false);
@@ -72,7 +74,7 @@ export function ReplayZonePile({ player, isOpponent = false, snapshot, cardDataM
           <div data-graveyard-id={player.playerId} style={{ ...styles.graveyardPile, ...pileStyle, cursor: graveyardCards.length > 0 ? 'pointer' : 'default' }} onClick={() => { if (graveyardCards.length > 0) setBrowsingGraveyard(true) }}>
             {topGraveyardCard && (
               <CardPreview card={{ card_name: topGraveyardCard.name, image_url: cardDataMap[topGraveyardCard.name]?.image_url, oldest_image_url: cardDataMap[topGraveyardCard.name]?.oldest_image_url }}>
-                <img src={getCardImageUrl(topGraveyardCard.name, cardDataMap?.[topGraveyardCard.name]?.image_url ?? topGraveyardCard.imageUri, 'normal')} alt={topGraveyardCard.name} style={{ ...styles.pileImage, opacity: 0.8 }} onError={(e) => handleImageError(e, topGraveyardCard.name, 'normal')} />
+                <img src={getArgentumCardImageUrl(topGraveyardCard.name, cardDataMap?.[topGraveyardCard.name]?.image_url ?? topGraveyardCard.imageUri, 'normal')} alt={topGraveyardCard.name} style={{ ...styles.pileImage, opacity: 0.8 }} onError={(e) => handleImageError(e, topGraveyardCard.name, 'normal')} />
               </CardPreview>
             )}
             {graveyardCards.length > 0 && <div style={{ ...styles.pileCount, fontSize: responsive.fontSize.small }}>{graveyardCards.length}</div>}
@@ -80,9 +82,7 @@ export function ReplayZonePile({ player, isOpponent = false, snapshot, cardDataM
               const fanOffset = targetedGraveyardCards.length > 1 ? (index - (targetedGraveyardCards.length - 1) / 2) * (responsive.isMobile ? 14 : 20) : 0;
               return (
                 <div key={card.id} data-card-id={card.id} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 10 + index, boxShadow: '0 0 12px 4px rgba(255, 136, 0, 0.8)', borderRadius: responsive.isMobile ? 4 : 6, transform: `translateX(${fanOffset}px)` }}>
-                  <CardPreview card={{ card_name: card.name, image_url: cardDataMap[card.name]?.image_url, oldest_image_url: cardDataMap[card.name]?.oldest_image_url }}>
-                    <img src={getCardImageUrl(card.name, cardDataMap?.[card.name]?.image_url ?? card.imageUri, 'normal')} alt={card.name} style={{ ...styles.pileImage, borderRadius: responsive.isMobile ? 4 : 6 }} onError={(e) => handleImageError(e, card.name, 'normal')} />
-                  </CardPreview>
+                  <img src={getArgentumCardImageUrl(card.name, cardDataMap?.[card.name]?.image_url ?? card.imageUri, 'normal')} alt={card.name} style={{ ...styles.pileImage, borderRadius: responsive.isMobile ? 4 : 6 }} onError={(e) => handleImageError(e, card.name, 'normal')} />
                 </div>
               );
             })}
@@ -93,8 +93,8 @@ export function ReplayZonePile({ player, isOpponent = false, snapshot, cardDataM
         <div style={styles.zoneStack}>
           <div data-exile-id={player.playerId} style={{ ...styles.exilePile, ...pileStyle, cursor: exileCards.length > 0 ? 'pointer' : 'default' }} onClick={() => { if (exileCards.length > 0) setBrowsingExile(true) }}>
             {topExileCard && (
-              <CardPreview card={{ card_name: topExileCard.name, image_url: cardDataMap[topExileCard.name]?.image_url, oldest_image_url: cardDataMap[topExileCard.name]?.oldest_image_url }}>
-                <img src={getCardImageUrl(topExileCard.name, cardDataMap?.[topExileCard.name]?.image_url ?? topExileCard.imageUri, 'normal')} alt={topExileCard.name} style={{ ...styles.pileImage, opacity: 0.7 }} onError={(e) => handleImageError(e, topExileCard.name, 'normal')} />
+               <CardPreview card={{ card_name: topExileCard.name, image_url: cardDataMap[topExileCard.name]?.image_url, oldest_image_url: cardDataMap[topExileCard.name]?.oldest_image_url }}>
+                <img src={getArgentumCardImageUrl(topExileCard.name, cardDataMap?.[topExileCard.name]?.image_url ?? topExileCard.imageUri, 'normal')} alt={topExileCard.name} style={{ ...styles.pileImage, opacity: 0.7 }} onError={(e) => handleImageError(e, topExileCard.name, 'normal')} />
               </CardPreview>
             )}
             {exileCards.length > 0 && <div style={{ ...styles.pileCount, fontSize: responsive.fontSize.small }}>{exileCards.length}</div>}
@@ -103,13 +103,13 @@ export function ReplayZonePile({ player, isOpponent = false, snapshot, cardDataM
         </div>
       </div>
       
-      {browsingGraveyard && <ReplayZoneBrowser zoneName="Graveyard" cards={graveyardCards} onClose={() => setBrowsingGraveyard(false)} cardDataMap={cardDataMap} />}
-      {browsingExile && <ReplayZoneBrowser zoneName="Exile" cards={exileCards} onClose={() => setBrowsingExile(false)} cardDataMap={cardDataMap} />}
+      {browsingGraveyard && <ReplayZoneBrowser zoneName="Graveyard" cards={graveyardCards} onClose={() => setBrowsingGraveyard(false)} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />}
+      {browsingExile && <ReplayZoneBrowser zoneName="Exile" cards={exileCards} onClose={() => setBrowsingExile(false)} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />}
     </>
   );
 }
 
-function ReplayZoneBrowser({ zoneName, cards, onClose, cardDataMap }: ReplayZoneBrowserProps) {
+function ReplayZoneBrowser({ zoneName, cards, onClose, cardDataMap, useOldestArt }: ReplayZoneBrowserProps) {
   const responsive = useResponsiveContext();
   const cardWidth = responsive.isMobile ? 120 : 160;
   const cardHeight = Math.round(cardWidth * 1.4);
@@ -131,21 +131,21 @@ function ReplayZoneBrowser({ zoneName, cards, onClose, cardDataMap }: ReplayZone
         </div>
         <div style={styles.graveyardCardGrid}>
           {cards.map((card) => {
-            const cardImageData = cardDataMap[card.name];
-            return (
-              <CardPreview
-                key={card.id}
-                card={{
-                  card_name: card.name,
-                  image_url: cardImageData?.image_url,
-                  oldest_image_url: cardImageData?.oldest_image_url,
-                }}
-              >
-                <div style={{ width: cardWidth, height: cardHeight, borderRadius: 6, overflow: 'hidden', flexShrink: 0 }}>
-                  <img src={getCardImageUrl(card.name, cardImageData?.image_url ?? card.imageUri, 'normal')} alt={card.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => handleImageError(e, card.name, 'normal')} />
-                </div>
-              </CardPreview>
-            );
+              const cardImageData = cardDataMap[card.name];
+              return (
+                <CardPreview
+                    key={card.id}
+                    card={{
+                        card_name: card.name,
+                        image_url: cardImageData?.image_url,
+                        oldest_image_url: cardImageData?.oldest_image_url,
+                    }}
+                >
+                    <div style={{ width: cardWidth, height: cardHeight, borderRadius: 6, overflow: 'hidden', flexShrink: 0 }}>
+                        <img src={getArgentumCardImageUrl(card.name, cardImageData?.image_url ?? card.imageUri, 'normal')} alt={card.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => handleImageError(e, card.name, 'normal')} />
+                    </div>
+                </CardPreview>
+              )
           })}
         </div>
         <div style={{ display: 'flex', gap: 16, marginTop: 16, justifyContent: 'center' }}>
