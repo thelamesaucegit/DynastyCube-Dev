@@ -201,16 +201,16 @@ function ReplayCardRow({ zoneId, snapshot, cardDataMap, faceDown = false, small 
                 key={card.id}
                 card={{
                     card_name: card.name,
-                    image_url: cardImageData?.image_url,
-                    oldest_image_url: cardImageData?.oldest_image_url,
+                    image_url: cardImageData?.image_url ?? null,
+                    oldest_image_url: cardImageData?.oldest_image_url ?? null,
                 }}
             >
                 <ReplayGameCard
                     cardData={{
                         name: card.name,
-                        card_type: cardImageData?.card_type ?? '', // <-- THIS IS THE FIX
-                        image_url: cardImageData?.image_url,
-                        oldest_image_url: cardImageData?.oldest_image_url,
+                        card_type: cardImageData?.card_type ?? card.typeLine,
+                        image_url: cardImageData?.image_url ?? null,
+                        oldest_image_url: cardImageData?.oldest_image_url ?? null,
                     }}
                     useOldestArt={useOldestArt}
                     width={`${fittingWidth}px`}
@@ -308,16 +308,16 @@ function HandFan({
                 <CardPreview
                     card={{
                         card_name: item.card.name,
-                        image_url: cardImageData?.image_url,
-                        oldest_image_url: cardImageData?.oldest_image_url,
+                        image_url: cardImageData?.image_url ?? null,
+                        oldest_image_url: cardImageData?.oldest_image_url ?? null,
                     }}
                 >
                     <ReplayGameCard
                         cardData={{
                             name: item.card.name,
-                            card_type: cardImageData?.card_type ?? '', // <-- THIS IS THE FIX
-                            image_url: cardImageData?.image_url,
-                            oldest_image_url: cardImageData?.oldest_image_url,
+                            card_type: cardImageData?.card_type ?? item.card.typeLine,
+                            image_url: cardImageData?.image_url ?? null,
+                            oldest_image_url: cardImageData?.oldest_image_url ?? null,
                         }}
                         useOldestArt={useOldestArt ?? false}
                         width={`${fittingWidth}px`}
