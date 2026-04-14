@@ -1,3 +1,6 @@
+//src/store/gameStore.ts
+
+
 /**
  * Main game store - combines all slices into a single Zustand store.
  *
