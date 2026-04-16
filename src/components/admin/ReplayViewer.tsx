@@ -1,3 +1,5 @@
+//src/components/admin/ReplayViewer.tsx
+
 import { useState, useEffect, useCallback } from 'react'
 import { useGameStore } from '@/store/gameStore'
 import { SpectatorContext } from '../../contexts/SpectatorContext'

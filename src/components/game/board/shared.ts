@@ -1,3 +1,5 @@
+//src/components/game/board/shared.ts
+
 import React, { createContext, useContext } from 'react'
 import type { ResponsiveSizes } from '../../../hooks/useResponsive'
 import { getScryfallFallbackUrl } from '../../../utils/cardImages'
