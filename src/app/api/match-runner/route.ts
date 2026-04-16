@@ -3,10 +3,16 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_KEY!
-);
+let _supabaseAdmin: ReturnType<typeof createClient> | null = null;
+function getSupabaseAdmin() {
+  if (!_supabaseAdmin) {
+    _supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_KEY!
+    );
+  }
+  return _supabaseAdmin;
+}
 
 export async function POST(request: Request): Promise<NextResponse> {
     let scheduleId: string | undefined;
@@ -42,7 +48,8 @@ export async function POST(request: Request): Promise<NextResponse> {
         }
 
         // 1. Create the sim_matches record
-        const { data: simMatch, error: simErr } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: simMatch, error: simErr } = await (getSupabaseAdmin() as any)
             .from('sim_matches')
             .insert({
                 player1_info: `${team1Id} (AI: ${finalProfile1})`,
@@ -82,7 +89,8 @@ export async function POST(request: Request): Promise<NextResponse> {
 
         // 3. Conditionally update the schedule table
         if (scheduleId) {
-            const { error: schedErr } = await supabase
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { error: schedErr } = await (getSupabaseAdmin() as any)
                 .from('schedule')
                 .update({ status: 'in_progress', sim_match_id: matchId })
                 .eq('id', scheduleId)
@@ -100,7 +108,8 @@ export async function POST(request: Request): Promise<NextResponse> {
         console.error(`[match-runner] error for schedule ${scheduleId ?? 'manual run'}:`, msg);
         
         if (scheduleId) {
-             await supabase.from('schedule').update({ status: 'validated' }).eq('id', scheduleId);
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             await (getSupabaseAdmin() as any).from('schedule').update({ status: 'validated' }).eq('id', scheduleId);
         }
 
         return NextResponse.json({ error: msg }, { status: 500 });

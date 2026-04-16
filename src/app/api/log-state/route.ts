@@ -3,7 +3,16 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+let _supabaseAdmin: ReturnType<typeof createClient> | null = null;
+function getSupabaseAdmin() {
+  if (!_supabaseAdmin) {
+    _supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_KEY!
+    );
+  }
+  return _supabaseAdmin;
+}
 
 // The Java logger sends an ARRAY of states, not an object.
 type LogStateRequestBody = object[];
@@ -23,8 +32,9 @@ export async function POST(request: Request) {
 
     // 3. Call the RPC function for each state in the batch.
     //    Using Promise.all to run them concurrently for better performance.
-    const rpcPromises = states.map(state => 
-      supabase.rpc('append_to_match_logs', {
+    const rpcPromises = states.map(state =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (getSupabaseAdmin() as any).rpc('append_to_match_logs', {
         match_id_to_append: matchId,
         new_state_to_append: state
       })
@@ -34,7 +44,7 @@ export async function POST(request: Request) {
 
     // Check if any of the RPC calls failed
     const firstError = results.find(res => res.error);
-    if (firstError) {
+    if (firstError?.error) {
       console.error('Supabase RPC error while appending log batch:', firstError.error);
       return NextResponse.json({ error: 'Failed to write one or more logs to database', details: firstError.error.message }, { status: 500 });
     }
