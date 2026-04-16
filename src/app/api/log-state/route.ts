@@ -3,37 +3,26 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
-// 1. Define the types for your database, specifically the RPC function.
-// This tells TypeScript about the existence and signature of your custom function.
-export interface Database {
-  public: {
-    Functions: {
-      append_batch_to_match_logs: {
-        Args: {
-          match_id_to_append: string;
-          new_states_to_append: object[];
-        };
-        Returns: void; // The function doesn't return anything.
-      };
-    };
-  };
-}
+// Define the arguments for our specific RPC function
+type AppendBatchArgs = {
+  match_id_to_append: string;
+  new_states_to_append: object[];
+};
 
-type LogStateRequestBody = object[];
+// Use a singleton pattern for the client. No need for the Database generic here.
+let _supabaseAdmin: SupabaseClient | null = null;
 
-// Use a singleton pattern for the client, now correctly typed.
-let _supabaseAdmin: SupabaseClient<Database> | null = null;
-
-function getSupabaseAdmin(): SupabaseClient<Database> {
+function getSupabaseAdmin(): SupabaseClient {
   if (!_supabaseAdmin) {
-    // 2. Pass the Database interface as a generic to createClient.
-    _supabaseAdmin = createClient<Database>(
+    _supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_KEY!
     );
   }
   return _supabaseAdmin;
 }
+
+type LogStateRequestBody = object[];
 
 export async function POST(request: Request) {
   try {
@@ -44,15 +33,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing x-match-id header or state payload array' }, { status: 400 });
     }
 
-    // 3. Make the RPC call. No generics or type casting needed here,
-    // as the client instance is now fully aware of your function's signature.
-    const { error: rpcError } = await getSupabaseAdmin().rpc(
+    // --- THIS IS THE FIX ---
+    // Explicitly assert the type of the 'rpc' method itself.
+    // This forces TypeScript to recognize the correct function signature.
+    const rpc = getSupabaseAdmin().rpc as (fn: string, args: AppendBatchArgs) => Promise<{ error: Error | null }>;
+
+    const { error: rpcError } = await rpc(
       'append_batch_to_match_logs', 
       {
         match_id_to_append: matchId,
         new_states_to_append: states
       }
     );
+    // --- END FIX ---
 
     if (rpcError) {
       console.error('Supabase batch RPC error:', rpcError);
