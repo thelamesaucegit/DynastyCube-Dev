@@ -1,5 +1,6 @@
 // src/lib/database.types.ts
 
+// The Json type is a standard requirement for Supabase types.
 export type Json =
   | string
   | number
@@ -8,37 +9,27 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+// Define the Database interface with strict, non-empty types.
 export interface Database {
   public: {
-    Tables: {
-      // You can add your table definitions here if needed later
-      // For now, we only need the Functions part
-      sim_matches: {
-        Row: {
-          id: string
-          argentum_game_states: Json | null
-          //... add other columns if you need them
-        }
-        // ... Insert, Update definitions
-      }
-    }
-    Views: {
-      // ...
-    }
+    // We don't need Tables, Views, etc., for this operation,
+    // so we explicitly define them as empty records.
+    Tables: Record<string, never>
+    Views: Record<string, never>
+    
+    // This is the only part we actually need.
     Functions: {
       append_batch_to_match_logs: {
         Args: {
           match_id_to_append: string
+          // The argument is a JSON array, which fits our Json type.
           new_states_to_append: Json
         }
+        // The SQL function itself returns void.
         Returns: void
       }
     }
-    Enums: {
-      // ...
-    }
-    CompositeTypes: {
-      // ...
-    }
+    Enums: Record<string, never>
+    CompositeTypes: Record<string, never>
   }
 }
