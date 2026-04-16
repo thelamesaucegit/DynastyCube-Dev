@@ -1,5 +1,6 @@
 // src/app/admin/argentum-viewer/[matchId]/page.tsx
 
+// 1. Keep this part as a Client Component for the hooks.
 "use client"; 
 
 import React, { useState, useEffect } from 'react';
@@ -13,7 +14,8 @@ import type { Team, ReplayCardData, SpectatorStateUpdate } from '@/types/replay-
 import { ResponsiveContext } from '@/components/game/board/shared';
 import { useResponsive } from '@/hooks/useResponsive';
 
-function ReplayPageContent({ matchId }: { matchId: string }) {
+// 2. This component does all the client-side work. It expects a simple 'matchId' string.
+function ArgentumViewerClient({ matchId }: { matchId: string }) {
   const [data, setData] = useState<{
     gameStates: SpectatorStateUpdate[] | null;
     team1: Team | null;
@@ -21,6 +23,9 @@ function ReplayPageContent({ matchId }: { matchId: string }) {
     cardDataMap: Record<string, ReplayCardData> | null;
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // The hook for responsive sizes is used here.
+  const responsiveSizes = useResponsive(); 
 
   useEffect(() => {
     async function fetchData() {
@@ -70,27 +75,29 @@ function ReplayPageContent({ matchId }: { matchId: string }) {
     return <div className="text-white p-8 text-center">Failed to load replay.</div>;
   }
 
+  // The provider is now inside the client component, using the calculated sizes.
   return (
-    <ArgentumReplayPlayer 
-      initialGameStates={data.gameStates!} 
-      cardDataMap={data.cardDataMap!}
-      team1={data.team1}
-      team2={data.team2}
-    />
+    <ResponsiveContext.Provider value={responsiveSizes}>
+      <ArgentumReplayPlayer 
+        initialGameStates={data.gameStates!} 
+        cardDataMap={data.cardDataMap!}
+        team1={data.team1}
+        team2={data.team2}
+      />
+    </ResponsiveContext.Provider>
   );
 }
 
-// --- THIS IS THE FIX ---
-// The 'params' prop should be typed as a plain object, not a Promise.
-export default function ReplayPage({ params }: { params: { matchId: string } }) {
-// --- END FIX ---
-  const responsiveSizes = useResponsive(); 
+// 3. The default export is now a simple, ASYNC Server Component.
+// It has NO "use client" directive.
+export default async function ReplayPage({ params }: { params: Promise<{ matchId: string }> }) {
+  // It performs the one required 'await' operation.
+  const { matchId } = await params;
 
+  // It then renders the Client Component, passing the resolved 'matchId' as a simple prop.
   return (
     <main className="w-full h-screen bg-gray-800">
-      <ResponsiveContext.Provider value={responsiveSizes}>
-        <ReplayPageContent matchId={params.matchId} />
-      </ResponsiveContext.Provider>
+      <ArgentumViewerClient matchId={matchId} />
     </main>
   );
 }
