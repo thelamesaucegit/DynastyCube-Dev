@@ -2,27 +2,24 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { Database } from '@/lib/database.types'; // Adjust the path if needed
 
-// Define the arguments for our specific RPC function
-type AppendBatchArgs = {
-  match_id_to_append: string;
-  new_states_to_append: object[];
-};
+// Type for the incoming request body
+type LogStateRequestBody = object[];
 
-// Use a singleton pattern for the client. No need for the Database generic here.
-let _supabaseAdmin: SupabaseClient | null = null;
+// Use a singleton pattern for the client, now correctly typed with our custom Database interface.
+let _supabaseAdmin: SupabaseClient<Database> | null = null;
 
-function getSupabaseAdmin(): SupabaseClient {
+function getSupabaseAdmin(): SupabaseClient<Database> {
   if (!_supabaseAdmin) {
-    _supabaseAdmin = createClient(
+    // Pass the Database interface as a generic to createClient.
+    _supabaseAdmin = createClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_KEY!
     );
   }
   return _supabaseAdmin;
 }
-
-type LogStateRequestBody = object[];
 
 export async function POST(request: Request) {
   try {
@@ -34,11 +31,10 @@ export async function POST(request: Request) {
     }
 
     // --- THIS IS THE FIX ---
-    // Explicitly assert the type of the 'rpc' method itself.
-    // This forces TypeScript to recognize the correct function signature.
-    const rpc = getSupabaseAdmin().rpc as (fn: string, args: AppendBatchArgs) => Promise<{ error: Error | null }>;
-
-    const { error: rpcError } = await rpc(
+    // The client is now fully aware of your function's signature.
+    // No generics, assertions, or 'any' are needed here.
+    // TypeScript will automatically validate the function name and arguments.
+    const { error: rpcError } = await getSupabaseAdmin().rpc(
       'append_batch_to_match_logs', 
       {
         match_id_to_append: matchId,
