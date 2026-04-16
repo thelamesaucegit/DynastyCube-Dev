@@ -15,8 +15,13 @@ function getSupabaseAdmin() {
   return _supabaseAdmin;
 }
 
-// The Java logger sends an ARRAY of states.
 type LogStateRequestBody = object[];
+
+// Define the shape of the arguments for our RPC function
+interface AppendBatchArgs {
+  match_id_to_append: string;
+  new_states_to_append: LogStateRequestBody;
+}
 
 export async function POST(request: Request) {
   try {
@@ -28,25 +33,27 @@ export async function POST(request: Request) {
     }
 
     // --- THIS IS THE FIX ---
-    // Make a SINGLE RPC call to the new batch-append function,
-    // passing the entire array of states at once.
-    const { error: rpcError } = await getSupabaseAdmin().rpc('append_batch_to_match_logs', {
-      match_id_to_append: matchId,
-      new_states_to_append: states // Pass the whole array
-    });
+    // Use a generic to tell TypeScript what arguments the rpc function expects.
+    // The <void> indicates that we don't expect a return value from the function itself.
+    const { error: rpcError } = await getSupabaseAdmin().rpc<void>(
+      'append_batch_to_match_logs', 
+      {
+        match_id_to_append: matchId,
+        new_states_to_append: states
+      } as AppendBatchArgs // Explicitly cast the arguments object
+    );
+    // --- END FIX ---
 
     if (rpcError) {
       console.error('Supabase batch RPC error:', rpcError);
       return NextResponse.json({ error: 'Failed to write log batch to database', details: rpcError.message }, { status: 500 });
     }
-    // --- END FIX ---
 
     return NextResponse.json({ message: 'Log batch received and processed successfully' });
 
   } catch (err: unknown) {
     const error = err as Error;
     console.error('API Error in /api/log-state:', error);
-    // This now more accurately reflects the possible error from request.json()
     return NextResponse.json({ error: 'Invalid request body. Ensure it is a valid JSON array.', details: error.message }, { status: 400 });
   }
 }
