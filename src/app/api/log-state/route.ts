@@ -2,7 +2,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { Database } from '@/lib/database.types'; // Adjust the path if needed
+import { Database } from '@/database.types'; 
 
 // Type for the incoming request body
 type LogStateRequestBody = object[];
