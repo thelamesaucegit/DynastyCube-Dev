@@ -2,17 +2,15 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { Database } from '@/database.types'; 
+import { Database, Json } from '@/database.types'; // Import Json as well
 
-// Type for the incoming request body
-type LogStateRequestBody = object[];
+// Remove the separate LogStateRequestBody type. We will use Json directly.
+// type LogStateRequestBody = object[];
 
-// Use a singleton pattern for the client, now correctly typed with our custom Database interface.
 let _supabaseAdmin: SupabaseClient<Database> | null = null;
 
 function getSupabaseAdmin(): SupabaseClient<Database> {
   if (!_supabaseAdmin) {
-    // Pass the Database interface as a generic to createClient.
     _supabaseAdmin = createClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_KEY!
@@ -24,24 +22,25 @@ function getSupabaseAdmin(): SupabaseClient<Database> {
 export async function POST(request: Request) {
   try {
     const matchId = request.headers.get('x-match-id');
-    const states = (await request.json()) as LogStateRequestBody;
+    
+    // --- THIS IS THE FIX ---
+    // Cast the result of request.json() directly to Json.
+    // The incoming data from the Java logger is a JSON array, which is a valid Json type.
+    const states: Json = await request.json();
+    // --- END FIX ---
 
+    // We can still perform the array check.
     if (!matchId || !states || !Array.isArray(states) || states.length === 0) {
       return NextResponse.json({ error: 'Missing x-match-id header or state payload array' }, { status: 400 });
     }
 
-    // --- THIS IS THE FIX ---
-    // The client is now fully aware of your function's signature.
-    // No generics, assertions, or 'any' are needed here.
-    // TypeScript will automatically validate the function name and arguments.
     const { error: rpcError } = await getSupabaseAdmin().rpc(
       'append_batch_to_match_logs', 
       {
         match_id_to_append: matchId,
-        new_states_to_append: states
+        new_states_to_append: states // Now 'states' is correctly typed as Json
       }
     );
-    // --- END FIX ---
 
     if (rpcError) {
       console.error('Supabase batch RPC error:', rpcError);
