@@ -1,26 +1,38 @@
 // src/app/api/log-state/route.ts
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
-let _supabaseAdmin: ReturnType<typeof createClient> | null = null;
+// 1. Define the types for your database, specifically the RPC function.
+// This tells TypeScript about the existence and signature of your custom function.
+export interface Database {
+  public: {
+    Functions: {
+      append_batch_to_match_logs: {
+        Args: {
+          match_id_to_append: string;
+          new_states_to_append: object[];
+        };
+        Returns: void; // The function doesn't return anything.
+      };
+    };
+  };
+}
 
-function getSupabaseAdmin() {
+type LogStateRequestBody = object[];
+
+// Use a singleton pattern for the client, now correctly typed.
+let _supabaseAdmin: SupabaseClient<Database> | null = null;
+
+function getSupabaseAdmin(): SupabaseClient<Database> {
   if (!_supabaseAdmin) {
-    _supabaseAdmin = createClient(
+    // 2. Pass the Database interface as a generic to createClient.
+    _supabaseAdmin = createClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_KEY!
     );
   }
   return _supabaseAdmin;
-}
-
-type LogStateRequestBody = object[];
-
-// Define the shape of the arguments for our RPC function
-interface AppendBatchArgs {
-  match_id_to_append: string;
-  new_states_to_append: LogStateRequestBody;
 }
 
 export async function POST(request: Request) {
@@ -32,17 +44,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing x-match-id header or state payload array' }, { status: 400 });
     }
 
-    // --- THIS IS THE FIX ---
-    // Use a generic to tell TypeScript what arguments the rpc function expects.
-    // The <void> indicates that we don't expect a return value from the function itself.
-    const { error: rpcError } = await getSupabaseAdmin().rpc<void>(
+    // 3. Make the RPC call. No generics or type casting needed here,
+    // as the client instance is now fully aware of your function's signature.
+    const { error: rpcError } = await getSupabaseAdmin().rpc(
       'append_batch_to_match_logs', 
       {
         match_id_to_append: matchId,
         new_states_to_append: states
-      } as AppendBatchArgs // Explicitly cast the arguments object
+      }
     );
-    // --- END FIX ---
 
     if (rpcError) {
       console.error('Supabase batch RPC error:', rpcError);
