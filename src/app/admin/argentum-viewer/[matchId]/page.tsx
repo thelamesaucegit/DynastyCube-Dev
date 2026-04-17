@@ -1,21 +1,24 @@
-// src/app/admin/argentum-viewer/[matchId]/page.tsx
+// /src/app/admin/argentum-viewer/[matchId]/page.tsx
 
-// 1. Keep this part as a Client Component for the hooks.
-"use client"; 
+"use client"; // Make the entire page a Client Component
 
 import React, { useState, useEffect } from 'react';
-import { notFound } from 'next/navigation';
+import { notFound, useParams } from 'next/navigation'; // Import useParams
 
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
 import { getMatchReplayData, getTeamData } from '@/app/admin/argentum-viewer/data-actions';
 import { getCardDataForReplay } from '@/app/actions/cardActions';
 import type { Team, ReplayCardData, SpectatorStateUpdate } from '@/types/replay-types';
 
+// Import the contexts and hooks
 import { ResponsiveContext } from '@/components/game/board/shared';
 import { useResponsive } from '@/hooks/useResponsive';
+import { SettingsProvider } from '@/contexts/SettingsContext';
 
-// 2. This component does all the client-side work. It expects a simple 'matchId' string.
-function ArgentumViewerClient({ matchId }: { matchId: string }) {
+export default function ReplayPage() {
+  const params = useParams(); // Use the client-side hook to get route parameters
+  const matchId = params.matchId as string;
+  
   const [data, setData] = useState<{
     gameStates: SpectatorStateUpdate[] | null;
     team1: Team | null;
@@ -24,10 +27,12 @@ function ArgentumViewerClient({ matchId }: { matchId: string }) {
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // The hook for responsive sizes is used here.
-  const responsiveSizes = useResponsive(); 
+  // This hook provides the responsive sizing values
+  const responsiveSizes = useResponsive();
 
   useEffect(() => {
+    if (!matchId) return; // Don't fetch if matchId isn't available yet
+
     async function fetchData() {
       try {
         const { gameStates, team1Id, team2Id } = await getMatchReplayData(matchId);
@@ -55,13 +60,6 @@ function ArgentumViewerClient({ matchId }: { matchId: string }) {
         ]);
 
         const cardDataMap: Record<string, ReplayCardData> = Object.fromEntries(cardDataMapFromAction);
-        // --- START: DIAGNOSTIC LOGS ---
-        console.log("--- 1. Data Fetched in ReplayPageContent ---");
-        console.log("Game States Count:", gameStates.length);
-        console.log("Team 1:", team1);
-        console.log("Team 2:", team2);
-        console.log("Card Data Map (first 5 entries):", Object.fromEntries(Object.entries(cardDataMap).slice(0, 5)));
-        // --- END: DIAGNOSTIC LOGS ---
         setData({ gameStates, team1, team2, cardDataMap });
       } catch (error) {
         console.error("Failed to fetch replay data:", error);
@@ -81,29 +79,19 @@ function ArgentumViewerClient({ matchId }: { matchId: string }) {
     return <div className="text-white p-8 text-center">Failed to load replay.</div>;
   }
 
-  // The provider is now inside the client component, using the calculated sizes.
-  return (
-    <ResponsiveContext.Provider value={responsiveSizes}>
-      <ArgentumReplayPlayer 
-        initialGameStates={data.gameStates!} 
-        cardDataMap={data.cardDataMap!}
-        team1={data.team1}
-        team2={data.team2}
-      />
-    </ResponsiveContext.Provider>
-  );
-}
-
-// 3. The default export is now a simple, ASYNC Server Component.
-// It has NO "use client" directive.
-export default async function ReplayPage({ params }: { params: Promise<{ matchId: string }> }) {
-  // It performs the one required 'await' operation.
-  const { matchId } = await params;
-
-  // It then renders the Client Component, passing the resolved 'matchId' as a simple prop.
   return (
     <main className="w-full h-screen bg-gray-800">
-      <ArgentumViewerClient matchId={matchId} />
+      {/* Provide all necessary contexts at the top level */}
+      <ResponsiveContext.Provider value={responsiveSizes}>
+        <SettingsProvider>
+          <ArgentumReplayPlayer 
+            initialGameStates={data.gameStates!} 
+            cardDataMap={data.cardDataMap!}
+            team1={data.team1}
+            team2={data.team2}
+          />
+        </SettingsProvider>
+      </ResponsiveContext.Provider>
     </main>
   );
 }
