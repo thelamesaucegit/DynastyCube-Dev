@@ -149,7 +149,9 @@ function ReplayCardRow({ zoneId, snapshot, cardDataMap, faceDown = false, small 
   const { useOldestArt } = useSettings();
   
   const { cards, zoneSize } = useMemo(() => {
-    const zone = snapshot.gameState.zones.find(z => z.zoneId.ownerId === zoneId.ownerId && z.zoneId.zoneType === zoneId.zoneType);
+        const targetZoneId = `${zoneId.zoneType}_${zoneId.ownerId}`;
+    const zone = snapshot.gameState.zones.find(z => z.zoneId === targetZoneId);
+    
     if (!zone) return { cards: [], zoneSize: 0 };
     const zoneCards = zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean);
     return { cards: zoneCards, zoneSize: zone.size };
