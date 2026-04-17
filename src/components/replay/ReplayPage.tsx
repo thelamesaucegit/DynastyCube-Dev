@@ -1,4 +1,4 @@
-//web-client/src/components/replay/ReplayPage.tsx
+//src/components/replay/ReplayPage.tsx
 
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -191,6 +191,7 @@ export function ReplayPage() {
               Next
             </button>
           </div>
+          
           <div style={styles.scrubberContainer}>
             <input
               type="range"
@@ -217,8 +218,9 @@ export function ReplayPage() {
             {copied ? 'Copied!' : 'Share'}
           </button>
         </div>
-        <div style={styles.gameBoardContainer}>
+      <div style={{ ...styles.gameBoardContainer, position: 'relative' }}>
           <GameBoard spectatorMode topOffset={HEADER_HEIGHT} />
+        </div>
         </div>
       </div>
       <CombatArrows />
