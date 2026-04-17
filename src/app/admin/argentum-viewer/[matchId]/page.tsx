@@ -1,24 +1,16 @@
 // /src/app/admin/argentum-viewer/[matchId]/page.tsx
 
-"use client"; // Make the entire page a Client Component
-
+"use client";
 import React, { useState, useEffect } from 'react';
-import { notFound, useParams } from 'next/navigation'; // Import useParams
-
+import { notFound } from 'next/navigation';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
 import { getMatchReplayData, getTeamData } from '@/app/admin/argentum-viewer/data-actions';
 import { getCardDataForReplay } from '@/app/actions/cardActions';
 import type { Team, ReplayCardData, SpectatorStateUpdate } from '@/types/replay-types';
-
-// Import the contexts and hooks
 import { ResponsiveContext } from '@/components/game/board/shared';
 import { useResponsive } from '@/hooks/useResponsive';
-import { SettingsProvider } from '@/contexts/SettingsContext';
 
-export default function ReplayPage() {
-  const params = useParams(); // Use the client-side hook to get route parameters
-  const matchId = params.matchId as string;
-  
+function ArgentumViewerClient({ matchId }: { matchId: string }) {
   const [data, setData] = useState<{
     gameStates: SpectatorStateUpdate[] | null;
     team1: Team | null;
@@ -26,22 +18,16 @@ export default function ReplayPage() {
     cardDataMap: Record<string, ReplayCardData> | null;
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-
-  // This hook provides the responsive sizing values
-  const responsiveSizes = useResponsive();
+  const responsiveSizes = useResponsive(); 
 
   useEffect(() => {
-    if (!matchId) return; // Don't fetch if matchId isn't available yet
-
     async function fetchData() {
       try {
         const { gameStates, team1Id, team2Id } = await getMatchReplayData(matchId);
-        
         if (!gameStates || gameStates.length === 0) {
           notFound();
           return;
         }
-
         const allCardNames = new Set<string>();
         gameStates.forEach(state => {
           if (state.gameState && state.gameState.cards) {
@@ -52,13 +38,11 @@ export default function ReplayPage() {
             }
           }
         });
-
         const [team1, team2, cardDataMapFromAction] = await Promise.all([
           getTeamData(team1Id),
           getTeamData(team2Id),
           getCardDataForReplay(Array.from(allCardNames))
         ]);
-
         const cardDataMap: Record<string, ReplayCardData> = Object.fromEntries(cardDataMapFromAction);
         setData({ gameStates, team1, team2, cardDataMap });
       } catch (error) {
@@ -67,7 +51,6 @@ export default function ReplayPage() {
         setIsLoading(false);
       }
     }
-
     fetchData();
   }, [matchId]);
 
@@ -80,18 +63,22 @@ export default function ReplayPage() {
   }
 
   return (
+    <ResponsiveContext.Provider value={responsiveSizes}>
+      <ArgentumReplayPlayer 
+        initialGameStates={data.gameStates!} 
+        cardDataMap={data.cardDataMap!}
+        team1={data.team1}
+        team2={data.team2}
+      />
+    </ResponsiveContext.Provider>
+  );
+}
+
+export default async function ReplayPage({ params }: { params: Promise<{ matchId: string }> }) {
+  const { matchId } = await params;
+  return (
     <main className="w-full h-screen bg-gray-800">
-      {/* Provide all necessary contexts at the top level */}
-      <ResponsiveContext.Provider value={responsiveSizes}>
-        <SettingsProvider>
-          <ArgentumReplayPlayer 
-            initialGameStates={data.gameStates!} 
-            cardDataMap={data.cardDataMap!}
-            team1={data.team1}
-            team2={data.team2}
-          />
-        </SettingsProvider>
-      </ResponsiveContext.Provider>
+      <ArgentumViewerClient matchId={matchId} />
     </main>
   );
 }

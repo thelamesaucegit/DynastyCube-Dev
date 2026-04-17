@@ -4,7 +4,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useZoneCards, useZone } from '@/store/selectors';
-import type { ZoneId, ClientCard } from '@/types';
+import type { ZoneId, ClientCard, zoneIdEquals } from '@/types';
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
 import { calculateFittingCardWidth } from '@/hooks/useResponsive';
 import { useResponsiveContext } from './shared';
@@ -149,7 +149,7 @@ function ReplayCardRow({ zoneId, snapshot, cardDataMap, faceDown = false, small 
   const { useOldestArt } = useSettings();
   
   const { cards, zoneSize } = useMemo(() => {
-    const zone = snapshot.gameState.zones.find(z => z.zoneId.ownerId === zoneId.ownerId && z.zoneId.zoneType === zoneId.zoneType);
+    const zone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, zoneId));
     if (!zone) return { cards: [], zoneSize: 0 };
     const zoneCards = zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean);
     return { cards: zoneCards, zoneSize: zone.size };

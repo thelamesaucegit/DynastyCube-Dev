@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useMemo } from 'react';
-import type { ClientCard } from '@/types';
+import type { ClientCard, entityId, zoneIdEquals, stack  } from '@/types';
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
 import { getCardImageUrl } from '@/utils/cardImages';
 import { ActiveEffectBadges } from '../card/CardOverlays';
@@ -22,7 +22,8 @@ export function ReplayStackDisplay({ snapshot, cardDataMap }: ReplayStackDisplay
   const responsive = useResponsiveContext();
 
   const stackCards = useMemo(() => {
-    const stackZone = snapshot.gameState.zones.find(z => z.zoneId.zoneType === 'Stack');
+   const stackTargetId = stack(entityId('game'));
+    const stackZone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, stackTargetId));
     return stackZone ? stackZone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [];
   }, [snapshot]);
 

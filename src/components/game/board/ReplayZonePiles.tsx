@@ -4,6 +4,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import type { ClientCard, ClientPlayer } from '@/types';
+import { entityId, zoneIdEquals, graveyard, library, exile, stack } from '@/types'; // Import helpers
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
 import { CARD_BACK_IMAGE_URL, getCardImageUrl as getArgentumCardImageUrl } from '@/utils/cardImages';
 import { CardPreview } from '@/app/components/CardPreview';
@@ -33,15 +34,17 @@ export function ReplayZonePile({ player, isOpponent = false, snapshot, cardDataM
   
   const { librarySize, graveyardCards, exileCards, targetedGraveyardCards } = useMemo(() => {
     const getZoneData = (type: 'Graveyard' | 'Exile' | 'Library') => {
-      const zone = snapshot.gameState.zones.find(z => z.zoneId.zoneType === type && z.zoneId.ownerId === player.playerId);
+      const targetZoneId = { zoneType: type, ownerId: entityId(player.playerId) };
+      const zone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, targetZoneId));
       return { cards: zone ? zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [], size: zone?.size ?? 0 };
     };
     const gyData = getZoneData('Graveyard');
     const exData = getZoneData('Exile');
     const libData = getZoneData('Library');
     
-    const stackZone = snapshot.gameState.zones.find(z => z.zoneId.zoneType === 'Stack');
-    const targetedIds = new Set<string>();
+const stackTargetId = { zoneType: 'Stack' as 'Stack', ownerId: entityId('game') };
+    const stackZone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, stackTargetId));
+        const targetedIds = new Set<string>();
     if (stackZone) {
       stackZone.cardIds.forEach(id => {
         snapshot.gameState.cards[id]?.targets?.forEach(target => {
