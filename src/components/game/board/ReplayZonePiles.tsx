@@ -38,9 +38,10 @@ export function ReplayZonePile({ player, isOpponent = false, snapshot, cardDataM
       const zone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, targetZoneId));
       return { cards: zone ? zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [], size: zone?.size ?? 0 };
     };
-    const gyData = getZoneData('Graveyard');
-    const exData = getZoneData('Exile');
-    const libData = getZoneData('Library');
+     // Call the function with the enum members, not string literals.
+    const gyData = getZoneData(ZoneType.GRAVEYARD);
+    const exData = getZoneData(ZoneType.EXILE);
+    const libData = getZoneData(ZoneType.LIBRARY);
     
  const stackTargetId = { zoneType: 'Stack', ownerId: entityId('game') } as const;
     const stackZone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, stackTargetId));
