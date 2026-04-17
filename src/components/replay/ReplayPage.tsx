@@ -1,4 +1,4 @@
-//web-client/src/components/replay/ReplayPage.tsx
+//src/components/replay/ReplayPage.tsx
 
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
