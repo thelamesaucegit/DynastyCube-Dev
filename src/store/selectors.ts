@@ -1,3 +1,5 @@
+//src/store/selectors.ts
+
 import { useMemo } from 'react'
 import { useGameStore, type GameStore } from './gameStore'
 import type {
