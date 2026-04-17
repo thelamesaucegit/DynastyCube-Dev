@@ -4,7 +4,8 @@
 
 import React, { useState, useMemo } from 'react';
 import { useZoneCards, useZone } from '@/store/selectors';
-import type { ZoneId, ClientCard, zoneIdEquals } from '@/types';
+import type { ZoneId, ClientCard } from '@/types';
+import  { zoneIdEquals } from '@/types';
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
 import { calculateFittingCardWidth } from '@/hooks/useResponsive';
 import { useResponsiveContext } from './shared';
