@@ -5,7 +5,7 @@
 import React, { useMemo } from 'react';
 import { ReplayCardStack } from '../card/ReplayCardStack'; // Use the new replay-specific stack
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
-import type { ClientCard, EntityId } from '@/types';
+import type { ClientCard, EntityId , zoneIdEquals, battlefield } from '@/types';
 
 // Define the GroupedCard type locally, as it's not exported from selectors
 export interface GroupedCard {
@@ -41,7 +41,11 @@ export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldest
   const { groupedCreatures, groupedLands, groupedOther } = useMemo(() => {
     const playerId = isOpponent ? snapshot.player2Id : snapshot.player1Id;
     if (!playerId) return { groupedCreatures: [], groupedLands: [], groupedOther: [] };
-    const zone = snapshot.gameState.zones.find(z => z.zoneId === `Battlefield_${playerId}`);
+    const targetZoneId = battlefield(entityId(playerId));
+    const zone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, targetZoneId));
+    
+    return zone ? zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [];
+  }, [snapshot, isOpponent]);
     const cards = zone ? zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [];
     
     const lands = cards.filter(c => c.cardTypes.includes('Land') && !c.cardTypes.includes('Creature'));
