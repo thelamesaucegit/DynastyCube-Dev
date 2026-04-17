@@ -8,7 +8,7 @@ import type { SpectatorStateUpdate, ReplayCardData, Team } from '@/types/replay-
 import { Button } from '@/app/components/ui/button';
 import { Slider } from '@/app/components/ui/slider';
 import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
-import { SettingsProvider, useSettings } from '@/contexts/SettingsContext';
+import { SettingsProvider } from '@/contexts/SettingsContext';
 
 interface ArgentumReplayPlayerProps {
   initialGameStates: SpectatorStateUpdate[];
@@ -17,16 +17,8 @@ interface ArgentumReplayPlayerProps {
   team2: Team | null;
 }
 
-// --- FIX 1: Create a new wrapper component for settings context ---
-// This ensures that any component inside GameBoard that needs settings will get them.
-function GameBoardWrapper({ snapshot, cardDataMap }: { snapshot: SpectatorStateUpdate, cardDataMap: Record<string, ReplayCardData> }) {
-    // We can place hooks that GameBoard and its children might need here.
-    // For now, it just passes props through.
-    return <GameBoard spectatorMode={true} snapshot={snapshot} cardDataMap={cardDataMap} />;
-}
-
 export function ArgentumReplayPlayer({ initialGameStates, cardDataMap, team1, team2 }: ArgentumReplayPlayerProps) {
-  // --- START: DIAGNOSTIC LOGS ---
+   // --- START: DIAGNOSTIC LOGS ---
   console.log("--- 2. Props Received in ArgentumReplayPlayer ---");
   console.log("Received game states:", initialGameStates.length);
   console.log("Received Team 1:", team1);
@@ -34,13 +26,10 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap, team1, te
   console.log("Received Card Data Map:", cardDataMap ? "Exists" : "DOES NOT EXIST");
   // --- END: DIAGNOSTIC LOGS ---
 
-  
-  const [currentIndex, setCurrentIndex] = useState(0);
+   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const totalStates = initialGameStates.length;
 
-  // --- FIX 2: Correctly map teams to players ---
-  // This logic now correctly identifies which team corresponds to player1 and player2 from the logs.
   const { player1, player2 } = useMemo(() => {
     if (!team1 || !team2 || !initialGameStates?.[0]) {
       return { player1: null, player2: null };
@@ -55,21 +44,29 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap, team1, te
     if (firstState.player2Name?.includes(team1.id)) p2 = { logName: firstState.player2Name, team: team1 };
     else if (firstState.player2Name?.includes(team2.id)) p2 = { logName: firstState.player2Name, team: team2 };
 
+    if (p1 && p2 && firstState.activePlayerId === p2.logName) {
+        return { player1: p2, player2: p1 };
+    }
     return { player1: p1, player2: p2 };
   }, [initialGameStates, team1, team2]);
   
-  // Create a new snapshot object with the human-readable names for the GameBoard
   const currentSnapshot = useMemo(() => {
     const originalSnapshot = initialGameStates[currentIndex];
     if (!originalSnapshot) return null;
 
+    // Create a new snapshot object with the correct team names and theme colors
     return {
       ...originalSnapshot,
       player1Name: player1?.team.name ?? originalSnapshot.player1Name,
       player2Name: player2?.team.name ?? originalSnapshot.player2Name,
-      // Pass team colors through for the UI to use
-      player1ThemeColor: player1?.team.primary_color ?? '#555',
-      player2ThemeColor: player2?.team.primary_color ?? '#555',
+      player1Theme: {
+        primary: player1?.team.primary_color ?? '#888',
+        secondary: player1?.team.secondary_color ?? '#555',
+      },
+      player2Theme: {
+        primary: player2?.team.primary_color ?? '#888',
+        secondary: player2?.team.secondary_color ?? '#555',
+      },
     };
   }, [currentIndex, initialGameStates, player1, player2]);
   
@@ -88,7 +85,7 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap, team1, te
   const handleSliderChange = (value: number[]) => setCurrentIndex(value[0]);
 
   if (!currentSnapshot) {
-    return <div className="text-white p-8">Loading replay state...</div>;
+    return <div className="text-white p-8">Waiting for snapshot...</div>;
   }
   
   const { turnNumber, currentPhase } = currentSnapshot.gameState;
@@ -96,10 +93,13 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap, team1, te
   return (
     <div className="flex flex-col h-screen w-full bg-background">
       <div className="flex-grow overflow-hidden relative">
-        {/* --- FIX 3: Wrap GameBoard in SettingsProvider --- */}
-        {/* This ensures that any child component (like a card renderer) that uses useSettings() will work correctly. */}
         <SettingsProvider>
-            <GameBoardWrapper snapshot={currentSnapshot} cardDataMap={cardDataMap} />
+            {/* --- FIX: Render GameBoard directly and pass the correct props --- */}
+            <GameBoard
+              spectatorMode={true}
+              snapshot={currentSnapshot} // Pass the MODIFIED snapshot with correct names
+              cardDataMap={cardDataMap}   // Pass the card data map
+            />
         </SettingsProvider>
       </div>
       
@@ -107,7 +107,7 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap, team1, te
         <div className="max-w-5xl mx-auto flex items-center gap-4 text-white">
             <div className="flex items-center gap-2">
                 <Button onClick={() => setCurrentIndex(0)} variant="ghost" size="icon" disabled={currentIndex === 0}><SkipBack className="h-5 w-5" /></Button>
-                <Button onClick={() => setIsPlaying(!isPlaying)} variant="outline" size="icon" className="w-10 h-10">{isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}</Button>
+                <Button onClick={() => setIsPlaying(!isPlaying)} variant="outline" size="icon" className="w-10 h-10">{isPlaying ? <Pause /> : <Play />}</Button>
                 <Button onClick={() => setCurrentIndex(totalStates - 1)} variant="ghost" size="icon" disabled={currentIndex === totalStates - 1}><SkipForward className="h-5 w-5" /></Button>
             </div>
             <div className="flex-grow flex items-center gap-4">
