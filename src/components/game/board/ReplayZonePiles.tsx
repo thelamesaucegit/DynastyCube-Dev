@@ -4,7 +4,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import type { ClientCard, ClientPlayer } from '@/types';
-import { entityId, zoneIdEquals } from '@/types'; // Import helpers
+import { entityId, zoneIdEquals, ZoneType } from '@/types'; // Add ZoneType here
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
 import { CARD_BACK_IMAGE_URL, getCardImageUrl as getArgentumCardImageUrl } from '@/utils/cardImages';
 import { CardPreview } from '@/app/components/CardPreview';
