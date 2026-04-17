@@ -22,7 +22,7 @@ export function ReplayStackDisplay({ snapshot, cardDataMap }: ReplayStackDisplay
   const responsive = useResponsiveContext();
 
   const stackCards = useMemo(() => {
-    const stackZone = snapshot.gameState.zones.find(z => z.zoneId.zoneType === 'Stack');
+    const stackZone = snapshot.gameState.zones.find(z => z.zoneId === 'Stack_game');
     return stackZone ? stackZone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [];
   }, [snapshot]);
 
