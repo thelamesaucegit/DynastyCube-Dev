@@ -42,8 +42,9 @@ export function ReplayZonePile({ player, isOpponent = false, snapshot, cardDataM
     const exData = getZoneData('Exile');
     const libData = getZoneData('Library');
     
-    const stackZone = snapshot.gameState.zones.find(z => z.zoneId.zoneType === 'Stack');
-    const targetedIds = new Set<string>();
+const stackTargetId = { zoneType: 'Stack' as 'Stack', ownerId: entityId('game') };
+    const stackZone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, stackTargetId));
+        const targetedIds = new Set<string>();
     if (stackZone) {
       stackZone.cardIds.forEach(id => {
         snapshot.gameState.cards[id]?.targets?.forEach(target => {
