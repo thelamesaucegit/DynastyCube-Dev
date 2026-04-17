@@ -1,3 +1,5 @@
+//src/types/entities.ts
+
 import { ZoneType } from './enums'
 
 /**
