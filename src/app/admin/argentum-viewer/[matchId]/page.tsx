@@ -55,7 +55,13 @@ function ArgentumViewerClient({ matchId }: { matchId: string }) {
         ]);
 
         const cardDataMap: Record<string, ReplayCardData> = Object.fromEntries(cardDataMapFromAction);
-        
+        // --- START: DIAGNOSTIC LOGS ---
+        console.log("--- 1. Data Fetched in ReplayPageContent ---");
+        console.log("Game States Count:", gameStates.length);
+        console.log("Team 1:", team1);
+        console.log("Team 2:", team2);
+        console.log("Card Data Map (first 5 entries):", Object.fromEntries(Object.entries(cardDataMap).slice(0, 5)));
+        // --- END: DIAGNOSTIC LOGS ---
         setData({ gameStates, team1, team2, cardDataMap });
       } catch (error) {
         console.error("Failed to fetch replay data:", error);
