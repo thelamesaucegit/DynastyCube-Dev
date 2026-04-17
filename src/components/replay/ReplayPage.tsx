@@ -221,7 +221,6 @@ export function ReplayPage() {
       <div style={{ ...styles.gameBoardContainer, position: 'relative' }}>
           <GameBoard spectatorMode topOffset={HEADER_HEIGHT} />
         </div>
-        </div>
       </div>
       <CombatArrows />
     </SpectatorContext.Provider>
