@@ -19,7 +19,9 @@ interface ReplayBattlefieldProps {
 export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldestArt }: ReplayBattlefieldProps) {
   const battlefieldCards = useMemo(() => {
     const playerId = isOpponent ? snapshot.player2Id : snapshot.player1Id;
-    const zone = snapshot.gameState.zones.find(z => z.zoneId.zoneType === 'Battlefield' && z.zoneId.ownerId === playerId);
+    // --- FIX: Find the zone using string matching on the zoneId ---
+    const zone = snapshot.gameState.zones.find(z => z.zoneId === `Battlefield_${playerId}`);
+    
     return zone ? zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [];
   }, [snapshot, isOpponent]);
 
