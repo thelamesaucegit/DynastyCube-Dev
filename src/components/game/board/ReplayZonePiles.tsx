@@ -33,7 +33,7 @@ export function ReplayZonePile({ player, isOpponent = false, snapshot, cardDataM
   
   const { librarySize, graveyardCards, exileCards, targetedGraveyardCards } = useMemo(() => {
     const getZoneData = (type: 'Graveyard' | 'Exile' | 'Library') => {
-       const zone = snapshot.gameState.zones.find(z => z.zoneId === `${type}_${player.playerId}`);
+      const zone = snapshot.gameState.zones.find(z => z.zoneId.zoneType === type && z.zoneId.ownerId === player.playerId);
       return { cards: zone ? zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [], size: zone?.size ?? 0 };
     };
     const gyData = getZoneData('Graveyard');
