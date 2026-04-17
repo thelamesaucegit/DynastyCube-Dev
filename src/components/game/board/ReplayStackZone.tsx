@@ -3,7 +3,8 @@
 "use client";
 
 import React, { useMemo } from 'react';
-import type { ClientCard, entityId, zoneIdEquals, stack  } from '@/types';
+import type { ClientCard } from '@/types';
+import {  entityId, zoneIdEquals, stack  } from '@/types';
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
 import { getCardImageUrl } from '@/utils/cardImages';
 import { ActiveEffectBadges } from '../card/CardOverlays';
