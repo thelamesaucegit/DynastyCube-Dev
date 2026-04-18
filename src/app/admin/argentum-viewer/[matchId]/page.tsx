@@ -2,7 +2,7 @@
 
 "use client";
 import React, { useState, useEffect } from 'react';
-import { notFound } from 'next/navigation';
+import { notFound, useParams } from 'next/navigation';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
 import { getMatchReplayData, getTeamData } from '@/app/admin/argentum-viewer/data-actions';
 import { getCardDataForReplay } from '@/app/actions/cardActions';
@@ -74,8 +74,8 @@ function ArgentumViewerClient({ matchId }: { matchId: string }) {
   );
 }
 
-export default function ReplayPage({ params }: { params: Promise<{ matchId: string }> }) {
-  const { matchId } = React.use(params);
+export default function ReplayPage() {
+  const { matchId } = useParams<{ matchId: string }>();
   return (
     <main className="w-full h-screen bg-gray-800">
       <ArgentumViewerClient matchId={matchId} />
