@@ -74,8 +74,8 @@ function ArgentumViewerClient({ matchId }: { matchId: string }) {
   );
 }
 
-export default async function ReplayPage({ params }: { params: Promise<{ matchId: string }> }) {
-  const { matchId } = await params;
+export default function ReplayPage({ params }: { params: Promise<{ matchId: string }> }) {
+  const { matchId } = React.use(params);
   return (
     <main className="w-full h-screen bg-gray-800">
       <ArgentumViewerClient matchId={matchId} />
