@@ -24,17 +24,16 @@ function ArgentumViewerClient({ matchId }: { matchId: string }) {
     async function fetchData() {
       try {
         const { gameStates, team1Id, team2Id } = await getMatchReplayData(matchId);
-        if (!gameStates || gameStates.length === 0) {
+        const validStates = (gameStates ?? []).filter(s => s?.gameState != null);
+        if (validStates.length === 0) {
           notFound();
           return;
         }
         const allCardNames = new Set<string>();
-        gameStates.forEach(state => {
-          if (state.gameState && state.gameState.cards) {
+        validStates.forEach(state => {
+          if (state.gameState.cards) {
             for (const card of Object.values(state.gameState.cards)) {
-              if (card && card.name) {
-                 allCardNames.add(card.name);
-              }
+              if (card && card.name) allCardNames.add(card.name);
             }
           }
         });
@@ -44,7 +43,7 @@ function ArgentumViewerClient({ matchId }: { matchId: string }) {
           getCardDataForReplay(Array.from(allCardNames))
         ]);
         const cardDataMap: Record<string, ReplayCardData> = Object.fromEntries(cardDataMapFromAction);
-        setData({ gameStates, team1, team2, cardDataMap });
+        setData({ gameStates: validStates, team1, team2, cardDataMap });
       } catch (error) {
         console.error("Failed to fetch replay data:", error);
       } finally {
