@@ -2,7 +2,7 @@
 
 "use client";
 import React, { useState, useEffect } from 'react';
-import { notFound, useParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
 import { getMatchReplayData, getTeamData } from '@/app/admin/argentum-viewer/data-actions';
 import { getCardDataForReplay } from '@/app/actions/cardActions';
@@ -26,7 +26,6 @@ function ArgentumViewerClient({ matchId }: { matchId: string }) {
         const { gameStates, team1Id, team2Id } = await getMatchReplayData(matchId);
         const validStates = (gameStates ?? []).filter(s => s?.gameState != null);
         if (validStates.length === 0) {
-          notFound();
           return;
         }
         const allCardNames = new Set<string>();
