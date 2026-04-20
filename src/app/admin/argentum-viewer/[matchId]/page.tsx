@@ -2,7 +2,7 @@
 
 "use client";
 import React, { useState, useEffect } from 'react';
-import { notFound } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
 import { getMatchReplayData, getTeamData } from '@/app/admin/argentum-viewer/data-actions';
 import { getCardDataForReplay } from '@/app/actions/cardActions';
@@ -24,17 +24,15 @@ function ArgentumViewerClient({ matchId }: { matchId: string }) {
     async function fetchData() {
       try {
         const { gameStates, team1Id, team2Id } = await getMatchReplayData(matchId);
-        if (!gameStates || gameStates.length === 0) {
-          notFound();
+        const validStates = (gameStates ?? []).filter(s => s?.gameState != null);
+        if (validStates.length === 0) {
           return;
         }
         const allCardNames = new Set<string>();
-        gameStates.forEach(state => {
-          if (state.gameState && state.gameState.cards) {
+        validStates.forEach(state => {
+          if (state.gameState.cards) {
             for (const card of Object.values(state.gameState.cards)) {
-              if (card && card.name) {
-                 allCardNames.add(card.name);
-              }
+              if (card && card.name) allCardNames.add(card.name);
             }
           }
         });
@@ -44,7 +42,7 @@ function ArgentumViewerClient({ matchId }: { matchId: string }) {
           getCardDataForReplay(Array.from(allCardNames))
         ]);
         const cardDataMap: Record<string, ReplayCardData> = Object.fromEntries(cardDataMapFromAction);
-        setData({ gameStates, team1, team2, cardDataMap });
+        setData({ gameStates: validStates, team1, team2, cardDataMap });
       } catch (error) {
         console.error("Failed to fetch replay data:", error);
       } finally {
@@ -74,8 +72,8 @@ function ArgentumViewerClient({ matchId }: { matchId: string }) {
   );
 }
 
-export default async function ReplayPage({ params }: { params: Promise<{ matchId: string }> }) {
-  const { matchId } = await params;
+export default function ReplayPage() {
+  const { matchId } = useParams<{ matchId: string }>();
   return (
     <main className="w-full h-screen bg-gray-800">
       <ArgentumViewerClient matchId={matchId} />

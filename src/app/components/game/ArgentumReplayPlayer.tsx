@@ -69,10 +69,10 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap, team1, te
 
   const handleSliderChange = (value: number[]) => setCurrentIndex(value[0]);
 
-  if (!currentSnapshot) {
+  if (!currentSnapshot || !currentSnapshot.gameState) {
     return <div className="text-white p-8">Waiting for snapshot...</div>;
   }
-  
+
   const { turnNumber, currentPhase } = currentSnapshot.gameState;
   
   return (
