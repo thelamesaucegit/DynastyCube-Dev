@@ -1,3 +1,5 @@
+//src/components/game/overlay/LifeDisplay.tsx
+
 import React from 'react'
 import { useGameStore } from '@/store/gameStore'
 import type { EntityId, ClientPlayerEffect } from '@/types'
