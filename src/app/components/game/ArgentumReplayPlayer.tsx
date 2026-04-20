@@ -17,6 +17,10 @@ interface ArgentumReplayPlayerProps {
 }
 
 export function ArgentumReplayPlayer({ initialGameStates, cardDataMap, team1, team2 }: ArgentumReplayPlayerProps) {
+ console.log("--- 1. Props Received in ArgentumReplayPlayer ---");
+  console.log("Initial Game States Count:", initialGameStates.length);
+  console.log("Card Data Map exists:", !!cardDataMap);
+  
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const totalStates = initialGameStates.length;
