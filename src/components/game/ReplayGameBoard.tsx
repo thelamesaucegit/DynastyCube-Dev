@@ -29,7 +29,10 @@ interface ReplayGameBoardProps {
 }
 
 export function ReplayGameBoard({ topOffset = 0, snapshot, cardDataMap }: ReplayGameBoardProps) {
-    const responsive = useResponsive(topOffset);
+      console.log("--- 2. Props Received in ReplayGameBoard ---");
+    console.log("Snapshot exists:", !!snapshot);
+    console.log("Card Data Map exists:", !!cardDataMap); 
+  const responsive = useResponsive(topOffset);
     const { useOldestArt } = useSettings(); // Get settings for art preference
 
     const effectiveViewingPlayer = snapshot.gameState.players.find(p => p.playerId === snapshot.player1Id)! as ClientPlayer;
