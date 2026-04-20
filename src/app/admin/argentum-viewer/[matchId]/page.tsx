@@ -1,76 +1,105 @@
 // /src/app/admin/argentum-viewer/[matchId]/page.tsx
 
-import { notFound } from 'next/navigation';
+// 1. "use client" MUST BE at the top of the file that uses hooks.
+"use client"; 
+
+import React, { useState, useEffect } from 'react';
+import { useParams, notFound } from 'next/navigation'; // Keep useParams
+import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
 import { getMatchReplayData, getTeamData } from '@/app/admin/argentum-viewer/data-actions';
 import { getCardDataForReplay } from '@/app/actions/cardActions';
-import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
+import type { Team, ReplayCardData, SpectatorStateUpdate } from '@/types/replay-types';
 import { ResponsiveContext } from '@/components/game/board/shared';
 import { useResponsive } from '@/hooks/useResponsive';
-import type { Team, ReplayCardData, SpectatorStateUpdate } from '@/types/replay-types';
 import { SettingsProvider } from '@/contexts/SettingsContext';
-import React from 'react'; // Make sure React is imported
 
-// This is a new, dedicated Client Component to wrap everything.
-// It uses "use client" and can therefore use client-side hooks.
-"use client";
-function ArgentumViewerClientWrapper({ data }: { data: any }) {
+// 2. The page itself will be the top-level client component.
+export default function ReplayPage() {
+  // Use client-side hooks to get params and screen size.
+  const params = useParams();
+  const matchId = params.matchId as string;
   const responsiveSizes = useResponsive();
+  
+  const [data, setData] = useState<{
+    gameStates: SpectatorStateUpdate[] | null;
+    team1: Team | null;
+    team2: Team | null;
+    cardDataMap: Record<string, ReplayCardData> | null;
+  } | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Add the console log here to confirm props are received.
-  console.log("--- 0. Props Received by Client Wrapper ---");
-  console.log("Team 1:", data.team1);
-  console.log("Card Data Map exists:", !!data.cardDataMap);
+  useEffect(() => {
+    // We can now safely use a client-side hook like useEffect to fetch data.
+    if (!matchId) return;
 
-  return (
-    <ResponsiveContext.Provider value={responsiveSizes}>
-      <SettingsProvider>
-        <ArgentumReplayPlayer 
-          initialGameStates={data.gameStates}
-          cardDataMap={data.cardDataMap}
-          team1={data.team1}
-          team2={data.team2}
-        />
-      </SettingsProvider>
-    </ResponsiveContext.Provider>
-  );
-}
+    async function fetchData() {
+      // Re-add diagnostic logs here to trace the data fetching
+      console.log("--- 1. Fetching data for matchId:", matchId, "---");
+      try {
+        const { gameStates, team1Id, team2Id } = await getMatchReplayData(matchId);
+        const validStates = (gameStates ?? []).filter(s => s?.gameState != null);
 
+        if (validStates.length === 0) {
+          console.error("No valid game states found for this match.");
+          setData(null); // Explicitly set data to null to trigger "Failed to load"
+          return;
+        }
 
-// This is now a true, ASYNC SERVER COMPONENT. It has no "use client" directive.
-export default async function ReplayPage({ params }: { params: { matchId: string } }) {
-  const { matchId } = params;
+        const allCardNames = new Set<string>();
+        validStates.forEach(state => {
+          if (state.gameState.cards) {
+            for (const card of Object.values(state.gameState.cards)) {
+              if (card && card.name) allCardNames.add(card.name);
+            }
+          }
+        });
 
-  // 1. Fetch all data on the server.
-  const { gameStates, team1Id, team2Id } = await getMatchReplayData(matchId);
-  const validStates = (gameStates ?? []).filter(s => s?.gameState != null);
+        const [team1, team2, cardDataMapFromAction] = await Promise.all([
+          getTeamData(team1Id),
+          getTeamData(team2Id),
+          getCardDataForReplay(Array.from(allCardNames))
+        ]);
 
-  if (validStates.length === 0) {
-    notFound();
-  }
+        const cardDataMap: Record<string, ReplayCardData> = Object.fromEntries(cardDataMapFromAction);
 
-  const allCardNames = new Set<string>();
-  validStates.forEach(state => {
-    if (state.gameState.cards) {
-      for (const card of Object.values(state.gameState.cards)) {
-        if (card && card.name) allCardNames.add(card.name);
+        console.log("--- 2. Data fetch successful ---");
+        console.log("Game States Count:", validStates.length);
+        console.log("Team 1:", team1?.name);
+        console.log("Card Data Map exists:", !!cardDataMap);
+
+        setData({ gameStates: validStates, team1, team2, cardDataMap });
+      } catch (error) {
+        console.error("Failed to fetch replay data:", error);
+        setData(null); // Set data to null on error
+      } finally {
+        setIsLoading(false);
       }
     }
-  });
 
-  const [team1, team2, cardDataMapFromAction] = await Promise.all([
-    getTeamData(team1Id),
-    getTeamData(team2Id),
-    getCardDataForReplay(Array.from(allCardNames))
-  ]);
+    fetchData();
+  }, [matchId]);
 
-  const cardDataMap: Record<string, ReplayCardData> = Object.fromEntries(cardDataMapFromAction);
+  if (isLoading) {
+    return <div className="text-white p-8 text-center">Loading replay data...</div>;
+  }
   
-  const data = { gameStates: validStates, team1, team2, cardDataMap };
+  if (!data) {
+    return <div className="text-white p-8 text-center">Failed to load replay.</div>;
+  }
 
-  // 2. Render the Client Component and pass the fetched data as a single prop.
+  // Provide all contexts at the top level here.
   return (
     <main className="w-full h-screen bg-gray-800">
-      <ArgentumViewerClientWrapper data={data} />
+      <ResponsiveContext.Provider value={responsiveSizes}>
+        <SettingsProvider>
+          <ArgentumReplayPlayer 
+            initialGameStates={data.gameStates!} 
+            cardDataMap={data.cardDataMap!}
+            team1={data.team1}
+            team2={data.team2}
+          />
+        </SettingsProvider>
+      </ResponsiveContext.Provider>
     </main>
   );
 }
