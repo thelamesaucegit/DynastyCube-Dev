@@ -6,13 +6,18 @@ import { useParams } from 'next/navigation';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
 import { getMatchReplayData, getTeamData } from '@/app/admin/argentum-viewer/data-actions';
 import { getCardDataForReplay } from '@/app/actions/cardActions';
-import type { Team, ReplayCardData, SpectatorStateUpdate, ReplayStateItem, ClientPlayer, ClientZone } from '@/types';
+import type { Team, ReplayCardData, SpectatorStateUpdate, SpectatorStateDiff, ReplayStateItem, ClientPlayer, ClientZone } from '@/types';
 import { ResponsiveContext } from '@/components/game/board/shared';
 import { useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
 import { produce } from 'immer';
 
-// --- STATE RECONSTRUCTION LOGIC (WITH EXPLICIT TYPES) ---
+// --- TYPE PREDICATE FUNCTION ---
+// This function acts as a definitive type guard for our union type.
+function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
+    return (item as SpectatorStateDiff).isDiff === true;
+}
+
 function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
     if (!rawStates || rawStates.length === 0) {
         return [];
@@ -22,7 +27,9 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     let currentBlueprint: SpectatorStateUpdate | null = null;
 
     for (const item of rawStates) {
-        if ('isDiff' in item && item.isDiff) {
+        // Use our new, definitive type guard function.
+        if (isDiff(item)) {
+            // Inside this block, TypeScript now knows for certain that 'item' is a 'SpectatorStateDiff'.
             if (!currentBlueprint || reconstructed.length === 0) {
                 console.error("Found a diff before a blueprint. Skipping.", item);
                 continue;
@@ -50,14 +57,12 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
 
                     if (gsd.players) {
                         Object.values(gsd.players).forEach((p: ClientPlayer) => {
-                            // THIS IS THE FIX: Explicitly type the 'pl' parameter
                             const index = draft.gameState.players.findIndex((pl: ClientPlayer) => pl.playerId === p.playerId);
                             if (index !== -1) draft.gameState.players[index] = p;
                         });
                     }
                     if (gsd.zones) {
                         Object.values(gsd.zones).forEach((z: ClientZone) => {
-                            // THIS IS THE PROACTIVE FIX: Explicitly type the 'zn' parameter
                             const index = draft.gameState.zones.findIndex((zn: ClientZone) => zn.zoneId.ownerId === z.zoneId.ownerId && zn.zoneId.zoneType === z.zoneId.zoneType);
                             if (index !== -1) draft.gameState.zones[index] = z;
                         });
@@ -67,10 +72,11 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             reconstructed.push(nextState);
 
         } else {
+            // Inside this block, TypeScript now knows 'item' must be 'SpectatorStateUpdate'.
+            // The error is now resolved.
             currentBlueprint = item;
             if (reconstructed.length > 0) {
                  const lastState = reconstructed[reconstructed.length - 1];
-                 // This is the subtle typo fix: .gameLog instead of .gamelog
                  if (lastState && currentBlueprint.gameState.gameLog) {
                     lastState.gameState.gameLog.push(...currentBlueprint.gameState.gameLog);
                  }
