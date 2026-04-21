@@ -6,14 +6,13 @@ import { useParams } from 'next/navigation';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
 import { getMatchReplayData, getTeamData } from '@/app/admin/argentum-viewer/data-actions';
 import { getCardDataForReplay } from '@/app/actions/cardActions';
-// This import is now cleaner and pulls from the main types index file
 import type { Team, ReplayCardData, SpectatorStateUpdate, ReplayStateItem, ClientPlayer, ClientZone } from '@/types';
 import { ResponsiveContext } from '@/components/game/board/shared';
 import { useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
 import { produce } from 'immer';
 
-// --- STATE RECONSTRUCTION LOGIC (NOW FULLY TYPED) ---
+// --- STATE RECONSTRUCTION LOGIC (WITH CORRECT TYPE GUARD) ---
 function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
     if (!rawStates || rawStates.length === 0) {
         return [];
@@ -23,8 +22,9 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     let currentBlueprint: SpectatorStateUpdate | null = null;
 
     for (const item of rawStates) {
-        // Use the 'isDiff' property as a type guard
-        if (item.isDiff) {
+        // CORRECTED TYPE GUARD: Use the 'in' operator to check for property existence.
+        // This allows TypeScript to correctly narrow the type of 'item'.
+        if ('isDiff' in item && item.isDiff) {
             if (!currentBlueprint || reconstructed.length === 0) {
                 console.error("Found a diff before a blueprint. Skipping.", item);
                 continue;
@@ -32,7 +32,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             
             const previousState = reconstructed[reconstructed.length - 1];
             const nextState = produce(previousState, draft => {
-                // The `item` is now correctly typed as SpectatorStateDiff
+                // Inside this block, TypeScript now knows 'item' is of type 'SpectatorStateDiff'.
                 if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
                 if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId;
                 if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId;
@@ -68,12 +68,12 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             reconstructed.push(nextState);
 
         } else {
-            // The `item` is correctly typed as SpectatorStateUpdate (the blueprint)
+            // Inside this block, TypeScript knows 'item' is of type 'SpectatorStateUpdate'.
             currentBlueprint = item;
             if (reconstructed.length > 0) {
                  const lastState = reconstructed[reconstructed.length - 1];
                  if (lastState && currentBlueprint.gameState.gameLog) {
-                    lastState.gameState.gameLog.push(...currentBlueprint.gameState.gameLog);
+                    lastState.gameState.gameLog.push(...currentBlueprint.gameState.gamelog);
                  }
             }
             reconstructed.push(currentBlueprint);
