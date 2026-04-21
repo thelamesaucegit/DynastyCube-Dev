@@ -6,7 +6,8 @@ import { useParams } from 'next/navigation';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
 import { getMatchReplayData, getTeamData } from '@/app/admin/argentum-viewer/data-actions';
 import { getCardDataForReplay } from '@/app/actions/cardActions';
-import type { Team, ReplayCardData, SpectatorStateUpdate, SpectatorStateDiff, ReplayStateItem, ClientPlayer, ClientZone } from '@/types/replay-types';
+// This import is now cleaner and pulls from the main types index file
+import type { Team, ReplayCardData, SpectatorStateUpdate, ReplayStateItem, ClientPlayer, ClientZone } from '@/types';
 import { ResponsiveContext } from '@/components/game/board/shared';
 import { useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';

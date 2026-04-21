@@ -369,3 +369,13 @@ export {
   createRequestUndoMessage,
   createRequestResyncMessage,
 } from './messages'
+
+export type {
+  SpectatorStateUpdate,
+  Team,
+  ReplayCardData,
+  CombatState,
+  CombatGroup,
+  SpectatorStateDiff,
+  ReplayStateItem,
+} from './replay-types'
