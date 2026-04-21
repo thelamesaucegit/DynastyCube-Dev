@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     }
 
     const { error: rpcError } = await getSupabaseAdmin().rpc(
-      'append_batch_to_match_logs', 
+      'overwrite_match_logs', 
       {
         match_id_to_append: matchId,
         new_states_to_append: states // Now 'states' is correctly typed as Json
