@@ -6,30 +6,26 @@ import { useParams } from 'next/navigation';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
 import { getMatchReplayData, getTeamData } from '@/app/admin/argentum-viewer/data-actions';
 import { getCardDataForReplay } from '@/app/actions/cardActions';
-import type { Team, ReplayCardData, SpectatorStateUpdate, SpectatorStateDiff, ReplayStateItem, ClientPlayer, ClientZone } from '@/types';
+// Note: We no longer need to import ClientPlayer/ClientZone here as they are correctly handled by the types.
+import type { Team, SpectatorStateUpdate, ReplayStateItem, ClientCard } from '@/types';
 import { ResponsiveContext } from '@/components/game/board/shared';
 import { useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
 import { produce } from 'immer';
 
-// --- TYPE PREDICATE FUNCTION ---
-// This function acts as a definitive type guard for our union type.
+// This is our definitive type guard.
 function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
     return (item as SpectatorStateDiff).isDiff === true;
 }
 
 function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
-    if (!rawStates || rawStates.length === 0) {
-        return [];
-    }
+    if (!rawStates || rawStates.length === 0) return [];
 
     const reconstructed: SpectatorStateUpdate[] = [];
     let currentBlueprint: SpectatorStateUpdate | null = null;
 
     for (const item of rawStates) {
-        // Use our new, definitive type guard function.
         if (isDiff(item)) {
-            // Inside this block, TypeScript now knows for certain that 'item' is a 'SpectatorStateDiff'.
             if (!currentBlueprint || reconstructed.length === 0) {
                 console.error("Found a diff before a blueprint. Skipping.", item);
                 continue;
@@ -56,14 +52,14 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     if (gsd.cards) Object.assign(draft.gameState.cards, gsd.cards);
 
                     if (gsd.players) {
-                        Object.values(gsd.players).forEach((p: ClientPlayer) => {
-                            const index = draft.gameState.players.findIndex((pl: ClientPlayer) => pl.playerId === p.playerId);
+                        Object.values(gsd.players).forEach(p => {
+                            const index = draft.gameState.players.findIndex(pl => pl.playerId === p.playerId);
                             if (index !== -1) draft.gameState.players[index] = p;
                         });
                     }
                     if (gsd.zones) {
-                        Object.values(gsd.zones).forEach((z: ClientZone) => {
-                            const index = draft.gameState.zones.findIndex((zn: ClientZone) => zn.zoneId.ownerId === z.zoneId.ownerId && zn.zoneId.zoneType === z.zoneId.zoneType);
+                        Object.values(gsd.zones).forEach(z => {
+                            const index = draft.gameState.zones.findIndex(zn => zn.zoneId.ownerId === z.zoneId.ownerId && zn.zoneId.zoneType === z.zoneId.zoneType);
                             if (index !== -1) draft.gameState.zones[index] = z;
                         });
                     }
@@ -72,8 +68,6 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             reconstructed.push(nextState);
 
         } else {
-            // Inside this block, TypeScript now knows 'item' must be 'SpectatorStateUpdate'.
-            // The error is now resolved.
             currentBlueprint = item;
             if (reconstructed.length > 0) {
                  const lastState = reconstructed[reconstructed.length - 1];
@@ -96,7 +90,7 @@ export default function ReplayPage() {
         gameStates: SpectatorStateUpdate[] | null;
         team1: Team | null;
         team2: Team | null;
-        cardDataMap: Record<string, ReplayCardData> | null;
+        cardDataMap: Record<string, ClientCard> | null; // Using the authoritative ClientCard type
     } | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -107,7 +101,6 @@ export default function ReplayPage() {
             setIsLoading(true);
             try {
                 const { gameStates: rawGameStates, team1Id, team2Id } = await getMatchReplayData(matchId);
-
                 if (!rawGameStates || rawGameStates.length === 0) {
                     console.error("No raw game states found for this match.");
                     setData(null);
@@ -115,7 +108,6 @@ export default function ReplayPage() {
                 }
 
                 const finalGameStates = reconstructGameStates(rawGameStates as ReplayStateItem[]);
-                
                 const validStates = finalGameStates.filter(s => s?.gameState != null);
                 if (validStates.length === 0) {
                     console.error("No valid game states after reconstruction.");
@@ -126,6 +118,7 @@ export default function ReplayPage() {
                 const allCardNames = new Set<string>();
                 validStates.forEach(state => {
                     if (state.gameState.cards) {
+                        // THIS IS THE FIX: TypeScript now knows 'card' is of type 'ClientCard'.
                         for (const card of Object.values(state.gameState.cards)) {
                             if (card && card.name) allCardNames.add(card.name);
                         }
@@ -135,10 +128,15 @@ export default function ReplayPage() {
                 const [team1, team2, cardDataMapFromAction] = await Promise.all([
                     getTeamData(team1Id),
                     getTeamData(team2Id),
-                    getCardDataForReplay(Array.from(allCardNames))
+                    // This action now returns ClientCard[], which we need to map
+                    getCardDataForReplay(Array.from(allCardNames)) 
                 ]);
 
-                const cardDataMap: Record<string, ReplayCardData> = Object.fromEntries(cardDataMapFromAction);
+                // We'll create a map from the array returned by the server action
+                const cardDataMap: Record<string, ClientCard> = {};
+                (cardDataMapFromAction as unknown as ClientCard[]).forEach(card => {
+                    cardDataMap[card.name] = card;
+                });
                 
                 setData({ gameStates: validStates, team1, team2, cardDataMap });
             } catch (error) {
@@ -164,6 +162,7 @@ export default function ReplayPage() {
             <ResponsiveContext.Provider value={responsiveSizes}>
                 <SettingsProvider>
                     <ArgentumReplayPlayer
+                        // The cardDataMap prop now expects Record<string, ClientCard>
                         initialGameStates={data.gameStates}
                         cardDataMap={data.cardDataMap!}
                         team1={data.team1}
