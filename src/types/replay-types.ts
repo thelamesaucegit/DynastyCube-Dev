@@ -1,31 +1,33 @@
 // src/types/replay-types.ts
 
-// Import the specific, detailed types we need from your central type files.
+// Import the specific, detailed types we need from the central type files.
 import type { 
   ClientGameState as LiveClientGameState,
   ClientCard,
   ClientPlayer,
   ClientZone
 } from './gameState';
-import type { Phase, Step } from './enums'; // <-- Import the enums
+import type { Phase, Step } from './enums';
+import type { EntityId } from './entities'; // <-- The crucial import.
 
 // The top-level object for a single state update (a blueprint)
 export interface SpectatorStateUpdate {
   gameSessionId: string;
   gameState: LiveClientGameState; 
-  player1Id: string;
-  player2Id: string;
+  // All ID fields are now correctly typed as EntityId.
+  player1Id: EntityId;
+  player2Id: EntityId;
   player1Name: string;
   player2Name: string;
-  currentPhase: Phase; // This should be the enum type
-  activePlayerId: string;
-  priorityPlayerId: string | null;
+  currentPhase: Phase;
+  activePlayerId: EntityId;
+  priorityPlayerId: EntityId | null;
   isReplay: boolean;
   combat: CombatState | null;
 }
 
 export interface Team {
-  id: string;
+  id: string; // Team IDs from the database are plain strings/uuids
   name: string;
   emoji: string;
   primary_color: string | null;
@@ -34,38 +36,36 @@ export interface Team {
 
 export interface CombatState {
   groups: CombatGroup[];
-  attackers: string[];
+  attackers: EntityId[];
 }
 
 export interface CombatGroup {
-  attackerId: string;
-  blockers: string[];
+  attackerId: EntityId;
+  blockers: EntityId[];
 }
 
 // --- DEFINITIVE TYPES FOR DIFFING MECHANISM ---
 
 interface GameStateDiff {
-    cards?: Record<string, ClientCard>;
-    zones?: Record<string, ClientZone>;
-    players?: Record<string, ClientPlayer>;
-    // These properties now correctly use the imported enum types.
+    cards?: Record<EntityId, ClientCard>;
+    zones?: Record<string, ClientZone>; // Zone map keys are stringified ZoneIds
+    players?: Record<EntityId, ClientPlayer>;
     currentPhase?: Phase;
     currentStep?: Step;
-    activePlayerId?: string;
-    priorityPlayerId?: string;
+    activePlayerId?: EntityId;
+    priorityPlayerId?: EntityId | null;
     turnNumber?: number;
     isGameOver?: boolean;
-    winnerId?: string | null;
+    winnerId?: EntityId | null;
     combat?: CombatState | null;
     gameLog?: Record<string, unknown>[];
 }
 
 export interface SpectatorStateDiff {
     isDiff: true;
-    // This property also correctly uses the imported enum type.
     currentPhase?: Phase;
-    activePlayerId?: string;
-    priorityPlayerId?: string;
+    activePlayerId?: EntityId;
+    priorityPlayerId?: EntityId | null;
     combat?: CombatState | null;
     gameState?: GameStateDiff;
 }
