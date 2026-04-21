@@ -5,14 +5,13 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
 import { getMatchReplayData, getTeamData } from '@/app/admin/argentum-viewer/data-actions';
-import { getCardDataForReplay } from '@/app/actions/cardActions';
-import type { Team, SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientCard, ClientPlayer, ClientZone } from '@/types';
+import type { Team, SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientCard, ClientPlayer, ClientZone, EntityId } from '@/types';
 import { ResponsiveContext } from '@/components/game/board/shared';
 import { useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
 import { produce } from 'immer';
 
-// The type predicate function for discriminating our union type.
+// This is our definitive type guard.
 function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
     return (item as SpectatorStateDiff).isDiff === true;
 }
@@ -40,6 +39,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
 
                 if (item.gameState) {
                     const gsd = item.gameState;
+                    // All these assignments are now type-safe because the diff object uses the correct types.
                     if (gsd.currentPhase !== undefined) draft.gameState.currentPhase = gsd.currentPhase;
                     if (gsd.currentStep !== undefined) draft.gameState.currentStep = gsd.currentStep;
                     if (gsd.activePlayerId !== undefined) draft.gameState.activePlayerId = gsd.activePlayerId;
@@ -90,7 +90,7 @@ export default function ReplayPage() {
         gameStates: SpectatorStateUpdate[] | null;
         team1: Team | null;
         team2: Team | null;
-        cardDataMap: Record<string, ClientCard> | null;
+        cardDataMap: Record<EntityId, ClientCard> | null;
     } | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -113,7 +113,7 @@ export default function ReplayPage() {
                     setData(null); return;
                 }
                 
-                const cardDataMap: Record<string, ClientCard> = validStates[0].gameState.cards;
+                const cardDataMap: Record<EntityId, ClientCard> = validStates[0].gameState.cards;
 
                 const [team1, team2] = await Promise.all([
                     getTeamData(team1Id),
