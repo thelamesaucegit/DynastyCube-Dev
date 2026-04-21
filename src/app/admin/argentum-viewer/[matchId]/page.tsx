@@ -12,7 +12,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
 import { produce } from 'immer';
 
-// --- STATE RECONSTRUCTION LOGIC (WITH CORRECT TYPE GUARD) ---
+// --- STATE RECONSTRUCTION LOGIC (WITH EXPLICIT TYPES) ---
 function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
     if (!rawStates || rawStates.length === 0) {
         return [];
@@ -22,8 +22,6 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     let currentBlueprint: SpectatorStateUpdate | null = null;
 
     for (const item of rawStates) {
-        // CORRECTED TYPE GUARD: Use the 'in' operator to check for property existence.
-        // This allows TypeScript to correctly narrow the type of 'item'.
         if ('isDiff' in item && item.isDiff) {
             if (!currentBlueprint || reconstructed.length === 0) {
                 console.error("Found a diff before a blueprint. Skipping.", item);
@@ -32,7 +30,6 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             
             const previousState = reconstructed[reconstructed.length - 1];
             const nextState = produce(previousState, draft => {
-                // Inside this block, TypeScript now knows 'item' is of type 'SpectatorStateDiff'.
                 if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
                 if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId;
                 if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId;
@@ -53,13 +50,15 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
 
                     if (gsd.players) {
                         Object.values(gsd.players).forEach((p: ClientPlayer) => {
-                            const index = draft.gameState.players.findIndex(pl => pl.playerId === p.playerId);
+                            // THIS IS THE FIX: Explicitly type the 'pl' parameter
+                            const index = draft.gameState.players.findIndex((pl: ClientPlayer) => pl.playerId === p.playerId);
                             if (index !== -1) draft.gameState.players[index] = p;
                         });
                     }
                     if (gsd.zones) {
                         Object.values(gsd.zones).forEach((z: ClientZone) => {
-                            const index = draft.gameState.zones.findIndex(zn => zn.zoneId.ownerId === z.zoneId.ownerId && zn.zoneId.zoneType === z.zoneId.zoneType);
+                            // THIS IS THE PROACTIVE FIX: Explicitly type the 'zn' parameter
+                            const index = draft.gameState.zones.findIndex((zn: ClientZone) => zn.zoneId.ownerId === z.zoneId.ownerId && zn.zoneId.zoneType === z.zoneId.zoneType);
                             if (index !== -1) draft.gameState.zones[index] = z;
                         });
                     }
@@ -68,12 +67,12 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             reconstructed.push(nextState);
 
         } else {
-            // Inside this block, TypeScript knows 'item' is of type 'SpectatorStateUpdate'.
             currentBlueprint = item;
             if (reconstructed.length > 0) {
                  const lastState = reconstructed[reconstructed.length - 1];
+                 // This is the subtle typo fix: .gameLog instead of .gamelog
                  if (lastState && currentBlueprint.gameState.gameLog) {
-                    lastState.gameState.gameLog.push(...currentBlueprint.gameState.gamelog);
+                    lastState.gameState.gameLog.push(...currentBlueprint.gameState.gameLog);
                  }
             }
             reconstructed.push(currentBlueprint);
