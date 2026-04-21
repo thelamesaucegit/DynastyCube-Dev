@@ -6,15 +6,14 @@ import { useParams } from 'next/navigation';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
 import { getMatchReplayData, getTeamData } from '@/app/admin/argentum-viewer/data-actions';
 import { getCardDataForReplay } from '@/app/actions/cardActions';
-import type { Team, ReplayCardData, SpectatorStateUpdate } from '@/types/replay-types';
+import type { Team, ReplayCardData, SpectatorStateUpdate, SpectatorStateDiff, ReplayStateItem, ClientPlayer, ClientZone } from '@/types/replay-types';
 import { ResponsiveContext } from '@/components/game/board/shared';
 import { useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
-import { produce } from 'immer'; // A library for working with immutable state easily
+import { produce } from 'immer';
 
-// --- STATE RECONSTRUCTION LOGIC ---
-// This function takes the raw array of blueprints and diffs and returns a full array of states.
-function reconstructGameStates(rawStates: any[]): SpectatorStateUpdate[] {
+// --- STATE RECONSTRUCTION LOGIC (NOW FULLY TYPED) ---
+function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
     if (!rawStates || rawStates.length === 0) {
         return [];
     }
@@ -23,21 +22,21 @@ function reconstructGameStates(rawStates: any[]): SpectatorStateUpdate[] {
     let currentBlueprint: SpectatorStateUpdate | null = null;
 
     for (const item of rawStates) {
+        // Use the 'isDiff' property as a type guard
         if (item.isDiff) {
-            if (!currentBlueprint) {
+            if (!currentBlueprint || reconstructed.length === 0) {
                 console.error("Found a diff before a blueprint. Skipping.", item);
                 continue;
             }
-            // Apply the diff to the blueprint to create the next state.
-            // Using 'immer' makes this much safer and less verbose.
-            const nextState = produce(reconstructed[reconstructed.length - 1], draft => {
-                // Apply top-level diffs
+            
+            const previousState = reconstructed[reconstructed.length - 1];
+            const nextState = produce(previousState, draft => {
+                // The `item` is now correctly typed as SpectatorStateDiff
                 if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
                 if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId;
                 if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId;
                 if (item.combat !== undefined) draft.combat = item.combat;
 
-                // Apply nested gameState diffs
                 if (item.gameState) {
                     const gsd = item.gameState;
                     if (gsd.currentPhase !== undefined) draft.gameState.currentPhase = gsd.currentPhase;
@@ -48,20 +47,17 @@ function reconstructGameStates(rawStates: any[]): SpectatorStateUpdate[] {
                     if (gsd.isGameOver !== undefined) draft.gameState.isGameOver = gsd.isGameOver;
                     if (gsd.winnerId !== undefined) draft.gameState.winnerId = gsd.winnerId;
                     if (gsd.combat !== undefined) draft.gameState.combat = gsd.combat;
-
-                    // Apply new game log entries
                     if (gsd.gameLog) draft.gameState.gameLog.push(...gsd.gameLog);
-                    
-                    // Merge changed objects
                     if (gsd.cards) Object.assign(draft.gameState.cards, gsd.cards);
+
                     if (gsd.players) {
-                        gsd.players.forEach((p: any) => {
+                        Object.values(gsd.players).forEach((p: ClientPlayer) => {
                             const index = draft.gameState.players.findIndex(pl => pl.playerId === p.playerId);
                             if (index !== -1) draft.gameState.players[index] = p;
                         });
                     }
                     if (gsd.zones) {
-                         Object.values(gsd.zones).forEach((z: any) => {
+                        Object.values(gsd.zones).forEach((z: ClientZone) => {
                             const index = draft.gameState.zones.findIndex(zn => zn.zoneId.ownerId === z.zoneId.ownerId && zn.zoneId.zoneType === z.zoneId.zoneType);
                             if (index !== -1) draft.gameState.zones[index] = z;
                         });
@@ -71,19 +67,19 @@ function reconstructGameStates(rawStates: any[]): SpectatorStateUpdate[] {
             reconstructed.push(nextState);
 
         } else {
-            // This is a new blueprint.
-            currentBlueprint = item as SpectatorStateUpdate;
+            // The `item` is correctly typed as SpectatorStateUpdate (the blueprint)
+            currentBlueprint = item;
             if (reconstructed.length > 0) {
-                 // if this isn't the first blueprint, it means we're just applying the accumulated logs from the last diff
                  const lastState = reconstructed[reconstructed.length - 1];
-                 lastState.gameState.gameLog.push(...(currentBlueprint.gameState.gameLog || []));
+                 if (lastState && currentBlueprint.gameState.gameLog) {
+                    lastState.gameState.gameLog.push(...currentBlueprint.gameState.gameLog);
+                 }
             }
             reconstructed.push(currentBlueprint);
         }
     }
     return reconstructed;
 }
-
 
 export default function ReplayPage() {
     const params = useParams();
@@ -104,7 +100,6 @@ export default function ReplayPage() {
         async function fetchData() {
             setIsLoading(true);
             try {
-                // Fetch the raw data (which is an array of blueprints and diffs)
                 const { gameStates: rawGameStates, team1Id, team2Id } = await getMatchReplayData(matchId);
 
                 if (!rawGameStates || rawGameStates.length === 0) {
@@ -113,8 +108,7 @@ export default function ReplayPage() {
                     return;
                 }
 
-                // --- RECONSTRUCT THE FULL STATE HISTORY ---
-                const finalGameStates = reconstructGameStates(rawGameStates as any[]);
+                const finalGameStates = reconstructGameStates(rawGameStates as ReplayStateItem[]);
                 
                 const validStates = finalGameStates.filter(s => s?.gameState != null);
                 if (validStates.length === 0) {
@@ -174,4 +168,3 @@ export default function ReplayPage() {
         </main>
     );
 }
-
