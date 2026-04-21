@@ -1,14 +1,15 @@
 // src/types/replay-types.ts
 
-// Import the specific, detailed types we need from your central gameState file.
+// Import the specific, detailed types we need from your central type files.
 import type { 
   ClientGameState as LiveClientGameState,
-  ClientCard, // This is the crucial import
+  ClientCard,
   ClientPlayer,
   ClientZone
 } from './gameState';
+import type { Phase, Step } from './enums'; // <-- Import the enums
 
-// The top-level object for a single state update from the logger
+// The top-level object for a single state update (a blueprint)
 export interface SpectatorStateUpdate {
   gameSessionId: string;
   gameState: LiveClientGameState; 
@@ -16,7 +17,7 @@ export interface SpectatorStateUpdate {
   player2Id: string;
   player1Name: string;
   player2Name: string;
-  currentPhase: string;
+  currentPhase: Phase; // This should be the enum type
   activePlayerId: string;
   priorityPlayerId: string | null;
   isReplay: boolean;
@@ -31,10 +32,6 @@ export interface Team {
   secondary_color: string | null;
 }
 
-// ReplayCardData was a simplified version. For consistency and type safety,
-// we will now use the authoritative ClientCard type throughout.
-// We can remove ReplayCardData as it is now redundant.
-
 export interface CombatState {
   groups: CombatGroup[];
   attackers: string[];
@@ -45,16 +42,15 @@ export interface CombatGroup {
   blockers: string[];
 }
 
-// --- NEW TYPES FOR DIFFING MECHANISM ---
+// --- DEFINITIVE TYPES FOR DIFFING MECHANISM ---
 
-// Represents the structure of a diff for the nested gameState object
 interface GameStateDiff {
-    // This now correctly uses the imported ClientCard type.
     cards?: Record<string, ClientCard>;
     zones?: Record<string, ClientZone>;
     players?: Record<string, ClientPlayer>;
-    currentPhase?: string;
-    currentStep?: string;
+    // These properties now correctly use the imported enum types.
+    currentPhase?: Phase;
+    currentStep?: Step;
     activePlayerId?: string;
     priorityPlayerId?: string;
     turnNumber?: number;
@@ -64,16 +60,14 @@ interface GameStateDiff {
     gameLog?: Record<string, unknown>[];
 }
 
-// Represents a SpectatorStateDiff object sent from the Java application.
 export interface SpectatorStateDiff {
     isDiff: true;
-    currentPhase?: string;
+    // This property also correctly uses the imported enum type.
+    currentPhase?: Phase;
     activePlayerId?: string;
     priorityPlayerId?: string;
     combat?: CombatState | null;
     gameState?: GameStateDiff;
 }
 
-// A union type representing an item in our raw replay array from the database.
 export type ReplayStateItem = SpectatorStateUpdate | SpectatorStateDiff;
-

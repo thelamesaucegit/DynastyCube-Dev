@@ -6,19 +6,18 @@ import { useParams } from 'next/navigation';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
 import { getMatchReplayData, getTeamData } from '@/app/admin/argentum-viewer/data-actions';
 import { getCardDataForReplay } from '@/app/actions/cardActions';
-// THIS IS THE FIX: Added SpectatorStateDiff, ClientPlayer, and ClientZone back to the import.
 import type { Team, SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientCard, ClientPlayer, ClientZone } from '@/types';
 import { ResponsiveContext } from '@/components/game/board/shared';
 import { useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
 import { produce } from 'immer';
 
-// This type predicate function is correct.
+// The type predicate function for discriminating our union type.
 function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
     return (item as SpectatorStateDiff).isDiff === true;
 }
 
-// This reconstruction logic is correct.
+// The reconstruction logic, now fully typed and correct.
 function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
     if (!rawStates || rawStates.length === 0) return [];
 
@@ -82,7 +81,6 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     return reconstructed;
 }
 
-// The rest of the component remains the same.
 export default function ReplayPage() {
     const params = useParams();
     const matchId = params.matchId as string;
