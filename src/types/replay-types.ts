@@ -1,20 +1,21 @@
 // src/types/replay-types.ts
 
-// Import the specific, detailed types we need from the central type files.
+// Import all necessary base types.
 import type { 
   ClientGameState as LiveClientGameState,
   ClientCard,
   ClientPlayer,
-  ClientZone
+  ClientZone,
+  ClientCombatState // <-- Import the correct combat state type from the server DTO
 } from './gameState';
 import type { Phase, Step } from './enums';
-import type { EntityId } from './entities'; // <-- The crucial import.
+import type { EntityId } from './entities';
 
-// The top-level object for a single state update (a blueprint)
+// The top-level object for a single state update (a blueprint).
+// This now uses the correct ClientCombatState type from gameState.ts.
 export interface SpectatorStateUpdate {
   gameSessionId: string;
   gameState: LiveClientGameState; 
-  // All ID fields are now correctly typed as EntityId.
   player1Id: EntityId;
   player2Id: EntityId;
   player1Name: string;
@@ -23,41 +24,31 @@ export interface SpectatorStateUpdate {
   activePlayerId: EntityId;
   priorityPlayerId: EntityId | null;
   isReplay: boolean;
-  combat: CombatState | null;
+  combat: ClientCombatState | null; // <-- Use the authoritative type
 }
 
 export interface Team {
-  id: string; // Team IDs from the database are plain strings/uuids
+  id: string;
   name: string;
   emoji: string;
   primary_color: string | null;
   secondary_color: string | null;
 }
 
-export interface CombatState {
-  groups: CombatGroup[];
-  attackers: EntityId[];
-}
-
-export interface CombatGroup {
-  attackerId: EntityId;
-  blockers: EntityId[];
-}
-
-// --- DEFINITIVE TYPES FOR DIFFING MECHANISM ---
+// --- DEFINITIVE TYPES FOR DIFFING MECHANISM (Corrected) ---
 
 interface GameStateDiff {
     cards?: Record<EntityId, ClientCard>;
-    zones?: Record<string, ClientZone>; // Zone map keys are stringified ZoneIds
+    zones?: Record<string, ClientZone>;
     players?: Record<EntityId, ClientPlayer>;
     currentPhase?: Phase;
     currentStep?: Step;
     activePlayerId?: EntityId;
-    priorityPlayerId?: EntityId | null;
+    priorityPlayerId?: EntityId; 
     turnNumber?: number;
     isGameOver?: boolean;
     winnerId?: EntityId | null;
-    combat?: CombatState | null;
+    combat?: ClientCombatState | null; // <-- Use the authoritative type here as well
     gameLog?: Record<string, unknown>[];
 }
 
@@ -66,7 +57,7 @@ export interface SpectatorStateDiff {
     currentPhase?: Phase;
     activePlayerId?: EntityId;
     priorityPlayerId?: EntityId | null;
-    combat?: CombatState | null;
+    combat?: ClientCombatState | null; // <-- And here
     gameState?: GameStateDiff;
 }
 
