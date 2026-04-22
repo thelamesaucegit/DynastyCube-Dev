@@ -22,7 +22,7 @@ function getSupabase() {
 export async function getMatchReplayData(matchId: string): Promise<{ gameStates: SpectatorStateUpdate[] | null, team1Id: string | null, team2Id: string | null }> {
   const { data, error } = await getSupabase()
     .from('sim_matches')
-    .select('argentum_game_states, team1_id, team2_id')
+    .select('argentum_game_states, team1_id, team2_id, team1_name, team1_color, team1_seccolor, team2_name, team2_color, team2_seccolor')
     .eq('id', matchId)
     .single();
 
@@ -36,8 +36,18 @@ export async function getMatchReplayData(matchId: string): Promise<{ gameStates:
 
   return {
     gameStates: row.argentum_game_states,
-    team1Id: row.team1_id,
-    team2Id: row.team2_id,
+    team1: {
+            id: data.team1_id,
+            name: data.team1_name,
+            primary_color: data.team1_color,
+            secondary_color: data.team1_seccolor,
+        },
+        team2: {
+            id: data.team2_id,
+            name: data.team2_name,
+            primary_color: data.team2_color,
+            secondary_color: data.team2_seccolor,
+        },
   };
 }
 
