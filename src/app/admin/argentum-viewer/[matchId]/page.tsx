@@ -11,12 +11,10 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
 import { produce } from 'immer';
 
-// This is our definitive type guard.
 function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
     return (item as SpectatorStateDiff).isDiff === true;
 }
 
-// The reconstruction logic, now fully typed and correct.
 function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
     if (!rawStates || rawStates.length === 0) return [];
 
@@ -39,7 +37,6 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
 
                 if (item.gameState) {
                     const gsd = item.gameState;
-                    // All these assignments are now type-safe because the diff object uses the correct types.
                     if (gsd.currentPhase !== undefined) draft.gameState.currentPhase = gsd.currentPhase;
                     if (gsd.currentStep !== undefined) draft.gameState.currentStep = gsd.currentStep;
                     if (gsd.activePlayerId !== undefined) draft.gameState.activePlayerId = gsd.activePlayerId;
@@ -47,8 +44,9 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     if (gsd.turnNumber !== undefined) draft.gameState.turnNumber = gsd.turnNumber;
                     if (gsd.isGameOver !== undefined) draft.gameState.isGameOver = gsd.isGameOver;
                     if (gsd.winnerId !== undefined) draft.gameState.winnerId = gsd.winnerId;
+                    // This assignment is now safe because all combat types are the correct 'ClientCombatState'
                     if (gsd.combat !== undefined) draft.gameState.combat = gsd.combat;
-                    if (gsd.gameLog) draft.gameState.gameLog.push(...gsd.gameLog);
+                    if (gsd.gameLog && draft.gameState.gameLog) draft.gameState.gameLog.push(...gsd.gameLog);
                     if (gsd.cards) Object.assign(draft.gameState.cards, gsd.cards);
                     
                     if (gsd.players) {
@@ -71,7 +69,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             currentBlueprint = item;
             if (reconstructed.length > 0) {
                  const lastState = reconstructed[reconstructed.length - 1];
-                 if (lastState && currentBlueprint.gameState.gameLog) {
+                 if (lastState && lastState.gameState.gameLog && currentBlueprint.gameState.gameLog) {
                     lastState.gameState.gameLog.push(...currentBlueprint.gameState.gameLog);
                  }
             }
