@@ -45,11 +45,7 @@ export function ReplayStackDisplay({ snapshot, cardDataMap, useOldestArt }: Repl
           {stackCards.map((card, index) => {
  const cardImageData = cardDataMap?.[card.name];
             // THIS IS THE FIX: Use getCardImageUrl with the useOldestArt prop.
-            const imageUrl = getCardImageUrl({
-                name: card.name,
-                image_url: cardImageData?.image_url,
-                oldest_image_url: cardImageData?.oldest_image_url
-            }, useOldestArt);
+             const imageUrl = getCardImageUrl(cardImageData, useOldestArt);
       return (
               <CardPreview key={card.id} card={cardImageData}>
                 <div data-card-id={card.id} style={{ ...styles.stackItem, marginTop: index === 0 ? 0 : -stackImageHeight + cardOffset, zIndex: index + 1 }}>
