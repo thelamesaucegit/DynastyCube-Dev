@@ -1,3 +1,5 @@
+//src/app/components/game/ArgentumReplayPlayer.tsx
+
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -21,38 +23,30 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap, team1, te
     const [isPlaying, setIsPlaying] = useState(false);
     const totalStates = initialGameStates.length;
 
-    const { player1Team, player2Team } = useMemo(() => {
-        if (!team1 || !team2 || !initialGameStates?.[0]) {
-            return { player1Team: null, player2Team: null };
-        }
-        const firstState = initialGameStates[0];
-        const p1IsTeam1 = firstState.player1Id.toString() === team1.id;
-        return {
-            player1Team: p1IsTeam1 ? team1 : team2,
-            player2Team: p1IsTeam1 ? team2 : team1,
-        };
-    }, [initialGameStates, team1, team2]);
 
     const currentSnapshot = useMemo(() => {
         const originalSnapshot = initialGameStates[currentIndex];
-        if (!originalSnapshot) return null;
+ if (!originalSnapshot || !team1 || !team2) return null;
+        // The snapshot from the DB now has the correct player names from forge.
+        // We just need to add the theme colors. The names are already correct.
+        const player1IsTeam1 = originalSnapshot.player1Id.toString() === team1.id.toString();
+        const player1Data = player1IsTeam1 ? team1 : team2;
+        const player2Data = player1IsTeam1 ? team2 : team1;
 
-        // Create a new snapshot object for rendering, injecting the correct names and theme colors.
         return {
             ...originalSnapshot,
-            player1Name: player1Team?.name ?? originalSnapshot.player1Name,
-            player2Name: player2Team?.name ?? originalSnapshot.player2Name,
-            // Add theme data for the GameBoard to use
+           player1Name: player1Data.name, // Overwrite with the proper team name
+            player2Name: player2Data.name, // Overwrite with the proper team name
             player1Theme: {
-                primary: player1Team?.primary_color ?? '#800080', // Default Purple
-                secondary: player1Team?.secondary_color ?? '#555',
+                primary: player1Data.primary_color ?? '#800080',
+                secondary: player1Data.secondary_color ?? '#555555',
             },
             player2Theme: {
-                primary: player2Team?.primary_color ?? '#0000FF', // Default Blue
-                secondary: player2Team?.secondary_color ?? '#555',
+                primary: player2Data.primary_color ?? '#0000FF',
+                secondary: player2Data.secondary_color ?? '#555555',
             },
         };
-    }, [currentIndex, initialGameStates, player1Team, player2Team]);
+    }, [currentIndex, initialGameStates, team1, team2]);
 
     useEffect(() => {
         if (!isPlaying) return;

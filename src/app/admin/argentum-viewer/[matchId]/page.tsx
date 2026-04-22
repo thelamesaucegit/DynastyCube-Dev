@@ -87,10 +87,13 @@ export default function ReplayPage() {
     useEffect(() => {
         if (!matchId) return;
 
-        async function fetchData() {
+       async function fetchData() {
             setIsLoading(true);
             try {
-                const { gameStates: rawGameStates, team1Id, team2Id } = await getMatchReplayData(matchId);
+                // --- THIS IS THE FIX ---
+                // Destructure the full team objects directly.
+                const { gameStates: rawGameStates, team1, team2 } = await getMatchReplayData(matchId);
+                // --- END FIX ---
                 if (!rawGameStates || rawGameStates.length === 0) {
                     console.error("No raw game states found for this match."); setData(null); return;
                 }
@@ -111,17 +114,13 @@ export default function ReplayPage() {
                     }
                 });
 
-                const [team1, team2, cardDataMapFromAction] = await Promise.all([
-                    getTeamData(team1Id),
-                    getTeamData(team2Id),
-                    // Restore the call to the card action.
-                    getCardDataForReplay(Array.from(allCardNames))
-                ]);
-                
-                // The result of the action is converted into the map.
+
+                const cardDataMapFromAction = await getCardDataForReplay(Array.from(allCardNames));
                 const cardDataMap: Record<string, ReplayCardData> = Object.fromEntries(cardDataMapFromAction);
 
+                // Set all data at once
                 setData({ gameStates: validStates, team1, team2, cardDataMap });
+                
             } catch (error) {
                 console.error("Failed to fetch and process replay data:", error);
                 setData(null);

@@ -11,6 +11,8 @@ import { Textarea } from '@/app/components/ui/textarea';
 import { Swords, Hourglass, ShieldCheck, ShieldX, Trophy } from 'lucide-react';
 import { getAiProfiles, validateAndCanonicalizeDeck, getTestDecklists } from '@/app/actions/adminActions';
 import { getAllTeams } from '@/app/actions/teamActions';
+import { type TeamWithDetails } from '@/app/actions/teamActions';
+
 
 interface Team {
   id: string;
@@ -30,7 +32,7 @@ function formatDecklistToDck(decklist: string, deckName: string): string {
 
 export default function MatchRunnerPage() {
   const [profiles, setProfiles] = useState<AiProfile[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
+  const [teams, setTeams] = useState<TeamWithDetails[]>([]);
   const [team1Id, setTeam1Id] = useState('');
   const [team2Id, setTeam2Id] = useState('');
   const [player1, setPlayer1] = useState({ decklist: '', aiProfile: '' });
@@ -45,9 +47,10 @@ export default function MatchRunnerPage() {
   useEffect(() => {
     async function loadInitialData() {
       try {
-        const [aiResult, teamResult, testDeckResult] = await Promise.all([ 
+          // Fetch data using getTeamsWithDetails to get colors
+      const [aiResult, teamResult, testDeckResult] = await Promise.all([ 
             getAiProfiles(), 
-            getAllTeams(),
+            getTeamsWithDetails(), // This function returns the colors we need
             getTestDecklists()
         ]);
         setProfiles(aiResult);
@@ -134,6 +137,12 @@ export default function MatchRunnerPage() {
           deck2: { content: formatDecklistToDck(correctedDeck2List, deck2NameForSim), aiProfile: player2.aiProfile },
           team1Id: team1Id,
           team2Id: team2Id,
+          team1_name: team1.name,
+          team1_color: team1.primary_color,
+          team1_seccolor: team1.secondary_color,
+          team2_name: team2.name,
+          team2_color: team2.primary_color,
+          team2_seccolor: team2.secondary_color,
         })
       });
 

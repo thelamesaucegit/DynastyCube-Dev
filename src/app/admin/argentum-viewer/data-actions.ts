@@ -19,25 +19,45 @@ function getSupabase() {
 }
 
 // Fetches the main game log and the IDs of the two teams
-export async function getMatchReplayData(matchId: string): Promise<{ gameStates: SpectatorStateUpdate[] | null, team1Id: string | null, team2Id: string | null }> {
+export async function getMatchReplayData(matchId: string): Promise<{ 
+    gameStates: SpectatorStateUpdate[] | null;
+    team1: Team | null; 
+    team2: Team | null; 
+}> {
   const { data, error } = await getSupabase()
     .from('sim_matches')
-    .select('argentum_game_states, team1_id, team2_id')
+    .select('argentum_game_states, team1_id, team2_id, team1_name, team1_color, team1_seccolor, team2_name, team2_color, team2_seccolor')
     .eq('id', matchId)
     .single();
 
+
   if (error || !data) {
     console.error(`Error fetching match data for ${matchId}:`, error);
-    return { gameStates: null, team1Id: null, team2Id: null };
+return { gameStates: null, team1: null, team2: null };
   }
 
-  // The 'as' cast remains correct as it refers to the database row structure.
-  const row = data as { argentum_game_states: SpectatorStateUpdate[]; team1_id: string; team2_id: string };
+
 
   return {
     gameStates: row.argentum_game_states,
-    team1Id: row.team1_id,
-    team2Id: row.team2_id,
+    team1: {
+            id: data.team1_id,
+            name: data.team1_name,
+            primary_color: data.team1_color,
+            secondary_color: data.team1_seccolor,
+      emoji: '', // Add dummy properties to match the interface
+        motto: '',
+        short_name: '',
+        },
+        team2: {
+            id: data.team2_id,
+            name: data.team2_name,
+            primary_color: data.team2_color,
+            secondary_color: data.team2_seccolor,
+          emoji: '', // Add dummy properties to match the interface
+        motto: '',
+        short_name: '',
+        },
   };
 }
 
