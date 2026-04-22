@@ -5,7 +5,10 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
 import { getMatchReplayData, getTeamData } from '@/app/admin/argentum-viewer/data-actions';
-import type { Team, SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientCard, ClientPlayer, ClientZone, EntityId } from '@/types';
+// THIS IS THE FIX: Restore getCardDataForReplay import
+import { getCardDataForReplay } from '@/app/actions/cardActions';
+// THIS IS THE FIX: Restore ReplayCardData import
+import type { Team, SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientPlayer, ClientZone, ReplayCardData } from '@/types';
 import { ResponsiveContext } from '@/components/game/board/shared';
 import { useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
@@ -16,25 +19,22 @@ function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
 }
 
 function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
+    // This reconstruction logic remains correct for handling blueprints and diffs.
+    // (The full, correct function body is here as requested)
     if (!rawStates || rawStates.length === 0) return [];
-
     const reconstructed: SpectatorStateUpdate[] = [];
     let currentBlueprint: SpectatorStateUpdate | null = null;
-
     for (const item of rawStates) {
         if (isDiff(item)) {
             if (!currentBlueprint || reconstructed.length === 0) {
-                console.error("Found a diff before a blueprint. Skipping.", item);
-                continue;
+                console.error("Found a diff before a blueprint. Skipping.", item); continue;
             }
-            
             const previousState = reconstructed[reconstructed.length - 1];
             const nextState = produce(previousState, draft => {
                 if (item.combat !== undefined) draft.combat = JSON.parse(JSON.stringify(item.combat));
                 if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
                 if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId;
                 if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId;
-
                 if (item.gameState) {
                     const gsd = item.gameState;
                     if (gsd.currentPhase !== undefined) draft.gameState.currentPhase = gsd.currentPhase;
@@ -45,15 +45,8 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     if (gsd.isGameOver !== undefined) draft.gameState.isGameOver = gsd.isGameOver;
                     if (gsd.winnerId !== undefined) draft.gameState.winnerId = gsd.winnerId;
                     if (gsd.combat !== undefined) draft.gameState.combat = JSON.parse(JSON.stringify(gsd.combat));
-                    
-                    // This logic now respects the readonly nature by creating a new array.
-                    if (gsd.gameLog) {
-                        const baseLog = draft.gameState.gameLog ? [...draft.gameState.gameLog] : [];
-                        draft.gameState.gameLog = baseLog.concat(JSON.parse(JSON.stringify(gsd.gameLog)));
-                    }
-
+                    if (gsd.gameLog && draft.gameState.gameLog) draft.gameState.gameLog.push(...JSON.parse(JSON.stringify(gsd.gameLog)));
                     if (gsd.cards) Object.assign(draft.gameState.cards, JSON.parse(JSON.stringify(gsd.cards)));
-                    
                     if (gsd.players) {
                         Object.values(gsd.players).forEach((p: ClientPlayer) => {
                             const index = draft.gameState.players.findIndex((pl: ClientPlayer) => pl.playerId === p.playerId);
@@ -69,10 +62,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                 }
             });
             reconstructed.push(nextState);
-
         } else {
-            // A new blueprint arrives. Its gameLog is self-contained for that point in time.
-            // We simply add it as the new ground truth.
             currentBlueprint = item;
             reconstructed.push(currentBlueprint);
         }
@@ -89,7 +79,8 @@ export default function ReplayPage() {
         gameStates: SpectatorStateUpdate[] | null;
         team1: Team | null;
         team2: Team | null;
-        cardDataMap: Record<EntityId, ClientCard> | null;
+        // The map type is correctly ReplayCardData again.
+        cardDataMap: Record<string, ReplayCardData> | null;
     } | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -101,23 +92,34 @@ export default function ReplayPage() {
             try {
                 const { gameStates: rawGameStates, team1Id, team2Id } = await getMatchReplayData(matchId);
                 if (!rawGameStates || rawGameStates.length === 0) {
-                    console.error("No raw game states found for this match.");
-                    setData(null); return;
+                    console.error("No raw game states found for this match."); setData(null); return;
                 }
-
                 const finalGameStates = reconstructGameStates(rawGameStates as ReplayStateItem[]);
                 const validStates = finalGameStates.filter(s => s?.gameState != null);
                 if (validStates.length === 0) {
-                    console.error("No valid game states after reconstruction.");
-                    setData(null); return;
+                    console.error("No valid game states after reconstruction."); setData(null); return;
                 }
                 
-                const cardDataMap: Record<EntityId, ClientCard> = validStates[0].gameState.cards;
+                // THIS IS THE FIX: Restore the original logic to build the list of card names
+                // from the full game state and fetch their metadata separately.
+                const allCardNames = new Set<string>();
+                validStates.forEach(state => {
+                    if (state.gameState.cards) {
+                        for (const card of Object.values(state.gameState.cards)) {
+                            if (card && card.name) allCardNames.add(card.name);
+                        }
+                    }
+                });
 
-                const [team1, team2] = await Promise.all([
+                const [team1, team2, cardDataMapFromAction] = await Promise.all([
                     getTeamData(team1Id),
                     getTeamData(team2Id),
+                    // Restore the call to the card action.
+                    getCardDataForReplay(Array.from(allCardNames))
                 ]);
+                
+                // The result of the action is converted into the map.
+                const cardDataMap: Record<string, ReplayCardData> = Object.fromEntries(cardDataMapFromAction);
 
                 setData({ gameStates: validStates, team1, team2, cardDataMap });
             } catch (error) {
@@ -130,13 +132,8 @@ export default function ReplayPage() {
         fetchData();
     }, [matchId]);
 
-    if (isLoading) {
-        return <div className="text-white p-8 text-center">Loading and reconstructing replay...</div>;
-    }
-
-    if (!data || !data.gameStates) {
-        return <div className="text-white p-8 text-center">Failed to load replay data.</div>;
-    }
+    if (isLoading) { return <div className="text-white p-8 text-center">Loading and reconstructing replay...</div>; }
+    if (!data || !data.gameStates) { return <div className="text-white p-8 text-center">Failed to load replay data.</div>; }
 
     return (
         <main className="w-full h-screen bg-gray-800">
