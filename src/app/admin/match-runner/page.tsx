@@ -49,7 +49,7 @@ export default function MatchRunnerPage() {
           // Fetch data using getTeamsWithDetails to get colors
       const [aiResult, teamResult, testDeckResult] = await Promise.all([ 
             getAiProfiles(), 
-            getTeamsWithDetails(), // This function returns the colors we need
+            getTeamsWithDetails(true), // This function returns the colors we need
             getTestDecklists()
         ]);
         setProfiles(aiResult);

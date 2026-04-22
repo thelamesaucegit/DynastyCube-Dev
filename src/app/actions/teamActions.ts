@@ -469,17 +469,20 @@ export async function getAllTeams(): Promise<{
 /**
  * Get all VISIBLE teams with their season record and last draft pick.
  */
-export async function getTeamsWithDetails(): Promise<{
+export async function getTeamsWithDetails(includeHidden = false): Promise<{
   teams: TeamWithDetails[];
   error?: string;
 }> {
-  const supabase = await createClient(); // Uses the existing createClient function in this file
+  const supabase = await createClient();
   try {
-    // 1. Get all visible teams and their records + member count
-    const { data: teams, error: teamsError } = await supabase
+    let query = supabase
       .from("teams")
-      .select("id, name, emoji, motto, short_name, wins, losses, primary_color, secondary_color, member_count")
-      .eq('is_hidden', false); // <-- Filter to only get visible teams
+      .select("id, name, emoji, motto, short_name, wins, losses, primary_color, secondary_color, member_count");
+
+    // THIS IS THE FIX: Only filter for hidden teams if the caller doesn't want them.
+    if (!includeHidden) {
+      query = query.eq('is_hidden', false);
+    }
 
     if (teamsError) {
       console.error("Error fetching teams:", teamsError);

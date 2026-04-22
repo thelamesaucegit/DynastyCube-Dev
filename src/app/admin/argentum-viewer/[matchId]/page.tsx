@@ -91,37 +91,28 @@ export default function ReplayPage() {
        async function fetchData() {
             setIsLoading(true);
             try {
-                // --- THIS IS THE FIX ---
-                // Destructure the full team objects directly.
                 const { gameStates: rawGameStates, team1, team2 } = await getMatchReplayData(matchId);
-                // --- END FIX ---
-                if (!rawGameStates || rawGameStates.length === 0) {
-                    console.error("No raw game states found for this match."); setData(null); return;
-                }
+
+                if (!rawGameStates) { throw new Error("No game states found for this match."); }
+                
                 const finalGameStates = reconstructGameStates(rawGameStates as ReplayStateItem[]);
                 const validStates = finalGameStates.filter(s => s?.gameState != null);
-                if (validStates.length === 0) {
-                    console.error("No valid game states after reconstruction."); setData(null); return;
-                }
+                if (validStates.length === 0) { throw new Error("No valid game states after reconstruction."); }
                 
-                // THIS IS THE FIX: Restore the original logic to build the list of card names
-                // from the full game state and fetch their metadata separately.
                 const allCardNames = new Set<string>();
                 validStates.forEach(state => {
                     if (state.gameState.cards) {
                         for (const card of Object.values(state.gameState.cards)) {
-                            if (card && card.name) allCardNames.add(card.name);
+                            if (card?.name) allCardNames.add(card.name);
                         }
                     }
                 });
 
-
                 const cardDataMapFromAction = await getCardDataForReplay(Array.from(allCardNames));
-                const cardDataMap: Record<string, ReplayCardData> = Object.fromEntries(cardDataMapFromAction);
+                const cardDataMap = Object.fromEntries(cardDataMapFromAction);
 
-                // Set all data at once
+                // Set all the data we fetched correctly.
                 setData({ gameStates: validStates, team1, team2, cardDataMap });
-                
             } catch (error) {
                 console.error("Failed to fetch and process replay data:", error);
                 setData(null);
@@ -131,7 +122,7 @@ export default function ReplayPage() {
         }
         fetchData();
     }, [matchId]);
-
+    
     if (isLoading) { return <div className="text-white p-8 text-center">Loading and reconstructing replay...</div>; }
     if (!data || !data.gameStates) { return <div className="text-white p-8 text-center">Failed to load replay data.</div>; }
 
