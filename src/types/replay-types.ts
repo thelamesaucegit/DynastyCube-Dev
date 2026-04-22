@@ -35,18 +35,14 @@ export interface Team {
   secondary_color: string | null;
 }
 
-// We are no longer using a separate ReplayCardData, but other files might
-// still reference CombatState. Let's keep it clean.
-export interface LegacyCombatState {
-  groups: CombatGroup[];
-  attackers: EntityId[];
+// THIS IS THE FIX: Restoring the ReplayCardData interface that I wrongly removed.
+// This is the lightweight type used for fetching card metadata.
+export interface ReplayCardData {
+  name: string;
+  card_type: string;
+  image_url: string | null;
+  oldest_image_url: string | null;
 }
-
-export interface CombatGroup {
-  attackerId: EntityId;
-  blockers: EntityId[];
-}
-
 
 interface GameStateDiff {
     cards?: Record<EntityId, ClientCard>;
