@@ -22,6 +22,7 @@ export interface SpectatorStateUpdate {
   player2Name: string;
   currentPhase: Phase;
   activePlayerId: EntityId;
+  // This property can be null at the top level of the snapshot.
   priorityPlayerId: EntityId | null;
   isReplay: boolean;
   combat: ClientCombatState | null; // <-- Use the authoritative type
@@ -43,6 +44,7 @@ interface GameStateDiff {
     players?: Record<EntityId, ClientPlayer>;
     currentPhase?: Phase;
     currentStep?: Step;
+    // THIS IS THE FIX: These properties are now non-nullable to match ClientGameState.
     activePlayerId?: EntityId;
     priorityPlayerId?: EntityId; 
     turnNumber?: number;
@@ -56,6 +58,7 @@ export interface SpectatorStateDiff {
     isDiff: true;
     currentPhase?: Phase;
     activePlayerId?: EntityId;
+    // This one can be null at this level
     priorityPlayerId?: EntityId | null;
     combat?: ClientCombatState | null; // <-- And here
     gameState?: GameStateDiff;
