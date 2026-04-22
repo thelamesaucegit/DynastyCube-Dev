@@ -1,18 +1,16 @@
 // src/types/replay-types.ts
 
-// Import all necessary base types.
 import type { 
   ClientGameState as LiveClientGameState,
   ClientCard,
   ClientPlayer,
   ClientZone,
-  ClientCombatState // <-- Import the correct combat state type from the server DTO
+  ClientCombatState,
+  ClientEvent // <-- Import the ClientEvent union type
 } from './gameState';
 import type { Phase, Step } from './enums';
 import type { EntityId } from './entities';
 
-// The top-level object for a single state update (a blueprint).
-// This now uses the correct ClientCombatState type from gameState.ts.
 export interface SpectatorStateUpdate {
   gameSessionId: string;
   gameState: LiveClientGameState; 
@@ -22,10 +20,9 @@ export interface SpectatorStateUpdate {
   player2Name: string;
   currentPhase: Phase;
   activePlayerId: EntityId;
-  // This property can be null at the top level of the snapshot.
   priorityPlayerId: EntityId | null;
   isReplay: boolean;
-  combat: ClientCombatState | null; // <-- Use the authoritative type
+  combat: ClientCombatState | null;
 }
 
 export interface Team {
@@ -44,23 +41,22 @@ interface GameStateDiff {
     players?: Record<EntityId, ClientPlayer>;
     currentPhase?: Phase;
     currentStep?: Step;
-    // THIS IS THE FIX: These properties are now non-nullable to match ClientGameState.
     activePlayerId?: EntityId;
-    priorityPlayerId?: EntityId; 
+    priorityPlayerId?: EntityId;
     turnNumber?: number;
     isGameOver?: boolean;
     winnerId?: EntityId | null;
-    combat?: ClientCombatState | null; // <-- Use the authoritative type here as well
-    gameLog?: Record<string, unknown>[];
+    combat?: ClientCombatState | null;
+    // THIS IS THE FIX: The gameLog is an array of ClientEvents.
+    gameLog?: ClientEvent[];
 }
 
 export interface SpectatorStateDiff {
     isDiff: true;
     currentPhase?: Phase;
     activePlayerId?: EntityId;
-    // This one can be null at this level
     priorityPlayerId?: EntityId | null;
-    combat?: ClientCombatState | null; // <-- And here
+    combat?: ClientCombatState | null;
     gameState?: GameStateDiff;
 }
 
