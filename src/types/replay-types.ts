@@ -5,11 +5,13 @@ import type {
   ClientCard,
   ClientPlayer,
   ClientZone,
-  ClientCombatState,
-  ClientEvent // <-- Import the ClientEvent union type
+  ClientCombatState
 } from './gameState';
 import type { Phase, Step } from './enums';
 import type { EntityId } from './entities';
+
+// Re-exporting for consumption by other files
+export type { ClientCard, ClientPlayer, ClientZone, ClientCombatState };
 
 export interface SpectatorStateUpdate {
   gameSessionId: string;
@@ -33,7 +35,18 @@ export interface Team {
   secondary_color: string | null;
 }
 
-// --- DEFINITIVE TYPES FOR DIFFING MECHANISM (Corrected) ---
+// We are no longer using a separate ReplayCardData, but other files might
+// still reference CombatState. Let's keep it clean.
+export interface LegacyCombatState {
+  groups: CombatGroup[];
+  attackers: EntityId[];
+}
+
+export interface CombatGroup {
+  attackerId: EntityId;
+  blockers: EntityId[];
+}
+
 
 interface GameStateDiff {
     cards?: Record<EntityId, ClientCard>;
@@ -47,8 +60,7 @@ interface GameStateDiff {
     isGameOver?: boolean;
     winnerId?: EntityId | null;
     combat?: ClientCombatState | null;
-    // THIS IS THE FIX: The gameLog is an array of ClientEvents.
-    gameLog?: ClientEvent[];
+    gameLog?: Record<string, unknown>[];
 }
 
 export interface SpectatorStateDiff {
