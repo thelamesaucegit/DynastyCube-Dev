@@ -11,8 +11,7 @@ import { Textarea } from '@/app/components/ui/textarea';
 import { Swords, Hourglass, ShieldCheck, ShieldX, Trophy } from 'lucide-react';
 import { getAiProfiles, validateAndCanonicalizeDeck, getTestDecklists } from '@/app/actions/adminActions';
 import { getAllTeams } from '@/app/actions/teamActions';
-import { type TeamWithDetails } from '@/app/actions/teamActions';
-
+import { getTeamsWithDetails, type TeamWithDetails } from '@/app/actions/teamActions';
 
 interface Team {
   id: string;
