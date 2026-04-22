@@ -1,14 +1,18 @@
 // src/types/replay-types.ts
 
+// Import all necessary base types.
 import type { 
   ClientGameState as LiveClientGameState,
   ClientCard,
   ClientPlayer,
-  ClientZone
+  ClientZone,
+  ClientCombatState // <-- Import the correct combat state type from the server DTO
 } from './gameState';
 import type { Phase, Step } from './enums';
 import type { EntityId } from './entities';
 
+// The top-level object for a single state update (a blueprint).
+// This now uses the correct ClientCombatState type from gameState.ts.
 export interface SpectatorStateUpdate {
   gameSessionId: string;
   gameState: LiveClientGameState; 
@@ -21,7 +25,7 @@ export interface SpectatorStateUpdate {
   // This property can be null at the top level of the snapshot.
   priorityPlayerId: EntityId | null;
   isReplay: boolean;
-  combat: CombatState | null;
+  combat: ClientCombatState | null; // <-- Use the authoritative type
 }
 
 export interface Team {
@@ -30,16 +34,6 @@ export interface Team {
   emoji: string;
   primary_color: string | null;
   secondary_color: string | null;
-}
-
-export interface CombatState {
-  groups: CombatGroup[];
-  attackers: EntityId[];
-}
-
-export interface CombatGroup {
-  attackerId: EntityId;
-  blockers: EntityId[];
 }
 
 // --- DEFINITIVE TYPES FOR DIFFING MECHANISM (Corrected) ---
@@ -52,11 +46,11 @@ interface GameStateDiff {
     currentStep?: Step;
     // THIS IS THE FIX: These properties are now non-nullable to match ClientGameState.
     activePlayerId?: EntityId;
-    priorityPlayerId?: EntityId; // Cannot be null here, as the destination is not nullable.
+    priorityPlayerId?: EntityId; 
     turnNumber?: number;
     isGameOver?: boolean;
-    winnerId?: EntityId | null; // This one can be null
-    combat?: CombatState | null;
+    winnerId?: EntityId | null;
+    combat?: ClientCombatState | null; // <-- Use the authoritative type here as well
     gameLog?: Record<string, unknown>[];
 }
 
@@ -66,7 +60,7 @@ export interface SpectatorStateDiff {
     activePlayerId?: EntityId;
     // This one can be null at this level
     priorityPlayerId?: EntityId | null;
-    combat?: CombatState | null;
+    combat?: ClientCombatState | null; // <-- And here
     gameState?: GameStateDiff;
 }
 

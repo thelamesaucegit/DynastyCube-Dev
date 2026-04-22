@@ -45,8 +45,9 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     if (gsd.turnNumber !== undefined) draft.gameState.turnNumber = gsd.turnNumber;
                     if (gsd.isGameOver !== undefined) draft.gameState.isGameOver = gsd.isGameOver;
                     if (gsd.winnerId !== undefined) draft.gameState.winnerId = gsd.winnerId;
+                    // This assignment is now safe because all combat types are the correct 'ClientCombatState'
                     if (gsd.combat !== undefined) draft.gameState.combat = gsd.combat;
-                    if (gsd.gameLog) draft.gameState.gameLog.push(...gsd.gameLog);
+                    if (gsd.gameLog && draft.gameState.gameLog) draft.gameState.gameLog.push(...gsd.gameLog);
                     if (gsd.cards) Object.assign(draft.gameState.cards, gsd.cards);
                     
                     if (gsd.players) {
@@ -69,7 +70,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             currentBlueprint = item;
             if (reconstructed.length > 0) {
                  const lastState = reconstructed[reconstructed.length - 1];
-                 if (lastState && currentBlueprint.gameState.gameLog) {
+                 if (lastState && lastState.gameState.gameLog && currentBlueprint.gameState.gameLog) {
                     lastState.gameState.gameLog.push(...currentBlueprint.gameState.gameLog);
                  }
             }
