@@ -36,8 +36,7 @@ export async function getMatchReplayData(matchId: string): Promise<{
 return { gameStates: null, team1: null, team2: null };
   }
 
-  // The 'as' cast remains correct as it refers to the database row structure.
-  const row = data as { argentum_game_states: SpectatorStateUpdate[]; team1_id: string; team2_id: string };
+
 
   return {
     gameStates: row.argentum_game_states,
