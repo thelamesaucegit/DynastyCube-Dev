@@ -87,10 +87,13 @@ export default function ReplayPage() {
     useEffect(() => {
         if (!matchId) return;
 
-        async function fetchData() {
+       async function fetchData() {
             setIsLoading(true);
             try {
-                const { gameStates: rawGameStates, team1Id, team2Id } = await getMatchReplayData(matchId);
+                // --- THIS IS THE FIX ---
+                // Destructure the full team objects directly.
+                const { gameStates: rawGameStates, team1, team2 } = await getMatchReplayData(matchId);
+                // --- END FIX ---
                 if (!rawGameStates || rawGameStates.length === 0) {
                     console.error("No raw game states found for this match."); setData(null); return;
                 }
