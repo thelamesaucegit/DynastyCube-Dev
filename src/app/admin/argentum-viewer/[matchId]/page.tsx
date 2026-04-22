@@ -30,9 +30,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             
             const previousState = reconstructed[reconstructed.length - 1];
             const nextState = produce(previousState, draft => {
-                if (item.combat !== undefined) {
-                    draft.combat = JSON.parse(JSON.stringify(item.combat));
-                }
+                if (item.combat !== undefined) draft.combat = JSON.parse(JSON.stringify(item.combat));
                 if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
                 if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId;
                 if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId;
@@ -46,36 +44,26 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     if (gsd.turnNumber !== undefined) draft.gameState.turnNumber = gsd.turnNumber;
                     if (gsd.isGameOver !== undefined) draft.gameState.isGameOver = gsd.isGameOver;
                     if (gsd.winnerId !== undefined) draft.gameState.winnerId = gsd.winnerId;
-                    if (gsd.combat !== undefined) {
-                        draft.gameState.combat = JSON.parse(JSON.stringify(gsd.combat));
-                    }
-                    if (gsd.gameLog && draft.gameState.gameLog) {
-                        // Create mutable copies of event objects before pushing
-                        const mutableLog = JSON.parse(JSON.stringify(gsd.gameLog));
-                        draft.gameState.gameLog.push(...mutableLog);
-                    }
-                    if (gsd.cards) {
-                        // Create mutable copies for cards as well
-                        const mutableCards = JSON.parse(JSON.stringify(gsd.cards));
-                        Object.assign(draft.gameState.cards, mutableCards);
-                    }
+                    if (gsd.combat !== undefined) draft.gameState.combat = JSON.parse(JSON.stringify(gsd.combat));
                     
-                    // THIS IS THE FIX: Create mutable copies of player objects
+                    // This logic now respects the readonly nature by creating a new array.
+                    if (gsd.gameLog) {
+                        const baseLog = draft.gameState.gameLog ? [...draft.gameState.gameLog] : [];
+                        draft.gameState.gameLog = baseLog.concat(JSON.parse(JSON.stringify(gsd.gameLog)));
+                    }
+
+                    if (gsd.cards) Object.assign(draft.gameState.cards, JSON.parse(JSON.stringify(gsd.cards)));
+                    
                     if (gsd.players) {
                         Object.values(gsd.players).forEach((p: ClientPlayer) => {
                             const index = draft.gameState.players.findIndex((pl: ClientPlayer) => pl.playerId === p.playerId);
-                            if (index !== -1) {
-                                draft.gameState.players[index] = JSON.parse(JSON.stringify(p));
-                            }
+                            if (index !== -1) draft.gameState.players[index] = JSON.parse(JSON.stringify(p));
                         });
                     }
-                    // AND for zone objects
                     if (gsd.zones) {
                         Object.values(gsd.zones).forEach((z: ClientZone) => {
                             const index = draft.gameState.zones.findIndex((zn: ClientZone) => zn.zoneId.ownerId === z.zoneId.ownerId && zn.zoneId.zoneType === z.zoneId.zoneType);
-                            if (index !== -1) {
-                                draft.gameState.zones[index] = JSON.parse(JSON.stringify(z));
-                            }
+                            if (index !== -1) draft.gameState.zones[index] = JSON.parse(JSON.stringify(z));
                         });
                     }
                 }
@@ -83,14 +71,9 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             reconstructed.push(nextState);
 
         } else {
+            // A new blueprint arrives. Its gameLog is self-contained for that point in time.
+            // We simply add it as the new ground truth.
             currentBlueprint = item;
-            if (reconstructed.length > 0) {
-                 const lastState = reconstructed[reconstructed.length - 1];
-                 if (lastState && lastState.gameState.gameLog && currentBlueprint.gameState.gameLog) {
-                    const mutableLog = JSON.parse(JSON.stringify(currentBlueprint.gameState.gameLog));
-                    lastState.gameState.gameLog.push(...mutableLog);
-                 }
-            }
             reconstructed.push(currentBlueprint);
         }
     }
