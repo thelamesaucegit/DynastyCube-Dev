@@ -3,10 +3,8 @@
 "use client";
 
 import React, { useMemo } from 'react';
-import type { ClientCard } from '@/types';
+import type { ClientCard, SpectatorStateUpdate, ReplayCardData } from '@/types';
 import {  entityId, zoneIdEquals, stack  } from '@/types';
-import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
-import { getCardImageUrl } from '@/utils/cardImages';
 import { ActiveEffectBadges } from '../card/CardOverlays';
 import { AbilityText } from '../../ui/ManaSymbols';
 import { useResponsiveContext, handleImageError } from './shared';
@@ -44,7 +42,10 @@ export function ReplayStackDisplay({ snapshot, cardDataMap }: ReplayStackDisplay
         <div style={styles.stackItems}>
           {stackCards.map((card, index) => {
             const cardImageData = cardDataMap?.[card.name];
-            return (
+      const imageUrl = useOldestArt 
+              ? cardImageData?.oldest_image_url ?? cardImageData?.image_url ?? card.imageUri
+              : cardImageData?.image_url ?? card.imageUri;      
+      return (
               <CardPreview
                 key={card.id}
                 card={{
@@ -55,7 +56,7 @@ export function ReplayStackDisplay({ snapshot, cardDataMap }: ReplayStackDisplay
               >
                 <div data-card-id={card.id} style={{ ...styles.stackItem, marginTop: index === 0 ? 0 : -stackImageHeight + cardOffset, zIndex: index + 1 }}>
                   <img
-                    src={getCardImageUrl(card.name, cardImageData?.image_url ?? card.imageUri, 'small')}
+                    src={imageUrl || ''}
                     alt={card.name}
                     style={{ ...styles.stackItemImage, width: stackImageWidth, height: stackImageHeight }}
                     title={card.name}
