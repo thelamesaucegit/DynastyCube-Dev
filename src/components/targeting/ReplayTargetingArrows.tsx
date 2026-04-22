@@ -3,8 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import type { EntityId, ClientChosenTarget } from '@/types';
-import type { SpectatorStateUpdate } from '@/types/replay-types';
+import type { EntityId, ClientChosenTarget, SpectatorStateUpdate } from '@/types';
 
 // ========================================================================
 // Helper functions (could be moved to a shared utility file)
