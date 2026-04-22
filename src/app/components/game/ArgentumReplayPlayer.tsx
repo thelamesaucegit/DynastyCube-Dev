@@ -5,7 +5,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { GameBoard } from '@/components/game/GameBoard';
 // THIS IS THE FIX: Import ReplayCardData and Team from the main types index.
-import type { SpectatorStateUpdate, Team, ReplayCardData } from '@/types';
+import type { SpectatorStateUpdate, ReplayCardData } from '@/types';
+import type { TeamWithDetails } from '@/app/actions/teamActions';
 import { Button } from '@/app/components/ui/button';
 import { Slider } from '@/app/components/ui/slider';
 import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
@@ -14,8 +15,8 @@ interface ArgentumReplayPlayerProps {
     initialGameStates: SpectatorStateUpdate[];
     // The prop type is correctly ReplayCardData again.
     cardDataMap: Record<string, ReplayCardData>;
-    team1: Team | null;
-    team2: Team | null;
+     team1: TeamWithDetails | null;
+    team2: TeamWithDetails | null;
 }
 
 export function ArgentumReplayPlayer({ initialGameStates, cardDataMap, team1, team2 }: ArgentumReplayPlayerProps) {
