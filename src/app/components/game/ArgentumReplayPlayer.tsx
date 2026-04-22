@@ -36,10 +36,21 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap, team1, te
     const currentSnapshot = useMemo(() => {
         const originalSnapshot = initialGameStates[currentIndex];
         if (!originalSnapshot) return null;
+
+        // Create a new snapshot object for rendering, injecting the correct names and theme colors.
         return {
             ...originalSnapshot,
             player1Name: player1Team?.name ?? originalSnapshot.player1Name,
             player2Name: player2Team?.name ?? originalSnapshot.player2Name,
+            // Add theme data for the GameBoard to use
+            player1Theme: {
+                primary: player1Team?.primary_color ?? '#800080', // Default Purple
+                secondary: player1Team?.secondary_color ?? '#555',
+            },
+            player2Theme: {
+                primary: player2Team?.primary_color ?? '#0000FF', // Default Blue
+                secondary: player2Team?.secondary_color ?? '#555',
+            },
         };
     }, [currentIndex, initialGameStates, player1Team, player2Team]);
 
