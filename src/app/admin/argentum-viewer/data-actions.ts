@@ -2,8 +2,8 @@
 "use server";
 
 import { createClient } from '@supabase/supabase-js';
-import type { SpectatorStateUpdate } from '@/types'; 
-import type { TeamWithDetails, Team } from '@/app/actions/teamActions'; 
+import type { SpectatorStateUpdate, Team } from '@/types'; 
+import type { TeamWithDetails } from '@/app/actions/teamActions'; 
 import { getCardDataForReplay } from '@/app/actions/cardActions';
 // Supabase client setup
 let _supabase: ReturnType<typeof createClient> | null = null;
