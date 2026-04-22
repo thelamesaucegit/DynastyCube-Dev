@@ -374,7 +374,6 @@ export type {
   SpectatorStateUpdate,
   Team,
   ReplayCardData,
-  CombatState,
   CombatGroup,
   SpectatorStateDiff,
   ReplayStateItem,
