@@ -30,23 +30,27 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             
             const previousState = reconstructed[reconstructed.length - 1];
             const nextState = produce(previousState, draft => {
+                // THIS IS THE FIX: Instead of direct assignment, create a mutable copy.
+                if (item.combat !== undefined) {
+                    draft.combat = JSON.parse(JSON.stringify(item.combat));
+                }
                 if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
                 if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId;
                 if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId;
-                if (item.combat !== undefined) draft.combat = item.combat;
 
                 if (item.gameState) {
                     const gsd = item.gameState;
                     if (gsd.currentPhase !== undefined) draft.gameState.currentPhase = gsd.currentPhase;
                     if (gsd.currentStep !== undefined) draft.gameState.currentStep = gsd.currentStep;
                     if (gsd.activePlayerId !== undefined) draft.gameState.activePlayerId = gsd.activePlayerId;
-                    // THIS IS THE FIX: Added a check for null/undefined before assigning to a non-nullable property.
-                    if (gsd.priorityPlayerId !== undefined && gsd.priorityPlayerId !== null) draft.gameState.priorityPlayerId = gsd.priorityPlayerId;
+                    if (gsd.priorityPlayerId !== undefined) draft.gameState.priorityPlayerId = gsd.priorityPlayerId;
                     if (gsd.turnNumber !== undefined) draft.gameState.turnNumber = gsd.turnNumber;
                     if (gsd.isGameOver !== undefined) draft.gameState.isGameOver = gsd.isGameOver;
                     if (gsd.winnerId !== undefined) draft.gameState.winnerId = gsd.winnerId;
-                    // This assignment is now safe because all combat types are the correct 'ClientCombatState'
-                    if (gsd.combat !== undefined) draft.gameState.combat = gsd.combat;
+                    // AND THE FIX HERE AS WELL for the nested combat object.
+                    if (gsd.combat !== undefined) {
+                        draft.gameState.combat = JSON.parse(JSON.stringify(gsd.combat));
+                    }
                     if (gsd.gameLog && draft.gameState.gameLog) draft.gameState.gameLog.push(...gsd.gameLog);
                     if (gsd.cards) Object.assign(draft.gameState.cards, gsd.cards);
                     
