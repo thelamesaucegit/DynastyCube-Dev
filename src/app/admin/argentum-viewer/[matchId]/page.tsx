@@ -8,7 +8,8 @@ import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer
 import { getMatchReplayData } from '@/app/admin/argentum-viewer/data-actions';
 import { getCardDataForReplay } from '@/app/actions/cardActions';
 // Correctly import TeamWithDetails
-import type { TeamWithDetails, ReplayCardData, SpectatorStateUpdate, ReplayStateItem } from '@/types'; 
+import type { TeamWithDetails } from '@/app/actions/teamActions'; 
+import type { ReplayCardData, SpectatorStateUpdate, ReplayStateItem } from '@/types'; 
 import { ResponsiveContext } from '@/components/game/board/shared';
 import { useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
