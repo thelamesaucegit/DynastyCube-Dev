@@ -30,7 +30,6 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             
             const previousState = reconstructed[reconstructed.length - 1];
             const nextState = produce(previousState, draft => {
-                // THIS IS THE FIX: Instead of direct assignment, create a mutable copy.
                 if (item.combat !== undefined) {
                     draft.combat = JSON.parse(JSON.stringify(item.combat));
                 }
@@ -47,23 +46,36 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     if (gsd.turnNumber !== undefined) draft.gameState.turnNumber = gsd.turnNumber;
                     if (gsd.isGameOver !== undefined) draft.gameState.isGameOver = gsd.isGameOver;
                     if (gsd.winnerId !== undefined) draft.gameState.winnerId = gsd.winnerId;
-                    // AND THE FIX HERE AS WELL for the nested combat object.
                     if (gsd.combat !== undefined) {
                         draft.gameState.combat = JSON.parse(JSON.stringify(gsd.combat));
                     }
-                    if (gsd.gameLog && draft.gameState.gameLog) draft.gameState.gameLog.push(...gsd.gameLog);
-                    if (gsd.cards) Object.assign(draft.gameState.cards, gsd.cards);
+                    if (gsd.gameLog && draft.gameState.gameLog) {
+                        // Create mutable copies of event objects before pushing
+                        const mutableLog = JSON.parse(JSON.stringify(gsd.gameLog));
+                        draft.gameState.gameLog.push(...mutableLog);
+                    }
+                    if (gsd.cards) {
+                        // Create mutable copies for cards as well
+                        const mutableCards = JSON.parse(JSON.stringify(gsd.cards));
+                        Object.assign(draft.gameState.cards, mutableCards);
+                    }
                     
+                    // THIS IS THE FIX: Create mutable copies of player objects
                     if (gsd.players) {
                         Object.values(gsd.players).forEach((p: ClientPlayer) => {
                             const index = draft.gameState.players.findIndex((pl: ClientPlayer) => pl.playerId === p.playerId);
-                            if (index !== -1) draft.gameState.players[index] = p;
+                            if (index !== -1) {
+                                draft.gameState.players[index] = JSON.parse(JSON.stringify(p));
+                            }
                         });
                     }
+                    // AND for zone objects
                     if (gsd.zones) {
                         Object.values(gsd.zones).forEach((z: ClientZone) => {
                             const index = draft.gameState.zones.findIndex((zn: ClientZone) => zn.zoneId.ownerId === z.zoneId.ownerId && zn.zoneId.zoneType === z.zoneId.zoneType);
-                            if (index !== -1) draft.gameState.zones[index] = z;
+                            if (index !== -1) {
+                                draft.gameState.zones[index] = JSON.parse(JSON.stringify(z));
+                            }
                         });
                     }
                 }
@@ -75,7 +87,8 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             if (reconstructed.length > 0) {
                  const lastState = reconstructed[reconstructed.length - 1];
                  if (lastState && lastState.gameState.gameLog && currentBlueprint.gameState.gameLog) {
-                    lastState.gameState.gameLog.push(...currentBlueprint.gameState.gameLog);
+                    const mutableLog = JSON.parse(JSON.stringify(currentBlueprint.gameState.gameLog));
+                    lastState.gameState.gameLog.push(...mutableLog);
                  }
             }
             reconstructed.push(currentBlueprint);
