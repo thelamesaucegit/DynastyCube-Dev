@@ -3,9 +3,8 @@
 
 import { createClient } from '@supabase/supabase-js';
 import type { SpectatorStateUpdate } from '@/types'; 
-import type { Team } from '@/app/actions/teamActions'; 
+import type { TeamWithDetails } from '@/app/actions/teamActions'; 
 import { getCardDataForReplay } from '@/app/actions/cardActions';
-
 // Supabase client setup
 let _supabase: ReturnType<typeof createClient> | null = null;
 function getSupabase() {
@@ -31,8 +30,8 @@ interface SimMatchData {
 
 export async function getMatchReplayData(matchId: string): Promise<{ 
     gameStates: SpectatorStateUpdate[] | null;
-    team1: Team | null; 
-    team2: Team | null; 
+     team1: TeamWithDetails | null; 
+    team2: TeamWithDetails | null;
 }> {
   const { data, error } = await getSupabase()
     .from('sim_matches')
@@ -50,23 +49,32 @@ export async function getMatchReplayData(matchId: string): Promise<{
 
   return {
     gameStates: matchData.argentum_game_states,
-    team1: {
+   team1: {
         id: matchData.team1_id,
         name: matchData.team1_name || 'Team 1',
-        primary_color: matchData.team1_color ?? '#808080',
-        secondary_color: matchData.team1_seccolor ?? '#555555',
-        emoji: '', 
-        motto: '',
+        primary_color: matchData.team1_color,
+        secondary_color: matchData.team1_seccolor,
+        // Add other required properties from TeamWithDetails interface with defaults
         short_name: '',
+        emoji: '',
+        motto: '',
+        wins: 0,
+        losses: 0,
+        member_count: 0,
+        last_pick: null,
     },
     team2: {
         id: matchData.team2_id,
         name: matchData.team2_name || 'Team 2',
-        primary_color: matchData.team2_color ?? '#808080',
-        secondary_color: matchData.team2_seccolor ?? '#555555',
+        primary_color: matchData.team2_color,
+        secondary_color: matchData.team2_seccolor,
+        short_name: '',
         emoji: '',
         motto: '',
-        short_name: '',
+        wins: 0,
+        losses: 0,
+        member_count: 0,
+        last_pick: null,
     },
   };
 }
