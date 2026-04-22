@@ -3,8 +3,6 @@
 "use server";
 
 import { createClient } from '@supabase/supabase-js';
-
-// THIS IS THE FIX: Import ClientCard instead of the deleted ReplayCardData
 import type { SpectatorStateUpdate, Team, ClientCard } from '@/types'; 
 import { getCardDataForReplay } from '@/app/actions/cardActions';
 
@@ -38,23 +36,23 @@ return { gameStates: null, team1: null, team2: null };
 
 
 
-  return {
-    gameStates: row.argentum_game_states,
+return {
+    gameStates: data.argentum_game_states,
     team1: {
-            id: data.team1_id,
-            name: data.team1_name,
-            primary_color: data.team1_color,
-            secondary_color: data.team1_seccolor,
-      emoji: '', // Add dummy properties to match the interface
+        id: data.team1_id,
+        name: data.team1_name,
+        primary_color: data.team1_color ?? '#808080',
+        secondary_color: data.team1_seccolor ?? '#555555',
+        emoji: '', 
         motto: '',
         short_name: '',
-        },
-        team2: {
-            id: data.team2_id,
-            name: data.team2_name,
-            primary_color: data.team2_color,
-            secondary_color: data.team2_seccolor,
-          emoji: '', // Add dummy properties to match the interface
+    },
+    team2: {
+        id: data.team2_id,
+        name: data.team2_name,
+        primary_color: data.team2_color ?? '#808080',
+        secondary_color: data.team2_seccolor ?? '#555555',
+        emoji: '',
         motto: '',
         short_name: '',
         },
