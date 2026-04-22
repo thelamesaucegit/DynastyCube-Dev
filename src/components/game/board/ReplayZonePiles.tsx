@@ -137,7 +137,9 @@ function ReplayZoneBrowser({ zoneName, cards, onClose, cardDataMap, useOldestArt
         </div>
         <div style={styles.graveyardCardGrid}>
           {cards.map((card) => {
-               const imageUrl = getArgentumCardImageUrl(cardImageData, useOldestArt);
+              // THIS IS THE FIX: Define cardImageData *inside* the map loop.
+              const cardImageData = cardDataMap[card.name];
+              const imageUrl = getArgentumCardImageUrl(cardImageData, useOldestArt);
               return (
                 <CardPreview key={card.id} card={cardImageData}>
                     <div style={{ width: cardWidth, height: cardHeight, borderRadius: 6, overflow: 'hidden', flexShrink: 0 }}>
