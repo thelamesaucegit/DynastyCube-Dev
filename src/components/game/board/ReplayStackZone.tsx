@@ -52,7 +52,7 @@ export function ReplayStackDisplay({ snapshot, cardDataMap, useOldestArt }: Repl
                   <img
                     src={imageUrl} // Use the correctly selected URL
                     alt={card.name}
-                    style={{...}}
+                    style={{ ...styles.stackItemImage, width: stackImageWidth, height: stackImageHeight }}
                     onError={(e) => handleImageError(e, card.name, 'small')}
                   />
                   {card.chosenX != null && <div style={styles.stackXBadge}>X={card.chosenX}</div>}
