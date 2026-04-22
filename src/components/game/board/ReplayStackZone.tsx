@@ -19,7 +19,7 @@ interface ReplayStackDisplayProps {
   useOldestArt: boolean;
 }
 
-export function ReplayStackDisplay({ snapshot, cardDataMap }: ReplayStackDisplayProps) {
+export function ReplayStackDisplay({ snapshot, cardDataMap, useOldestArt }: ReplayStackDisplayProps) {
   const responsive = useResponsiveContext();
 
   const stackCards = useMemo(() => {
@@ -43,22 +43,16 @@ export function ReplayStackDisplay({ snapshot, cardDataMap }: ReplayStackDisplay
         </div>
         <div style={styles.stackItems}>
           {stackCards.map((card, index) => {
-            const cardImageData = cardDataMap?.[card.name];
-            return (
-              <CardPreview
-                key={card.id}
-                card={{
-                  card_name: card.name,
-                  image_url: cardImageData?.image_url,
-                  oldest_image_url: cardImageData?.oldest_image_url,
-                }}
-              >
+ const cardImageData = cardDataMap?.[card.name];
+            // THIS IS THE FIX: Use getCardImageUrl with the useOldestArt prop.
+             const imageUrl = getCardImageUrl(cardImageData, useOldestArt);
+      return (
+              <CardPreview key={card.id} card={cardImageData}>
                 <div data-card-id={card.id} style={{ ...styles.stackItem, marginTop: index === 0 ? 0 : -stackImageHeight + cardOffset, zIndex: index + 1 }}>
                   <img
-                    src={getCardImageUrl(card.name, cardImageData?.image_url ?? card.imageUri, 'small')}
+                    src={imageUrl} // Use the correctly selected URL
                     alt={card.name}
-                    style={{ ...styles.stackItemImage, width: stackImageWidth, height: stackImageHeight }}
-                    title={card.name}
+                    style={{...}}
                     onError={(e) => handleImageError(e, card.name, 'small')}
                   />
                   {card.chosenX != null && <div style={styles.stackXBadge}>X={card.chosenX}</div>}

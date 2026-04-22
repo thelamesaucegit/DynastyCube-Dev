@@ -26,6 +26,9 @@ export const styles: Record<string, React.CSSProperties> = {
     maxHeight: '36vh',
     marginBottom: 8,
     paddingBottom: 8,
+    position: 'relative', 
+    width: '100%', // Ensure it takes full width to center the hand correctly
+ 
   },
   centerArea: {
     display: 'flex',
@@ -129,6 +132,9 @@ export const styles: Record<string, React.CSSProperties> = {
     maxHeight: '46vh',
     marginTop: 'auto',
     paddingBottom: 0,
+    position: 'relative', 
+    width: '100%', // Ensure it takes full width to center the hand correctly
+ 
   },
   playerRowWithZones: {
     display: 'flex',

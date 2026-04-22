@@ -155,7 +155,7 @@ export default function MatchRunnerPage() {
           if (winner && isReplayReady) {
             clearInterval(poll);
             setStatusMessage(`Match complete! Winner: ${winner}. Redirecting to replay...`);
-            window.location.href = `/admin/match-viewer/${matchId}`;
+            window.location.href = `/admin/argentum-viewer/${matchId}`;
           }
         } catch (pollError: unknown) {
           console.error("Polling error:", pollError instanceof Error ? pollError.message : "Unknown polling error");

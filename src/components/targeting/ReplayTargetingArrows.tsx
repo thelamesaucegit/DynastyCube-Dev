@@ -3,8 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import type { EntityId, ClientCard, ClientChosenTarget } from '@/types';
-import type { SpectatorStateUpdate } from '@/types/replay-types';
+import type { EntityId, ClientChosenTarget, SpectatorStateUpdate } from '@/types';
 
 // ========================================================================
 // Helper functions (could be moved to a shared utility file)
@@ -115,26 +114,25 @@ interface ReplayTargetingArrowsProps {
 export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) {
   const [arrows, setArrows] = useState<TargetArrow[]>([]);
 
-  // Derive stack cards directly from the snapshot
-  const stackCards = useMemo(() => {
+  const { stackCards, combatAttackers } = useMemo(() => {
+    if (!snapshot.gameState) return { stackCards: [], combatAttackers: [] };
     const stackZone = snapshot.gameState.zones.find(z => z.zoneId.zoneType === 'Stack');
-    return stackZone ? stackZone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [];
+    const sCards = stackZone ? stackZone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [];
+    const cAttackers = snapshot.gameState.combat?.attackers ?? [];
+    return { stackCards: sCards, combatAttackers: cAttackers };
   }, [snapshot]);
 
   useEffect(() => {
-    const cardsWithTargets = stackCards.filter(card => (card.targets && card.targets.length > 0) || card.triggeringEntityId);
-    if (cardsWithTargets.length === 0) {
-      setArrows([]);
-      return;
-    }
-
-    const updateArrows = () => {
+const updateArrows = () => {
       const newArrows: TargetArrow[] = [];
-      for (const card of cardsWithTargets) {
+      const cardsOnStack = stackCards.filter(card => (card.targets && card.targets.length > 0) || card.triggeringEntityId);
+      const attackingCreatures = combatAttackers.filter(attacker => attacker.attackingTarget);
+
+      // 1. Your existing logic for Spells/Abilities on the Stack
+      for (const card of cardsOnStack) {
         const stackPos = getCardCenter(card.id);
         if (!stackPos) continue;
 
-        // Target arrows
         card.targets?.forEach((target, i) => {
           const targetPos = getTargetPosition(target);
           if (targetPos) {
@@ -144,7 +142,6 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
           }
         });
 
-        // Source arrow for triggers
         if (card.triggeringEntityId) {
           const triggerPos = getCardCenter(card.triggeringEntityId);
           if (triggerPos) {
@@ -152,13 +149,36 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
           }
         }
       }
+
+      // 2. NEW LOGIC: Handle Combat Targeting (Attackers)
+      for (const attacker of attackingCreatures) {
+        const sourcePos = getCardCenter(attacker.creatureId);
+        if (!sourcePos) continue;
+        
+        let targetId: EntityId | null = null;
+        if (attacker.attackingTarget.type === 'Player') {
+            targetId = attacker.attackingTarget.playerId;
+        } else if (attacker.attackingTarget.type === 'Planeswalker') {
+            targetId = attacker.attackingTarget.permanentId;
+        }
+
+        if (!targetId) continue;
+        
+        // The target could be a player OR a card (planeswalker)
+        const targetPos = getPlayerCenter(targetId) || getCardCenter(targetId);
+        if (targetPos) {
+          newArrows.push({ targetKey: `combat-${attacker.creatureId}`, start: sourcePos, end: targetPos, color: '#ef4444' });
+        }
+      }
+      
       setArrows(newArrows);
     };
 
-    updateArrows();
-    const interval = setInterval(updateArrows, 100);
+ updateArrows();
+    const interval = setInterval(updateArrows, 100); 
     return () => clearInterval(interval);
-  }, [stackCards]); // Dependency is now just the derived stackCards
+
+  }, [stackCards, combatAttackers]);
 
   if (arrows.length === 0) {
     return null;

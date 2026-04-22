@@ -130,7 +130,7 @@ export function LifeDisplay({
             : 'none'
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: isDistributeTarget ? 4 : 0 }}>
+    <div  data-player-id={playerId}  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: isDistributeTarget ? 4 : 0 }}>
       <div
         data-player-id={playerId}
         data-life-id={playerId}
