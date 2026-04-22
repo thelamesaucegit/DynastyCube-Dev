@@ -17,7 +17,7 @@ interface ReplayStackDisplayProps {
   useOldestArt: boolean;
 }
 
-export function ReplayStackDisplay({ snapshot, cardDataMap }: ReplayStackDisplayProps) {
+export function ReplayStackDisplay({ snapshot, cardDataMap, useOldestArt }: ReplayStackDisplayProps) {
   const responsive = useResponsiveContext();
 
   const stackCards = useMemo(() => {
