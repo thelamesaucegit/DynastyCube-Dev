@@ -1,14 +1,12 @@
-// src/app/admin/argentum-viewer/data-actions.ts
-
+// /src/app/admin/argentum-viewer/data-actions.ts
 "use server";
 
 import { createClient } from '@supabase/supabase-js';
-import type { SpectatorStateUpdate, Team, ClientCard } from '@/types'; 
+import type { SpectatorStateUpdate, Team } from '@/types'; 
 import { getCardDataForReplay } from '@/app/actions/cardActions';
 
 // Supabase client setup
 let _supabase: ReturnType<typeof createClient> | null = null;
-
 function getSupabase() {
   if (!_supabase) {
     _supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
@@ -16,7 +14,20 @@ function getSupabase() {
   return _supabase;
 }
 
-// Fetches the main game log and the IDs of the two teams
+// --- THIS IS THE FIX: Define an interface for the data we expect from Supabase ---
+interface SimMatchData {
+    argentum_game_states: SpectatorStateUpdate[] | null;
+    team1_id: string;
+    team2_id: string;
+    team1_name: string | null;
+    team1_color: string | null;
+    team1_seccolor: string | null;
+    team2_name: string | null;
+    team2_color: string | null;
+    team2_seccolor: string | null;
+}
+// --- END FIX ---
+
 export async function getMatchReplayData(matchId: string): Promise<{ 
     gameStates: SpectatorStateUpdate[] | null;
     team1: Team | null; 
@@ -28,51 +39,48 @@ export async function getMatchReplayData(matchId: string): Promise<{
     .eq('id', matchId)
     .single();
 
-
   if (error || !data) {
     console.error(`Error fetching match data for ${matchId}:`, error);
-return { gameStates: null, team1: null, team2: null };
+    return { gameStates: null, team1: null, team2: null };
   }
 
+  // --- THIS IS THE FIX: Cast the data to our new interface ---
+  const matchData = data as SimMatchData;
 
-
-return {
-    gameStates: data.argentum_game_states,
+  return {
+    gameStates: matchData.argentum_game_states,
     team1: {
-        id: data.team1_id,
-        name: data.team1_name,
-        primary_color: data.team1_color ?? '#808080',
-        secondary_color: data.team1_seccolor ?? '#555555',
+        id: matchData.team1_id,
+        name: matchData.team1_name || 'Team 1',
+        primary_color: matchData.team1_color ?? '#808080',
+        secondary_color: matchData.team1_seccolor ?? '#555555',
         emoji: '', 
         motto: '',
         short_name: '',
     },
     team2: {
-        id: data.team2_id,
-        name: data.team2_name,
-        primary_color: data.team2_color ?? '#808080',
-        secondary_color: data.team2_seccolor ?? '#555555',
+        id: matchData.team2_id,
+        name: matchData.team2_name || 'Team 2',
+        primary_color: matchData.team2_color ?? '#808080',
+        secondary_color: matchData.team2_seccolor ?? '#555555',
         emoji: '',
         motto: '',
         short_name: '',
-        },
+    },
   };
 }
 
-// Fetches the detailed information for a single team
+// getTeamData can remain as is.
 export async function getTeamData(teamId: string | null): Promise<Team | null> {
     if (!teamId) return null;
-
     const { data, error } = await getSupabase()
         .from('teams')
         .select('*')
         .eq('id', teamId)
         .single();
-
     if (error) {
         console.error(`Error fetching team data for ${teamId}:`, error);
         return null;
     }
-
     return data as Team;
 }
