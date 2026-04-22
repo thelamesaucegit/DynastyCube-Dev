@@ -483,6 +483,7 @@ export async function getTeamsWithDetails(includeHidden = false): Promise<{
     if (!includeHidden) {
       query = query.eq('is_hidden', false);
     }
+    const { data: teams, error: teamsError } = await query;
 
     if (teamsError) {
       console.error("Error fetching teams:", teamsError);
