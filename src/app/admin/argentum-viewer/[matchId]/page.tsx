@@ -111,17 +111,13 @@ export default function ReplayPage() {
                     }
                 });
 
-                const [team1, team2, cardDataMapFromAction] = await Promise.all([
-                    getTeamData(team1Id),
-                    getTeamData(team2Id),
-                    // Restore the call to the card action.
-                    getCardDataForReplay(Array.from(allCardNames))
-                ]);
-                
-                // The result of the action is converted into the map.
+
+                const cardDataMapFromAction = await getCardDataForReplay(Array.from(allCardNames));
                 const cardDataMap: Record<string, ReplayCardData> = Object.fromEntries(cardDataMapFromAction);
 
+                // Set all data at once
                 setData({ gameStates: validStates, team1, team2, cardDataMap });
+                
             } catch (error) {
                 console.error("Failed to fetch and process replay data:", error);
                 setData(null);
