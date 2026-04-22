@@ -4,11 +4,11 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
-import { getMatchReplayData, getTeamData } from '@/app/admin/argentum-viewer/data-actions';
-// THIS IS THE FIX: Restore getCardDataForReplay import
+// Correctly import getMatchReplayData
+import { getMatchReplayData } from '@/app/admin/argentum-viewer/data-actions';
 import { getCardDataForReplay } from '@/app/actions/cardActions';
-// THIS IS THE FIX: Restore ReplayCardData import
-import type { Team, SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientPlayer, ClientZone, ReplayCardData } from '@/types';
+// Correctly import TeamWithDetails
+import type { TeamWithDetails, ReplayCardData, SpectatorStateUpdate, ReplayStateItem } from '@/types'; 
 import { ResponsiveContext } from '@/components/game/board/shared';
 import { useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
@@ -77,11 +77,11 @@ export default function ReplayPage() {
 
     const [data, setData] = useState<{
         gameStates: SpectatorStateUpdate[] | null;
-        team1: Team | null;
-        team2: Team | null;
-        // The map type is correctly ReplayCardData again.
+        team1: TeamWithDetails | null;
+        team2: TeamWithDetails | null;
         cardDataMap: Record<string, ReplayCardData> | null;
     } | null>(null);
+    
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
