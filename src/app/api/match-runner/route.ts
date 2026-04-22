@@ -27,7 +27,9 @@ export async function POST(request: Request): Promise<NextResponse> {
             deck1, deck2,
             deck1Override, deck2Override,
             team1AiProfile, team2AiProfile,
-            scheduleId: reqScheduleId 
+            scheduleId: reqScheduleId,
+            team1_name, team1_color, team1_seccolor,
+            team2_name, team2_color, team2_seccolor
         } = body;
         // --- END FIX ---
 
@@ -58,6 +60,8 @@ export async function POST(request: Request): Promise<NextResponse> {
                 team2_id: team2Id,
                 deck1_list: finalDeck1Content,
                 deck2_list: finalDeck2Content,
+              team1_name, team1_color, team1_seccolor,
+                team2_name, team2_color, team2_seccolor,
             })
             .select('id')
             .single();
