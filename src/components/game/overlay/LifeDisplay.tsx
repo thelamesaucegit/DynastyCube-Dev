@@ -124,17 +124,13 @@ export function LifeDisplay({
                         : isPlayer ? '#3a7aba' : '#7a3a9a';
   
   const cursor = spectatorMode ? 'default' : (isValidTarget || isDistributeTarget ? 'pointer' : 'default');
-  const boxShadow = spectatorMode ? 'none' : (
+  const boxShadow = spectatorMode ? 'none' : (isDistributeTarget && distributeAllocated > 0
     ? '0 0 16px rgba(255, 107, 53, 0.7), 0 0 32px rgba(255, 107, 53, 0.4)'
-    : isDistributeTarget
-      ? '0 0 12px rgba(255, 140, 66, 0.5)'
-      : isSelected
-        ? '0 0 20px rgba(255, 255, 0, 0.8)'
-        : isValidTarget
-          ? '0 0 15px rgba(255, 68, 68, 0.6)'
-          : isAttackDropTarget
-            ? '0 0 16px rgba(255, 68, 68, 0.7), 0 0 32px rgba(255, 68, 68, 0.4)'
-            : 'none');
+    : isDistributeTarget ? '0 0 12px rgba(255, 140, 66, 0.5)'
+    : isSelected ? '0 0 20px rgba(255, 255, 0, 0.8)'
+    : isValidTarget ? '0 0 15px rgba(255, 68, 68, 0.6)'
+    : isAttackDropTarget ? '0 0 16px rgba(255, 68, 68, 0.7), 0 0 32px rgba(255, 68, 68, 0.4)'
+    : 'none');
 
   return (
     <div  data-player-id={playerId}  
