@@ -84,8 +84,19 @@ export function ReplayGameBoard({ topOffset = 0, snapshot, cardDataMap }: Replay
                 {/* Center Strip */}
                 <div style={{ ...styles.centerArea, position: 'relative', zIndex: 20 }}>
                     <div style={styles.centerLifeSection}><LifeDisplay life={player2.life} playerId={entityId(player2.playerId)} playerName={player2.name} spectatorMode={true} theme={player2.theme} /></div>
-                    <StepStrip phase={snapshot.gameState.currentPhase} step={snapshot.gameState.currentStep} turnNumber={snapshot.gameState.turnNumber} activePlayerName={activePlayer?.name} isSpectator={true} />
-                    <div style={styles.centerLifeSection}><LifeDisplay life={player1.life} isPlayer playerId={entityId(player1.playerId)} playerName={player1.name} spectatorMode={true} theme={player1.theme} /></div>
+ <StepStrip 
+                        phase={snapshot.gameState.currentPhase} 
+                        step={snapshot.gameState.currentStep} 
+                        turnNumber={snapshot.gameState.turnNumber} 
+                        activePlayerName={activePlayer?.name} 
+                        isSpectator={true}
+                        isActivePlayer={false} // Default value for spectator
+                        hasPriority={false} // Default value for spectator
+                        priorityMode={'waiting'} // Default value for spectator
+                        stopOverrides={{ myTurnStops: [], opponentTurnStops: [] }} // Default value for spectator
+                        onToggleStop={() => {}} // Dummy function for spectator
+                    />
+                  <div style={styles.centerLifeSection}><LifeDisplay life={player1.life} isPlayer playerId={entityId(player1.playerId)} playerName={player1.name} spectatorMode={true} theme={player1.theme} /></div>
                 </div>
 
                 {/* Player's Area */}
