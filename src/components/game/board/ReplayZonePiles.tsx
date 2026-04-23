@@ -44,6 +44,7 @@ export function ReplayZonePile({ player, isOpponent = false, snapshot, cardDataM
             const zone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, targetZoneId));
             return { cards: zone ? zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [], size: zone?.size ?? 0 };
         };
+    
         const gyData = getZoneData(ZoneType.GRAVEYARD);
         const exData = getZoneData(ZoneType.EXILE);
         const libData = getZoneData(ZoneType.LIBRARY);
@@ -62,15 +63,17 @@ export function ReplayZonePile({ player, isOpponent = false, snapshot, cardDataM
 
     const topGraveyardCard = graveyardCards[graveyardCards.length - 1];
     const topExileCard = exileCards[exileCards.length - 1];
-    const pileStyle = { width: responsive.pileWidth, height: responsive.pileHeight, borderRadius: responsive.isMobile ? 4 : 6 };
+const pileWidth = responsive.isMobile ? responsive.pileWidth : responsive.pileWidth * 1.5;
+  const pileHeight = responsive.isMobile ? responsive.pileHeight : responsive.pileHeight * 1.5;
+  const pileStyle = { width: pileWidth, height: pileHeight, borderRadius: responsive.isMobile ? 4 : 8 };
     const verticalOffset = isOpponent ? { marginTop: responsive.zonePileOffset } : { marginBottom: responsive.zonePileOffset + responsive.sectionGap * 3 };
 
     return (
         <>
             <div style={{ ...styles.zonePile, gap: responsive.cardGap, minWidth: responsive.pileWidth + 10, ...verticalOffset }}>
                 <div style={styles.zoneStack}>
-                    <div data-zone={isOpponent ? 'opponent-library' : 'player-library'} style={{ ...styles.deckPile, ...pileStyle }}>
-                        {librarySize > 0 ? <img src={CARD_BACK_IMAGE_URL} alt="Library" style={styles.pileImage} /> : <div style={styles.emptyPile} />}
+                    <div data-zone={isOpponent ? 'opponent-' : 'player-'} style={{ ...styles.deckPile, ...pileStyle }}>
+                        {librarySize > 0 ? <img src={CARD_BACK_IMAGE_URL} alt=" " style={styles.pileImage} /> : <div style={styles.emptyPile} />}
                         <div style={{ ...styles.pileCount, fontSize: responsive.fontSize.small }}>{librarySize}</div>
                     </div>
                     <span style={{ ...styles.zoneLabel, fontSize: responsive.isMobile ? 8 : 10 }}>Deck</span>
