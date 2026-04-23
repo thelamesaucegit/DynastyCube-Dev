@@ -133,12 +133,10 @@ export function LifeDisplay({
     : 'none');
 
   return (
-    <div  data-player-id={playerId}  
-      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: isDistributeTarget ? 4 : 0 }}>
+   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <div
+       
         data-player-id={playerId}
-        data-life-id={playerId}
-        data-life-display={playerId}
         onClick={handleClick}
         style={{
           ...styles.lifeDisplay,
@@ -147,8 +145,8 @@ export function LifeDisplay({
           fontSize: responsive.fontSize.large,
           backgroundColor: bgColor,
           borderColor: borderColor,
-          cursor,
-          boxShadow,
+          cursor: cursor,
+          boxShadow: 'none',
           transition: 'all 0.2s ease-in-out',
           position: 'relative',
         }}
