@@ -60,6 +60,7 @@ export type {
   ClientCombatTarget,
   ClientBlocker,
   ClientChosenTarget,
+  PlayerTheme
 } from './gameState'
 export {
   totalMana,
