@@ -8,6 +8,11 @@ import { ClientEvent } from './events'
  * Client-facing game state DTO.
  * Matches backend ClientGameState.kt
  */
+
+export interface PlayerTheme {
+  primary: string | null;
+  secondary: string | null;
+}
 export interface ClientGameState {
   /** The player viewing this state */
   readonly viewingPlayerId: EntityId
@@ -230,6 +235,7 @@ export interface ClientPlayer {
   readonly playerId: EntityId
   readonly name: string
     readonly team_name?: string;
+   readonly theme?: PlayerTheme;
   readonly life: number
   readonly poisonCounters: number
   readonly handSize: number
