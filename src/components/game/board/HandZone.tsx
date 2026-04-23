@@ -24,6 +24,7 @@ interface CardRowProps {
   zoneId: ZoneId;
   snapshot?: SpectatorStateUpdate;
   cardDataMap?: Record<string, ReplayCardData>;
+  useOldestArt?: boolean;
   faceDown?: boolean;
   interactive?: boolean;
   small?: boolean;
@@ -44,6 +45,7 @@ interface ReplayCardRowProps {
     zoneId: ZoneId;
     snapshot: SpectatorStateUpdate;
     cardDataMap: Record<string, ReplayCardData>;
+  useOldestArt?: boolean;
     faceDown?: boolean;
     small?: boolean;
     inverted?: boolean;
@@ -70,7 +72,7 @@ interface HandFanProps {
 
 export function CardRow(props: CardRowProps) {
   if (props.snapshot && props.cardDataMap) {
-    return <ReplayCardRow {...props} snapshot={props.snapshot} cardDataMap={props.cardDataMap} />;
+    return <ReplayCardRow {...props} snapshot={props.snapshot} cardDataMap={props.cardDataMap} useOldestArt={props.useOldestArt ?? false} />;
   }
   return <LiveCardRow {...props} />;
 }
@@ -145,9 +147,8 @@ function LiveCardRow({ zoneId, faceDown = false, interactive = false, small = fa
 // REPLAY COMPONENT (zero hooks, uses ReplayGameCard)
 // ========================================================================
 
-function ReplayCardRow({ zoneId, snapshot, cardDataMap, faceDown = false, small = false, inverted = false }: ReplayCardRowProps) {
+function ReplayCardRow({ zoneId, snapshot, cardDataMap, useOldestArt, faceDown = false, small = false, inverted = false }: ReplayCardRowProps) {
   const responsive = useResponsiveContext();
-  const { useOldestArt } = useSettings();
   
   const { cards, zoneSize } = useMemo(() => {
     const zone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, zoneId));
