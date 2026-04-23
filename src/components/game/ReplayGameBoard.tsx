@@ -40,6 +40,14 @@ export function ReplayGameBoard({ topOffset = 0, snapshot, cardDataMap }: Replay
     if (!player1 || !player2) {
         return <div style={{ color: 'white' }}>Waiting for player data in snapshot...</div>;
     }
+   const mainAreaStyle: React.CSSProperties = {
+        display: 'flex',
+        flexDirection: 'column',
+        flexGrow: 1,
+        // Take up the full space but prevent overflow
+        minWidth: 0,
+        overflow: 'hidden', 
+    };
 
     return (
         <ResponsiveContextProvider value={responsive}>
