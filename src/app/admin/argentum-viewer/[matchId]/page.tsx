@@ -7,7 +7,7 @@ import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer
 // We only need the one data action now
 import { getMatchReplayData } from '@/app/admin/argentum-viewer/data-actions';
 import { getCardDataForReplay } from '@/app/actions/cardActions';
-import type { SpectatorStateUpdate, ReplayStateItem, ReplayCardData } from '@/types';
+import type { Team, SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientPlayer, ClientZone, ReplayCardData} from '@/types';
 import { ResponsiveContext } from '@/components/game/board/shared';
 import { useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
