@@ -1,10 +1,8 @@
-// /src/app/admin/argentum-viewer/data-actions.ts
 "use server";
 
 import { createClient } from '@supabase/supabase-js';
-import type { SpectatorStateUpdate } from '@/types'; 
-// The 'Team' type is no longer needed in this file
-import { getCardDataForReplay } from '@/app/actions/cardActions';
+import type { SpectatorStateUpdate, Team } from '@/types'; 
+// getCardDataForReplay is no longer used in this file, so we remove the import.
 
 let _supabase: ReturnType<typeof createClient> | null = null;
 function getSupabase() {
@@ -14,11 +12,10 @@ function getSupabase() {
   return _supabase;
 }
 
-// --- THIS IS THE FIX: The function is now much simpler ---
-// It only needs to fetch the game states, as they now contain all necessary info.
 export async function getMatchReplayData(matchId: string): Promise<{ 
     gameStates: SpectatorStateUpdate[] | null;
 }> {
+  // This function is now correct and simple.
   const { data, error } = await getSupabase()
     .from('sim_matches')
     .select('argentum_game_states')
@@ -35,18 +32,19 @@ export async function getMatchReplayData(matchId: string): Promise<{
   };
 }
 
-// The getTeamData function is no longer needed by the replay page,
-// but we can leave it for other parts of your application.
-export async function getTeamData(teamId: string | null): Promise<any | null> {
+// --- THIS IS THE FIX ---
+// Use the correct 'Team' type for the promise and the return value.
+export async function getTeamData(teamId: string | null): Promise<Team | null> {
     if (!teamId) return null;
     const { data, error } = await getSupabase()
         .from('teams')
         .select('*')
         .eq('id', teamId)
         .single();
+
     if (error) {
         console.error(`Error fetching team data for ${teamId}:`, error);
         return null;
     }
-    return data;
+    return data as Team;
 }
