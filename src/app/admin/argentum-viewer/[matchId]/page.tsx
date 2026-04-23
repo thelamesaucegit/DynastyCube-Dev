@@ -4,12 +4,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
-// Correctly import getMatchReplayData
+// We only need the one data action now
 import { getMatchReplayData } from '@/app/admin/argentum-viewer/data-actions';
 import { getCardDataForReplay } from '@/app/actions/cardActions';
-// Correctly import TeamWithDetails
-import type { TeamWithDetails } from '@/app/actions/teamActions'; 
-import type { Team, SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientPlayer, ClientZone, ReplayCardData } from '@/types'; 
+import type { SpectatorStateUpdate, ReplayStateItem, ReplayCardData } from '@/types';
 import { ResponsiveContext } from '@/components/game/board/shared';
 import { useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
@@ -76,10 +74,8 @@ export default function ReplayPage() {
     const matchId = params.matchId as string;
     const responsiveSizes = useResponsive();
 
-    const [data, setData] = useState<{
+   const [data, setData] = useState<{
         gameStates: SpectatorStateUpdate[] | null;
-        team1: TeamWithDetails | null;
-        team2: TeamWithDetails | null;
         cardDataMap: Record<string, ReplayCardData> | null;
     } | null>(null);
     
@@ -91,13 +87,17 @@ export default function ReplayPage() {
        async function fetchData() {
             setIsLoading(true);
             try {
-                const { gameStates: rawGameStates, team1, team2 } = await getMatchReplayData(matchId);
+          const { gameStates: rawGameStates } = await getMatchReplayData(matchId);
 
-                if (!rawGameStates) { throw new Error("No game states found for this match."); }
+                if (!rawGameStates || rawGameStates.length === 0) {
+                    throw new Error("No game states found for this match.");
+                }
                 
                 const finalGameStates = reconstructGameStates(rawGameStates as ReplayStateItem[]);
                 const validStates = finalGameStates.filter(s => s?.gameState != null);
-                if (validStates.length === 0) { throw new Error("No valid game states after reconstruction."); }
+                if (validStates.length === 0) {
+                    throw new Error("No valid game states after reconstruction.");
+                }
                 
                 const allCardNames = new Set<string>();
                 validStates.forEach(state => {
@@ -111,8 +111,8 @@ export default function ReplayPage() {
                 const cardDataMapFromAction = await getCardDataForReplay(Array.from(allCardNames));
                 const cardDataMap = Object.fromEntries(cardDataMapFromAction);
 
-                // Set all the data we fetched correctly.
-                setData({ gameStates: validStates, team1, team2, cardDataMap });
+                // Set all the data we fetched.
+                setData({ gameStates: validStates, cardDataMap });
             } catch (error) {
                 console.error("Failed to fetch and process replay data:", error);
                 setData(null);
@@ -133,8 +133,6 @@ export default function ReplayPage() {
                     <ArgentumReplayPlayer
                         initialGameStates={data.gameStates}
                         cardDataMap={data.cardDataMap!}
-                        team1={data.team1}
-                        team2={data.team2}
                     />
                 </SettingsProvider>
             </ResponsiveContext.Provider>

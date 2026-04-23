@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { useGameStore } from '@/store/gameStore'
-import type { EntityId, ClientPlayerEffect } from '@/types'
+import type { EntityId, ClientPlayerEffect, PlayerTheme } from '@/types'
 import { useResponsiveContext, getEffectIcon } from '../board/shared'
 import { styles } from '../board/styles'
 
@@ -15,12 +15,14 @@ export function LifeDisplay({
   playerId,
   playerName,
   spectatorMode = false,
+  theme,
 }: {
   life: number
   isPlayer?: boolean
   playerId: EntityId
   playerName?: string
   spectatorMode?: boolean
+   theme?: PlayerTheme 
 }) {
   const responsive = useResponsiveContext()
   const targetingState = useGameStore((state) => state.targetingState)
@@ -103,34 +105,36 @@ export function LifeDisplay({
   const size = responsive.isMobile ? 36 : responsive.isTablet ? 42 : 48
 
   // Dynamic styling based on targeting state
-  const bgColor = isPlayer ? '#1a3a5a' : '#3a1a4a'
-  const borderColor = isDistributeTarget && distributeAllocated > 0
-    ? '#ff6b35' // Orange for distribute targets with allocation
-    : isDistributeTarget
-      ? '#ff8c42' // Dim orange for unallocated distribute targets
-      : isSelected
-        ? '#ffff00' // Yellow if selected as target
-        : isValidTarget
-          ? '#ff4444' // Red glow if valid target
-          : isAttackDropTarget
-            ? '#ff4444' // Red highlight when attacker being dragged
-            : isPlayer ? '#3a7aba' : '#7a3a9a'
+  const bgColor = spectatorMode 
+    ? theme?.secondary ?? '#3a1a4a' // Use theme secondary color, fallback to purple
+    : isPlayer ? '#1a3a5a' : '#3a1a4a'; // Your original live-mode logic
 
-  const cursor = isValidTarget || isDistributeTarget ? 'pointer' : 'default'
-  const boxShadow = isDistributeTarget && distributeAllocated > 0
+  const borderColor = spectatorMode 
+    ? theme?.primary ?? '#7a3a9a' // Use theme primary color, fallback to purple
+    : isDistributeTarget && distributeAllocated > 0
+        ? '#ff6b35'
+        : isDistributeTarget
+            ? '#ff8c42'
+            : isSelected
+                ? '#ffff00'
+                : isValidTarget
+                    ? '#ff4444'
+                    : isAttackDropTarget
+                        ? '#ff4444'
+                        : isPlayer ? '#3a7aba' : '#7a3a9a';
+  
+  const cursor = spectatorMode ? 'default' : (isValidTarget || isDistributeTarget ? 'pointer' : 'default');
+  const boxShadow = spectatorMode ? 'none' : (isDistributeTarget && distributeAllocated > 0
     ? '0 0 16px rgba(255, 107, 53, 0.7), 0 0 32px rgba(255, 107, 53, 0.4)'
-    : isDistributeTarget
-      ? '0 0 12px rgba(255, 140, 66, 0.5)'
-      : isSelected
-        ? '0 0 20px rgba(255, 255, 0, 0.8)'
-        : isValidTarget
-          ? '0 0 15px rgba(255, 68, 68, 0.6)'
-          : isAttackDropTarget
-            ? '0 0 16px rgba(255, 68, 68, 0.7), 0 0 32px rgba(255, 68, 68, 0.4)'
-            : 'none'
+    : isDistributeTarget ? '0 0 12px rgba(255, 140, 66, 0.5)'
+    : isSelected ? '0 0 20px rgba(255, 255, 0, 0.8)'
+    : isValidTarget ? '0 0 15px rgba(255, 68, 68, 0.6)'
+    : isAttackDropTarget ? '0 0 16px rgba(255, 68, 68, 0.7), 0 0 32px rgba(255, 68, 68, 0.4)'
+    : 'none');
 
   return (
-    <div  data-player-id={playerId}  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: isDistributeTarget ? 4 : 0 }}>
+    <div  data-player-id={playerId}  
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: isDistributeTarget ? 4 : 0 }}>
       <div
         data-player-id={playerId}
         data-life-id={playerId}
@@ -157,7 +161,7 @@ export function LifeDisplay({
             transform: 'translateX(-50%)',
             fontSize: 9,
             fontWeight: 'bold',
-            color: isPlayer ? '#4a9aea' : '#aa6aca',
+            color: borderColor,
             backgroundColor: '#1a1a2e',
             padding: '1px 4px',
             borderRadius: 3,
@@ -169,7 +173,7 @@ export function LifeDisplay({
         <span style={{ color: life <= 5 ? '#ff4444' : '#ffffff' }}>{life}</span>
 
         {/* Damage allocation badge */}
-        {isDistributeTarget && distributeAllocated > 0 && (
+        {!spectatorMode && isDistributeTarget && distributeAllocated > 0 && (
           <div style={{
             position: 'absolute',
             top: -4,
@@ -193,7 +197,7 @@ export function LifeDisplay({
       </div>
 
       {/* Inline +/- controls for distribute mode */}
-      {isDistributeTarget && (
+      {!spectatorMode && isDistributeTarget && (
         <div style={{
           display: 'flex',
           alignItems: 'center',
