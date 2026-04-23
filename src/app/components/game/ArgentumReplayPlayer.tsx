@@ -4,9 +4,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { GameBoard } from '@/components/game/GameBoard';
-// THIS IS THE FIX: Import ReplayCardData and Team from the main types index.
-import type { SpectatorStateUpdate, ReplayCardData } from '@/types';
-import type { TeamWithDetails } from '@/app/actions/teamActions';
+import type { SpectatorStateUpdate, ReplayCardData, ClientPlayer } from '@/types';
 import { Button } from '@/app/components/ui/button';
 import { Slider } from '@/app/components/ui/slider';
 import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
@@ -15,39 +13,19 @@ interface ArgentumReplayPlayerProps {
     initialGameStates: SpectatorStateUpdate[];
     // The prop type is correctly ReplayCardData again.
     cardDataMap: Record<string, ReplayCardData>;
-     team1: TeamWithDetails | null;
-    team2: TeamWithDetails | null;
 }
 
-export function ArgentumReplayPlayer({ initialGameStates, cardDataMap, team1, team2 }: ArgentumReplayPlayerProps) {
+export function ArgentumReplayPlayer({ initialGameStates, cardDataMap }: ArgentumReplayPlayerProps) {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
     const totalStates = initialGameStates.length;
 
 
     const currentSnapshot = useMemo(() => {
-        const originalSnapshot = initialGameStates[currentIndex];
- if (!originalSnapshot || !team1 || !team2) return null;
-        // The snapshot from the DB now has the correct player names from forge.
-        // We just need to add the theme colors. The names are already correct.
-        const player1IsTeam1 = originalSnapshot.player1Id.toString() === team1.id.toString();
-        const player1Data = player1IsTeam1 ? team1 : team2;
-        const player2Data = player1IsTeam1 ? team2 : team1;
-
-        return {
-            ...originalSnapshot,
-           player1Name: player1Data.name, // Overwrite with the proper team name
-            player2Name: player2Data.name, // Overwrite with the proper team name
-            player1Theme: {
-                primary: player1Data.primary_color ?? '#800080',
-                secondary: player1Data.secondary_color ?? '#555555',
-            },
-            player2Theme: {
-                primary: player2Data.primary_color ?? '#0000FF',
-                secondary: player2Data.secondary_color ?? '#555555',
-            },
-        };
-    }, [currentIndex, initialGameStates, team1, team2]);
+        // The snapshot from the backend now has all the correct data.
+        // All we do is return it. No more complex logic is needed.
+        return initialGameStates[currentIndex];
+    }, [currentIndex, initialGameStates]);
 
     useEffect(() => {
         if (!isPlaying) return;
