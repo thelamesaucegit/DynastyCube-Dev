@@ -214,7 +214,7 @@ function ReplayCardRow({ zoneId, snapshot, cardDataMap, useOldestArt, faceDown =
                         image_url: cardImageData?.image_url ?? null,
                         oldest_image_url: cardImageData?.oldest_image_url ?? null,
                     }}
-                    useOldestArt={useOldestArt}
+                    useOldestArt={useOldestArt ?? false}
                     width={`${fittingWidth}px`}
                     height={`${cardHeight}px`}
                 />
