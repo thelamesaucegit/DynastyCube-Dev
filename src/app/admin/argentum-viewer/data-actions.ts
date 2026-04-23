@@ -11,24 +11,34 @@ function getSupabase() {
   }
   return _supabase;
 }
-
+interface MatchReplayRow {
+  argentum_game_states: SpectatorStateUpdate[] | null;
+}
 export async function getMatchReplayData(matchId: string): Promise<{ 
     gameStates: SpectatorStateUpdate[] | null;
 }> {
-  // This function is now correct and simple.
   const { data, error } = await getSupabase()
     .from('sim_matches')
     .select('argentum_game_states')
     .eq('id', matchId)
     .single();
 
-  if (error || !data || !data.argentum_game_states) {
+  // --- THIS IS THE FIX: Check for the error, then safely cast the data to our new type. ---
+  if (error || !data) {
     console.error(`Error fetching match data for ${matchId}:`, error);
     return { gameStates: null };
   }
 
+  const matchData = data as MatchReplayRow;
+
+  if (!matchData.argentum_game_states) {
+      console.error(`No argentum_game_states found for match ${matchId}`);
+      return { gameStates: null };
+  }
+  // --- END FIX ---
+
   return {
-    gameStates: data.argentum_game_states,
+    gameStates: matchData.argentum_game_states,
   };
 }
 
