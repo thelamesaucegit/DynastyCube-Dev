@@ -198,13 +198,13 @@ export default function TeamPage({ params }: TeamPageProps) {
 
   const handleDraftComplete = async () => {
     if (!activeDraftSessionId || !team) return;
-    const { picks } = await getTeamDraftPicks(team.id, activeDraftSessionId);
+    const { picks } = await getTeamDraftPicks(team.id, activeDraftSessionId); // Use team.id (UUID)
     setDraftPicks(picks);
     setCubucksRefreshKey((prev) => prev + 1);
-
-    const preview = await getAutoDraftPreview(team.id, activeDraftSessionId);
+    const preview = await getAutoDraftPreview(team.id, activeDraftSessionId); // Use team.id (UUID)
     setDraftPreview(preview);
   };
+
 
   const handleToggleVote = async () => {
     if (!draftPreview?.nextPick?.id || !activeDraftSessionId) return;
@@ -233,14 +233,14 @@ export default function TeamPage({ params }: TeamPageProps) {
   };
 
   const handleUndraftCard = async (pick: DraftPick) => {
-    if (!pick.id || undrafting || !activeDraftSessionId) return;
+    if (!pick.id || undrafting || !activeDraftSessionId || !team) return;
     const confirmed = window.confirm(
       `Are you sure you want to undraft "${pick.card_name}"? The Çubucks spent will be refunded to the team.`
     );
     if (!confirmed) return;
     setUndrafting(pick.id);
     setUndraftMessage(null);
-    const result = await refundDraftPick(teamId, pick.id, pick.card_id, pick.card_name);
+    const result = await refundDraftPick(team.id, pick.id, pick.card_id, pick.card_name); // Use team.id (UUID)
     if (result.success) {
       setUndraftMessage({
         type: "success",
@@ -405,7 +405,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                       <p className="text-sm text-muted-foreground">Browse cards available for acquisition. Acquiring free agents is only enabled during the active season.</p>
                     </div>
                     <DraftInterface
-                      teamId={teamId}
+                      teamId={team.id} 
                       teamName={team.name}
                       isUserTeamMember={isUserTeamMember}
                       onDraftComplete={handleDraftComplete}
