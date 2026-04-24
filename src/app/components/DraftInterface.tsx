@@ -69,7 +69,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       setActiveSessionId(sessionId);
       const [{ cards }, { picks }, { team }, { order }] = await Promise.all([
         getAvailableCardsForDraft(),
-        getTeamDraftPicks(teamId, sessionId!),
+        getTeamDraftPicks(teamId, sessionId || underfined),
         getTeamBalance(teamId),
         getActiveDraftOrder(),
       ]);
