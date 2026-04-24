@@ -213,9 +213,9 @@ export default function PoolsPage() {
     <div className="container max-w-7xl mx-auto px-4 py-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-4xl font-bold tracking-tight mb-2">Card Pool</h1>
+        <h1 className="text-4xl font-bold tracking-tight mb-2">The Draft Pool</h1>
         <p className="text-muted-foreground text-lg">
-          Browse all cards in the Dynasty Cube draft pool
+          Browse all cards in The Draft Pool
         </p>
       </div>
 
