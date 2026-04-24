@@ -74,7 +74,7 @@ interface TeamPageProps {
 type TabType = "picks" | "decks" | "members" | "draft" | "stats" | "roles" | "trades" | "matches" | "votes";
 
 export default function TeamPage({ params }: TeamPageProps) {
-  const { teamId } = use(params);
+ const { teamId: teamShortName } = use(params); 
   const { user } = useAuth();
   const { useOldestArt } = useSettings();
   const [team, setTeam] = useState<Team | null>(null);
@@ -100,63 +100,70 @@ export default function TeamPage({ params }: TeamPageProps) {
   useEffect(() => {
     loadTeamData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teamId, user?.id]);
+  }, [teamShortName, user?.id]);
 
   const loadTeamData = async () => {
     setLoading(true);
     try {
-      // Phase 1: Resolve short_name → team UUID (needed for FK queries)
-      const [{ team: foundTeam }, { session: activeSession }, seasonResult] = await Promise.all([
-        getTeamByShortName(teamId),
-        getActiveDraftSession(),
-        getCurrentSeason(),
-      ]);
+      // Phase 1: Resolve short_name to the full team object, which includes the UUID (id)
+      const { team: foundTeam, error: teamError } = await getTeamByShortName(teamShortName);
 
-      setTeam(foundTeam || null);
-
-      const sessionId = activeSession?.id || null;
-      setActiveDraftSessionId(sessionId);
-
-      if (!foundTeam) {
+      if (teamError || !foundTeam) {
+        setTeam(null);
         setLoading(false);
         return;
       }
-
-      // Phase 2: Load team data using UUID (foundTeam.id) for all FK queries
+      
+      // Now we have the definitive UUID
       const teamUUID = foundTeam.id;
-      const [teams, picksResult, decksResult, rolesResult, membersResult, previewResult] = await Promise.all([
-        getTeamsWithMembers(),
-        getTeamDraftPicks(teamUUID, sessionId!),
+
+      // Phase 2: Load all other data using the correct teamUUID
+      const [{ session: activeSession }, seasonResult, picksResult, decksResult, rolesResult, membersResult, previewResult] = await Promise.all([
+        getActiveDraftSession(),
+        getCurrentSeason(),
+        getTeamDraftPicks(teamUUID, activeSession?.id || null),
         getTeamDecks(teamUUID),
         getCurrentUserRolesForTeam(teamUUID),
         getTeamMembersWithRoles(teamUUID),
-        getAutoDraftPreview(teamUUID, sessionId!),
+        getAutoDraftPreview(teamUUID, activeSession?.id || null),
       ]);
-      // Update team with members included (getTeamsWithMembers enriches members)
-      const teamWithMembers = teams.find((t) => t.id === teamUUID);
-      if (teamWithMembers) setTeam(teamWithMembers);
+      
+      // The `foundTeam` object might not have the `members` array populated yet.
+      // The `membersResult` has the full member list with roles. Let's enrich our team object.
+      foundTeam.members = membersResult.members.map(m => ({ 
+        id: m.member_id, 
+        user_id: m.user_id, 
+        team_id: m.team_id,
+        user_email: m.user_email,
+        user_display_name: m.user_display_name,
+        joined_at: m.joined_at,
+      }));
 
+      // Set all state at once
+      setTeam(foundTeam);
+      setActiveDraftSessionId(activeSession?.id || null);
       setDraftPicks(picksResult.picks);
       setDecks(decksResult.decks);
       setUserRoles(rolesResult.roles);
       setMembersWithRoles(membersResult.members);
       setDraftPreview(previewResult);
-      const fetchedPhase = seasonResult.season?.phase || null;
-      setSeasonPhase(fetchedPhase);
-
-      const isMember = (teamWithMembers ?? foundTeam)?.members?.some((m) => m.user_id === user?.id) || rolesResult.roles.length > 0;
-
+      setSeasonPhase(seasonResult.season?.phase || null);
+      
+      // Set default tab
+      const isMember = foundTeam.members?.some((m) => m.user_id === user?.id) || rolesResult.roles.length > 0;
       let defaultTab: TabType = "picks";
-      if (fetchedPhase === "preseason" || fetchedPhase === "draft") {
+       if (seasonResult.season?.phase === "preseason" || seasonResult.season?.phase === "draft") {
         defaultTab = isMember ? "draft" : "picks";
-      } else if (fetchedPhase === "season" || fetchedPhase === "playoffs") {
+      } else if (seasonResult.season?.phase === "season" || seasonResult.season?.phase === "playoffs") {
         defaultTab = "picks";
-      } else if (fetchedPhase === "postseason") {
+      } else if (seasonResult.season?.phase === "postseason") {
         defaultTab = isMember ? "votes" : "picks";
       }
       setActiveTab(defaultTab);
+
     } catch (error) {
       console.error("Error loading team data:", error);
+      setTeam(null);
     } finally {
       setLoading(false);
     }
