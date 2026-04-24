@@ -122,16 +122,20 @@ export default function TeamPage({ params }: TeamPageProps) {
       setActiveDraftSessionId(sessionId); // Set the session ID state
 
       // --- Phase 3: Fetch all remaining data in parallel now that we have all necessary IDs ---
+const previewPromise = sessionId
+        ? getAutoDraftPreview(teamUUID, sessionId)
+        : Promise.resolve(null as AutoDraftPreviewResult | null);
+      // --- END OF FIX ---
+
       const [seasonResult, picksResult, decksResult, rolesResult, membersResult, previewResult] = await Promise.all([
         getCurrentSeason(),
         getTeamDraftPicks(teamUUID, sessionId || undefined),
         getTeamDecks(teamUUID),
         getCurrentUserRolesForTeam(teamUUID),
         getTeamMembersWithRoles(teamUUID),
-        getAutoDraftPreview(teamUUID, sessionId || undefined),
+        previewPromise, // Use the conditional promise here
       ]);
       
-      // Enrich the team object with the detailed member list
       foundTeam.members = membersResult.members.map(m => ({ 
         id: m.member_id, 
         user_id: m.user_id, 
@@ -141,13 +145,12 @@ export default function TeamPage({ params }: TeamPageProps) {
         joined_at: m.joined_at,
       }));
 
-      // --- Phase 4: Set all state at once to trigger a single re-render ---
       setTeam(foundTeam);
       setDraftPicks(picksResult.picks);
       setDecks(decksResult.decks);
       setUserRoles(rolesResult.roles);
       setMembersWithRoles(membersResult.members);
-      setDraftPreview(previewResult);
+      setDraftPreview(previewResult); // This will be null if no session was active
       setSeasonPhase(seasonResult.season?.phase || null);
       
       // Determine and set the default active tab
