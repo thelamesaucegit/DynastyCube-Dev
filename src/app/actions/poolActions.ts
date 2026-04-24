@@ -130,7 +130,7 @@ export interface PoolStatistics {
   totalCards: number;
   draftedCards: number;
   availableCards: number;
-  draftPercentage: number;
+  
 }
 
 export async function getPoolStatistics(): Promise<{
@@ -158,17 +158,14 @@ export async function getPoolStatistics(): Promise<{
     }
 
     const availableCards = (totalCards || 0) - (draftedCards || 0);
-    const draftPercentage =
-      totalCards && totalCards > 0
-        ? Math.round(((draftedCards || 0) / totalCards) * 100)
-        : 0;
+   
 
     return {
       stats: {
         totalCards: totalCards || 0,
         draftedCards: draftedCards || 0,
         availableCards: availableCards,
-        draftPercentage: draftPercentage,
+       
       },
     };
   } catch (error) {

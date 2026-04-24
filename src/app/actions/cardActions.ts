@@ -96,7 +96,7 @@ export async function undraftAllCards(): Promise<{ success: boolean; updatedCoun
   }
 }
 
-export async function getCardPool(poolName: string = "default"): Promise<{ cards: CardData[]; error?: string }> {
+export async function getCardPool(poolName: string = "draft"): Promise<{ cards: CardData[]; error?: string }> {
   const supabase = await createClient();
   try {
     const { data, error } = await supabase.from("card_pools").select("*").eq("pool_name", poolName).eq('hidden', false).order("created_at", { ascending: false });
