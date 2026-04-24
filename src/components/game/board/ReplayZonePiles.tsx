@@ -70,7 +70,7 @@ export function ReplayZonePile({ player, isOpponent = false, snapshot, cardDataM
             <div style={{ ...styles.zonePile, gap: responsive.cardGap, minWidth: responsive.pileWidth + 10, ...verticalOffset }}>
                 <div style={styles.zoneStack}>
                     <div data-zone={isOpponent ? 'opponent-library' : 'player-library'} style={{ ...styles.deckPile, ...pileStyle }}>
-                        {librarySize > 0 ? <img src={CARD_BACK_IMAGE_URL} alt="Library" style={styles.pileImage} /> : <div style={styles.emptyPile} />}
+                        {librarySize > 0 ? <img src={CARD_BACK_IMAGE_URL} alt=" " style={styles.pileImage} /> : <div style={styles.emptyPile} />}
                         <div style={{ ...styles.pileCount, fontSize: responsive.fontSize.small }}>{librarySize}</div>
                     </div>
                     <span style={{ ...styles.zoneLabel, fontSize: responsive.isMobile ? 8 : 10 }}>Deck</span>
