@@ -129,10 +129,10 @@ export default function PoolsPage() {
     if (filterCubucks !== "all") {
         filtered = filtered.filter((card) => {
             const cost = card.cubucks_cost ?? 1;
-            if (filterCubucks === "0-50") return cost <= 50;
-            if (filterCubucks === "51-100") return cost >= 51 && cost <= 100;
-            if (filterCubucks === "101-200") return cost >= 101 && cost <= 200;
-            if (filterCubucks === "201+") return cost >= 201;
+            if (filterCubucks === "0-1") return cost <= 1;
+            if (filterCubucks === "2-3") return cost >= 2 && cost <= 3;
+            if (filterCubucks === "4-6") return cost >= 4 && cost <= 6;
+            if (filterCubucks === "7+") return cost >= 7;
             return true;
         });
     }
