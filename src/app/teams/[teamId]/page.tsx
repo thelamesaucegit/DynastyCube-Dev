@@ -122,16 +122,20 @@ export default function TeamPage({ params }: TeamPageProps) {
       setActiveDraftSessionId(sessionId); // Set the session ID state
 
       // --- Phase 3: Fetch all remaining data in parallel now that we have all necessary IDs ---
+const previewPromise = sessionId
+        ? getAutoDraftPreview(teamUUID, sessionId)
+        : Promise.resolve(null as AutoDraftPreviewResult | null);
+      // --- END OF FIX ---
+
       const [seasonResult, picksResult, decksResult, rolesResult, membersResult, previewResult] = await Promise.all([
         getCurrentSeason(),
         getTeamDraftPicks(teamUUID, sessionId || undefined),
         getTeamDecks(teamUUID),
         getCurrentUserRolesForTeam(teamUUID),
         getTeamMembersWithRoles(teamUUID),
-        getAutoDraftPreview(teamUUID, sessionId || undefined),
+        previewPromise, // Use the conditional promise here
       ]);
       
-      // Enrich the team object with the detailed member list
       foundTeam.members = membersResult.members.map(m => ({ 
         id: m.member_id, 
         user_id: m.user_id, 
@@ -141,13 +145,12 @@ export default function TeamPage({ params }: TeamPageProps) {
         joined_at: m.joined_at,
       }));
 
-      // --- Phase 4: Set all state at once to trigger a single re-render ---
       setTeam(foundTeam);
       setDraftPicks(picksResult.picks);
       setDecks(decksResult.decks);
       setUserRoles(rolesResult.roles);
       setMembersWithRoles(membersResult.members);
-      setDraftPreview(previewResult);
+      setDraftPreview(previewResult); // This will be null if no session was active
       setSeasonPhase(seasonResult.season?.phase || null);
       
       // Determine and set the default active tab
@@ -190,7 +193,7 @@ export default function TeamPage({ params }: TeamPageProps) {
             <AlertCircle className="size-10 text-destructive mx-auto mb-4" />
             <h2 className="text-2xl font-bold mb-2">Team Not Found</h2>
             <p className="text-muted-foreground">
-              The team &quot;{teamId}&quot; does not exist.
+              The team &quot;{teamShortName}&quot; does not exist.
             </p>
           </CardContent>
         </Card>
@@ -213,7 +216,7 @@ export default function TeamPage({ params }: TeamPageProps) {
     setIsVoting(true);
     try {
       const result = await toggleQueuePickVote(
-        teamId,
+   team.short_name,
         draftPreview.nextPick.id,
         activeDraftSessionId
       );
@@ -221,7 +224,7 @@ export default function TeamPage({ params }: TeamPageProps) {
         if (result.pickExecuted) {
           await handleDraftComplete();
         } else {
-          const updatedPreview = await getAutoDraftPreview(teamId, activeDraftSessionId);
+          const updatedPreview = await getAutoDraftPreview(team.id, activeDraftSessionId);
           setDraftPreview(updatedPreview);
         }
       } else {
@@ -248,7 +251,7 @@ export default function TeamPage({ params }: TeamPageProps) {
         type: "success",
         text: `Undrafted ${pick.card_name}! Refunded ${result.refundAmount} Çubucks.`,
       });
-      const { picks } = await getTeamDraftPicks(teamId, activeDraftSessionId);
+      const { picks } = await getTeamDraftPicks(team.id, activeDraftSessionId);
       setDraftPicks(picks);
       setCubucksRefreshKey((prev) => prev + 1);
     } else {
@@ -292,7 +295,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                   <p className="text-lg text-muted-foreground italic">&quot;{team.motto}&quot;</p>
                 </div>
                 <Button asChild>
-                  <Link href={`/teams/${teamId}/trades`} className="shrink-0">
+                  <Link href={`/teams/${teamShortName}/trades`} className="shrink-0">
                     <ArrowLeftRight className="size-4 mr-2" />
                     View Trades
                   </Link>
@@ -310,10 +313,10 @@ export default function TeamPage({ params }: TeamPageProps) {
         </CardContent>
       </Card>
 
-      <DraftStatusWidget variant="team" teamId={teamId} />
+      <DraftStatusWidget variant="team" teamId={team.id} />
 
       <div className="mb-6">
-        <TeamCubucksDisplay teamId={teamId} showTransactions={true} refreshKey={cubucksRefreshKey} isUserTeamMember={isUserTeamMember} />
+        <TeamCubucksDisplay teamId={team.id} showTransactions={true} refreshKey={cubucksRefreshKey} isUserTeamMember={isUserTeamMember} />
       </div>
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabType)}>
@@ -392,14 +395,14 @@ export default function TeamPage({ params }: TeamPageProps) {
                       <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">Draft Priority Queue</h2>
                       <p className="text-sm text-muted-foreground">Set your team&apos;s desired draft picks before the draft begins.</p>
                     </div>
-                    <DraftQueueManager teamId={teamId} isUserTeamMember={isUserTeamMember} />
+                    <DraftQueueManager teamId={team.id} isUserTeamMember={isUserTeamMember} />
                   </div>
                   <div>
                     <div className="mb-4">
                       <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">Draft Progress & Pick Order</h2>
                       <p className="text-sm text-muted-foreground">View the current draft progress and upcoming pick order.</p>
                     </div>
-                    <DraftStatusWidget variant="team" teamId={teamId} />
+                    <DraftStatusWidget variant="team" teamId={team.id} />
                   </div>
                   <div>
                     <div className="mb-4">
@@ -508,7 +511,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                         : `View and manage ${team.name}&apos;s decks`}
                     </p>
                   </div>
-                  <DeckBuilder teamId={teamId} teamName={team.name} isUserTeamMember={isUserTeamMember} />
+                  <DeckBuilder teamId={team.id} teamName={team.name} isUserTeamMember={isUserTeamMember} />
                 </div>
               )}
             </TabsContent>
@@ -529,7 +532,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                       Trade cards and future draft picks with other teams. Captains and Brokers receive notifications about all trade activities.
                     </p>
                     <Button asChild size="lg">
-                      <Link href={`/teams/${teamId}/trades`}>
+                      <Link href={`/teams/${teamShortName}/trades`}>
                         View All Trades
                         <ExternalLink className="size-4 ml-2" />
                       </Link>
@@ -548,10 +551,10 @@ export default function TeamPage({ params }: TeamPageProps) {
                     </h2>
                     <p className="text-sm text-muted-foreground">Schedule match times and record results</p>
                   </div>
-                  <MatchSchedulingWidget teamId={teamId} userRoles={userRoles} />
+                  <MatchSchedulingWidget teamId={team.id} userRoles={userRoles} />
                   <div>
                     <h3 className="text-lg font-semibold mb-4">Record Match Results</h3>
-                    <MatchRecording teamId={teamId} />
+                    <MatchRecording teamId={team.id} />
                   </div>
                 </div>
               )}
@@ -566,7 +569,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                     </h2>
                     <p className="text-sm text-muted-foreground">Vote on team decisions and view results</p>
                   </div>
-                  <TeamVoting teamId={teamId} userRoles={userRoles} />
+                  <TeamVoting teamId={team.id} userRoles={userRoles} />
                 </div>
               )}
             </TabsContent>
@@ -580,7 +583,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                     </h2>
                     <p className="text-sm text-muted-foreground">Comprehensive statistics for {team.name}&apos;s draft picks and decks</p>
                   </div>
-                  <TeamStats teamId={teamId} />
+                  <TeamStats teamId={team.id} />
                 </div>
               )}
             </TabsContent>
@@ -594,7 +597,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                     </h2>
                     <p className="text-sm text-muted-foreground">Manage team member roles and responsibilities</p>
                   </div>
-                  <TeamRoles teamId={teamId} teamName={team.name} isUserTeamMember={isUserTeamMember} />
+                  <TeamRoles teamId={team.id} teamName={team.name} isUserTeamMember={isUserTeamMember} />
                 </div>
               )}
             </TabsContent>
