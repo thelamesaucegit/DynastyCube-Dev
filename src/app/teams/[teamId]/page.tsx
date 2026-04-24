@@ -128,7 +128,7 @@ export default function TeamPage({ params }: TeamPageProps) {
         getTeamDecks(teamUUID),
         getCurrentUserRolesForTeam(teamUUID),
         getTeamMembersWithRoles(teamUUID),
-        getAutoDraftPreview(teamUUID, sessionId),
+        getAutoDraftPreview(teamUUID, sessionId || undefined)),
       ]);
       
       // Enrich the team object with the detailed member list
