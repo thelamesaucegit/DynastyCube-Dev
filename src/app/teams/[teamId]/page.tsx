@@ -251,7 +251,7 @@ const previewPromise = sessionId
         type: "success",
         text: `Undrafted ${pick.card_name}! Refunded ${result.refundAmount} Çubucks.`,
       });
-      const { picks } = await getTeamDraftPicks(teamId, activeDraftSessionId);
+      const { picks } = await getTeamDraftPicks(team.id, activeDraftSessionId);
       setDraftPicks(picks);
       setCubucksRefreshKey((prev) => prev + 1);
     } else {
@@ -313,10 +313,10 @@ const previewPromise = sessionId
         </CardContent>
       </Card>
 
-      <DraftStatusWidget variant="team" teamId={teamId} />
+      <DraftStatusWidget variant="team" teamId={team.id} />
 
       <div className="mb-6">
-        <TeamCubucksDisplay teamId={teamId} showTransactions={true} refreshKey={cubucksRefreshKey} isUserTeamMember={isUserTeamMember} />
+        <TeamCubucksDisplay teamId={team.id} showTransactions={true} refreshKey={cubucksRefreshKey} isUserTeamMember={isUserTeamMember} />
       </div>
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabType)}>
@@ -395,14 +395,14 @@ const previewPromise = sessionId
                       <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">Draft Priority Queue</h2>
                       <p className="text-sm text-muted-foreground">Set your team&apos;s desired draft picks before the draft begins.</p>
                     </div>
-                    <DraftQueueManager teamId={teamId} isUserTeamMember={isUserTeamMember} />
+                    <DraftQueueManager teamId={team.id} isUserTeamMember={isUserTeamMember} />
                   </div>
                   <div>
                     <div className="mb-4">
                       <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">Draft Progress & Pick Order</h2>
                       <p className="text-sm text-muted-foreground">View the current draft progress and upcoming pick order.</p>
                     </div>
-                    <DraftStatusWidget variant="team" teamId={teamId} />
+                    <DraftStatusWidget variant="team" teamId={team.id} />
                   </div>
                   <div>
                     <div className="mb-4">
@@ -511,7 +511,7 @@ const previewPromise = sessionId
                         : `View and manage ${team.name}&apos;s decks`}
                     </p>
                   </div>
-                  <DeckBuilder teamId={teamId} teamName={team.name} isUserTeamMember={isUserTeamMember} />
+                  <DeckBuilder teamId={team.id} teamName={team.name} isUserTeamMember={isUserTeamMember} />
                 </div>
               )}
             </TabsContent>
@@ -551,10 +551,10 @@ const previewPromise = sessionId
                     </h2>
                     <p className="text-sm text-muted-foreground">Schedule match times and record results</p>
                   </div>
-                  <MatchSchedulingWidget teamId={teamId} userRoles={userRoles} />
+                  <MatchSchedulingWidget teamId={team.id} userRoles={userRoles} />
                   <div>
                     <h3 className="text-lg font-semibold mb-4">Record Match Results</h3>
-                    <MatchRecording teamId={teamId} />
+                    <MatchRecording teamId={team.id} />
                   </div>
                 </div>
               )}
@@ -569,7 +569,7 @@ const previewPromise = sessionId
                     </h2>
                     <p className="text-sm text-muted-foreground">Vote on team decisions and view results</p>
                   </div>
-                  <TeamVoting teamId={teamId} userRoles={userRoles} />
+                  <TeamVoting teamId={team.id} userRoles={userRoles} />
                 </div>
               )}
             </TabsContent>
@@ -583,7 +583,7 @@ const previewPromise = sessionId
                     </h2>
                     <p className="text-sm text-muted-foreground">Comprehensive statistics for {team.name}&apos;s draft picks and decks</p>
                   </div>
-                  <TeamStats teamId={teamId} />
+                  <TeamStats teamId={team.id} />
                 </div>
               )}
             </TabsContent>
@@ -597,7 +597,7 @@ const previewPromise = sessionId
                     </h2>
                     <p className="text-sm text-muted-foreground">Manage team member roles and responsibilities</p>
                   </div>
-                  <TeamRoles teamId={teamId} teamName={team.name} isUserTeamMember={isUserTeamMember} />
+                  <TeamRoles teamId={team.id} teamName={team.name} isUserTeamMember={isUserTeamMember} />
                 </div>
               )}
             </TabsContent>
