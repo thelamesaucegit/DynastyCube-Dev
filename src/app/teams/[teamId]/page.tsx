@@ -224,7 +224,7 @@ const previewPromise = sessionId
         if (result.pickExecuted) {
           await handleDraftComplete();
         } else {
-          const updatedPreview = await getAutoDraftPreview(teamId, activeDraftSessionId);
+          const updatedPreview = await getAutoDraftPreview(team.id, activeDraftSessionId);
           setDraftPreview(updatedPreview);
         }
       } else {
