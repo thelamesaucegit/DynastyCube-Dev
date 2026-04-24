@@ -193,7 +193,7 @@ const previewPromise = sessionId
             <AlertCircle className="size-10 text-destructive mx-auto mb-4" />
             <h2 className="text-2xl font-bold mb-2">Team Not Found</h2>
             <p className="text-muted-foreground">
-              The team &quot;{teamId}&quot; does not exist.
+              The team &quot;{teamShortName}&quot; does not exist.
             </p>
           </CardContent>
         </Card>
@@ -216,7 +216,7 @@ const previewPromise = sessionId
     setIsVoting(true);
     try {
       const result = await toggleQueuePickVote(
-        teamId,
+   team.short_name,
         draftPreview.nextPick.id,
         activeDraftSessionId
       );
@@ -295,7 +295,7 @@ const previewPromise = sessionId
                   <p className="text-lg text-muted-foreground italic">&quot;{team.motto}&quot;</p>
                 </div>
                 <Button asChild>
-                  <Link href={`/teams/${teamId}/trades`} className="shrink-0">
+                  <Link href={`/teams/${teamShortName}/trades`} className="shrink-0">
                     <ArrowLeftRight className="size-4 mr-2" />
                     View Trades
                   </Link>
@@ -532,7 +532,7 @@ const previewPromise = sessionId
                       Trade cards and future draft picks with other teams. Captains and Brokers receive notifications about all trade activities.
                     </p>
                     <Button asChild size="lg">
-                      <Link href={`/teams/${teamId}/trades`}>
+                      <Link href={`/teams/${teamShortName}/trades`}>
                         View All Trades
                         <ExternalLink className="size-4 ml-2" />
                       </Link>
