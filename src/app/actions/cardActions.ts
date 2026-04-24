@@ -109,7 +109,7 @@ export async function getCardPool(poolName: string = "draft"): Promise<{ cards: 
   }
 }
 
-export async function getAvailableCardsForDraft(poolName: string = "default", adminClient?: AnySupabaseClient): Promise<{ cards: CardData[]; error?: string }> {
+export async function getAvailableCardsForDraft(poolName: string = "draft", adminClient?: AnySupabaseClient): Promise<{ cards: CardData[]; error?: string }> {
   const supabase = adminClient ?? await createClient();
   try {
     const { data: allCards, error: poolError } = await supabase.from("card_pools").select("*").eq("pool_name", poolName).eq('hidden', false).order("card_name", { ascending: true });
@@ -128,7 +128,7 @@ export async function getAvailableCardsForDraft(poolName: string = "default", ad
   }
 }
 
-export async function addCardToPool(card: CardData, poolName: string = "default"): Promise<{ success: boolean; error?: string }> {
+export async function addCardToPool(card: CardData, poolName: string = "draft"): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -157,7 +157,7 @@ export async function addCardToPool(card: CardData, poolName: string = "default"
   }
 }
 
-export async function addCardsToPool(cards: CardData[], poolName: string = "default"): Promise<{ success: boolean; error?: string; count?: number }> {
+export async function addCardsToPool(cards: CardData[], poolName: string = "draft"): Promise<{ success: boolean; error?: string; count?: number }> {
     const supabase = await createClient();
     try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -187,7 +187,7 @@ export async function addCardsToPool(cards: CardData[], poolName: string = "defa
     }
 }
 
-export async function bulkImportCards(lines: string[], defaultCubucksCost: number = 1, poolName: string = "default"): Promise<{ success: boolean; added: number; skipped: number; failed: string[]; error?: string; }> {
+export async function bulkImportCards(lines: string[], defaultCubucksCost: number = 1, poolName: string = "draft"): Promise<{ success: boolean; added: number; skipped: number; failed: string[]; error?: string; }> {
     const supabase = await createClient();
     try {
         const { data: existingCards, error: existingError } = await supabase.from("card_pools").select("card_id").eq("pool_name", poolName);
@@ -265,7 +265,7 @@ export async function bulkImportCards(lines: string[], defaultCubucksCost: numbe
     }
 }
 
-export async function removeCardFromPool(dbId: string, poolName: string = "default"): Promise<{ success: boolean; error?: string }> {
+export async function removeCardFromPool(dbId: string, poolName: string = "draft"): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
   try {
     const { error } = await supabase.from("card_pools").delete().eq("id", dbId).eq("pool_name", poolName);
@@ -277,7 +277,7 @@ export async function removeCardFromPool(dbId: string, poolName: string = "defau
   }
 }
 
-export async function clearCardPool(poolName: string = "default"): Promise<{ success: boolean; error?: string }> {
+export async function clearCardPool(poolName: string = "draft"): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
   try {
     const { error } = await supabase.from("card_pools").delete().eq("pool_name", poolName);
@@ -289,7 +289,7 @@ export async function clearCardPool(poolName: string = "default"): Promise<{ suc
   }
 }
 
-export async function removeFilteredCards(filter: "all" | "undrafted" | "drafted", poolName: string = "default"): Promise<{ success: boolean; removedCount?: number; error?: string }> {
+export async function removeFilteredCards(filter: "all" | "undrafted" | "drafted", poolName: string = "draft"): Promise<{ success: boolean; removedCount?: number; error?: string }> {
   const supabase = await createClient();
   try {
     if (filter === "all") {
