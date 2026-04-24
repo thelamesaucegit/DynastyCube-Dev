@@ -124,7 +124,7 @@ export default function TeamPage({ params }: TeamPageProps) {
       // --- Phase 3: Fetch all remaining data in parallel now that we have all necessary IDs ---
       const [seasonResult, picksResult, decksResult, rolesResult, membersResult, previewResult] = await Promise.all([
         getCurrentSeason(),
-        getTeamDraftPicks(teamUUID, sessionId),
+        getTeamDraftPicks(teamUUID, sessionId || undefined),
         getTeamDecks(teamUUID),
         getCurrentUserRolesForTeam(teamUUID),
         getTeamMembersWithRoles(teamUUID),
