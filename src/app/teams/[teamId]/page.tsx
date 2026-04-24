@@ -484,7 +484,7 @@ const previewPromise = sessionId
                                   `}
                                 >
                                   <span className="px-4 py-2 rounded-lg font-semibold shadow-lg bg-destructive hover:bg-destructive/90 text-white">
-                                    {isUndrafting ? "Removing..." : "Undraft & Refund"}
+                                    {isUndrafting ? "Removing..." : "Cut & Refund"}
                                   </span>
                                 </button>
                               )}
