@@ -52,7 +52,6 @@ export default function PoolsPage() {
     totalCards: number;
     draftedCards: number;
     availableCards: number;
-    draftPercentage: number;
   } | null>(null);
 
   useEffect(() => {
