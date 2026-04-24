@@ -622,7 +622,62 @@ export async function completeDraft(
 // ============================================================================
 
 /**
- * Check the draft timer state and take action if needed.
+ * The main cron job handler.
+ * This function is designed to be called every minute by a scheduled task.
+ * It performs a very fast check to see if a draft is active before running
+ * the more expensive timer logic.
+ */
+export async function handleDraftTimerCron(): Promise<{
+  status: "skipped" | "processed" | "error";
+  details?: string;
+  error?: string;
+}> {
+  const supabase = await createServerClient();
+  
+  try {
+    // 1. Perform a highly efficient check for any active draft sessions.
+    // We only select 'id' and limit to 1 for maximum performance.
+    const { data: activeSession, error: checkError } = await supabase
+      .from("draft_sessions")
+      .select("id")
+      .eq("status", "active")
+      .limit(1)
+      .single();
+      
+    if (checkError && checkError.code !== 'PGRST116') {
+      // PGRST116 means "exactly one row was not returned", which is expected if no active session exists.
+      // Any other error should be logged.
+      console.error("Cron check for active session failed:", checkError);
+      return { status: "error", error: "Failed to check for active sessions." };
+    }
+
+    // 2. If no active session is found, do nothing and exit. This is the main optimization.
+    if (!activeSession) {
+      return { status: "skipped", details: "No active draft session found." };
+    }
+
+    // 3. If an active session exists, proceed with the full timer logic.
+    console.log(`Active draft session found (${activeSession.id}). Running full draft timer check.`);
+    const result = await checkDraftTimer(supabase);
+
+    return { status: "processed", details: result.action, error: result.error };
+
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("Unexpected error in handleDraftTimerCron:", errorMessage);
+    return { status: "error", error: errorMessage };
+  }
+}
+
+
+/**
+ * Checks the state of an active or scheduled draft and takes action if needed.
+ * This function should only be called by the `handleDraftTimerCron` gatekeeper
+ * or in direct response to a user action to avoid unnecessary runs.
+ *
+ * It handles two primary cases:
+ * 1. Activating a "scheduled" draft whose start time has passed.
+ * 2. Processing a pick for an "active" draft whose deadline has passed (auto-draft or skip).
  */
 export async function checkDraftTimer(adminClient?: AnySupabaseClient): Promise<{
   action: "none" | "activated" | "auto_drafted" | "completed" | "error";
@@ -632,26 +687,44 @@ export async function checkDraftTimer(adminClient?: AnySupabaseClient): Promise<
 }> {
   try {
     const supabase = adminClient ?? await createServerClient();
-    const { data: session } = await supabase.from("draft_sessions").select("*").in("status", ["scheduled", "active"]).order("created_at", { ascending: false }).limit(1).single();
-    if (!session) return { action: "none" };
+    
+    // This function now assumes it's being called because a potentially actionable session exists.
+    // It queries for a scheduled OR active session to handle the transition from scheduled->active.
+    const { data: session } = await supabase
+        .from("draft_sessions")
+        .select("*")
+        .in("status", ["scheduled", "active"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+
+    // If, in the small window since the gatekeeper ran, the session was completed, we do nothing.
+    if (!session) return { action: "none", message: "No actionable draft session found." };
 
     const now = new Date();
+
+    // Case 1: Activate a scheduled draft if its start time has passed.
     if (session.status === "scheduled" && new Date(session.start_time) <= now) {
+      console.log(`Activating scheduled draft session ${session.id}.`);
       const result = await activateDraft(session.id, supabase);
-      return result.success ? { action: "activated", message: "Draft has been activated!" } : { action: "error", error: result.error };
+      return result.success 
+        ? { action: "activated", message: "Draft has been activated!" } 
+        : { action: "error", error: result.error };
     }
 
+    // Case 2: Handle a pick for an active draft if the deadline has passed.
     if (session.status === "active" && session.current_pick_deadline && new Date(session.current_pick_deadline) <= now) {
-      // Always derive on-clock team from live pick counts, not from potentially stale column
+      console.log(`Deadline passed for session ${session.id}. Executing auto-pick logic.`);
+
       const { status: draftStatus, error: statusError } = await getDraftStatus(session.id, supabase);
       if (!draftStatus) {
         return { action: "error", error: statusError || "Could not get draft status." };
       }
-      const teamId = draftStatus.onTheClock.teamId;
 
+      const teamId = draftStatus.onTheClock.teamId;
       const autoDraftResult = await executeAutoDraft(teamId, session.id, supabase);
 
-      // Case 1: A real card was successfully picked.
+      // Sub-case A: Auto-draft was successful.
       if (autoDraftResult.success) {
         await resetSkipCounter(session.id, supabase);
         await advanceDraft(supabase);
@@ -661,12 +734,12 @@ export async function checkDraftTimer(adminClient?: AnySupabaseClient): Promise<
         };
       }
 
-      // Case 2: The pick failed (no funds, no cards, etc.) — skip it.
+      // Sub-case B: Auto-draft failed (no funds, no cards), so we skip the pick.
       else {
         console.error(`Auto-draft failed for ${teamId}: ${autoDraftResult.error}. The pick will be skipped.`);
-
         const newSkipCount = (session.consecutive_skipped_picks || 0) + 1;
 
+        // Stall Condition: If every team has skipped consecutively, end the draft.
         if (newSkipCount >= draftStatus.totalTeams) {
             console.log(`Stall condition met: ${newSkipCount} consecutive skips. Ending draft.`);
             await completeDraft(session.id, supabase);
@@ -678,6 +751,7 @@ export async function checkDraftTimer(adminClient?: AnySupabaseClient): Promise<
 
         await supabase.from("draft_sessions").update({ consecutive_skipped_picks: newSkipCount }).eq("id", session.id);
         const skippedResult = await addSkippedPick(teamId, draftStatus.totalPicks + 1, session.id, supabase);
+
         if (!skippedResult.success) {
             return { action: "error", error: `Auto-draft failed and could not log skipped pick: ${skippedResult.error}` };
         }
@@ -689,11 +763,14 @@ export async function checkDraftTimer(adminClient?: AnySupabaseClient): Promise<
 
         return {
           action: "auto_drafted",
-          message: `Team ${teamId} pick was skipped. Consecutive skips: ${newSkipCount}.`,
+          message: `Team ${teamId}'s pick was skipped. Consecutive skips: ${newSkipCount}.`,
         };
       }
     }
-    return { action: "none" };
+
+    // If neither of the above conditions are met, do nothing.
+    return { action: "none", message: "Active session found, but no action required at this time." };
+
   } catch (error) {
     console.error("Unexpected error checking draft timer:", error);
     return { action: "error", error: String(error) };
