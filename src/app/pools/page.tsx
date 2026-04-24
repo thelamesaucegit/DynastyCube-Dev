@@ -248,7 +248,7 @@ export default function PoolsPage() {
               <Card><CardContent className="pt-6 text-center"><Layers className="h-5 w-5 text-primary mx-auto mb-2" /><div className="text-3xl font-bold mb-1">{stats.totalCards}</div><div className="text-sm text-muted-foreground">Total Cards</div></CardContent></Card>
               <Card><CardContent className="pt-6 text-center"><CircleDashed className="h-5 w-5 text-emerald-500 mx-auto mb-2" /><div className="text-3xl font-bold mb-1">{stats.availableCards}</div><div className="text-sm text-muted-foreground">Available</div></CardContent></Card>
               <Card><CardContent className="pt-6 text-center"><CheckCircle2 className="h-5 w-5 text-orange-500 mx-auto mb-2" /><div className="text-3xl font-bold mb-1">{stats.draftedCards}</div><div className="text-sm text-muted-foreground">Drafted</div></CardContent></Card>
-              <Card><CardContent className="pt-6 text-center"><BarChart3 className="h-5 w-5 text-violet-500 mx-auto mb-2" /><div className="text-3xl font-bold mb-1">{stats.draftPercentage}%</div><div className="text-sm text-muted-foreground">Completion</div></CardContent></Card>
+             
           </div>
       )}
       {/* Filters */}
