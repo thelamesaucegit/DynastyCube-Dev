@@ -40,92 +40,70 @@ export function ReplayGameBoard({ topOffset = 0, snapshot, cardDataMap }: Replay
     if (!player1 || !player2) {
         return <div style={{ color: 'white' }}>Waiting for player data in snapshot...</div>;
     }
-   const mainAreaStyle: React.CSSProperties = {
-        display: 'flex',
-        flexDirection: 'column',
-        flexGrow: 1,
-        // Take up the full space but prevent overflow
-        minWidth: 0,
-        overflow: 'hidden', 
-    };
 
-     return (
+    return (
         <ResponsiveContextProvider value={responsive}>
-            <div style={{ 
-                position: 'relative', 
-                width: '100%', 
-                height: '100%', 
-                display: 'flex', 
-                flexDirection: 'column',
-                backgroundColor: '#0a0a0a', // A dark, clean background
-                overflow: 'hidden' // This creates the hard top/bottom boundaries
-            }}>
+            <div style={{ ...styles.container, padding: `0 ${responsive.containerPadding}px`, gap: responsive.sectionGap }}>
                 <FullscreenButton />
-
-                {/* Opponent's Hand - Positioned at the very top */}
-                <div style={{ position: 'absolute', top: topOffset, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }}>
-                    <CardRow zoneId={hand(entityId(player2.playerId))} faceDown small inverted snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
+                
+                <div data-zone="opponent-hand" style={{ position: 'absolute', top: topOffset, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }}>
+                    {/* FIX: Use player2 object */}
+                    <CardRow zoneId={hand(entityId(player2.playerId))} faceDown small inverted snapshot={snapshot} cardDataMap={cardDataMap} />
+                </div>
+                <div style={{...styles.spectatorNameLabel, position: 'absolute', top: topOffset + responsive.smallCardHeight + responsive.handBattlefieldGap + 8, left: 16 }}>
+                    {/* FIX: Use player2 object */}
+                    {player2.name}
                 </div>
                 
-                {/* Opponent's Area */}
-                <div style={{ 
-                    flex: 1, // This makes the opponent's area and player's area share space equally
-                    display: 'flex', 
-                    minHeight: 0, // Critical for flexbox children to shrink correctly
-                    paddingTop: topOffset + responsive.smallCardHeight,
-                    paddingLeft: '60px', // Space for stack
-                    paddingRight: '60px' // Space for zone piles
-                }}>
-                    <div style={{ flexGrow: 1, display: 'flex' }}>
-                        <ReplayBattlefield isOpponent={true} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
+                <div style={{ ...styles.opponentArea, marginTop: -responsive.containerPadding + responsive.sectionGap, paddingTop: responsive.smallCardHeight + topOffset + responsive.handBattlefieldGap }}>
+                    <div style={styles.playerRowWithZones}>
+                        {/* FIX: Use player2 object */}
+                        <div style={styles.playerMainArea}><ReplayBattlefield isOpponent={true} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} /></div>
+                        <ReplayZonePile player={player2} isOpponent={true} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
                     </div>
                 </div>
 
-                {/* Center Strip */}
-                <div style={{ ...styles.centerArea, position: 'relative', zIndex: 20 }}>
+                <div style={{ ...styles.centerArea, gap: responsive.isMobile ? 6 : 16 }}>
+                    {/* --- THIS IS THE FIX: Pass the theme object from player2 --- */}
                     <div style={styles.centerLifeSection}><LifeDisplay life={player2.life} playerId={entityId(player2.playerId)} playerName={player2.name} spectatorMode={true} theme={player2.theme} /></div>
- <StepStrip 
-                        phase={snapshot.gameState.currentPhase} 
-                        step={snapshot.gameState.currentStep} 
-                        turnNumber={snapshot.gameState.turnNumber} 
-                        activePlayerName={activePlayer?.name} 
+                    
+                    <StepStrip
+                        phase={snapshot.gameState.currentPhase}
+                        step={snapshot.gameState.currentStep}
+                        turnNumber={snapshot.gameState.turnNumber}
+                        isActivePlayer={false}
                         isSpectator={true}
-                        isActivePlayer={false} // Default value for spectator
-                        hasPriority={false} // Default value for spectator
-                        priorityMode={'waiting'} // Default value for spectator
-                        stopOverrides={{ myTurnStops: [], opponentTurnStops: [] }} // Default value for spectator
-                        onToggleStop={() => {}} // Dummy function for spectator
+                        hasPriority={false}
+                        priorityMode={'ownTurn'}
+                        stopOverrides={{ myTurnStops: [], opponentTurnStops: [] }}
+                        onToggleStop={() => {}}
+                        activePlayerName={activePlayer?.name}
                     />
-                  <div style={styles.centerLifeSection}><LifeDisplay life={player1.life} isPlayer playerId={entityId(player1.playerId)} playerName={player1.name} spectatorMode={true} theme={player1.theme} /></div>
-                </div>
-
-                {/* Player's Area */}
-                <div style={{ 
-                    flex: 1, 
-                    display: 'flex', 
-                    minHeight: 0, 
-                    paddingBottom: responsive.smallCardHeight,
-                    paddingLeft: '60px',
-                    paddingRight: '60px'
-                }}>
-                     <div style={{ flexGrow: 1, display: 'flex' }}>
-                        <ReplayBattlefield isOpponent={false} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
-                    </div>
-                </div>
-
-                {/* Player's Hand - Positioned at the very bottom */}
-                <div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }}>
-                    <CardRow zoneId={hand(entityId(player1.playerId))} faceDown={true} small={true} interactive={false} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
+                    
+                    {/* --- THIS IS THE FIX: Pass the theme object from player1 --- */}
+                    <div style={styles.centerLifeSection}><LifeDisplay life={player1.life} isPlayer playerId={entityId(player1.playerId)} playerName={player1.name} spectatorMode={true} theme={player1.theme} /></div>
                 </div>
                 
-                {/* Overlays - These are positioned absolutely and are not part of the flex layout */}
                 <ReplayStackDisplay snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
-                <div style={{position: 'absolute', top: '50%', right: '16px', transform: 'translateY(-50%)'}}>
-                    <ReplayZonePile player={player2} isOpponent={true} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
+                
+                <div style={{ ...styles.playerArea, marginBottom: -responsive.containerPadding + responsive.sectionGap, paddingBottom: responsive.smallCardHeight + responsive.handBattlefieldGap }}>
+                    <div style={styles.playerRowWithZones}>
+                        {/* FIX: Use player1 object */}
+                        <div style={styles.playerMainArea}><ReplayBattlefield isOpponent={false} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} /></div>
+                        <ReplayZonePile player={player1} isOpponent={false} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
+                    </div>
                 </div>
-                 <div style={{position: 'absolute', bottom: '50%', right: '16px', transform: 'translateY(50%)'}}>
-                    <ReplayZonePile player={player1} isOpponent={false} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
+                
+                <div style={{...styles.spectatorNameLabel, position: 'absolute', bottom: responsive.smallCardHeight + responsive.handBattlefieldGap + 8, left: 16 }}>
+                     {/* FIX: Use player1 object */}
+                    {player1.name}
                 </div>
+                
+                <div data-zone="hand" style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }}>
+                     {/* FIX: Use player1 object */}
+                    <CardRow zoneId={hand(entityId(player1.playerId))} faceDown={true} small={true} interactive={false} snapshot={snapshot} cardDataMap={cardDataMap} />
+                </div>
+                
                 <ReplayTargetingArrows snapshot={snapshot} />
                 <ReplayGameLog snapshot={snapshot} />
             </div>
