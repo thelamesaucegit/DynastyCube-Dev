@@ -29,9 +29,9 @@ export function ReplayStackDisplay({ snapshot, cardDataMap, useOldestArt }: Repl
   if (stackCards.length === 0) return null;
 
   const topCard = stackCards[stackCards.length - 1];
-  const stackImageWidth = responsive.isMobile ? 44 : 80; // Was 60, now 80
-  const stackImageHeight = responsive.isMobile ? 62 : 112; // Was 84, now 112
-  const cardOffset = responsive.isMobile ? 20 : 30; // Increase offset
+  const stackImageWidth = responsive.isMobile ? 44 : 60;
+  const stackImageHeight = responsive.isMobile ? 62 : 84;
+  const cardOffset = 20;
 
   return (
     <div style={{ position: 'fixed', left: responsive.isMobile ? 4 : 16, top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, zIndex: 50, maxHeight: '80vh' }}>
