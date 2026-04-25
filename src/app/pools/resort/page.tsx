@@ -4,13 +4,11 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { getResortCards, type ResortCardWithVote } from "@/app/actions/resortActions";
-// CORRECTED: Using the existing action from the file you provided
-import { getUserTeam } from "@/app/actions/teamActions"; 
+import { getUserTeam } from "@/app/actions/teamActions";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2, AlertCircle } from "lucide-react";
 import { ResortCardComponent } from "@/app/components/ResortCardComponent";
 
-// Define the Team type locally for state management
 interface Team {
   id: string;
   name: string;
@@ -18,16 +16,18 @@ interface Team {
 }
 
 export default function ResortPage() {
-  const { user } = useAuth(); // CORRECT: Only gets user from the hook
+  const { user } = useAuth();
   const [team, setTeam] = useState<Team | null>(null);
   const [resortCards, setResortCards] = useState<ResortCardWithVote[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // This effect fetches the user's team data after the user is loaded.
+  // This effect will run when the user object changes.
   useEffect(() => {
-    if (user?.email) {
+    // CORRECTED: Check for user and user.email before making the call.
+    if (user && user.email) {
       const fetchUserTeam = async () => {
+        // Now 'user.email' is guaranteed to be a string.
         const { team: userTeam, error: teamError } = await getUserTeam(user.email);
         if (teamError) {
           setError(teamError);
@@ -35,12 +35,16 @@ export default function ResortPage() {
         setTeam(userTeam);
       };
       fetchUserTeam();
+    } else if (!user) {
+      // If there's no user, there's no team.
+      setTeam(null);
     }
-  }, [user]); // Depends only on the user object
+  }, [user]);
 
   const loadResortData = useCallback(async () => {
-    // We wait until the team state has been set before loading cards
-    if (user && team !== undefined) {
+    // This check is now more robust. It ensures we don't try to load
+    // data until we've at least tried to fetch the team information.
+    if (team !== undefined) {
       setLoading(true);
       setError(null);
       try {
@@ -58,16 +62,19 @@ export default function ResortPage() {
         setLoading(false);
       }
     }
-  }, [user, team]); // Depends on user and team state
+  }, [team]); // Dependency is now just 'team'
 
+  // This effect triggers loading the card data once the team data has been fetched.
   useEffect(() => {
-    loadResortData();
+      loadResortData();
   }, [loadResortData]);
+
 
   const handleVoteSuccess = () => {
     loadResortData(); 
   };
 
+  // The rest of the component remains the same...
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8 text-center">
