@@ -52,6 +52,23 @@ export interface PoolCard {
   drafted_at?: string;
 }
 
+export async function getCardsForPool(poolName: string): Promise<{ cards: PoolCard[] | null; error?: string }> {
+  const supabase = await createServerClient();
+  try {
+    const { data, error } = await supabase
+      .from('card_pools')
+      .select('*, drafted_by_team:teams(*)')
+      .eq('pool_name', poolName)
+      .order('card_name', { ascending: true });
+
+    if (error) {
+      return { cards: null, error: error.message };
+    }
+    return { cards: data };
+  } catch (err) {
+    return { cards: null, error: 'An unexpected error occurred.' };
+  }
+}
 export async function getPoolCardsWithStatus(): Promise<{
   cards: PoolCard[];
   error?: string;
