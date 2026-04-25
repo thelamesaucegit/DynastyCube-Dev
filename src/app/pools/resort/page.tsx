@@ -4,37 +4,61 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { getResortCards, type ResortCardWithVote } from "@/app/actions/resortActions";
-// CORRECTED: This is the right hook, as demonstrated by your TeamVoting component.
+// CORRECTED: Using the existing action from the file you provided
+import { getUserTeam } from "@/app/actions/teamActions"; 
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2, AlertCircle } from "lucide-react";
 import { ResortCardComponent } from "@/app/components/ResortCardComponent";
 
+// Define the Team type locally for state management
+interface Team {
+  id: string;
+  name: string;
+  emoji: string;
+}
+
 export default function ResortPage() {
-  // CORRECTED: This call matches the pattern in TeamVoting and should now work.
-  const { user } = useAuth(); 
+  const { user } = useAuth(); // CORRECT: Only gets user from the hook
+  const [team, setTeam] = useState<Team | null>(null);
   const [resortCards, setResortCards] = useState<ResortCardWithVote[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadResortData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      // The team?.id will now be correctly sourced from the AuthContext
-      const { cards, error: fetchError } = await getResortCards(team?.id);
-      if (fetchError) {
-        setError(fetchError);
-      } else {
-        setResortCards(cards);
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "An unexpected error occurred.";
-      setError(message);
-      console.error(err);
-    } finally {
-      setLoading(false);
+  // This effect fetches the user's team data after the user is loaded.
+  useEffect(() => {
+    if (user?.email) {
+      const fetchUserTeam = async () => {
+        const { team: userTeam, error: teamError } = await getUserTeam(user.email);
+        if (teamError) {
+          setError(teamError);
+        }
+        setTeam(userTeam);
+      };
+      fetchUserTeam();
     }
-  }, [team]); // The dependency is on the team object from the context
+  }, [user]); // Depends only on the user object
+
+  const loadResortData = useCallback(async () => {
+    // We wait until the team state has been set before loading cards
+    if (user && team !== undefined) {
+      setLoading(true);
+      setError(null);
+      try {
+        const { cards, error: fetchError } = await getResortCards(team?.id);
+        if (fetchError) {
+          setError(fetchError);
+        } else {
+          setResortCards(cards);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+        setError(message);
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+  }, [user, team]); // Depends on user and team state
 
   useEffect(() => {
     loadResortData();
@@ -83,7 +107,7 @@ export default function ResortPage() {
             <ResortCardComponent 
               key={card.id} 
               card={card} 
-              teamId={team?.id} // This now correctly passes the teamId from the context
+              teamId={team?.id}
               onVoteSuccess={handleVoteSuccess} 
             />
           ))}
