@@ -1,3 +1,5 @@
+//src/app/actions/resortActions.ts
+
 "use server";
 
 import { createServerClient } from "@/lib/supabase";
