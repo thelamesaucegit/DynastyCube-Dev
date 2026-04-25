@@ -16,6 +16,7 @@ import { getCardImageUrl } from "@/app/utils/cardUtils";
 
 interface DraftInterfaceProps {
   teamId: string;
+    poolName: 'draft' | 'free'; // <--- NEW PROP
   teamName?: string;
   isUserTeamMember?: boolean;
   onDraftComplete?: () => void;
@@ -24,6 +25,7 @@ interface DraftInterfaceProps {
 
 export const DraftInterface: React.FC<DraftInterfaceProps> = ({
   teamId,
+  poolName,
   teamName = "This team",
   isUserTeamMember = true,
   onDraftComplete,
