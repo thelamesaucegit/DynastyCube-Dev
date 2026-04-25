@@ -1,3 +1,5 @@
+//src/app/pools/resort/page.tsx
+
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
