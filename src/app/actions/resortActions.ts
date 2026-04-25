@@ -5,8 +5,8 @@
 import { createServerClient } from "@/lib/supabase";
 
 export interface ResortCard {
-  id: string; // This is the card's unique ID in the resort_pool table
-  card_id: string; // This is the Scryfall card_id
+  id: string;
+  card_id: string;
   card_name: string;
   image_url: string | null;
   vote_count: number;
@@ -16,7 +16,6 @@ export interface ResortCardWithVote extends ResortCard {
   team_has_voted_for: boolean;
 }
 
-// Gets all cards from the resort_pool
 export async function getResortCards(teamId?: string): Promise<{ cards: ResortCardWithVote[]; error?: string }> {
   const supabase = await createServerClient();
   try {
@@ -29,15 +28,12 @@ export async function getResortCards(teamId?: string): Promise<{ cards: ResortCa
 
     let teamVoteId: string | null = null;
     if (teamId) {
-      const { data: voteData, error: voteError } = await supabase
+      const { data: voteData } = await supabase
         .from("resort_pool_votes")
         .select("resort_card_id")
         .eq("team_id", teamId)
         .single();
       
-      if (voteError && voteError.code !== 'PGRST116') { // Ignore 'no rows' error
-          console.error("Error fetching team vote:", voteError.message);
-      }
       if (voteData) {
         teamVoteId = voteData.resort_card_id;
       }
@@ -56,16 +52,14 @@ export async function getResortCards(teamId?: string): Promise<{ cards: ResortCa
   }
 }
 
-// Action for a team to cast or change their vote
 export async function castResortVote(teamId: string, resortCardId: string): Promise<{ success: boolean; error?: string }> {
     const supabase = await createServerClient();
     try {
-        // This is an "upsert" operation. It will insert a new vote or update the existing one for the team.
         const { error } = await supabase
             .from("resort_pool_votes")
             .upsert(
                 { team_id: teamId, resort_card_id: resortCardId },
-                { onConflict: 'team_id' } // This is the crucial part for upserting
+                { onConflict: 'team_id' }
             );
 
         if (error) throw error;
