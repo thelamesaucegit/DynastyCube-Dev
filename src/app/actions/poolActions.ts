@@ -19,7 +19,7 @@ type CardWithDraftInfo = {
     cubucks_cost: number | null;
     cubecobra_elo: number | null;
     was_drafted: boolean | null; 
-    team_draft_picks: {
+  team_draft_picks: {
         drafted_at: string | null;
         teams: {
             id: string;
@@ -27,12 +27,6 @@ type CardWithDraftInfo = {
             emoji: string;
         } | null;
     }[] | null;
-    // This represents the join from getCardsForPool
-    drafted_by_team: {
-        id: string;
-        name: string;
-        emoji: string;
-    } | null;
 };
 
 export interface PoolCard {
@@ -61,41 +55,54 @@ export interface PoolCard {
 export async function getCardsForPool(poolName: string): Promise<{ cards: PoolCard[]; error?: string }> {
   const supabase = await createServerClient();
   try {
+    // --- THIS IS THE FIX ---
+    // The query now explicitly joins through the 'team_draft_picks' table,
+    // which is the correct relationship defined in your schema.
     const { data, error } = await supabase
       .from('card_pools')
-      .select('*, drafted_by_team:teams!left(*)')
+      .select(`
+        *,
+        team_draft_picks (
+          drafted_at,
+          teams ( id, name, emoji )
+        )
+      `)
       .eq('pool_name', poolName)
       .order('card_name', { ascending: true });
+    // --- END OF FIX ---
 
     if (error) {
       console.error(`Error fetching cards for pool "${poolName}":`, error);
       return { cards: [], error: error.message };
     }
     
-    // --- FIX: Use the specific CardWithDraftInfo type instead of 'any' ---
     const cards: PoolCard[] = (data || []).map((card: CardWithDraftInfo) => {
-        const team = card.drafted_by_team;
-        return {
-            id: card.id,
-            card_id: card.card_id,
-            card_name: card.card_name,
-            card_set: card.card_set ?? undefined,
-            card_type: card.card_type ?? undefined,
-            rarity: card.rarity ?? undefined,
-            colors: card.colors ?? undefined,
-            image_url: card.image_url ?? undefined,
-            oldest_image_url: card.oldest_image_url ?? undefined,
-            mana_cost: card.mana_cost ?? undefined,
-            cmc: card.cmc ?? undefined,
-            cubucks_cost: card.cubucks_cost ?? undefined,
-            cubecobra_elo: card.cubecobra_elo ?? undefined,
-            is_drafted: card.was_drafted || !!team,
-            drafted_by_team: team && team.id ? { id: team.id, name: team.name, emoji: team.emoji } : undefined,
-            drafted_at: undefined, // This query doesn't fetch drafted_at
-        };
+      // This logic is now correct because the data shape matches the query
+      const pick = Array.isArray(card.team_draft_picks) ? card.team_draft_picks[0] : card.team_draft_picks;
+      const team = pick?.teams;
+
+      return {
+          id: card.id,
+          card_id: card.card_id,
+          card_name: card.card_name,
+          card_set: card.card_set ?? undefined,
+          card_type: card.card_type ?? undefined,
+          rarity: card.rarity ?? undefined,
+          colors: card.colors ?? undefined,
+          image_url: card.image_url ?? undefined,
+          oldest_image_url: card.oldest_image_url ?? undefined,
+          mana_cost: card.mana_cost ?? undefined,
+          cmc: card.cmc ?? undefined,
+          cubucks_cost: card.cubucks_cost ?? undefined,
+          cubecobra_elo: card.cubecobra_elo ?? undefined,
+          is_drafted: !!pick, // is_drafted is true if a pick exists for this card
+          drafted_by_team: team && team.id ? { id: team.id, name: team.name, emoji: team.emoji } : undefined,
+          drafted_at: pick?.drafted_at ?? undefined,
+      };
     });
 
     return { cards };
+      
   } catch (err) {
     const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
     console.error(`Unexpected error in getCardsForPool for pool "${poolName}":`, message);
