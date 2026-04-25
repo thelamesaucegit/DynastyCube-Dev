@@ -7,6 +7,9 @@ import { cookies } from "next/headers";
 import { invalidateDraftCache } from '@/lib/draftCache';
 import { type AnySupabaseClient } from "@/lib/supabase";
 
+export type PoolTableName = "card_pools" | "the_chamber";
+
+
 async function createClient() {
   const cookieStore = await cookies();
   return createServerClient(
@@ -95,11 +98,17 @@ export async function undraftAllCards(): Promise<{ success: boolean; updatedCoun
     return { success: false, error: errorMessage };
   }
 }
-
-export async function getCardPool(poolName: string = "draft"): Promise<{ cards: CardData[]; error?: string }> {
+export async function getCardPool(
+  tableName: PoolTableName = "card_pools"
+): Promise<{ cards: CardData[]; error?: string }> {
   const supabase = await createClient();
   try {
-    const { data, error } = await supabase.from("card_pools").select("*").eq("pool_name", poolName).eq('hidden', false).order("created_at", { ascending: false });
+    const { data, error } = await supabase
+      .from(tableName)
+      .select("*")
+      .eq("hidden", false)
+      .order("created_at", { ascending: false });
+
     if (error) {
       return { cards: [], error: error.message };
     }
@@ -128,11 +137,16 @@ export async function getAvailableCardsForDraft(poolName: string = "draft", admi
   }
 }
 
-export async function addCardToPool(card: CardData, poolName: string = "draft"): Promise<{ success: boolean; error?: string }> {
+export async function addCardToPool(
+  card: CardData,
+  tableName: PoolTableName = "card_pools"
+): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    const { error } = await supabase.from("card_pools").insert({
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const { error } = await supabase.from(tableName).insert({
       card_id: card.card_id,
       card_name: card.card_name,
       card_set: card.card_set,
@@ -146,16 +160,21 @@ export async function addCardToPool(card: CardData, poolName: string = "draft"):
       hidden: card.hidden || false,
       mana_cost: card.mana_cost,
       cmc: card.cmc || 0,
-      pool_name: poolName,
+      pool_name: tableName === "the_chamber" ? "chamber" : "draft",
       created_by: user?.id || null,
     });
-    if (error) { return { success: false, error: error.message }; }
-    invalidateDraftCache();
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    if (tableName === "card_pools") {
+      invalidateDraftCache();
+    }
     return { success: true };
   } catch {
     return { success: false, error: "An unexpected error occurred" };
   }
 }
+
 
 export async function addCardsToPool(cards: CardData[], poolName: string = "draft"): Promise<{ success: boolean; error?: string; count?: number }> {
     const supabase = await createClient();
@@ -187,16 +206,42 @@ export async function addCardsToPool(cards: CardData[], poolName: string = "draf
     }
 }
 
-export async function bulkImportCards(lines: string[], defaultCubucksCost: number = 1, poolName: string = "draft"): Promise<{ success: boolean; added: number; skipped: number; failed: string[]; error?: string; }> {
-    const supabase = await createClient();
-    try {
-        const { data: existingCards, error: existingError } = await supabase.from("card_pools").select("card_id").eq("pool_name", poolName);
-        if (existingError) { return { success: false, added: 0, skipped: 0, failed: [], error: existingError.message }; }
-        const existingCardIds = new Set((existingCards || []).map(c => c.card_id));
-        let skipped = 0;
-        const failed: string[] = [];
-        const cardsToInsert: Array<Omit<CardData, 'id' | 'created_at' | 'rating_updated_at'>> = [];
-        for (const line of lines) {
+export async function bulkImportCards(
+  lines: string[],
+  defaultCubucksCost: number = 1,
+  tableName: PoolTableName = "card_pools"
+): Promise<{
+  success: boolean;
+  added: number;
+  skipped: number;
+  failed: string[];
+  error?: string;
+}> {
+  const supabase = await createClient();
+  const poolName = tableName === "the_chamber" ? "chamber" : "draft";
+  try {
+    const { data: existingCards, error: existingError } = await supabase
+      .from(tableName)
+      .select("card_id");
+    // .eq("pool_name", poolName); // pool_name check is implicit via table name now
+
+    if (existingError) {
+      return {
+        success: false,
+        added: 0,
+        skipped: 0,
+        failed: [],
+        error: existingError.message,
+      };
+    }
+    const existingCardIds = new Set(
+      (existingCards || []).map((c) => c.card_id)
+    );
+    let skipped = 0;
+    const failed: string[] = [];
+    const cardsToInsert: Array<Omit<CardData, "id" | "created_at" | "rating_updated_at">> = [];
+
+    for (const line of lines) {
             const trimmed = line.trim();
             if (!trimmed) continue;
             let cardName = trimmed;
@@ -254,36 +299,65 @@ export async function bulkImportCards(lines: string[], defaultCubucksCost: numbe
                 failed.push(cardName);
             }
         }
-        if (cardsToInsert.length > 0) {
-            const { error: insertError } = await supabase.from("card_pools").insert(cardsToInsert);
-            if (insertError) { return { success: false, added: 0, skipped: 0, failed, error: insertError.message }; }
-            invalidateDraftCache();
-        }
+          if (cardsToInsert.length > 0) {
+      const { error: insertError } = await supabase
+        .from(tableName)
+        .insert(cardsToInsert);
+      if (insertError) {
+        return {
+          success: false,
+          added: 0,
+          skipped,
+          failed,
+          error: insertError.message,
+        };
+      }
+      if (tableName === "card_pools") {
+        invalidateDraftCache();
+      }
+    }
         return { success: true, added: cardsToInsert.length, skipped, failed };
     } catch (error) {
         return { success: false, added: 0, skipped: 0, failed: [], error: String(error) };
     }
 }
 
-export async function removeCardFromPool(dbId: string, poolName: string = "draft"): Promise<{ success: boolean; error?: string }> {
+export async function removeCardFromPool(
+  dbId: string,
+  tableName: PoolTableName = "card_pools"
+): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
   try {
-    const { error } = await supabase.from("card_pools").delete().eq("id", dbId).eq("pool_name", poolName);
-    if (error) { return { success: false, error: error.message }; }
-    invalidateDraftCache();
+    const { error } = await supabase.from(tableName).delete().eq("id", dbId);
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    if (tableName === "card_pools") {
+      invalidateDraftCache();
+    }
     return { success: true };
   } catch {
     return { success: false, error: "An unexpected error occurred" };
   }
 }
 
-export async function clearCardPool(poolName: string = "draft"): Promise<{ success: boolean; error?: string }> {
+export async function clearCardPool(
+  tableName: PoolTableName = "card_pools"
+): Promise<{ success: boolean; error?: string, removedCount?: number }> {
   const supabase = await createClient();
   try {
-    const { error } = await supabase.from("card_pools").delete().eq("pool_name", poolName);
-    if (error) { return { success: false, error: error.message }; }
-    invalidateDraftCache();
-    return { success: true };
+     const { count, error: deleteError } = await supabase
+      .from(tableName)
+      .delete()
+      .not("id", "is", null);
+
+    if (deleteError) {
+      return { success: false, error: deleteError.message };
+    }
+    if (tableName === "card_pools") {
+      invalidateDraftCache();
+    }
+    return { success: true, removedCount: count ?? 0 };
   } catch {
     return { success: false, error: "An unexpected error occurred" };
   }
