@@ -31,7 +31,7 @@ export interface PoolCard {
 }
 
 export async function getCardsForPool(poolName: string): Promise<{ cards: PoolCard[]; error?: string }> {
-  const supabase = await createClient();
+  const supabase = await createServerClient();
   try {
     const { data, error } = await supabase
       .from('card_pools')
