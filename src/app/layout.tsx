@@ -4,6 +4,8 @@ import "./globals.css";
 import { Metadata } from "next";
 import Providers from "./components/Providers";
 import { SettingsProvider } from '@/contexts/SettingsContext'; // 1. Import the provider
+import { Toaster } from "@/app/components/ui/sonner"; // <--- ADD THIS IMPORT
+
 
 export const metadata: Metadata = {
   title: "The Dynasty Cube",
@@ -54,6 +56,7 @@ export default function RootLayout({
         <SettingsProvider>
           <Providers>{children}</Providers>
         </SettingsProvider>
+         <Toaster /> 
       </body>
     </html>
   );
