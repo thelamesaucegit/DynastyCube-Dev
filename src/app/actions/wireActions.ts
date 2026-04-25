@@ -1,6 +1,8 @@
+//src/app/actions/wireActions.ts
+
 "use server";
 
-import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
+import { createServerClient, createAdminClient, type AnySupabaseClient } from "@/lib/supabase";
 import { addDraftPick } from "@/app/actions/draftActions";
 import { type CardData } from "@/app/actions/cardActions";
 import { type DraftPick } from "@/app/actions/draftActions";
@@ -165,7 +167,7 @@ export async function placeWireBid(cardPoolId: string, bidAmount: number): Promi
  */
 export async function processWireBids(): Promise<{ success: boolean; processedBids: number; movedToFreeAgency: number; error?: string }> {
     console.log("Starting Wire bid processing...");
-    const supabase = createServerClient(true); // Use admin client for elevated privileges
+    const supabase = createAdminClient(); 
     let processedBids = 0;
     let movedToFreeAgency = 0;
 
