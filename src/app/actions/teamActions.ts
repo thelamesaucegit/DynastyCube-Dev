@@ -31,7 +31,7 @@ async function createClient() {
   );
 }
 
-interface TeamMember {
+export interface TeamMember {
   id: string;
   user_id: string;
   team_id: string;
@@ -40,7 +40,7 @@ interface TeamMember {
   joined_at: string;
 }
 
-interface Team {
+export interface Team {
   id: string;         // UUID primary key
   short_name: string; // URL-safe identifier e.g. 'shards', 'ninja'
   name: string;
