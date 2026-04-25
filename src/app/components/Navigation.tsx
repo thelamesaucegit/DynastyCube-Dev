@@ -422,15 +422,30 @@ export default function Navigation() {
                 ))}
 
                 <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                 <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                   Pools
-                </div>
-                <Link
-                  href="/pools"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}
-                >
-                  Draft Pool
-                </Link>
+              </div>
+              <Link
+                href="/pools/draft"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/draft") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}
+              >
+                Draft Pool
+              </Link>
+              <Link
+                href="/pools/wire"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/wire") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}
+              >
+                The Wire
+              </Link>
+              <Link
+                href="/pools/free-agents"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/free-agents") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}
+              >
+                Free Agents
+              </Link>
 
                 <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                   League
