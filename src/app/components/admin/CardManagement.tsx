@@ -11,8 +11,9 @@ import {
   bulkImportCards,
   removeFilteredCards,
   undraftAllCards,
+    clearCardPool, // Import the updated clearCardPool
 } from "@/app/actions/cardActions";
-import type { CardData } from "@/app/actions/cardActions";
+import type { CardData, PoolTableName } from "@/app/actions/cardActions"; // Import the new type
 import { getPoolCardsWithStatus } from "@/app/actions/poolActions";
 import type { PoolCard } from "@/app/actions/poolActions";
 import {
