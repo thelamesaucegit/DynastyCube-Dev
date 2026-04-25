@@ -111,26 +111,33 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
     }
   };
 
-  const handleSearchCard = async () => {
+const handleSearchCard = async () => {
     if (!searchQuery.trim()) return;
+
     setSearchLoading(true);
     setError(null);
     try {
+      // Using Scryfall API to search for cards
       const response = await fetch(
-        `https://api.scryfall.com/cards/search?q=${encodeURIComponent(
-          searchQuery
-        )}&unique=cards`
+        `https://api.scryfall.com/cards/search?q=${encodeURIComponent(searchQuery)}&unique=cards`
       );
+
       if (response.ok) {
         const data = await response.json();
-        const formattedResults: MTGCard[] = data.data
-          .slice(0, 10)
-          .map((card: any) => ({
-            id: card.id, name: card.name, set: card.set_name, rarity: card.rarity,
-            colors: card.colors || [], type: card.type_line,
-            imageUrl: card.image_uris?.normal || card.image_uris?.small || "",
-            manaCost: card.mana_cost, cmc: card.cmc || 0,
-          }));
+        const formattedResults: MTGCard[] = data.data.slice(0, 10).map((card: unknown) => {
+          const c = card as { id: string; name: string; set_name: string; rarity: string; colors?: string[]; type_line: string; image_uris?: { normal?: string; small?: string }; mana_cost?: string; cmc?: number };
+          return {
+            id: c.id,
+            name: c.name,
+            set: c.set_name,
+            rarity: c.rarity,
+            colors: c.colors || [],
+            type: c.type_line,
+            imageUrl: c.image_uris?.normal || c.image_uris?.small || "",
+            manaCost: c.mana_cost,
+            cmc: c.cmc || 0,
+          };
+        });
         setSearchResults(formattedResults);
       } else {
         setError("Failed to search cards from Scryfall");
