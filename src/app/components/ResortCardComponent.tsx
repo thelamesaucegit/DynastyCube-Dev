@@ -1,5 +1,3 @@
-//src/app/components/ResortCardComponent.tsx
-
 "use client";
 
 import React, { useState } from "react";
@@ -11,7 +9,7 @@ import { Loader2, CheckCircle } from "lucide-react";
 
 interface ResortCardProps {
   card: ResortCardWithVote;
-  teamId: string | undefined; // Accept teamId as an optional prop
+  teamId: string | undefined; // Accept teamId as a prop
   onVoteSuccess: () => void;
 }
 
@@ -19,11 +17,12 @@ export function ResortCardComponent({ card, teamId, onVoteSuccess }: ResortCardP
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleVote = async () => {
+    // Logic now correctly depends on the teamId prop
     if (!teamId) {
       toast.error("You must be on a team to vote.");
       return;
     }
-    
+
     setIsSubmitting(true);
     const result = await castResortVote(teamId, card.id);
     if (result.success) {
