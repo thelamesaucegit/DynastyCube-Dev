@@ -9,7 +9,7 @@ import { Loader2, AlertCircle } from "lucide-react";
 import { ResortCardComponent } from "@/app/components/ResortCardComponent";
 
 export default function ResortPage() {
-  const { team } = useAuth();
+  const { user, team } = useAuth(); // Correctly get user and team from the context
   const [resortCards, setResortCards] = useState<ResortCardWithVote[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -18,7 +18,7 @@ export default function ResortPage() {
     setLoading(true);
     setError(null);
     try {
-      // Pass the team ID to know which card has been voted for
+      // Pass the team ID (if it exists) to the server action
       const { cards, error: fetchError } = await getResortCards(team?.id);
       if (fetchError) {
         setError(fetchError);
@@ -32,14 +32,13 @@ export default function ResortPage() {
     } finally {
       setLoading(false);
     }
-  }, [team]);
+  }, [team]); // Dependency array includes team
 
   useEffect(() => {
     loadResortData();
   }, [loadResortData]);
 
   const handleVoteSuccess = () => {
-    // Re-fetch data to show the updated vote status across all cards
     loadResortData(); 
   };
 
@@ -79,7 +78,12 @@ export default function ResortPage() {
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           {resortCards.map((card) => (
-            <ResortCardComponent key={card.id} card={card} onVoteSuccess={handleVoteSuccess} />
+            <ResortCardComponent 
+              key={card.id} 
+              card={card} 
+              teamId={team?.id} // Pass teamId down as a prop
+              onVoteSuccess={handleVoteSuccess} 
+            />
           ))}
         </div>
       )}
