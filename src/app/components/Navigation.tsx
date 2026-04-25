@@ -1,4 +1,4 @@
-// src/app/components/Navigation.tsx
+//src/app/components/Navigation.tsx
 
 "use client";
 
@@ -24,11 +24,9 @@ import {
 } from "./ui/dropdown-menu";
 import {
   NavigationMenu,
-  NavigationMenuContent,
   NavigationMenuItem,
   NavigationMenuLink,
   NavigationMenuList,
-  NavigationMenuTrigger,
   navigationMenuTriggerStyle,
 } from "./ui/navigation-menu";
 import { Sheet, SheetContent, SheetTrigger } from "./ui/sheet";
@@ -45,6 +43,9 @@ import {
   Newspaper,
   History,
   Info,
+  LayoutGrid,
+  Cable,
+  Sparkles,
 } from "lucide-react";
 import { getDraftSessions, type DraftSession } from "@/app/actions/draftSessionActions";
 
@@ -89,10 +90,11 @@ export default function Navigation() {
     return pathname.startsWith(href);
   };
 
+  const isDropdownActive = (paths: string[]) => paths.some(path => pathname.startsWith(path));
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container max-w-7xl mx-auto flex h-16 items-center justify-between px-4">
-        {/* Logo */}
         <div className="flex items-center gap-8">
           <Link
             href="/"
@@ -114,7 +116,6 @@ export default function Navigation() {
           <nav className="hidden md:flex items-center gap-1">
             <NavigationMenu>
               <NavigationMenuList>
-                {/* Home */}
                 <NavigationMenuItem>
                   <Link href="/" legacyBehavior passHref>
                     <NavigationMenuLink
@@ -127,54 +128,53 @@ export default function Navigation() {
 
                 {/* Drafts Dropdown */}
                 <NavigationMenuItem>
-                  <NavigationMenuTrigger className={`bg-transparent ${isActive("/draft") ? "bg-accent/50 text-accent-foreground font-medium" : ""}`}>
-                    Draft
-                  </NavigationMenuTrigger>
-                  <NavigationMenuContent>
-                    <ul className="grid w-[300px] gap-2 p-3">
-                      {draftSessions.map((session) => (
-                        <li key={session.id}>
-                          <Link href={`/draft/${session.id}/live`} legacyBehavior passHref>
-                            <NavigationMenuLink className="block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground">
-                              <div className="text-sm font-medium leading-none">{session.name || `Draft from ${new Date(session.created_at).toLocaleDateString()}`}</div>
-                              <p className="line-clamp-2 text-xs leading-snug text-muted-foreground mt-1.5">
-                                View live draft board and results.
-                              </p>
-                            </NavigationMenuLink>
-                          </Link>
-                        </li>
-                      ))}
-                      {draftSessions.length === 0 && (
-                         <li>
-                            <div className="text-sm text-muted-foreground p-3 text-center">No drafts found.</div>
-                         </li>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger className={`${navigationMenuTriggerStyle()} bg-transparent ${isActive("/draft") ? "bg-accent/50 text-accent-foreground font-medium" : ""}`}>
+                      Draft
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      {draftSessions.length > 0 ? (
+                        draftSessions.map((session) => (
+                          <DropdownMenuItem key={session.id} asChild>
+                            <Link href={`/draft/${session.id}/live`}>
+                              {session.name || `Draft from ${new Date(session.created_at).toLocaleDateString()}`}
+                            </Link>
+                          </DropdownMenuItem>
+                        ))
+                      ) : (
+                        <DropdownMenuLabel className="text-muted-foreground font-normal px-2">No active drafts.</DropdownMenuLabel>
                       )}
-                    </ul>
-                  </NavigationMenuContent>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </NavigationMenuItem>
-
+                
                 {/* Pools Dropdown */}
                 <NavigationMenuItem>
-                  <NavigationMenuTrigger className={`bg-transparent ${isActive("/pools") ? "bg-accent/50 text-accent-foreground font-medium" : ""}`}>
-                    Pools
-                  </NavigationMenuTrigger>
-                  <NavigationMenuContent>
-                    <ul className="grid w-[200px] gap-2 p-3">
-                      <li>
-                        <Link href="/pools" legacyBehavior passHref>
-                          <NavigationMenuLink className="block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground">
-                            <div className="text-sm font-medium leading-none">Draft Pool</div>
-                            <p className="line-clamp-2 text-xs leading-snug text-muted-foreground mt-1.5">
-                              Browse the active cube
-                            </p>
-                          </NavigationMenuLink>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger className={`${navigationMenuTriggerStyle()} bg-transparent ${isDropdownActive(['/pools']) ? "bg-accent/50 text-accent-foreground font-medium" : ""}`}>
+                      Pools
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem asChild>
+                        <Link href="/pools/draft" className="flex items-center gap-2">
+                          <LayoutGrid className="size-4" /> Draft Pool
                         </Link>
-                      </li>
-                    </ul>
-                  </NavigationMenuContent>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/pools/wire" className="flex items-center gap-2">
+                          <Cable className="size-4" /> The Wire
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/pools/free-agents" className="flex items-center gap-2">
+                          <Sparkles className="size-4" /> Free Agents
+                        </Link>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </NavigationMenuItem>
 
-                {/* Teams */}
+                {/* Teams Link */}
                 <NavigationMenuItem>
                   <Link href="/teams" legacyBehavior passHref>
                     <NavigationMenuLink
@@ -185,7 +185,7 @@ export default function Navigation() {
                   </Link>
                 </NavigationMenuItem>
 
-                {/* Matches */}
+                {/* Matches Link */}
                 <NavigationMenuItem>
                   <Link href="/schedule" legacyBehavior passHref>
                     <NavigationMenuLink
@@ -195,14 +195,11 @@ export default function Navigation() {
                     </NavigationMenuLink>
                   </Link>
                 </NavigationMenuItem>
-
-                {/* Vote (Auth Only) */}
+                
                 {user && (
                   <NavigationMenuItem>
                     <Link href="/vote" legacyBehavior passHref>
-                      <NavigationMenuLink
-                        className={`${navigationMenuTriggerStyle()} bg-transparent ${isActive("/vote") ? "bg-accent/50 text-accent-foreground font-medium" : ""}`}
-                      >
+                      <NavigationMenuLink className={`${navigationMenuTriggerStyle()} bg-transparent ${isActive("/vote") ? "bg-accent/50 text-accent-foreground font-medium" : ""}`}>
                         Vote
                       </NavigationMenuLink>
                     </Link>
@@ -211,60 +208,19 @@ export default function Navigation() {
 
                 {/* Info Dropdown */}
                 <NavigationMenuItem>
-                  <NavigationMenuTrigger className={`bg-transparent ${["/about", "/history", "/news", "/glossary"].some(isActive) ? "bg-accent/50 text-accent-foreground font-medium" : ""}`}>
-                    Info
-                  </NavigationMenuTrigger>
-                  <NavigationMenuContent>
-                    <ul className="grid w-[250px] gap-2 p-3">
-                      <li>
-                        <Link href="/about" legacyBehavior passHref>
-                          <NavigationMenuLink className="flex items-center gap-3 select-none rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground">
-                            <Info className="size-4 text-muted-foreground" />
-                            <div>
-                              <div className="text-sm font-medium">About</div>
-                              <p className="text-xs text-muted-foreground mt-1">What is The Dynasty Cube?</p>
-                            </div>
-                          </NavigationMenuLink>
-                        </Link>
-                      </li>
-                      <li>
-                        <Link href="/history" legacyBehavior passHref>
-                          <NavigationMenuLink className="flex items-center gap-3 select-none rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground">
-                            <History className="size-4 text-muted-foreground" />
-                            <div>
-                              <div className="text-sm font-medium">History</div>
-                              <p className="text-xs text-muted-foreground mt-1">Past seasons and records</p>
-                            </div>
-                          </NavigationMenuLink>
-                        </Link>
-                      </li>
-                      <li>
-                        <Link href="/news" legacyBehavior passHref>
-                          <NavigationMenuLink className="flex items-center gap-3 select-none rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground">
-                            <Newspaper className="size-4 text-muted-foreground" />
-                            <div>
-                              <div className="text-sm font-medium">News</div>
-                              <p className="text-xs text-muted-foreground mt-1">Latest league updates</p>
-                            </div>
-                          </NavigationMenuLink>
-                        </Link>
-                      </li>
-                      <li>
-                        <Link href="/glossary" legacyBehavior passHref>
-                          <NavigationMenuLink className="flex items-center gap-3 select-none rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground">
-                            <BookOpen className="size-4 text-muted-foreground" />
-                            <div>
-                              <div className="text-sm font-medium">Glossary</div>
-                              <p className="text-xs text-muted-foreground mt-1">Terminology and rules</p>
-                            </div>
-                          </NavigationMenuLink>
-                        </Link>
-                      </li>
-                    </ul>
-                  </NavigationMenuContent>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger className={`${navigationMenuTriggerStyle()} bg-transparent ${isDropdownActive(["/about", "/history", "/news", "/glossary"]) ? "bg-accent/50 text-accent-foreground font-medium" : ""}`}>
+                      Info
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                       <DropdownMenuItem asChild><Link href="/about">About</Link></DropdownMenuItem>
+                       <DropdownMenuItem asChild><Link href="/history">History</Link></DropdownMenuItem>
+                       <DropdownMenuItem asChild><Link href="/news">News</Link></DropdownMenuItem>
+                       <DropdownMenuItem asChild><Link href="/glossary">Glossary</Link></DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </NavigationMenuItem>
 
-                {/* Admin */}
                 {user && isAdmin && (
                   <NavigationMenuItem>
                     <Link href="/admin" legacyBehavior passHref>
@@ -284,7 +240,6 @@ export default function Navigation() {
 
         {/* Right section */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Icon buttons for logged-in users */}
           {user && (
             <div className="hidden md:flex items-center gap-1">
               <ReportButton />
@@ -292,26 +247,13 @@ export default function Navigation() {
               <NotificationBell />
             </div>
           )}
-
-          {/* Theme toggle */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleTheme}
-            className="size-9"
-          >
+          <Button variant="ghost" size="icon" onClick={toggleTheme} className="size-9">
             {mounted ? (
-              theme === "light" ? (
-                <Moon className="size-4" />
-              ) : (
-                <Sun className="size-4" />
-              )
+              theme === "light" ? <Moon className="size-4" /> : <Sun className="size-4" />
             ) : (
               <span className="size-4" />
             )}
           </Button>
-
-          {/* User menu / Sign in */}
           {loading ? (
             <div className="size-8 rounded-full bg-muted animate-pulse" />
           ) : user ? (
@@ -330,18 +272,8 @@ export default function Navigation() {
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>{displayName}</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/account" className="cursor-pointer">
-                    <User className="mr-2 size-4" />
-                    My Account
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/messages" className="cursor-pointer">
-                    <Settings className="mr-2 size-4" />
-                    Messages
-                  </Link>
-                </DropdownMenuItem>
+                <DropdownMenuItem asChild><Link href="/account" className="cursor-pointer"><User className="mr-2 size-4" />My Account</Link></DropdownMenuItem>
+                <DropdownMenuItem asChild><Link href="/messages" className="cursor-pointer"><Settings className="mr-2 size-4" />Messages</Link></DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-destructive focus:text-destructive">
                   <LogOut className="mr-2 size-4" />
@@ -359,23 +291,14 @@ export default function Navigation() {
           <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
             <SheetTrigger asChild className="md:hidden">
               <Button variant="ghost" size="icon" className="size-9">
-                {mobileMenuOpen ? (
-                  <X className="size-5" />
-                ) : (
-                  <Menu className="size-5" />
-                )}
+                {mobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
               </Button>
             </SheetTrigger>
             <SheetContent side="right" className="w-72 overflow-y-auto">
               <nav className="flex flex-col gap-1 mt-8">
-                <Link
-                  href="/"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`px-4 py-2.5 rounded-md text-left transition-colors ${isActive("/") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}
-                >
+                <Link href="/" onClick={() => setMobileMenuOpen(false)} className={`px-4 py-2.5 rounded-md text-left transition-colors ${isActive("/") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
                   Home
                 </Link>
-
                 <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                   Draft
                 </div>
@@ -389,74 +312,48 @@ export default function Navigation() {
                     {session.name || `Draft from ${new Date(session.created_at).toLocaleDateString()}`}
                   </Link>
                 ))}
-
+                
                 <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                   Pools
                 </div>
-                <Link
-                  href="/pools"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}
-                >
+                <Link href="/pools/draft" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/draft") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
                   Draft Pool
+                </Link>
+                <Link href="/pools/wire" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/wire") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
+                  The Wire
+                </Link>
+                <Link href="/pools/free-agents" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/free-agents") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
+                  Free Agents
                 </Link>
 
                 <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                   League
                 </div>
-                <Link
-                  href="/teams"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/teams") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}
-                >
+                <Link href="/teams" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/teams") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
                   Teams
                 </Link>
-                <Link
-                  href="/schedule"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/schedule") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}
-                >
+                <Link href="/schedule" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/schedule") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
                   Matches
                 </Link>
                 {user && (
-                  <Link
-                    href="/vote"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/vote") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}
-                  >
+                  <Link href="/vote" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/vote") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
                     Vote
                   </Link>
                 )}
-
+                
                 <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                   Info
                 </div>
-                <Link
-                  href="/about"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/about") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}
-                >
+                <Link href="/about" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/about") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
                   About
                 </Link>
-                <Link
-                  href="/history"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/history") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}
-                >
+                <Link href="/history" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/history") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
                   History
                 </Link>
-                <Link
-                  href="/news"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/news") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}
-                >
+                <Link href="/news" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/news") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
                   News
                 </Link>
-                <Link
-                  href="/glossary"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/glossary") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}
-                >
+                <Link href="/glossary" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/glossary") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
                   Glossary
                 </Link>
 
@@ -465,17 +362,12 @@ export default function Navigation() {
                     <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                       Admin
                     </div>
-                    <Link
-                      href="/admin"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="mx-2 px-4 py-2 rounded-md text-left transition-colors text-orange-600 dark:text-orange-400 hover:bg-orange-500/10 flex items-center gap-2"
-                    >
+                    <Link href="/admin" onClick={() => setMobileMenuOpen(false)} className="mx-2 px-4 py-2 rounded-md text-left transition-colors text-orange-600 dark:text-orange-400 hover:bg-orange-500/10 flex items-center gap-2">
                       <Shield className="size-4" />
                       Dashboard
                     </Link>
                   </>
                 )}
-
                 {user && (
                   <div className="flex items-center gap-3 px-4 py-2 border-t mt-4 pt-6">
                     <ReportButton />

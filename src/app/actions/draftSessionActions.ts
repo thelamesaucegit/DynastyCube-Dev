@@ -578,7 +578,19 @@ export async function completeDraft(
       console.error("Error completing draft:", error);
       return { success: false, error: error.message };
     }
+ console.log(`Draft ${sessionId} completed. Moving undrafted cards to The Wire.`);
+    const { error: wireError } = await supabase
+      .from('card_pools')
+      .update({ 
+        pool_name: 'wire', 
+        on_wire_since: new Date().toISOString() 
+      })
+      .eq('pool_name', 'draft'); // Move all cards remaining in the 'draft' pool
 
+    if (wireError) {
+      console.error("Critical error: Failed to move undrafted cards to The Wire:", wireError);
+      // The draft is complete, but this part failed. Log it for admin review.
+    }
  // Generate placeholder decks for all teams in the draft.
     const { data: sessionData } = await supabase
       .from('draft_sessions')

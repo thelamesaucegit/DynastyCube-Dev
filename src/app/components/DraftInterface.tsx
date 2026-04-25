@@ -67,12 +67,17 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       const { session } = await getActiveDraftSession();
       const sessionId = session?.id || null;
       setActiveSessionId(sessionId);
+
+          // If free agency is active, we get cards from the 'free' pool. Otherwise, the 'draft' pool.
+      const poolToFetch = isFreeAgencyEnabled ? 'free' : 'draft';
+
       const [{ cards }, { picks }, { team }, { order }] = await Promise.all([
-        getAvailableCardsForDraft(),
+        getAvailableCardsForDraft(poolToFetch), // Pass the correct pool name
         getTeamDraftPicks(teamId, sessionId || undefined),
         getTeamBalance(teamId),
         getActiveDraftOrder(),
       ]);
+ 
       setAvailableCards(cards);
       setDraftedCards(picks);
       if (team) setCubucksBalance(team.cubucks_balance);
@@ -132,7 +137,11 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
         mana_cost: card.mana_cost ?? undefined,
         cmc: card.cmc ?? undefined,
         pick_number: draftedCards.length + 1,
+         acquisition_method: isFreeAgencyEnabled ? 'free_agent' : 'draft', // Set method
+        acquired_at: new Date().toISOString(), // Set time
       };
+
+    
       const result = await addDraftPick(pick);
       if (result.success) {
         setSuccess(`Acquired ${card.card_name} for ${cardCost} Cubucks!`);

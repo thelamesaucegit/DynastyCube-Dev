@@ -25,6 +25,8 @@ export interface DraftPick {
   pick_number?: number;
   cubecobra_elo?: number;
   rating_updated_at?: string;
+  acquisition_method?: 'draft' | 'wire' | 'free_agent' | 'trade' | 'skipped';
+  acquired_at?: string;
 }
 
 export interface Deck {
@@ -151,6 +153,12 @@ export async function addDraftPick(pick: DraftPick): Promise<{ success: boolean;
       cmc: pick.cmc,
       pick_number: pick.pick_number,
       drafted_by: authCheck.userId,
+         // Pass through the acquisition method from the component
+      // Default to 'draft' if not provided, for backward compatibility.
+      acquisition_method: pick.acquisition_method || 'draft',
+      
+      // Set the acquisition time to now. The old 'drafted_at' becomes redundant.
+      acquired_at: new Date().toISOString(), 
     });
     if (error) {
       console.error("Error adding draft pick:", error);
@@ -219,12 +227,63 @@ export async function addDraftPickInternal(pick: DraftPick, _isAutoDraft?: boole
 export async function removeDraftPick(pickId: string): Promise<{ success: boolean; error?: string }> {
   const supabase = await createServerClient();
   try {
-    const teamId = await getDraftPickTeamId(pickId);
-    if (!teamId) return { success: false, error: "Draft pick not found" };
-    const authCheck = await verifyTeamMembership(teamId, supabase);
+     const { data: pick, error: pickError } = await supabase
+      .from("team_draft_picks")
+      .select("id, team_id, card_id, card_pool_id, acquisition_method, acquired_at, draft_session_id")
+      .eq("id", pickId)
+      .single();
+
+    if (pickError || !pick) {
+      return { success: false, error: "Draft pick not found." };
+    }
+
+    const authCheck = await verifyTeamMembership(pick.team_id, supabase);
     if (!authCheck.authorized) return { success: false, error: authCheck.error };
-    const { error } = await supabase.from("team_draft_picks").delete().eq("id", pickId);
-    if (error) return { success: false, error: error.message };
+
+    // --- NEW LOGIC: ENFORCE CUTTING RULE ---
+    if (pick.acquisition_method === 'wire') {
+      const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      if (new Date(pick.acquired_at) > oneWeekAgo) {
+        return { success: false, error: "Cannot cut a card won on The Wire for 7 days after acquisition." };
+      }
+    }
+    // --- END OF NEW LOGIC ---
+
+    // --- NEW LOGIC: ADD TO OWNERSHIP HISTORY ---
+    // Get the current season ID from the draft session
+    const { data: session } = await supabase.from('draft_sessions').select('season_id').eq('id', pick.draft_session_id).single();
+    if (session?.season_id) {
+        await supabase.from('card_ownership_history').insert({
+            card_id: pick.card_id,
+            team_id: pick.team_id,
+            season_id: session.season_id,
+        }).onConflict('card_id', 'team_id', 'season_id').ignore(); // Ignore if it already exists
+    }
+    // --- END OF NEW LOGIC ---
+
+    // --- MODIFIED LOGIC: MOVE TO WIRE INSTEAD OF DELETE ---
+    // 1. Delete the pick from the team's roster
+    const { error: deleteError } = await supabase.from("team_draft_picks").delete().eq("id", pickId);
+    if (deleteError) {
+        console.error("Error removing pick from team roster:", deleteError);
+        return { success: false, error: "Failed to remove card from roster." };
+    }
+
+    // 2. Update the card in card_pools to move it to The Wire
+    if (pick.card_pool_id) {
+        const { error: updateError } = await supabase
+            .from("card_pools")
+            .update({ 
+                pool_name: 'wire', 
+                on_wire_since: new Date().toISOString() 
+            })
+            .eq("id", pick.card_pool_id);
+
+        if (updateError) {
+            console.error("Critical error: Roster pick deleted but failed to move card to Wire:", updateError);
+            return { success: false, error: "Card removed from team but failed to place on The Wire. Please contact an admin." };
+        }
+    }
     return { success: true };
   } catch (error) { return { success: false, error: "An unexpected error occurred" }; }
 }
