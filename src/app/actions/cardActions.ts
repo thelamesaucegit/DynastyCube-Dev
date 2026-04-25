@@ -7,7 +7,7 @@ import { cookies } from "next/headers";
 import { invalidateDraftCache } from '@/lib/draftCache';
 import { type AnySupabaseClient } from "@/lib/supabase";
 
-export type PoolTableName = "card_pools" | "the_chamber";
+export type PoolTableName = "card_pools" | "the_chamber" | "resort_pool"; 
 
 
 async function createClient() {
