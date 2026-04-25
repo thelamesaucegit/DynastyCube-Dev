@@ -240,56 +240,37 @@ const handleRemoveCard = async (cardId: string) => {
   };
 
  const handleClearPool = async () => {
-    if (!clearFilter || (clearFilter !== 'drafted' && confirmText !== "CONFIRM")) return;
+    if (!clearFilter) return;
 
     setClearing(true);
-    setError(null);
-    setSuccess(null);
-
     try {
-        let result: { success: boolean; error?: string; removedCount?: number; updatedCount?: number };
-        
-        if (clearFilter === 'drafted') {
-            result = await undraftAllCards();
-            if (result.success) {
-                toast.success(`Successfully undrafted ${result.updatedCount || 0} card(s).`);
-            }
-        } else { // 'all' or 'undrafted'
-             // For 'the_chamber', 'undrafted' is the same as 'all'
-            if (activePool === 'the_chamber' && clearFilter === 'undrafted') {
-                setClearFilter('all'); 
-            }
-            // Use the correct action based on filter
-            if (clearFilter === 'all') {
-                result = await clearCardPool(activePool);
-                 if (result.success) {
-                    toast.success(`Removed ${result.removedCount || 0} card(s) from the pool.`);
-                }
-            } else { // 'undrafted' for card_pools
-                result = await removeFilteredCards('undrafted');
-                 if (result.success) {
-                    toast.success(`Removed ${result.removedCount || 0} undrafted card(s).`);
-                }
-            }
-        }
+      let result: { success: boolean; error?: string; removedCount?: number; updatedCount?: number };
 
-        if (result.success) {
-            closeClearDialog();
-            await loadCards();
-            onUpdate?.();
-        } else {
-            toast.error(result.error || "Failed to clear pool.");
-            closeClearDialog();
-        }
+      if (clearFilter === 'drafted') {
+        result = await undraftAllCards();
+        if (result.success) toast.success(`Successfully undrafted ${result.updatedCount || 0} card(s).`);
+      } else if (clearFilter === 'undrafted') {
+        result = await removeFilteredCards('undrafted', 'draft');
+        if (result.success) toast.success(`Removed ${result.removedCount || 0} undrafted card(s).`);
+      } else { // 'all'
+        result = await clearCardPool(activePool);
+        if (result.success) toast.success(`Removed ${result.removedCount || 0} card(s) from the pool.`);
+      }
+
+      if (result.success) {
+        await loadCards();
+        onUpdate?.();
+      } else {
+        toast.error(result.error || "Failed to process request.");
+      }
     } catch (err) {
-        console.error("Error clearing pool:", err);
-        toast.error("An unexpected error occurred while clearing the pool.");
-        closeClearDialog();
+      console.error("Error in handleClearPool:", err);
+      toast.error("An unexpected error occurred while clearing the pool.");
     } finally {
-        setClearing(false);
+      setClearing(false);
+      closeClearDialog();
     }
   };
-
 
  const handleBulkImport = async () => {
     const lines = bulkText.split("\n").filter((l) => l.trim());
