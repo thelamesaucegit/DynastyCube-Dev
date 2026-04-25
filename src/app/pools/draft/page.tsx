@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
-import { getPoolCardsWithStatus, getPoolStatistics } from "@/app/actions/poolActions";
+import { getPoolCardsWithStatus, getPoolStatistics, getCardsForPool } from "@/app/actions/poolActions";
 import type { PoolCard } from "@/app/actions/poolActions";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
@@ -73,13 +73,13 @@ export default function PoolsPage() {
   const loadPoolData = async () => {
     setLoading(true);
     try {
-      const { cards: poolCards, error: cardsError } = await getPoolCardsWithStatus();
+      const { cards: poolCards, error: cardsError } = await getCardsForPool("draft");
       if (cardsError) {
         setError(cardsError);
       } else {
         setCards(poolCards);
       }
-      const { stats: poolStats, error: statsError } = await getPoolStatistics();
+      const { stats: poolStats, error: statsError } = await getPoolStatistics("draft");
       if (!statsError && poolStats) {
         setStats(poolStats);
       }
