@@ -15,7 +15,65 @@ export interface ResortCard {
 export interface ResortCardWithVote extends ResortCard {
   team_has_voted_for: boolean;
 }
+// This function will find the correct poll for a team and add a card as an option.
+export async function nominateResortCard(
+  resortCardId: string,
+  teamId: string,
+  cardName: string
+): Promise<{ success: boolean; error?: string; message?: string }> {
+  const supabase = await createServerClient();
 
+  try {
+    // 1. Find the active "Resort Pool Vote" poll for the given team.
+    const { data: poll, error: pollError } = await supabase
+      .from("polls")
+      .select("id")
+      .eq("team_id", teamId)
+      .like("title", "Resort Pool Vote%") // Find the right poll by its title
+      .eq("is_active", true)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (pollError || !poll) {
+      return { success: false, error: "Could not find an active resort poll for your team." };
+    }
+
+    // 2. Check if this card is already an option in this poll.
+    const { data: existingOption, error: checkError } = await supabase
+      .from("poll_options")
+      .select("id")
+      .eq("poll_id", poll.id)
+      .eq("resort_card_id", resortCardId)
+      .single();
+
+    if (checkError && checkError.code !== 'PGRST116') { // Ignore 'no rows' error
+        throw checkError;
+    }
+
+    if (existingOption) {
+      return { success: true, message: `${cardName} has already been nominated.` };
+    }
+
+    // 3. If not, add the card as a new poll option.
+    const { error: insertError } = await supabase
+      .from("poll_options")
+      .insert({
+        poll_id: poll.id,
+        option_text: cardName, // The display text for the option is the card's name.
+        resort_card_id: resortCardId, // This links the option back to the card.
+      });
+
+    if (insertError) throw insertError;
+
+    return { success: true, message: `Successfully nominated ${cardName} for your team!` };
+
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+    console.error("Error in nominateResortCard:", message);
+    return { success: false, error: message };
+  }
+}
 export async function getResortCards(teamId?: string): Promise<{ cards: ResortCardWithVote[]; error?: string }> {
   const supabase = await createServerClient();
   try {
