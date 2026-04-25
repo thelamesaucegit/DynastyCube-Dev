@@ -43,6 +43,9 @@ interface CardManagementProps {
 }
 
 export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
+  // MODIFIED: State to manage which pool is active
+  const [activePool, setActivePool] = useState<PoolTableName>("card_pools");
+
   const [cards, setCards] = useState<CardData[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -51,7 +54,6 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  // Bulk import state
   const [bulkText, setBulkText] = useState("");
   const [bulkCost, setBulkCost] = useState("1");
   const [bulkImporting, setBulkImporting] = useState(false);
@@ -61,34 +63,36 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
     failed: string[];
   } | null>(null);
   const [showBulkImport, setShowBulkImport] = useState(false);
-  // Pool actions state
   const [poolCards, setPoolCards] = useState<PoolCard[]>([]);
   const [clearFilter, setClearFilter] = useState<"all" | "undrafted" | "drafted" | null>(null);
   const [clearStep, setClearStep] = useState<1 | 2>(1);
   const [confirmText, setConfirmText] = useState("");
   const [clearing, setClearing] = useState(false);
-  // Load cards from database on mount
+
+  // MODIFIED: Load cards whenever the activePool changes
   useEffect(() => {
     loadCards();
-  }, []);
+  }, [activePool]);
+
   const loadCards = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [poolResult, statusResult] = await Promise.all([
-        getCardPool(),
-        getPoolCardsWithStatus(),
-      ]);
+      // MODIFIED: Pass the active pool table name to the action
+      const poolResult = await getCardPool(activePool);
       if (poolResult.error) {
         setError(poolResult.error);
+        setCards([]);
       } else {
-        // Sort cards alphabetically by name
-        const sortedCards = poolResult.cards.sort((a, b) =>
-          a.card_name.localeCompare(b.card_name)
-        );
-        setCards(sortedCards);
+        setCards(poolResult.cards);
       }
-      setPoolCards(statusResult.cards || []);
+      // Only fetch draft status for the main card pool
+      if (activePool === "card_pools") {
+        const statusResult = await getPoolCardsWithStatus();
+        setPoolCards(statusResult.cards || []);
+      } else {
+        setPoolCards([]); // Clear draft status for The Chamber
+      }
     } catch (err) {
       console.error("Error loading cards:", err);
       setError("Failed to load cards");
@@ -96,6 +100,7 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
       setLoading(false);
     }
   };
+
 
   const handleSearchCard = async () => {
     if (!searchQuery.trim()) return;
