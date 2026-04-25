@@ -4,11 +4,12 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { getResortCards, type ResortCardWithVote } from "@/app/actions/resortActions";
-import { getUserTeam } from "@/app/actions/teamActions";
+import { getUserTeam } from "@/app/actions/teamActions"; 
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2, AlertCircle } from "lucide-react";
 import { ResortCardComponent } from "@/app/components/ResortCardComponent";
 
+// Define the Team type locally for state management
 interface Team {
   id: string;
   name: string;
@@ -22,59 +23,66 @@ export default function ResortPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // This effect will run when the user object changes.
+  // This effect fetches the user's team data once the user object is available.
   useEffect(() => {
-    // CORRECTED: Check for user and user.email before making the call.
-    if (user && user.email) {
+    // CORRECTED: Capture the email in a constant.
+    const userEmail = user?.email;
+
+    // Check the constant. This makes the type guard explicit.
+    if (userEmail) {
       const fetchUserTeam = async () => {
-        // Now 'user.email' is guaranteed to be a string.
-        const { team: userTeam, error: teamError } = await getUserTeam(user.email);
-        if (teamError) {
-          setError(teamError);
+        try {
+          // Now we pass the constant 'userEmail', which is guaranteed to be a string.
+          const { team: userTeam, error: teamError } = await getUserTeam(userEmail);
+          if (teamError) {
+            setError(teamError);
+          }
+          setTeam(userTeam);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Failed to fetch team data.";
+            setError(message);
         }
-        setTeam(userTeam);
       };
       fetchUserTeam();
-    } else if (!user) {
+    } else {
       // If there's no user, there's no team.
       setTeam(null);
     }
-  }, [user]);
+  }, [user]); // This effect correctly depends on the user object.
 
   const loadResortData = useCallback(async () => {
-    // This check is now more robust. It ensures we don't try to load
-    // data until we've at least tried to fetch the team information.
-    if (team !== undefined) {
-      setLoading(true);
-      setError(null);
-      try {
-        const { cards, error: fetchError } = await getResortCards(team?.id);
-        if (fetchError) {
-          setError(fetchError);
-        } else {
-          setResortCards(cards);
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "An unexpected error occurred.";
-        setError(message);
-        console.error(err);
-      } finally {
-        setLoading(false);
+    setLoading(true);
+    setError(null);
+    try {
+      const { cards, error: fetchError } = await getResortCards(team?.id);
+      if (fetchError) {
+        setError(fetchError);
+      } else {
+        setResortCards(cards);
       }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(message);
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-  }, [team]); // Dependency is now just 'team'
+  }, [team]);
 
-  // This effect triggers loading the card data once the team data has been fetched.
+  // This effect loads the main page data after the user and their team have been loaded.
   useEffect(() => {
-      loadResortData();
-  }, [loadResortData]);
-
+    // This logic ensures we don't try to load cards until we know if there is a team or not.
+    if (user) {
+        loadResortData();
+    } else if (user === null) { // Explicitly check for when auth has resolved to no user
+        setLoading(false);
+    }
+  }, [user, team, loadResortData]); // Depend on team state as well
 
   const handleVoteSuccess = () => {
     loadResortData(); 
   };
 
-  // The rest of the component remains the same...
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8 text-center">
