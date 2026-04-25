@@ -4,8 +4,36 @@
 
 import { createServerClient } from "@/lib/supabase";
 
-import { cookies } from "next/headers";
-
+type CardWithDraftInfo = {
+    id: string;
+    card_id: string;
+    card_name: string;
+    card_set: string | null;
+    card_type: string | null;
+    rarity: string | null;
+    colors: string[] | null;
+    image_url: string | null;
+    oldest_image_url: string | null;
+    mana_cost: string | null;
+    cmc: number | null;
+    cubucks_cost: number | null;
+    cubecobra_elo: number | null;
+    was_drafted: boolean | null; 
+    team_draft_picks: {
+        drafted_at: string | null;
+        teams: {
+            id: string;
+            name: string;
+            emoji: string;
+        } | null;
+    }[] | null;
+    // This represents the join from getCardsForPool
+    drafted_by_team: {
+        id: string;
+        name: string;
+        emoji: string;
+    } | null;
+};
 
 export interface PoolCard {
   id: string;
@@ -35,45 +63,39 @@ export async function getCardsForPool(poolName: string): Promise<{ cards: PoolCa
   try {
     const { data, error } = await supabase
       .from('card_pools')
-      .select('*, drafted_by_team:teams!left(*)') // Use a left join to be safe
+      .select('*, drafted_by_team:teams!left(*)')
       .eq('pool_name', poolName)
       .order('card_name', { ascending: true });
 
     if (error) {
       console.error(`Error fetching cards for pool "${poolName}":`, error);
-      // On error, return an empty array for cards, but include the error message
       return { cards: [], error: error.message };
     }
-
-    // If data is null or empty, this will correctly return an empty array
-    const cards: PoolCard[] = (data || []).map((card: any) => {
-        // This mapping logic seems complex and might be from another function.
-        // Let's simplify for what getCardsForPool needs.
-        // A more robust mapping would check `card.team_draft_picks` if that's joined.
-        // Based on the select, we only have `drafted_by_team`.
-        const team = card.drafted_by_team; 
+    
+    // --- FIX: Use the specific CardWithDraftInfo type instead of 'any' ---
+    const cards: PoolCard[] = (data || []).map((card: CardWithDraftInfo) => {
+        const team = card.drafted_by_team;
         return {
             id: card.id,
             card_id: card.card_id,
             card_name: card.card_name,
-            card_set: card.card_set,
-            card_type: card.card_type,
-            rarity: card.rarity,
-            colors: card.colors,
-            image_url: card.image_url,
-            oldest_image_url: card.oldest_image_url,
-            mana_cost: card.mana_cost,
-            cmc: card.cmc,
-            cubucks_cost: card.cubucks_cost,
-            cubecobra_elo: card.cubecobra_elo,
+            card_set: card.card_set ?? undefined,
+            card_type: card.card_type ?? undefined,
+            rarity: card.rarity ?? undefined,
+            colors: card.colors ?? undefined,
+            image_url: card.image_url ?? undefined,
+            oldest_image_url: card.oldest_image_url ?? undefined,
+            mana_cost: card.mana_cost ?? undefined,
+            cmc: card.cmc ?? undefined,
+            cubucks_cost: card.cubucks_cost ?? undefined,
+            cubecobra_elo: card.cubecobra_elo ?? undefined,
             is_drafted: card.was_drafted || !!team,
             drafted_by_team: team && team.id ? { id: team.id, name: team.name, emoji: team.emoji } : undefined,
-            drafted_at: card.drafted_at, // Assuming this might come from another join
+            drafted_at: undefined, // This query doesn't fetch drafted_at
         };
     });
 
     return { cards };
-
   } catch (err) {
     const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
     console.error(`Unexpected error in getCardsForPool for pool "${poolName}":`, message);
@@ -87,32 +109,9 @@ export async function getPoolCardsWithStatus(): Promise<{
 }> {
   try {
     const supabase = await createServerClient();
-
     const { data: allCards, error: cardsError } = await supabase
       .from("card_pools")
-      .select(
-        `
-        id,
-        card_id,
-        card_name,
-        card_set,
-        card_type,
-        rarity,
-        colors,
-        image_url,
-        oldest_image_url,
-        mana_cost,
-        cmc,
-        cubucks_cost,
-        cubecobra_elo,
-        team_draft_picks (
-          id,
-          drafted_at,
-          team_id,
-          teams ( id, name, emoji )
-        )
-      `
-      )
+      .select(`*, team_draft_picks ( id, drafted_at, team_id, teams ( id, name, emoji ) )`)
       .order("card_name", { ascending: true });
 
     if (cardsError) {
@@ -120,67 +119,65 @@ export async function getPoolCardsWithStatus(): Promise<{
       return { cards: [], error: cardsError.message };
     }
 
-    const cards: PoolCard[] = (allCards || []).map((card) => {
-      const pick = Array.isArray(card.team_draft_picks)
-        ? card.team_draft_picks[0]
-        : card.team_draft_picks;
+    // --- FIX: Use the specific CardWithDraftInfo type here as well ---
+    const cards: PoolCard[] = (allCards || []).map((card: CardWithDraftInfo) => {
+      const pick = Array.isArray(card.team_draft_picks) ? card.team_draft_picks[0] : card.team_draft_picks;
       const team = pick?.teams ? (Array.isArray(pick.teams) ? pick.teams[0] : pick.teams) : null;
 
       return {
         id: card.id,
         card_id: card.card_id,
         card_name: card.card_name,
-        card_set: card.card_set,
-        card_type: card.card_type,
-        rarity: card.rarity,
-        colors: card.colors,
-        image_url: card.image_url,
-        oldest_image_url: card.oldest_image_url, // Include this in the mapped data
-        mana_cost: card.mana_cost,
-        cmc: card.cmc,
-        cubucks_cost: card.cubucks_cost,
-        cubecobra_elo: card.cubecobra_elo,
+        card_set: card.card_set ?? undefined,
+        card_type: card.card_type ?? undefined,
+        rarity: card.rarity ?? undefined,
+        colors: card.colors ?? undefined,
+        image_url: card.image_url ?? undefined,
+        oldest_image_url: card.oldest_image_url ?? undefined,
+        mana_cost: card.mana_cost ?? undefined,
+        cmc: card.cmc ?? undefined,
+        cubucks_cost: card.cubucks_cost ?? undefined,
+        cubecobra_elo: card.cubecobra_elo ?? undefined,
         is_drafted: !!pick,
-        drafted_by_team: team
-          ? { id: team.id, name: team.name, emoji: team.emoji }
-          : undefined,
-        drafted_at: pick?.drafted_at || undefined,
+        drafted_by_team: team ? { id: team.id, name: team.name, emoji: team.emoji } : undefined,
+        drafted_at: pick?.drafted_at ?? undefined,
       };
     });
 
-    return { cards: cards };
+    return { cards };
   } catch (error) {
     console.error("Unexpected error in getPoolCardsWithStatus:", error);
     return { cards: [], error: "An unexpected error occurred" };
   }
 }
 
+
 export interface PoolStatistics {
   totalCards: number;
   draftedCards: number;
   availableCards: number;
-  
 }
 
-export async function getPoolStatistics(): Promise<{
-  stats: PoolStatistics | null;
-  error?: string;
-}> {
+export async function getPoolStatistics(poolName?: string): Promise<{ stats: PoolStatistics | null; error?: string }> {
   try {
     const supabase = await createServerClient();
+    
+    let totalQuery = supabase.from("card_pools").select("*", { count: "exact", head: true });
+    // Correctly check for drafted status using the join, which is more reliable than `was_drafted`
+    let draftedQuery = supabase.from("card_pools").select("id", { count: "exact", head: true }).not("team_draft_picks", "is", null);
 
-    const { count: totalCards, error: totalError } = await supabase
-      .from("card_pools")
-      .select("*", { count: "exact", head: true });
+    if (poolName) {
+        totalQuery = totalQuery.eq('pool_name', poolName);
+        draftedQuery = draftedQuery.eq('pool_name', poolName);
+    }
+
+    const { count: totalCards, error: totalError } = await totalQuery;
     if (totalError) {
       console.error("Error fetching total cards count:", totalError.message);
       return { stats: null, error: totalError.message };
     }
 
-    const { count: draftedCards, error: draftedError } = await supabase
-      .from("card_pools")
-      .select("*", { count: "exact", head: true })
-      .eq("was_drafted", true);
+    const { count: draftedCards, error: draftedError } = await draftedQuery;
     if (draftedError) {
       console.error("Error fetching drafted cards count:", draftedError.message);
       return { stats: null, error: draftedError.message };
@@ -188,13 +185,11 @@ export async function getPoolStatistics(): Promise<{
 
     const availableCards = (totalCards || 0) - (draftedCards || 0);
    
-
     return {
       stats: {
         totalCards: totalCards || 0,
         draftedCards: draftedCards || 0,
         availableCards: availableCards,
-       
       },
     };
   } catch (error) {
