@@ -30,23 +30,57 @@ export interface PoolCard {
   drafted_at?: string;
 }
 
-export async function getCardsForPool(poolName: string): Promise<{ cards: PoolCard[] | null; error?: string }> {
+export async function getCardsForPool(poolName: string): Promise<{ cards: PoolCard[]; error?: string }> {
   const supabase = await createServerClient();
   try {
     const { data, error } = await supabase
       .from('card_pools')
-      .select('*, drafted_by_team:teams(*)')
+      .select('*, drafted_by_team:teams!left(*)') // Use a left join to be safe
       .eq('pool_name', poolName)
       .order('card_name', { ascending: true });
 
     if (error) {
-      return { cards: null, error: error.message };
+      console.error(`Error fetching cards for pool "${poolName}":`, error);
+      // On error, return an empty array for cards, but include the error message
+      return { cards: [], error: error.message };
     }
-    return { cards: data };
+
+    // If data is null or empty, this will correctly return an empty array
+    const cards: PoolCard[] = (data || []).map((card: any) => {
+        // This mapping logic seems complex and might be from another function.
+        // Let's simplify for what getCardsForPool needs.
+        // A more robust mapping would check `card.team_draft_picks` if that's joined.
+        // Based on the select, we only have `drafted_by_team`.
+        const team = card.drafted_by_team; 
+        return {
+            id: card.id,
+            card_id: card.card_id,
+            card_name: card.card_name,
+            card_set: card.card_set,
+            card_type: card.card_type,
+            rarity: card.rarity,
+            colors: card.colors,
+            image_url: card.image_url,
+            oldest_image_url: card.oldest_image_url,
+            mana_cost: card.mana_cost,
+            cmc: card.cmc,
+            cubucks_cost: card.cubucks_cost,
+            cubecobra_elo: card.cubecobra_elo,
+            is_drafted: card.was_drafted || !!team,
+            drafted_by_team: team && team.id ? { id: team.id, name: team.name, emoji: team.emoji } : undefined,
+            drafted_at: card.drafted_at, // Assuming this might come from another join
+        };
+    });
+
+    return { cards };
+
   } catch (err) {
-    return { cards: null, error: 'An unexpected error occurred.' };
+    const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
+    console.error(`Unexpected error in getCardsForPool for pool "${poolName}":`, message);
+    return { cards: [], error: message };
   }
 }
+
 export async function getPoolCardsWithStatus(): Promise<{
   cards: PoolCard[];
   error?: string;
