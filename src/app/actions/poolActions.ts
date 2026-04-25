@@ -2,7 +2,8 @@
 
 "use server";
 
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient } from "@/lib/supabase";
+
 import { cookies } from "next/headers";
 
 async function createClient() {
