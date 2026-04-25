@@ -227,7 +227,6 @@ export async function addDraftPickInternal(pick: DraftPick, _isAutoDraft?: boole
 export async function removeDraftPick(pickId: string): Promise<{ success: boolean; error?: string }> {
   const supabase = await createServerClient();
   try {
-    // Get full pick details to check rules and get necessary IDs
     const { data: pick, error: pickError } = await supabase
       .from("team_draft_picks")
       .select("id, team_id, card_id, card_pool_id, acquisition_method, acquired_at, draft_session_id")
@@ -241,7 +240,6 @@ export async function removeDraftPick(pickId: string): Promise<{ success: boolea
     const authCheck = await verifyTeamMembership(pick.team_id, supabase);
     if (!authCheck.authorized) return { success: false, error: authCheck.error };
 
-    // Enforce the 7-day cutting rule for wire acquisitions
     if (pick.acquisition_method === 'wire') {
       const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
       if (pick.acquired_at && new Date(pick.acquired_at) > oneWeekAgo) {
@@ -249,25 +247,33 @@ export async function removeDraftPick(pickId: string): Promise<{ success: boolea
       }
     }
 
-    // Add an entry to the ownership history ledger for the season
+    // --- NEW LOGIC: ADD TO OWNERSHIP HISTORY ---
     if (pick.draft_session_id) {
-        const { data: session } = await supabase.from('draft_sessions').select('season_id').eq('id', pick.draft_session_id).single();
-        if (session?.season_id) {
-            
-            // --- THIS IS THE FIX ---
-            // The column names for the onConflict clause must be in a single string.
-            const { error: historyError } = await supabase.from('card_ownership_history').insert({
-                card_id: pick.card_id,
-                team_id: pick.team_id,
-                season_id: session.season_id,
-            }).onConflict('card_id,team_id,season_id').ignore(); // Correct syntax
-            // --- END OF FIX ---
-
-            if (historyError) {
-                console.error("Error inserting into card_ownership_history:", historyError);
-                // We don't block the cut, but we log the error.
+      const { data: session } = await supabase.from('draft_sessions').select('season_id').eq('id', pick.draft_session_id).single();
+      if (session?.season_id) {
+        
+        // --- THIS IS THE CORRECT FIX ---
+        // Use .upsert() with the onConflict option, not .insert().onConflict()
+        const { error: historyError } = await supabase
+          .from('card_ownership_history')
+          .upsert(
+            {
+              card_id: pick.card_id,
+              team_id: pick.team_id,
+              season_id: session.season_id,
+            },
+            {
+              onConflict: 'card_id,team_id,season_id', // The unique constraint columns
+              ignoreDuplicates: true, // This performs the "ignore" action
             }
+          );
+        // --- END OF FIX ---
+
+        if (historyError) {
+            console.error("Error upserting into card_ownership_history:", historyError);
+            // Non-fatal error, but log it. The cut can still proceed.
         }
+      }
     }
 
     // Delete the pick from the team's roster
@@ -292,8 +298,13 @@ export async function removeDraftPick(pickId: string): Promise<{ success: boolea
             return { success: false, error: "Card removed from team but failed to place on The Wire. Please contact an admin." };
         }
     }
+
     return { success: true };
-  } catch (error) { return { success: false, error: "An unexpected error occurred" }; }
+  } catch (error) { 
+    const message = error instanceof Error ? error.message : "An unexpected error occurred.";
+    console.error("Unexpected error in removeDraftPick:", message)
+    return { success: false, error: message }; 
+  }
 }
 
 export async function getTeamDecks(teamId: string): Promise<{ decks: Deck[]; error?: string }> {
