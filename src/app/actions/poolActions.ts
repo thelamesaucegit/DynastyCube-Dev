@@ -52,7 +52,7 @@ export async function getPoolCardsWithStatus(): Promise<{
   error?: string;
 }> {
   try {
-    const supabase = await createClient();
+    const supabase = await createServerClient();
 
     const { data: allCards, error: cardsError } = await supabase
       .from("card_pools")
@@ -133,7 +133,7 @@ export async function getPoolStatistics(): Promise<{
   error?: string;
 }> {
   try {
-    const supabase = await createClient();
+    const supabase = await createServerClient();
 
     const { count: totalCards, error: totalError } = await supabase
       .from("card_pools")
