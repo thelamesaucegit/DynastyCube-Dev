@@ -11,7 +11,7 @@ import { ResortCardComponent } from "@/app/components/ResortCardComponent";
 
 export default function ResortPage() {
   // CORRECTED: This call matches the pattern in TeamVoting and should now work.
-  const { user, team } = useAuth(); 
+  const { user } = useAuth(); 
   const [resortCards, setResortCards] = useState<ResortCardWithVote[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
