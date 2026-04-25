@@ -45,6 +45,9 @@ import {
   Newspaper,
   History,
   Info,
+    Cable, // Import an icon for The Wire
+  Sparkles, // Import an icon for Free Agents
+  LayoutGrid, 
 } from "lucide-react";
 import { getDraftSessions, type DraftSession } from "@/app/actions/draftSessionActions";
 
@@ -159,21 +162,49 @@ export default function Navigation() {
                     Pools
                   </NavigationMenuTrigger>
                   <NavigationMenuContent>
-                    <ul className="grid w-[200px] gap-2 p-3">
+                    {/* Updated the grid to be slightly wider to accommodate content */}
+                    <ul className="grid w-[250px] gap-2 p-3">
+                      {/* Item 1: Draft Pool */}
                       <li>
-                        <Link href="/pools" legacyBehavior passHref>
-                          <NavigationMenuLink className="block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground">
-                            <div className="text-sm font-medium leading-none">Draft Pool</div>
-                            <p className="line-clamp-2 text-xs leading-snug text-muted-foreground mt-1.5">
-                              Browse the active cube
-                            </p>
+                        <Link href="/pools/draft" legacyBehavior passHref>
+                          <NavigationMenuLink className="flex items-center gap-3 select-none rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground">
+                            <LayoutGrid className="size-4 text-muted-foreground" />
+                            <div>
+                              <div className="text-sm font-medium">Draft Pool</div>
+                              <p className="text-xs text-muted-foreground mt-1">Browse the main card pool</p>
+                            </div>
+                          </NavigationMenuLink>
+                        </Link>
+                      </li>
+                      
+                      {/* Item 2: The Wire */}
+                      <li>
+                        <Link href="/pools/wire" legacyBehavior passHref>
+                          <NavigationMenuLink className="flex items-center gap-3 select-none rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground">
+                            <Cable className="size-4 text-muted-foreground" />
+                            <div>
+                              <div className="text-sm font-medium">The Wire</div>
+                              <p className="text-xs text-muted-foreground mt-1">Place bids on dropped cards</p>
+                            </div>
+                          </NavigationMenuLink>
+                        </Link>
+                      </li>
+
+                      {/* Item 3: Free Agents */}
+                      <li>
+                        <Link href="/pools/free-agents" legacyBehavior passHref>
+                          <NavigationMenuLink className="flex items-center gap-3 select-none rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground">
+                            <Sparkles className="size-4 text-muted-foreground" />
+                            <div>
+                              <div className="text-sm font-medium">Free Agents</div>
+                              <p className="text-xs text-muted-foreground mt-1">Claim un-bid on cards</p>
+                            </div>
                           </NavigationMenuLink>
                         </Link>
                       </li>
                     </ul>
                   </NavigationMenuContent>
                 </NavigationMenuItem>
-
                 {/* Teams */}
                 <NavigationMenuItem>
                   <Link href="/teams" legacyBehavior passHref>
