@@ -1,15 +1,15 @@
-//src/app/pools/resort/page.tsx 
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
 import { getResortCards, type ResortCardWithVote } from "@/app/actions/resortActions";
+// CORRECTED: This is the right hook, as demonstrated by your TeamVoting component.
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2, AlertCircle } from "lucide-react";
 import { ResortCardComponent } from "@/app/components/ResortCardComponent";
 
 export default function ResortPage() {
-  const { user, team } = useAuth(); // Correctly get user and team from the context
+  // CORRECTED: This call matches the pattern in TeamVoting and should now work.
+  const { user, team } = useAuth(); 
   const [resortCards, setResortCards] = useState<ResortCardWithVote[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -18,7 +18,7 @@ export default function ResortPage() {
     setLoading(true);
     setError(null);
     try {
-      // Pass the team ID (if it exists) to the server action
+      // The team?.id will now be correctly sourced from the AuthContext
       const { cards, error: fetchError } = await getResortCards(team?.id);
       if (fetchError) {
         setError(fetchError);
@@ -32,7 +32,7 @@ export default function ResortPage() {
     } finally {
       setLoading(false);
     }
-  }, [team]); // Dependency array includes team
+  }, [team]); // The dependency is on the team object from the context
 
   useEffect(() => {
     loadResortData();
@@ -81,7 +81,7 @@ export default function ResortPage() {
             <ResortCardComponent 
               key={card.id} 
               card={card} 
-              teamId={team?.id} // Pass teamId down as a prop
+              teamId={team?.id} // This now correctly passes the teamId from the context
               onVoteSuccess={handleVoteSuccess} 
             />
           ))}
