@@ -1,18 +1,15 @@
-//src/app/pools/resort/page.tsx
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-// We need new actions to get the resort cards and the current season phase
 import { getResortCards, type ResortCard } from "@/app/actions/resortActions";
-// This action should be created or already exist to get the active season's phase
-import { getActiveSeason } from "@/app/actions/scheduleActions"; 
+// CORRECTED: Import the correct function from the correct file
+import { getCurrentSeason } from "@/app/actions/seasonPhaseActions"; 
 import { useAuth } from "@/contexts/AuthContext";
 import { getUserTeam } from "@/app/actions/teamActions";
 import { Loader2, AlertCircle, Info } from "lucide-react";
 import { ResortNominationCard } from "@/app/components/ResortNominationCard";
 
-// Define the Team type locally for state management within this page
+// Define the Team type locally for state management
 interface Team {
   id: string;
   name: string;
@@ -28,17 +25,17 @@ export default function ResortPage() {
   const [error, setError] = useState<string | null>(null);
 
   const loadPageData = useCallback(async () => {
-    // Don't start loading until we know who the user is
+    // Don't start loading until we know if the user is available
     if (user === undefined) return;
 
     setLoading(true);
     setError(null);
     try {
-      // Fetch all necessary data in parallel for efficiency
+      // Fetch all necessary data in parallel
       const [cardResult, seasonResult, teamResult] = await Promise.all([
         getResortCards(),
-        getActiveSeason(),
-        // Only fetch the team if there is a user email
+        // CORRECTED: Call the existing `getCurrentSeason` function
+        getCurrentSeason(),
         user?.email ? getUserTeam(user.email) : Promise.resolve({ team: null, error: undefined })
       ]);
 
@@ -54,12 +51,12 @@ export default function ResortPage() {
          console.warn("Could not determine current season phase.");
          setIsPostseason(false);
       } else {
+         // Check the 'phase' property of the returned season object
          setIsPostseason(seasonResult.season.phase === 'postseason');
       }
       
       // Handle team data
       if (teamResult.error) {
-          // This is a non-critical error; the user might just not be on a team.
           console.warn("Could not fetch user team:", teamResult.error);
       }
       setTeam(teamResult.team);
@@ -77,6 +74,19 @@ export default function ResortPage() {
     loadPageData();
   }, [loadPageData]);
   
+  const handleVoteSuccess = () => {
+    // We don't need to reload the whole page, just the card data
+    const reloadCards = async () => {
+        const { cards, error: fetchError } = await getResortCards(team?.id);
+        if (fetchError) {
+            setError(fetchError);
+        } else {
+            setResortCards(cards);
+        }
+    };
+    reloadCards();
+  };
+
   if (loading) {
     return (
         <div className="container mx-auto px-4 py-8 text-center">
@@ -101,9 +111,8 @@ export default function ResortPage() {
       <div className="mb-8">
         <h1 className="text-4xl font-bold tracking-tight mb-2">The Resort Pool</h1>
         <p className="text-muted-foreground text-lg">
-          Nominate a card for your Team&apos;s Off-Season vote.
+          Nominate a card for your team's off-season vote.
         </p>
-        {/* Banner to inform users about the nomination status */}
         {!isPostseason ? (
             <div className="mt-4 p-3 bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-600 rounded-lg text-sm text-yellow-800 dark:text-yellow-200 flex items-center gap-3">
                 <Info className="h-5 w-5" />
