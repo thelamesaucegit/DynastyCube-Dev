@@ -25,6 +25,8 @@ export interface DraftPick {
   pick_number?: number;
   cubecobra_elo?: number;
   rating_updated_at?: string;
+  acquisition_method?: 'draft' | 'wire' | 'free_agent' | 'trade' | 'skipped';
+  acquired_at?: string;
 }
 
 export interface Deck {
@@ -151,6 +153,12 @@ export async function addDraftPick(pick: DraftPick): Promise<{ success: boolean;
       cmc: pick.cmc,
       pick_number: pick.pick_number,
       drafted_by: authCheck.userId,
+         // Pass through the acquisition method from the component
+      // Default to 'draft' if not provided, for backward compatibility.
+      acquisition_method: pick.acquisition_method || 'draft',
+      
+      // Set the acquisition time to now. The old 'drafted_at' becomes redundant.
+      acquired_at: new Date().toISOString(), 
     });
     if (error) {
       console.error("Error adding draft pick:", error);
