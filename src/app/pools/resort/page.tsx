@@ -101,7 +101,7 @@ export default function ResortPage() {
       <div className="mb-8">
         <h1 className="text-4xl font-bold tracking-tight mb-2">The Resort Pool</h1>
         <p className="text-muted-foreground text-lg">
-          Nominate a card for your team's off-season vote.
+          Nominate a card for your Team&apos;s Off-Season vote.
         </p>
         {/* Banner to inform users about the nomination status */}
         {!isPostseason ? (
