@@ -1,15 +1,16 @@
-//src/app/pools/resort/page.tsx
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { getResortCards, type ResortCardWithVote } from "@/app/actions/resortActions";
-import { getUserTeam } from "@/app/actions/teamActions"; 
+// We need new actions to get the resort cards and the current season phase
+import { getResortCards, type ResortCard } from "@/app/actions/resortActions";
+// This action should be created or already exist to get the active season's phase
+import { getActiveSeason } from "@/app/actions/scheduleActions"; 
 import { useAuth } from "@/contexts/AuthContext";
-import { Loader2, AlertCircle } from "lucide-react";
-import { ResortCardComponent } from "@/app/components/ResortCardComponent";
+import { getUserTeam } from "@/app/actions/teamActions";
+import { Loader2, AlertCircle, Info } from "lucide-react";
+import { ResortNominationCard } from "@/app/components/ResortNominationCard";
 
-// Define the Team type locally for state management
+// Define the Team type locally for state management within this page
 interface Team {
   id: string;
   name: string;
@@ -19,47 +20,48 @@ interface Team {
 export default function ResortPage() {
   const { user } = useAuth();
   const [team, setTeam] = useState<Team | null>(null);
-  const [resortCards, setResortCards] = useState<ResortCardWithVote[]>([]);
+  const [resortCards, setResortCards] = useState<ResortCard[]>([]);
+  const [isPostseason, setIsPostseason] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // This effect fetches the user's team data once the user object is available.
-  useEffect(() => {
-    // CORRECTED: Capture the email in a constant.
-    const userEmail = user?.email;
+  const loadPageData = useCallback(async () => {
+    // Don't start loading until we know who the user is
+    if (user === undefined) return;
 
-    // Check the constant. This makes the type guard explicit.
-    if (userEmail) {
-      const fetchUserTeam = async () => {
-        try {
-          // Now we pass the constant 'userEmail', which is guaranteed to be a string.
-          const { team: userTeam, error: teamError } = await getUserTeam(userEmail);
-          if (teamError) {
-            setError(teamError);
-          }
-          setTeam(userTeam);
-        } catch (err) {
-            const message = err instanceof Error ? err.message : "Failed to fetch team data.";
-            setError(message);
-        }
-      };
-      fetchUserTeam();
-    } else {
-      // If there's no user, there's no team.
-      setTeam(null);
-    }
-  }, [user]); // This effect correctly depends on the user object.
-
-  const loadResortData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const { cards, error: fetchError } = await getResortCards(team?.id);
-      if (fetchError) {
-        setError(fetchError);
+      // Fetch all necessary data in parallel for efficiency
+      const [cardResult, seasonResult, teamResult] = await Promise.all([
+        getResortCards(),
+        getActiveSeason(),
+        // Only fetch the team if there is a user email
+        user?.email ? getUserTeam(user.email) : Promise.resolve({ team: null, error: undefined })
+      ]);
+
+      // Handle card data
+      if (cardResult.error) {
+        setError(cardResult.error);
       } else {
-        setResortCards(cards);
+        setResortCards(cardResult.cards);
       }
+
+      // Handle season data
+      if (seasonResult.error || !seasonResult.season) {
+         console.warn("Could not determine current season phase.");
+         setIsPostseason(false);
+      } else {
+         setIsPostseason(seasonResult.season.phase === 'postseason');
+      }
+      
+      // Handle team data
+      if (teamResult.error) {
+          // This is a non-critical error; the user might just not be on a team.
+          console.warn("Could not fetch user team:", teamResult.error);
+      }
+      setTeam(teamResult.team);
+
     } catch (err) {
       const message = err instanceof Error ? err.message : "An unexpected error occurred.";
       setError(message);
@@ -67,38 +69,28 @@ export default function ResortPage() {
     } finally {
       setLoading(false);
     }
-  }, [team]);
+  }, [user]);
 
-  // This effect loads the main page data after the user and their team have been loaded.
   useEffect(() => {
-    // This logic ensures we don't try to load cards until we know if there is a team or not.
-    if (user) {
-        loadResortData();
-    } else if (user === null) { // Explicitly check for when auth has resolved to no user
-        setLoading(false);
-    }
-  }, [user, team, loadResortData]); // Depend on team state as well
-
-  const handleVoteSuccess = () => {
-    loadResortData(); 
-  };
-
+    loadPageData();
+  }, [loadPageData]);
+  
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8 text-center">
-        <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
-        <p className="mt-4 text-muted-foreground">Loading The Resort Pool...</p>
-      </div>
+        <div className="container mx-auto px-4 py-8 text-center">
+            <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
+            <p className="mt-4 text-muted-foreground">Loading The Resort Pool...</p>
+        </div>
     );
   }
-
+  
   if (error) {
     return (
-      <div className="container mx-auto px-4 py-8 text-center">
-        <AlertCircle className="h-10 w-10 text-destructive mx-auto" />
-        <p className="mt-4 font-bold text-destructive">Error Loading The Resort Pool</p>
-        <p className="text-muted-foreground">{error}</p>
-      </div>
+        <div className="container mx-auto px-4 py-8 text-center">
+            <AlertCircle className="h-10 w-10 text-destructive mx-auto" />
+            <p className="mt-4 font-bold text-destructive">Error Loading The Resort Pool</p>
+            <p className="text-muted-foreground">{error}</p>
+        </div>
     );
   }
 
@@ -107,8 +99,20 @@ export default function ResortPage() {
       <div className="mb-8">
         <h1 className="text-4xl font-bold tracking-tight mb-2">The Resort Pool</h1>
         <p className="text-muted-foreground text-lg">
-          During the Post-Season, each team may cast one vote for a card to be added to The Chamber.
+          Nominate a card for your team's off-season vote.
         </p>
+        {/* Banner to inform users about the nomination status */}
+        {!isPostseason ? (
+            <div className="mt-4 p-3 bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-600 rounded-lg text-sm text-yellow-800 dark:text-yellow-200 flex items-center gap-3">
+                <Info className="h-5 w-5" />
+                <span>Nominations are only open during the Post-Season.</span>
+            </div>
+        ) : (
+             <div className="mt-4 p-3 bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-600 rounded-lg text-sm text-green-800 dark:text-green-200 flex items-center gap-3">
+                <Info className="h-5 w-5" />
+                <span>Nominations are currently open! Nominated cards will appear as voting options on your Team Page.</span>
+            </div>
+        )}
       </div>
 
       {resortCards.length === 0 ? (
@@ -119,11 +123,11 @@ export default function ResortPage() {
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           {resortCards.map((card) => (
-            <ResortCardComponent 
+            <ResortNominationCard 
               key={card.id} 
               card={card} 
               teamId={team?.id}
-              onVoteSuccess={handleVoteSuccess} 
+              isPostseason={isPostseason}
             />
           ))}
         </div>
