@@ -46,6 +46,7 @@ import {
   LayoutGrid,
   Cable,
   Sparkles,
+  Palmtree, // 1. Icon imported
 } from "lucide-react";
 import { getDraftSessions, type DraftSession } from "@/app/actions/draftSessionActions";
 
@@ -111,7 +112,6 @@ export default function Navigation() {
               Dynasty Cube
             </span>
           </Link>
-
           {/* Desktop Nav */}
           <nav className="hidden md:flex items-center gap-1">
             <NavigationMenu>
@@ -125,7 +125,6 @@ export default function Navigation() {
                     </NavigationMenuLink>
                   </Link>
                 </NavigationMenuItem>
-
                 {/* Drafts Dropdown */}
                 <NavigationMenuItem>
                   <DropdownMenu>
@@ -160,6 +159,12 @@ export default function Navigation() {
                           <LayoutGrid className="size-4" /> Draft Pool
                         </Link>
                       </DropdownMenuItem>
+                      {/* 2. Added Resort Pool link to desktop menu */}
+                      <DropdownMenuItem asChild>
+                        <Link href="/pools/resort" className="flex items-center gap-2">
+                          <Palmtree className="size-4" /> The Resort Pool
+                        </Link>
+                      </DropdownMenuItem>
                       <DropdownMenuItem asChild>
                         <Link href="/pools/wire" className="flex items-center gap-2">
                           <Cable className="size-4" /> The Wire
@@ -173,7 +178,6 @@ export default function Navigation() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </NavigationMenuItem>
-
                 {/* Teams Link */}
                 <NavigationMenuItem>
                   <Link href="/teams" legacyBehavior passHref>
@@ -184,7 +188,6 @@ export default function Navigation() {
                     </NavigationMenuLink>
                   </Link>
                 </NavigationMenuItem>
-
                 {/* Matches Link */}
                 <NavigationMenuItem>
                   <Link href="/schedule" legacyBehavior passHref>
@@ -205,7 +208,6 @@ export default function Navigation() {
                     </Link>
                   </NavigationMenuItem>
                 )}
-
                 {/* Info Dropdown */}
                 <NavigationMenuItem>
                   <DropdownMenu>
@@ -220,7 +222,6 @@ export default function Navigation() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </NavigationMenuItem>
-
                 {user && isAdmin && (
                   <NavigationMenuItem>
                     <Link href="/admin" legacyBehavior passHref>
@@ -286,7 +287,6 @@ export default function Navigation() {
               <Link href="/auth/login">Sign In</Link>
             </Button>
           )}
-
           {/* Mobile menu */}
           <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
             <SheetTrigger asChild className="md:hidden">
@@ -319,13 +319,16 @@ export default function Navigation() {
                 <Link href="/pools/draft" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/draft") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
                   Draft Pool
                 </Link>
+                 {/* 3. Added Resort Pool link to mobile menu */}
+                <Link href="/pools/resort" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/resort") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
+                  The Resort Pool
+                </Link>
                 <Link href="/pools/wire" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/wire") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
                   The Wire
                 </Link>
                 <Link href="/pools/free-agents" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/free-agents") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
                   Free Agents
                 </Link>
-
                 <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                   League
                 </div>
@@ -356,7 +359,6 @@ export default function Navigation() {
                 <Link href="/glossary" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/glossary") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
                   Glossary
                 </Link>
-
                 {user && isAdmin && (
                   <>
                     <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
