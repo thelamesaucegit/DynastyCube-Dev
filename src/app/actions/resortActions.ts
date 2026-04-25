@@ -1,5 +1,3 @@
-//src/app/actions/resortActions.ts
-
 "use server";
 
 import { createServerClient } from "@/lib/supabase";
@@ -57,10 +55,7 @@ export async function castResortVote(teamId: string, resortCardId: string): Prom
     try {
         const { error } = await supabase
             .from("resort_pool_votes")
-            .upsert(
-                { team_id: teamId, resort_card_id: resortCardId },
-                { onConflict: 'team_id' }
-            );
+            .upsert({ team_id: teamId, resort_card_id: resortCardId }, { onConflict: 'team_id' });
 
         if (error) throw error;
         
