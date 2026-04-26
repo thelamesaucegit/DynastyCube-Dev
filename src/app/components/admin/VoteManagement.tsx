@@ -332,7 +332,7 @@ export function VoteManagement() {
                   <input type="checkbox" checked={formData.activateOnChampionship} onChange={(e) => setFormData({ ...formData, activateOnChampionship: e.target.checked })} className="w-4 h-4 text-blue-600" />
                   <div>
                     <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">Activate when Championship begins</span>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">The poll will be created as "Inactive" and will be automatically activated when the championship match starts.</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">The poll will be created as Inactive and will be automatically activated when the Championship match starts.</p>
                   </div>
                 </label>
               <label className="flex items-center gap-2">
