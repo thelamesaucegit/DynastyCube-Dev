@@ -401,6 +401,8 @@ export async function createPoll(
   options: string[],
   createdBy: string,
   voteType: VoteType = "individual"
+    triggerEvent?: 'championship_match_start' | null 
+
 ) {
   try {
     const supabase = await createServerClient();
@@ -419,6 +421,9 @@ export async function createPoll(
     }
 
     // Create poll
+     const isActive = !triggerEvent;
+
+    // Create poll
     const { data: poll, error: pollError } = await supabase
       .from("polls")
       .insert({
@@ -429,7 +434,8 @@ export async function createPoll(
         show_results_before_end: showResultsBeforeEnd,
         vote_type: voteType,
         created_by: createdBy,
-        is_active: true,
+        is_active: isActive, // Use the new isActive logic
+        trigger_event: triggerEvent, // Save the trigger event
       })
       .select()
       .single();
