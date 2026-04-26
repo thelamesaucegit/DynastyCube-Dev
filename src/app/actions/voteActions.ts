@@ -400,9 +400,9 @@ export async function createPoll(
   showResultsBeforeEnd: boolean,
   options: string[],
   createdBy: string,
-  voteType: VoteType = "individual"
-    triggerEvent?: 'championship_match_start' | null 
-
+  voteType: VoteType = "individual",
+  // CORRECTED: Added a comma after the 'voteType' parameter
+  triggerEvent?: 'championship_match_start' | null 
 ) {
   try {
     const supabase = await createServerClient();

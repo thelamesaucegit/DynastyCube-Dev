@@ -33,6 +33,13 @@ export interface Season {
   created_at: string;
   updated_at: string;
 }
+export interface SeasonScheduleParams {
+  draft_start_date: string; // ISO String
+  draft_duration_days: number;
+  pre_season_duration_days: number;
+  regular_season_weeks: number;
+  // Post-season duration is fixed (e.g., ~2 weeks for playoffs + off-season votes)
+}
 
 export interface TeamBalance {
   id: string;
@@ -131,49 +138,95 @@ export async function getActiveSeason(): Promise<{ season: Season | null; error?
   }
 }
 
-/**
- * Create a new season
- */
-export async function createSeason(
+export async function createSeasonWithSchedule(
   seasonNumber: number,
   seasonName: string,
-  cubucksAllocation: number
+  cubucksAllocation: number,
+  scheduleParams: SeasonScheduleParams
 ): Promise<{ success: boolean; seasonId?: string; error?: string }> {
   try {
     const supabase = await createServerClient();
-
-    // Check authentication
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return { success: false, error: "Not authenticated" };
     }
+    
+    // --- Date Calculation Logic ---
+    const startDate = new Date(scheduleParams.draft_start_date);
+    
+    // DRAFT
+    const draftStart = new Date(startDate);
+    const draftEnd = new Date(draftStart);
+    draftEnd.setDate(draftStart.getDate() + scheduleParams.draft_duration_days);
 
-    const { data, error } = await supabase
+    // PRE-SEASON
+    const preSeasonStart = new Date(draftEnd);
+    const preSeasonEnd = new Date(preSeasonStart);
+    preSeasonEnd.setDate(preSeasonStart.getDate() + scheduleParams.pre_season_duration_days);
+    
+    // REGULAR SEASON
+    const regularSeasonStart = new Date(preSeasonEnd);
+    const regularSeasonEnd = new Date(regularSeasonStart);
+    regularSeasonEnd.setDate(regularSeasonStart.getDate() + scheduleParams.regular_season_weeks * 7);
+
+    // POST-SEASON (Playoffs + Off-Season Activities) - Let's allocate a fixed 2 weeks for now.
+    const postSeasonStart = new Date(regularSeasonEnd);
+    const postSeasonEnd = new Date(postSeasonStart);
+    postSeasonEnd.setDate(postSeasonStart.getDate() + 14);
+
+    // The 'preseason' phase for the *next* season begins immediately after this one's post-season ends.
+    // The main 'seasons' table row will span the entire duration.
+    const overallSeasonEndDate = postSeasonEnd;
+
+    // --- Database Transaction ---
+    // 1. Create the main season entry
+    const { data: seasonData, error: seasonError } = await supabase
       .from("seasons")
       .insert({
         season_number: seasonNumber,
         season_name: seasonName,
-        start_date: new Date().toISOString(),
+        start_date: draftStart.toISOString(),
+        end_date: overallSeasonEndDate.toISOString(), // The overall end date
         cubucks_allocation: cubucksAllocation,
-        is_active: false, // Don't auto-activate
+        is_active: false,
+        phase: 'preseason' // A new season always logically starts in its own pre-season (the off-season before it)
       })
       .select()
       .single();
 
-    if (error) {
-      console.error("Error creating season:", error);
-      return { success: false, error: error.message };
+    if (seasonError) throw seasonError;
+
+    // 2. Create the detailed schedule entries for the Master Clock to use
+    const scheduleToInsert = [
+      { season_id: seasonData.id, phase: 'draft', start_date: draftStart.toISOString(), end_date: draftEnd.toISOString() },
+      { season_id: seasonData.id, phase: 'season', start_date: preSeasonEnd.toISOString(), end_date: regularSeasonEnd.toISOString() }, // Note: 'season' phase is the regular season
+      { season_id: seasonData.id, phase: 'playoffs', start_date: regularSeasonEnd.toISOString(), end_date: postSeasonStart.toISOString() }, // Playoffs are part of post-season
+      { season_id: seasonData.id, phase: 'postseason', start_date: postSeasonStart.toISOString(), end_date: postSeasonEnd.toISOString() }
+    ];
+
+    // The pre-season phase is the time between the previous season ending and this draft starting.
+    // This logic assumes a previous season exists to calculate from, which is complex.
+    // For now, we will manually manage the "Pre-Season" phase time via admin controls.
+    // We will only schedule draft, season, and post-season.
+    
+    const { error: scheduleError } = await supabase
+      .from("season_schedule")
+      .insert(scheduleToInsert.filter(p => p.phase !== 'preseason'));
+
+    if (scheduleError) {
+      // If schedule fails, roll back the season creation for data integrity
+      await supabase.from("seasons").delete().eq("id", seasonData.id);
+      throw scheduleError;
     }
 
-    return { success: true, seasonId: data.id };
+    return { success: true, seasonId: seasonData.id };
+
   } catch (error) {
-    console.error("Unexpected error creating season:", error);
-    return { success: false, error: String(error) };
+    const message = error instanceof Error ? error.message : "An unknown error occurred";
+    console.error("Error creating season with schedule:", message);
+    return { success: false, error: message };
   }
 }
-
 /**
  * Activate a season (deactivates others)
  */
