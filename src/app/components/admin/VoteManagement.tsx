@@ -55,33 +55,30 @@ export function VoteManagement() {
     }
   };
 
-  const handleCreatePoll = async () => {
+const handleCreatePoll = async () => {
     if (!user) return;
-
-    // Validate
+    
     if (!formData.title.trim()) {
       alert("❌ Title is required");
       return;
     }
-
     if (!formData.endsAt) {
       alert("❌ End date is required");
       return;
     }
-
     const validOptions = formData.options.filter((opt) => opt.trim().length > 0);
     if (validOptions.length < 2) {
       alert("❌ At least 2 options are required");
       return;
     }
 
-     const result = await createPoll(
+    const result = await createPoll(
       formData.title,
       formData.description || null,
       formData.endsAt,
       formData.allowMultipleVotes,
       formData.showResultsBeforeEnd,
-      formData.options.filter((opt) => opt.trim()),
+      validOptions,
       user.id,
       formData.voteType,
       formData.activateOnChampionship ? 'championship_match_start' : null
@@ -90,6 +87,7 @@ export function VoteManagement() {
     if (result.success) {
       alert("✅ " + result.message);
       setShowCreateForm(false);
+      // CORRECTED: The missing property is now included in the reset object.
       setFormData({
         title: "",
         description: "",
@@ -98,10 +96,11 @@ export function VoteManagement() {
         showResultsBeforeEnd: true,
         voteType: "individual",
         options: ["", ""],
+        activateOnChampionship: false, // This was the missing piece
       });
       loadPolls();
     } else {
-      alert("❌ " + result.error);
+      alert("❌ " + (result.error || "An unknown error occurred."));
     }
   };
 
