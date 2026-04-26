@@ -13,6 +13,7 @@ import {
   initializeSeasonCosts,
   type CardCostChange,
 } from "@/app/actions/seasonActions";
+import { getSeasons, createSeasonWithSchedule, activateSeason, type Season, type SeasonScheduleParams } from "@/app/actions/cubucksActions";
 import { SeasonPhaseManager } from "./SeasonPhaseManager";
 import { WeekCreator } from "./WeekCreator";
 import { MatchScheduler } from "./MatchScheduler";
@@ -25,17 +26,22 @@ export const SeasonManagement: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<SeasonSubTab>("management");
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(
-    null
-  );
-
-  // New season form
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  
+  // MODIFIED: Expanded state for the new Season Planner form
+  const [showPlanner, setShowPlanner] = useState(false);
   const [newSeasonNumber, setNewSeasonNumber] = useState("");
   const [newSeasonName, setNewSeasonName] = useState("");
   const [cubucksAllocation, setCubucksAllocation] = useState("1000");
+  const [scheduleParams, setScheduleParams] = useState<SeasonScheduleParams>({
+      draft_start_date: '',
+      draft_duration_days: 7,
+      pre_season_duration_days: 10,
+      regular_season_weeks: 6,
+  });
   const [creating, setCreating] = useState(false);
 
-  // Rollover state
+  // Rollover state remains the same
   const [rollingOver, setRollingOver] = useState(false);
   const [rolloverChanges, setRolloverChanges] = useState<CardCostChange[]>([]);
   const [showRolloverDetails, setShowRolloverDetails] = useState(false);
@@ -60,19 +66,20 @@ export const SeasonManagement: React.FC = () => {
     const seasonNum = parseInt(newSeasonNumber);
     const allocation = parseInt(cubucksAllocation);
 
-    if (isNaN(seasonNum) || !newSeasonName || isNaN(allocation)) {
-      setMessage({ type: "error", text: "Please fill in all fields correctly" });
+    if (isNaN(seasonNum) || !newSeasonName || isNaN(allocation) || !scheduleParams.draft_start_date) {
+      setMessage({ type: "error", text: "Please fill in all Season Planner fields correctly." });
       return;
     }
 
     setCreating(true);
     try {
-      const result = await createSeason(seasonNum, newSeasonName, allocation);
+      const result = await createSeasonWithSchedule(seasonNum, newSeasonName, allocation, scheduleParams);
       if (result.success) {
-        setMessage({ type: "success", text: `Season ${seasonNum} created successfully!` });
-        setNewSeasonNumber("");
-        setNewSeasonName("");
-        setCubucksAllocation("1000");
+        setMessage({ type: "success", text: `Season ${seasonNum} and its schedule have been created successfully!` });
+        setShowPlanner(false); // Hide planner on success
+        // Reset form
+        setNewSeasonNumber(""); setNewSeasonName(""); setCubucksAllocation("1000");
+        setScheduleParams({ draft_start_date: '', draft_duration_days: 7, pre_season_duration_days: 10, regular_season_weeks: 6 });
         loadSeasons();
       } else {
         setMessage({ type: "error", text: result.error || "Failed to create season" });
@@ -403,34 +410,62 @@ export const SeasonManagement: React.FC = () => {
             )}
   
             {/* Create New Season */}
-            <div className="mb-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                Create New Season
-              </h3>
-              <div className="grid md:grid-cols-3 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Season Number
-                  </label>
-                  <input
-                    type="number"
-                    value={newSeasonNumber}
-                    onChange={(e) => setNewSeasonNumber(e.target.value)}
-                    placeholder="2"
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Season Name
-                  </label>
-                  <input
-                    type="text"
-                    value={newSeasonName}
-                    onChange={(e) => setNewSeasonName(e.target.value)}
-                    placeholder="Season 2"
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                  />
+           <div className="mb-6">
+                    {!showPlanner ? (
+                         <button onClick={() => setShowPlanner(true)} className="w-full admin-btn admin-btn-primary py-4 text-base">
+                           + Plan New Season
+                         </button>
+                    ) : (
+                        <div className="bg-white dark:bg-gray-800 border-2 border-blue-400 rounded-lg p-6 shadow-lg">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">New Season Planner</h3>
+                                <button onClick={() => setShowPlanner(false)} className="text-gray-500 hover:text-gray-700">&times;</button>
+                            </div>
+
+                            {/* --- Season Details --- */}
+                            <div className="grid md:grid-cols-3 gap-4 mb-6">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Season Number</label>
+                                    <input type="number" value={newSeasonNumber} onChange={(e) => setNewSeasonNumber(e.target.value)} placeholder="e.g., 2" className="w-full px-4 py-2 border rounded-lg" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Season Name</label>
+                                    <input type="text" value={newSeasonName} onChange={(e) => setNewSeasonName(e.target.value)} placeholder="e.g., Season Two" className="w-full px-4 py-2 border rounded-lg" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cubucks Allocation</label>
+                                    <input type="number" value={cubucksAllocation} onChange={(e) => setCubucksAllocation(e.target.value)} placeholder="1000" className="w-full px-4 py-2 border rounded-lg" />
+                                </div>
+                            </div>
+                            
+                            {/* --- Schedule Parameters --- */}
+                            <div className="border-t pt-6">
+                                <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-4">Scheduling</h4>
+                                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Draft Start Date</label>
+                                        <input type="date" value={scheduleParams.draft_start_date} onChange={(e) => setScheduleParams(p => ({ ...p, draft_start_date: e.target.value }))} className="w-full px-4 py-2 border rounded-lg" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Draft Duration (Days)</label>
+                                        <input type="number" value={scheduleParams.draft_duration_days} onChange={(e) => setScheduleParams(p => ({ ...p, draft_duration_days: parseInt(e.target.value) || 0 }))} className="w-full px-4 py-2 border rounded-lg" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Pre-Season (Days)</label>
+                                        <input type="number" value={scheduleParams.pre_season_duration_days} onChange={(e) => setScheduleParams(p => ({ ...p, pre_season_duration_days: parseInt(e.target.value) || 0 }))} className="w-full px-4 py-2 border rounded-lg" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Regular Season (Weeks)</label>
+                                        <input type="number" value={scheduleParams.regular_season_weeks} onChange={(e) => setScheduleParams(p => ({ ...p, regular_season_weeks: parseInt(e.target.value) || 0 }))} className="w-full px-4 py-2 border rounded-lg" />
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <button onClick={handleCreateSeason} disabled={creating} className="admin-btn admin-btn-primary w-full mt-4">
+                                {creating ? "Creating Season..." : "Create & Schedule Season"}
+                            </button>
+                        </div>
+                    )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
