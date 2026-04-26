@@ -33,6 +33,8 @@ export function VoteManagement() {
     showResultsBeforeEnd: true,
     voteType: "individual" as VoteType,
     options: ["", ""],
+        activateOnChampionship: false, 
+
   });
 
   useEffect(() => {
@@ -73,15 +75,16 @@ export function VoteManagement() {
       return;
     }
 
-    const result = await createPoll(
+     const result = await createPoll(
       formData.title,
       formData.description || null,
       formData.endsAt,
       formData.allowMultipleVotes,
       formData.showResultsBeforeEnd,
-      validOptions,
+      formData.options.filter((opt) => opt.trim()),
       user.id,
-      formData.voteType
+      formData.voteType,
+      formData.activateOnChampionship ? 'championship_match_start' : null
     );
 
     if (result.success) {
@@ -325,7 +328,13 @@ export function VoteManagement() {
                   Allow multiple selections
                 </span>
               </label>
-
+ <label className="flex items-center gap-3 cursor-pointer pt-3 border-t border-gray-200 dark:border-gray-600">
+                  <input type="checkbox" checked={formData.activateOnChampionship} onChange={(e) => setFormData({ ...formData, activateOnChampionship: e.target.checked })} className="w-4 h-4 text-blue-600" />
+                  <div>
+                    <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">Activate when Championship begins</span>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">The poll will be created as "Inactive" and will be automatically activated when the championship match starts.</p>
+                  </div>
+                </label>
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
