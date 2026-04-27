@@ -5,6 +5,34 @@
 import { createServerClient } from "@/lib/supabase";
 import { PoolTableName } from "./cardActions"; // Import the shared type
 
+type BasePoolCard = {
+    id: string;
+    card_id: string;
+    card_name: string;
+    card_set: string | null;
+    card_type: string | null;
+    rarity: string | null;
+    colors: string[] | null;
+    image_url: string | null;
+    oldest_image_url: string | null;
+    mana_cost: string | null;
+    cmc: number | null;
+    cubucks_cost: number | null;
+    cubecobra_elo: number | null;
+};
+
+// This type extends the base card with the specific relational data we get when querying 'card_pools'
+type CardWithDraftInfo = BasePoolCard & {
+  team_draft_picks: {
+        drafted_at: string | null;
+        teams: {
+            id: string;
+            name: string;
+            emoji: string;
+        } | null;
+    }[] | null;
+};
+
 
 type CardWithDraftInfo = {
     id: string;
@@ -58,10 +86,7 @@ export async function getCardsForPool(poolName: PoolTableName): Promise<{ cards:
   const supabase = await createServerClient();
   try {
     let query;
-    // --- THIS IS THE KEY CHANGE ---
-    // We build the query based on the table name.
     if (poolName === 'card_pools') {
-      // For the main draft pool, we need draft pick information.
       query = supabase
         .from('card_pools')
         .select(`
@@ -73,10 +98,8 @@ export async function getCardsForPool(poolName: PoolTableName): Promise<{ cards:
         `)
         .order('card_name', { ascending: true });
     } else {
-      // For other pools like 'the_chamber', we don't need draft info.
-      // This assumes 'resort_pool' also doesn't have draft info.
       query = supabase
-        .from(poolName) // Dynamically select the table
+        .from(poolName)
         .select('*')
         .order('card_name', { ascending: true });
     }
@@ -88,10 +111,13 @@ export async function getCardsForPool(poolName: PoolTableName): Promise<{ cards:
       return { cards: [], error: error.message };
     }
     
-    // --- MAPPING LOGIC IS NOW CONDITIONAL ---
-    const cards: PoolCard[] = (data || []).map((card: any) => { // Using 'any' as the shape differs
-      const isDraftPool = 'team_draft_picks' in card;
-      const pick = isDraftPool && Array.isArray(card.team_draft_picks) ? card.team_draft_picks[0] : null;
+    // --- THIS IS THE FIX: Define a union type for the map function ---
+    // This tells TypeScript the 'card' can be one of two shapes, eliminating the need for 'any'.
+    const cards: PoolCard[] = (data || []).map((card: CardWithDraftInfo | BasePoolCard) => {
+      // Use a type guard to check if the draft info exists.
+      const isDraftableCard = 'team_draft_picks' in card;
+      
+      const pick = isDraftableCard && Array.isArray(card.team_draft_picks) ? card.team_draft_picks[0] : null;
       const team = pick?.teams;
 
       return {
@@ -108,7 +134,7 @@ export async function getCardsForPool(poolName: PoolTableName): Promise<{ cards:
           cmc: card.cmc ?? undefined,
           cubucks_cost: card.cubucks_cost ?? undefined,
           cubecobra_elo: card.cubecobra_elo ?? undefined,
-          is_drafted: !!pick,
+          is_drafted: !!pick, // Will be false if 'pick' is null
           drafted_by_team: team && team.id ? { id: team.id, name: team.name, emoji: team.emoji } : undefined,
           drafted_at: pick?.drafted_at ?? undefined,
       };
