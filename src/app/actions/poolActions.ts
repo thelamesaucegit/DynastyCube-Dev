@@ -34,30 +34,7 @@ type CardWithDraftInfo = BasePoolCard & {
 };
 
 
-type CardWithDraftInfo = {
-    id: string;
-    card_id: string;
-    card_name: string;
-    card_set: string | null;
-    card_type: string | null;
-    rarity: string | null;
-    colors: string[] | null;
-    image_url: string | null;
-    oldest_image_url: string | null;
-    mana_cost: string | null;
-    cmc: number | null;
-    cubucks_cost: number | null;
-    cubecobra_elo: number | null;
-    was_drafted: boolean | null; 
-  team_draft_picks: {
-        drafted_at: string | null;
-        teams: {
-            id: string;
-            name: string;
-            emoji: string;
-        } | null;
-    }[] | null;
-};
+
 
 export interface PoolCard {
   id: string;
