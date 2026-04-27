@@ -7,7 +7,7 @@ import {
   getCardPool,
   addCardToPool,
   removeCardFromPool,
-  bulkImportCards,
+bulkImportAndSync,
   removeFilteredCards,
   undraftAllCards,
   clearCardPool,
@@ -72,9 +72,9 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
   const [bulkCost, setBulkCost] = useState("1");
   const [bulkImporting, setBulkImporting] = useState(false);
   const [bulkResult, setBulkResult] = useState<{
-    added: number;
-    skipped: number;
-    failed: string[];
+      added: number;
+    failed: { name: string; reason: string }[];
+    eloSyncMessage?: string;
   } | null>(null);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [poolCards, setPoolCards] = useState<PoolCard[]>([]);
@@ -248,32 +248,55 @@ const handleSearchCard = async () => {
     }
   };
 
-  const handleBulkImport = async () => {
+  const handleBulkImportAndSync = async () => {
     const lines = bulkText.split("\n").filter((l) => l.trim());
-    if (lines.length === 0) return;
-    const cost = parseInt(bulkCost);
-    if (isNaN(cost) || cost < 0) {
-      toast.error("Please enter a valid cubucks cost (0 or higher)");
+    if (lines.length === 0) {
+      toast.error("Please enter at least one card name.");
       return;
     }
-    if (!confirm(`Import ${lines.length} card(s)?`)) return;
-    
+    const cost = parseInt(bulkCost);
+    if (isNaN(cost) || cost < 0) {
+      toast.error("Please enter a valid default Cubucks cost (0 or higher).");
+      return;
+    }
+
+    if (!confirm(`This will import ${lines.length} card(s) and then trigger a CubeCobra ELO sync. Duplicates are allowed. Continue?`)) {
+      return;
+    }
+
     setBulkImporting(true);
     setBulkResult(null);
-    const result = await bulkImportCards(lines, cost, activePool);
+    setError(null);
 
-    if (result.success) {
-      setBulkResult({ added: result.added, skipped: result.skipped, failed: result.failed });
-      if (result.added > 0) toast.success(`Successfully imported ${result.added} card(s).`);
-      if (result.failed.length > 0) toast.warning(`Could not find ${result.failed.length} card(s).`);
-      if (result.skipped > 0) toast.info(`Skipped ${result.skipped} card(s) that were already in the pool.`);
-      await loadCards();
-      onUpdate?.();
-      setBulkText("");
-    } else {
-      toast.error(result.error || "Failed to import cards");
+    try {
+      const result = await bulkImportAndSync(lines, cost, activePool);
+
+      if (result.success) {
+        setBulkResult({
+          added: result.added,
+          failed: result.failed,
+          eloSyncMessage: result.eloSyncMessage,
+        });
+
+        toast.success(`Import complete! Added: ${result.added}, Failed: ${result.failed.length}.`);
+        if (result.eloSyncMessage) {
+            toast.info(result.eloSyncMessage);
+        }
+
+        await loadCards();
+        onUpdate?.();
+        setBulkText("");
+      } else {
+        setError(result.error || "An unknown error occurred during the import process.");
+        toast.error(result.error || "Failed to import and sync cards.");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(`A critical error occurred: ${message}`);
+      toast.error(`A critical error occurred: ${message}`);
+    } finally {
+      setBulkImporting(false);
     }
-    setBulkImporting(false);
   };
 
   if (loading) {
@@ -342,29 +365,45 @@ const handleSearchCard = async () => {
       </div>
 
       <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-300 dark:border-amber-700 rounded-lg p-6 mb-6">
-        <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-lg">Bulk Import & Sync</h3>
+        <p className="text-sm text-muted-foreground mb-4">
+          Paste card names (one per line) to import full card data and sync ELO ratings. Duplicates are allowed and will be added as separate entries.
+        </p>
+        <textarea
+          value={bulkText}
+          onChange={(e) => setBulkText(e.target.value)}
+          placeholder={`Sol Ring\nSol Ring\nCounterspell, 5`}
+          rows={8}
+          className="w-full p-3 border rounded-lg font-mono text-sm mb-3 bg-white dark:bg-gray-800"
+        />
+        <div className="flex flex-wrap gap-4 items-end">
           <div>
-            <h3 className="font-semibold text-lg">Bulk Import</h3>
-            <p className="text-sm text-muted-foreground">Paste card names to import many at once.</p>
+            <label className="block text-sm font-medium mb-1">Default Cubucks Cost</label>
+            <input
+              type="number"
+              value={bulkCost}
+              onChange={(e) => setBulkCost(e.target.value)}
+              min={0}
+              className="w-32 p-2 border rounded-lg bg-white dark:bg-gray-800"
+            />
           </div>
-          <button onClick={() => setShowBulkImport(!showBulkImport)} className="admin-btn admin-btn-secondary text-sm">{showBulkImport ? "Hide" : "Show"}</button>
+          <button onClick={handleBulkImportAndSync} disabled={!bulkText.trim() || bulkImporting} className="admin-btn admin-btn-primary">
+            {bulkImporting ? "Processing..." : "Run Import & Sync"}
+          </button>
         </div>
-        {showBulkImport && (
-          <div>
-            <textarea value={bulkText} onChange={(e) => setBulkText(e.target.value)} placeholder={`Lightning Bolt\nCounterspell, 5\nBrainstorm`} rows={8} className="w-full p-3 border rounded-lg font-mono text-sm mb-3" />
-            <div className="flex gap-3 items-end">
-              <div>
-                <label className="block text-sm font-medium mb-1">Default Cubucks Cost</label>
-                <input type="number" value={bulkCost} onChange={(e) => setBulkCost(e.target.value)} min={0} className="w-32 p-2 border rounded-lg" />
-              </div>
-              <button onClick={handleBulkImport} disabled={!bulkText.trim() || bulkImporting} className="admin-btn admin-btn-primary">{bulkImporting ? "Importing..." : "Import Cards"}</button>
-            </div>
-            {bulkResult && (
-              <div className="mt-4 p-4 bg-background border rounded-lg text-sm space-y-1">
-                <p className="text-green-600">Added: {bulkResult.added}</p>
-                {bulkResult.skipped > 0 && <p className="text-yellow-600">Skipped: {bulkResult.skipped}</p>}
-                {bulkResult.failed.length > 0 && <p className="text-red-600">Failed: {bulkResult.failed.length}</p>}
-              </div>
+        {bulkResult && (
+          <div className="mt-4 p-4 bg-background border rounded-lg text-sm space-y-2">
+            <h4 className="font-semibold">Import Result:</h4>
+            <p className="text-green-600">✓ Added: {bulkResult.added}</p>
+            <p className="text-red-600">✗ Failed: {bulkResult.failed.length}</p>
+            {bulkResult.failed.length > 0 && (
+                <p className="text-xs text-muted-foreground">Failed cards: {bulkResult.failed.map(f => f.name).join(", ")}</p>
+            )}
+             {bulkResult.eloSyncMessage && (
+                <div className="mt-2 pt-2 border-t">
+                    <h4 className="font-semibold">ELO Sync Result:</h4>
+                    <p className="text-blue-600">{bulkResult.eloSyncMessage}</p>
+                </div>
             )}
           </div>
         )}

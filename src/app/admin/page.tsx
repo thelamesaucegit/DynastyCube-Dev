@@ -7,7 +7,6 @@ import { AdminRoute } from "../components/admin/AdminRoute";
 import { UserManagement } from "../components/admin/UserManagement";
 import { TeamManagement } from "../components/admin/TeamManagement";
 import { CardManagement } from "../components/admin/CardManagement";
-import { CardRatingSync } from "../components/admin/CardRatingSync";
 import { CubucksManagement } from "../components/admin/CubucksManagement";
 import { SeasonManagement } from "../components/admin/SeasonManagement";
 import { TradeSettings } from "../components/admin/TradeSettings";
@@ -20,7 +19,6 @@ import { GlossaryManagement } from "../components/admin/GlossaryManagement";
 import { DraftOrderManagement } from "../components/admin/DraftOrderManagement";
 import { DraftSessionManagement } from "../components/admin/DraftSessionManagement";
 import { EssenceManagement } from "../components/admin/EssenceManagement";
-import { DataBackfillManagement } from "@/app/components/admin/DataBackfillManagement";
 import { getTeamsWithMembers } from "../actions/teamActions";
 import { getCardPool } from "../actions/cardActions";
 import { SimMatchScheduler } from "@/app/components/admin/SimMatchScheduler";
@@ -55,7 +53,7 @@ import {
   Play,
 } from "lucide-react";
 
-type TabType = "users" | "teams" | "cards" | "cubucks" | "essence" | "seasons" | "matches" | "sim-schedule" | "draft-order" | "draft-session" | "ratings" | "news" | "timers" | "reports" | "votes" | "settings" | "history" | "glossary";
+type TabType = "users" | "teams" | "cards" | "cubucks" | "essence" | "seasons" | "matches" | "sim-schedule" | "draft-order" | "draft-session" | "news" | "timers" | "reports" | "votes" | "settings" | "history" | "glossary";
 
 interface Stats {
   totalUsers: number;
@@ -116,7 +114,6 @@ export default function AdminPage() {
     { id: "matches", label: "Matches", icon: <Swords className="size-4" /> },
     { id: "draft-order", label: "Draft Order", icon: <ListOrdered className="size-4" /> },
     { id: "draft-session", label: "Draft Session", icon: <Play className="size-4" /> },
-    { id: "ratings", label: "Ratings", icon: <BarChart3 className="size-4" /> },
     { id: "news", label: "News", icon: <Megaphone className="size-4" /> },
     { id: "votes", label: "Voting", icon: <Vote className="size-4" /> },
     { id: "timers", label: "Timers", icon: <Timer className="size-4" /> },
@@ -162,8 +159,6 @@ export default function AdminPage() {
   );
       case "seasons":
         return <SeasonManagement />;
-      case "ratings":
-        return <CardRatingSync />;
       case "news":
         return <NewsManagement />;
       case "votes":
@@ -228,8 +223,7 @@ export default function AdminPage() {
               </p>
             </div>
             <div className="space-y-6">
-              {/*  Data Backfill Management */}
-              <DataBackfillManagement />
+        
               {/* Trade System Settings */}
               <TradeSettings />
               {/* Team Role Management Link */}

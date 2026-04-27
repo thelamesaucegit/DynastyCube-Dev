@@ -28,6 +28,57 @@ async function waitForRateLimit(): Promise<void> {
   lastRequestTime = Date.now();
 }
 
+export async function fetchOldestPrintings(oracleIds: string[]): Promise<Map<string, string>> {
+  if (oracleIds.length === 0) {
+    return new Map();
+  }
+  await waitForRateLimit();
+  const imageUrlMap = new Map<string, string>();
+
+  // Scryfall's `collection` endpoint can also fetch cards by oracle_id
+  const identifiers = oracleIds.map(id => ({ oracle_id: id }));
+  
+  try {
+    const url = `${SCRYFALL_API_BASE}/cards/collection`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifiers }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Scryfall API error fetching collection by oracle_id: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    const foundCards: ScryfallCard[] = result.data || [];
+
+    // Group by oracle_id to find the one with the earliest release date
+    const cardsByOracle = new Map<string, ScryfallCard[]>();
+    for (const card of foundCards) {
+        if (!cardsByOracle.has(card.oracle_id)) {
+            cardsByOracle.set(card.oracle_id, []);
+        }
+        cardsByOracle.get(card.oracle_id)!.push(card);
+    }
+    
+    for (const [oracleId, cards] of cardsByOracle.entries()) {
+        cards.sort((a, b) => new Date(a.released_at).getTime() - new Date(b.released_at).getTime());
+        const oldestCard = cards[0];
+        const imageUrl = oldestCard.image_uris?.normal || oldestCard.image_uris?.small;
+        if (imageUrl) {
+            imageUrlMap.set(oracleId, imageUrl);
+        }
+    }
+    
+    return imageUrlMap;
+
+  } catch (error) {
+    console.error("Error in fetchOldestPrintings:", error);
+    return new Map(); // Return empty map on error
+  }
+}
+
 /**
  * Scryfall Card Object (simplified)
  */
@@ -43,6 +94,7 @@ export interface ScryfallCard {
   color_identity?: string[];
   mana_cost?: string;
   cmc: number;
+  released_at: string;
   edhrec_rank?: number; // Lower is more popular
   image_uris?: {
     small: string;

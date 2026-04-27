@@ -36,7 +36,7 @@ export const SeasonManagement: React.FC = () => {
   const [showPlanner, setShowPlanner] = useState(false);
   const [newSeasonNumber, setNewSeasonNumber] = useState("");
   const [newSeasonName, setNewSeasonName] = useState("");
-  const [cubucksAllocation, setCubucksAllocation] = useState("1000");
+  const [cubucksAllocation, setCubucksAllocation] = useState("100");
   const [scheduleParams, setScheduleParams] = useState<SeasonScheduleParams>({
       draft_start_date: '',
       draft_duration_days: 7,
@@ -78,7 +78,7 @@ export const SeasonManagement: React.FC = () => {
       if (result.success) {
         setMessage({ type: "success", text: `Season ${seasonNum} and its schedule have been created successfully!` });
         setShowPlanner(false);
-        setNewSeasonNumber(""); setNewSeasonName(""); setCubucksAllocation("1000");
+        setNewSeasonNumber(""); setNewSeasonName(""); setCubucksAllocation("100");
         setScheduleParams({ draft_start_date: '', draft_duration_days: 7, pre_season_duration_days: 10, regular_season_weeks: 6, include_rivals_week: false });
         loadSeasons();
       } else {
@@ -286,7 +286,7 @@ export const SeasonManagement: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cubucks Allocation</label>
-                    <input type="number" value={cubucksAllocation} onChange={(e) => setCubucksAllocation(e.target.value)} placeholder="1000" className="w-full px-4 py-2 border rounded-lg" />
+                    <input type="number" value={cubucksAllocation} onChange={(e) => setCubucksAllocation(e.target.value)} placeholder="100" className="w-full px-4 py-2 border rounded-lg" />
                   </div>
                 </div>
 
