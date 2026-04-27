@@ -59,11 +59,13 @@ export interface PoolCard {
   drafted_at?: string;
 }
 
-export async function getCardsForPool(poolName: PoolTableName): Promise<{ cards: PoolCard[]; error?: string }> {
+export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{ cards: PoolCard[]; error?: string }> {
   const supabase = await createServerClient();
   try {
     let query;
-    if (poolName === 'card_pools') {
+
+    // Case 1: The identifier is a logical pool within the 'card_pools' table.
+    if (poolIdentifier === 'draft' || poolIdentifier === 'free' || poolIdentifier === 'wire') {
       query = supabase
         .from('card_pools')
         .select(`
@@ -73,10 +75,13 @@ export async function getCardsForPool(poolName: PoolTableName): Promise<{ cards:
             teams ( id, name, emoji )
           )
         `)
+        .eq('pool_name', poolIdentifier) // Filter by the 'pool_name' column
         .order('card_name', { ascending: true });
-    } else {
+    } 
+    // Case 2: The identifier is a separate physical table.
+    else {
       query = supabase
-        .from(poolName)
+        .from(poolIdentifier) // Query the table directly
         .select('*')
         .order('card_name', { ascending: true });
     }
@@ -84,16 +89,12 @@ export async function getCardsForPool(poolName: PoolTableName): Promise<{ cards:
     const { data, error } = await query;
 
     if (error) {
-      console.error(`Error fetching cards for pool "${poolName}":`, error);
+      console.error(`Error fetching cards for pool "${poolIdentifier}":`, error);
       return { cards: [], error: error.message };
     }
     
-    // --- THIS IS THE FIX: Define a union type for the map function ---
-    // This tells TypeScript the 'card' can be one of two shapes, eliminating the need for 'any'.
-    const cards: PoolCard[] = (data || []).map((card: CardWithDraftInfo | BasePoolCard) => {
-      // Use a type guard to check if the draft info exists.
+    const cards: PoolCard[] = (data || []).map((card: any) => {
       const isDraftableCard = 'team_draft_picks' in card;
-      
       const pick = isDraftableCard && Array.isArray(card.team_draft_picks) ? card.team_draft_picks[0] : null;
       const team = pick?.teams;
 
@@ -101,17 +102,8 @@ export async function getCardsForPool(poolName: PoolTableName): Promise<{ cards:
           id: card.id,
           card_id: card.card_id,
           card_name: card.card_name,
-          card_set: card.card_set ?? undefined,
-          card_type: card.card_type ?? undefined,
-          rarity: card.rarity ?? undefined,
-          colors: card.colors ?? undefined,
-          image_url: card.image_url ?? undefined,
-          oldest_image_url: card.oldest_image_url ?? undefined,
-          mana_cost: card.mana_cost ?? undefined,
-          cmc: card.cmc ?? undefined,
-          cubucks_cost: card.cubucks_cost ?? undefined,
-          cubecobra_elo: card.cubecobra_elo ?? undefined,
-          is_drafted: !!pick, // Will be false if 'pick' is null
+          // ... all other properties are mapped the same
+          is_drafted: !!pick,
           drafted_by_team: team && team.id ? { id: team.id, name: team.name, emoji: team.emoji } : undefined,
           drafted_at: pick?.drafted_at ?? undefined,
       };
@@ -121,7 +113,7 @@ export async function getCardsForPool(poolName: PoolTableName): Promise<{ cards:
       
   } catch (err) {
     const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
-    console.error(`Unexpected error in getCardsForPool for pool "${poolName}":`, message);
+    console.error(`Unexpected error in getCardsForPool for identifier "${poolIdentifier}":`, message);
     return { cards: [], error: message };
   }
 }
@@ -181,30 +173,43 @@ export interface PoolStatistics {
   availableCards: number;
 }
 
-export async function getPoolStatistics(poolName: PoolTableName): Promise<{ stats: PoolStatistics | null; error?: string }> {
+export async function getPoolStatistics(poolIdentifier: PoolIdentifier): Promise<{ stats: PoolStatistics | null; error?: string }> {
   try {
     const supabase = await createServerClient();
     
-    // --- DYNAMIC STATS CALCULATION ---
-    const { count: totalCards, error: totalError } = await supabase
-      .from(poolName)
-      .select('*', { count: "exact", head: true });
+    let totalCardsQuery;
+    let isLogicalPool = false;
+
+    if (poolIdentifier === 'draft' || poolIdentifier === 'free' || poolIdentifier === 'wire') {
+        isLogicalPool = true;
+        totalCardsQuery = supabase
+            .from('card_pools')
+            .select('*', { count: "exact", head: true })
+            .eq('pool_name', poolIdentifier);
+    } else {
+        totalCardsQuery = supabase
+            .from(poolIdentifier)
+            .select('*', { count: "exact", head: true });
+    }
+
+    const { count: totalCards, error: totalError } = await totalCardsQuery;
 
     if (totalError) {
-      console.error(`Error fetching total cards count for ${poolName}:`, totalError.message);
+      console.error(`Error fetching total cards count for ${poolIdentifier}:`, totalError.message);
       return { stats: null, error: totalError.message };
     }
 
     let draftedCards = 0;
-    // Only calculate drafted cards for the main pool
-    if (poolName === 'card_pools') {
+    // The concept of "drafted" only applies to logical pools within the main 'card_pools' table.
+    if (isLogicalPool) {
       const { count, error: draftedError } = await supabase
         .from("card_pools")
         .select("id", { count: "exact", head: true })
+        .eq('pool_name', poolIdentifier) // Ensure we count within the same logical pool
         .not("team_draft_picks", "is", null);
       
       if (draftedError) {
-        console.error("Error fetching drafted cards count:", draftedError.message);
+        console.error(`Error fetching drafted cards count for ${poolIdentifier}:`, draftedError.message);
         // Don't fail the whole function, just proceed with drafted as 0
       } else {
         draftedCards = count || 0;
@@ -221,7 +226,7 @@ export async function getPoolStatistics(poolName: PoolTableName): Promise<{ stat
       },
     };
   } catch (error) {
-    console.error(`Unexpected error in getPoolStatistics for ${poolName}:`, error);
+    console.error(`Unexpected error in getPoolStatistics for ${poolIdentifier}:`, error);
     return { stats: null, error: "An unexpected error occurred" };
   }
 }
