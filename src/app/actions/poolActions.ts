@@ -65,7 +65,7 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
     let query;
 
     // Case 1: The identifier is a logical pool within the 'card_pools' table.
-    if (poolIdentifier === 'draft' || poolIdentifier === 'free') {
+    if (poolIdentifier === 'draft' || poolIdentifier === 'free' || poolIdentifier === 'wire') {
       query = supabase
         .from('card_pools')
         .select(`
@@ -180,7 +180,7 @@ export async function getPoolStatistics(poolIdentifier: PoolIdentifier): Promise
     let totalCardsQuery;
     let isLogicalPool = false;
 
-    if (poolIdentifier === 'draft' || poolIdentifier === 'free') {
+    if (poolIdentifier === 'draft' || poolIdentifier === 'free' || poolIdentifier === 'wire') {
         isLogicalPool = true;
         totalCardsQuery = supabase
             .from('card_pools')
