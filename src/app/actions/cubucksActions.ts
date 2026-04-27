@@ -38,6 +38,7 @@ export interface SeasonScheduleParams {
   draft_duration_days: number;
   pre_season_duration_days: number;
   regular_season_weeks: number;
+  include_rivals_week: boolean;
   // Post-season duration is fixed (e.g., ~2 weeks for playoffs + off-season votes)
 }
 
