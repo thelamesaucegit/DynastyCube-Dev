@@ -59,10 +59,10 @@ export default function ChamberPoolsPage() {
     setCurrentPage(1);
   }, [filteredAndSortedCards]);
 
-  const loadPoolData = async () => {
+ const loadPoolData = async () => {
     setLoading(true);
     try {
-      // Fetching from "chamber" using your now-dynamic action
+      // This is correct. It passes the physical table name.
       const { cards: poolCards, error: cardsError } = await getCardsForPool("the_chamber");
       if (cardsError) {
         setError(cardsError);
