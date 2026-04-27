@@ -9,6 +9,7 @@ import { TeamManagement } from "../components/admin/TeamManagement";
 import { CardManagement } from "../components/admin/CardManagement";
 import { CubucksManagement } from "../components/admin/CubucksManagement";
 import { SeasonManagement } from "../components/admin/SeasonManagement";
+import { ChamberManagement } from "@/app/components/admin/ChamberManagement"; // Add this import
 import { TradeSettings } from "../components/admin/TradeSettings";
 import { ReportManagement } from "../components/admin/ReportManagement";
 import { NewsManagement } from "../components/admin/NewsManagement";
@@ -223,7 +224,7 @@ export default function AdminPage() {
               </p>
             </div>
             <div className="space-y-6">
-        
+        <ChamberManagement />
               {/* Trade System Settings */}
               <TradeSettings />
               {/* Team Role Management Link */}
