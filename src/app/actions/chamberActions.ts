@@ -3,7 +3,7 @@
 "use server";
 
 import { createServerClient } from "@/lib/supabase";
-import { fetchAllCards, ScryfallCard } from "@/lib/scryfall-client";
+import { fetchAllCards, searchAllCards, ScryfallCard } from "@/lib/scryfall-client";
 import { type CardData } from "./cardActions"; // We'll reuse this interface
 
 // Helper to create a Supabase client
@@ -37,7 +37,7 @@ export async function importNextSetToChamber(): Promise<{
   const supabase = await getSupabaseClient();
 
   try {
-    // 1. Find the next set to import from chamber_records
+    // 1. Find the next set to import...
     const { data: nextSet, error: fetchSetError } = await supabase
       .from("chamber_records")
       .select("*")
@@ -48,7 +48,7 @@ export async function importNextSetToChamber(): Promise<{
       .single();
 
     if (fetchSetError || !nextSet) {
-      if (fetchSetError && fetchSetError.code !== 'PGRST116') { // PGRST116 = no rows found
+      if (fetchSetError && fetchSetError.code !== 'PGRST116') {
         throw new Error(`Failed to fetch next set: ${fetchSetError.message}`);
       }
       return { success: true, message: "All available sets have been imported into The Chamber." };
@@ -56,22 +56,22 @@ export async function importNextSetToChamber(): Promise<{
 
     console.log(`Found next set to import: ${nextSet.set_name} (Code: ${nextSet.set_code})`);
 
-    // 2. Construct the Scryfall search query based on your requirements
+    // 2. Construct the Scryfall search query...
     const scryfallQuery = `(set:${nextSet.set_code}) -is:reprint -banned:vintage -oracle:banding -oracle:"bands with" -oracle:" ante"`;
     
-    // 3. Fetch all matching cards from Scryfall
-    const { cards: scryfallResults, notFound, errors: fetchErrors } = await fetchAllCards(scryfallQuery);
+    // --- THIS IS THE FIX ---
+    // 3. Fetch all matching cards using the new `searchAllCards` function.
+    const { cards: scryfallResults, errors: fetchErrors } = await searchAllCards(scryfallQuery);
 
     if (fetchErrors.length > 0) {
         console.error("Scryfall fetch errors:", fetchErrors);
     }
     
     if (scryfallResults.length === 0) {
-        // This can happen for sets with no cards matching the criteria. We should still mark it as done.
         console.warn(`No cards found for set ${nextSet.set_name} matching the criteria.`);
     }
 
-    // 4. Prepare card data for insertion, including calculated cost
+    // 4. Prepare card data for insertion...
     const cardsToInsert: Array<Omit<CardData, "id" | "created_at" | "rating_updated_at">> = scryfallResults.map(card => {
         const finalCost = calculateCubucksCost(card);
         return {
@@ -88,11 +88,11 @@ export async function importNextSetToChamber(): Promise<{
             mana_cost: card.mana_cost,
             cmc: card.cmc || 0,
             cubucks_cost: finalCost,
-            pool_name: 'chamber', // Explicitly set for this table
+            pool_name: 'chamber',
         };
     });
 
-    // 5. Insert the new cards into `the_chamber` table
+    // 5. Insert the new cards...
     if (cardsToInsert.length > 0) {
         const { error: insertError } = await supabase.from("the_chamber").insert(cardsToInsert);
         if (insertError) {
@@ -100,14 +100,13 @@ export async function importNextSetToChamber(): Promise<{
         }
     }
 
-    // 6. Update the record in `chamber_records` to mark it as complete
+    // 6. Update the record...
     const { error: updateRecordError } = await supabase
       .from("chamber_records")
-      .update({ in_chamber: true, added: true }) // Mark as both in_chamber and added
+      .update({ in_chamber: true, added: true })
       .eq("id", nextSet.id);
 
     if (updateRecordError) {
-      // This is a critical error, as it could lead to re-importing the same set.
       console.error(`CRITICAL: Failed to update chamber_records for set ${nextSet.set_code}. Manual correction needed.`);
       throw new Error(`Cards were imported, but failed to update record for ${nextSet.set_code}: ${updateRecordError.message}`);
     }

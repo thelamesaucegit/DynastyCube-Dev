@@ -28,6 +28,51 @@ async function waitForRateLimit(): Promise<void> {
   lastRequestTime = Date.now();
 }
 
+export async function searchAllCards(
+  query: string
+): Promise<{
+  cards: ScryfallCard[];
+  errors: string[];
+}> {
+  const allCards: ScryfallCard[] = [];
+  const errors: string[] = [];
+  let next_page: string | null = `${SCRYFALL_API_BASE}/cards/search?q=${encodeURIComponent(query)}`;
+
+  try {
+    while (next_page) {
+      await waitForRateLimit();
+      const response = await fetch(next_page);
+
+      if (!response.ok) {
+        const errorBody = await response.json();
+        const errorMessage = `Scryfall API error on page ${next_page}: ${response.status} - ${errorBody?.details || response.statusText}`;
+        console.error(errorMessage);
+        errors.push(errorMessage);
+        break; // Stop pagination on error
+      }
+
+      const pageData = await response.json();
+      allCards.push(...pageData.data);
+      
+      if (pageData.has_more) {
+        next_page = pageData.next_page;
+      } else {
+        next_page = null;
+      }
+    }
+  } catch (error: unknown) {
+    const message = `A critical error occurred during Scryfall search pagination for query "${query}"`;
+    if (error instanceof Error) errors.push(`${message}: ${error.message}`);
+    else errors.push(message);
+    console.error(message, error);
+  }
+
+  return {
+    cards: allCards,
+    errors,
+  };
+}
+
 export async function fetchOldestPrintings(oracleIds: string[]): Promise<Map<string, string>> {
   if (oracleIds.length === 0) {
     return new Map();
