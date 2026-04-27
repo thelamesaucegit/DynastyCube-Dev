@@ -3,6 +3,8 @@
 "use server";
 
 import { createServerClient } from "@/lib/supabase";
+import type { PoolTableName } from "./cardActions"; // Import the type
+
 
 // NEW: Helper interfaces for the S3 data structures
 interface SimpleCard {
@@ -144,48 +146,61 @@ async function updateTableCubecobraElo(
 /**
  * REPLACED: This now uses the S3 data source instead of a specific cube
  */
-export async function updateAllCubecobraElo(): Promise<{
+export async function updateAllCubecobraElo(
+  tableName?: PoolTableName
+): Promise<{
   success: boolean;
-  poolResult?: CardRatingResult;
-  draftResult?: CardRatingResult;
+  results: CardRatingResult[];
   message?: string;
 }> {
   try {
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return { success: false, message: "Not authenticated" };
+      return { success: false, results: [], message: "Not authenticated" };
     }
-
-    console.log("Starting full CubeCobra ELO update from S3 source...");
     
-    // Fetch the global ELO map once
+    console.log(`Starting CubeCobra ELO sync. Target: ${tableName || 'All Tables'}`);
+    
     const eloMap = await fetchEloMapFromS3();
-    
     if (eloMap.size === 0) {
-      return { success: false, message: "Failed to build ELO map from CubeCobra S3 data. Check server logs." };
+      return { success: false, results: [], message: "Failed to build ELO map from CubeCobra S3 data." };
     }
 
-    // Update both tables using the same ELO map
-    const poolResult = await updateTableCubecobraElo("card_pools", eloMap);
-    const draftResult = await updateTableCubecobraElo("team_draft_picks", eloMap);
+    const syncResults: CardRatingResult[] = [];
+    const tablesToSync: PoolTableName[] = tableName ? [tableName] : ["card_pools"];
 
-    const totalUpdated = (poolResult.updatedCount || 0) + (draftResult.updatedCount || 0);
-    const totalNotFound = (poolResult.notFoundCount || 0) + (draftResult.notFoundCount || 0);
-    const totalErrors = (poolResult.errorCount || 0) + (draftResult.errorCount || 0);
+    // Always sync team_draft_picks if we are doing a full sync
+    if (!tableName) {
+        // You might want to add 'the_chamber' here for a full sync in the future
+        // For now, let's keep it to card_pools and team_draft_picks for a full sync
+    }
+
+    for (const table of tablesToSync) {
+        const result = await updateTableCubecobraElo(table, eloMap);
+        syncResults.push({ ...result, message: `[${table}] ${result.message}` });
+    }
+
+    // Always sync draft picks regardless of which pool is being updated, as they are related
+    const draftResult = await updateTableCubecobraElo("team_draft_picks", eloMap);
+    syncResults.push({ ...draftResult, message: `[team_draft_picks] ${draftResult.message}` });
+
+    const totalUpdated = syncResults.reduce((sum, res) => sum + (res.updatedCount || 0), 0);
+    const totalNotFound = syncResults.reduce((sum, res) => sum + (res.notFoundCount || 0), 0);
+    const totalErrors = syncResults.reduce((sum, res) => sum + (res.errorCount || 0), 0);
 
     return {
-      success: poolResult.success && draftResult.success,
-      poolResult,
-      draftResult,
-      message: `CubeCobra ELO Sync: ${totalUpdated} updated, ${totalNotFound} not found, ${totalErrors} errors`,
+      success: syncResults.every(res => res.success),
+      results: syncResults,
+      message: `ELO Sync Complete: ${totalUpdated} updated, ${totalNotFound} not found, ${totalErrors} errors.`,
     };
+
   } catch (error) {
+    const message = error instanceof Error ? error.message : "An unknown error occurred.";
     console.error("Unexpected error in updateAllCubecobraElo:", error);
-    return { success: false, message: `Unexpected error: ${error instanceof Error ? error.message : String(error)}` };
+    return { success: false, results: [], message: `Unexpected error: ${message}` };
   }
 }
-
 // NOTE: The single-table update functions and the test function are now deprecated
 // as they rely on the old cube-specific fetch. You can either remove them
 // or leave them if they are used elsewhere for testing specific cubes.
