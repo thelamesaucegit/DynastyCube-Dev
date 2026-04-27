@@ -41,8 +41,8 @@ export const SeasonManagement: React.FC = () => {
       draft_start_date: '',
       draft_duration_days: 7,
       pre_season_duration_days: 10,
-      regular_season_weeks: 6,
-  });
+ regular_season_weeks: 5, // Defaulting to 5
+      include_rivals_week: false,  });
   const [creating, setCreating] = useState(false);
 
   const [rollingOver, setRollingOver] = useState(false);
@@ -304,8 +304,12 @@ export const SeasonManagement: React.FC = () => {
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Regular Season (Weeks)</label>
                                 <input type="number" value={scheduleParams.regular_season_weeks} onChange={(e) => setScheduleParams(p => ({ ...p, regular_season_weeks: parseInt(e.target.value) || 0 }))} className="w-full px-4 py-2 border rounded-lg" />
                             </div>
-                        </div>
-                    </div>
+                          {/* NEW: Rivals Week Checkbox */}
+                    <div>
+                        <label  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Include All-Rivals Week> </label>
+                            <input type="checkbox" checked={scheduleParams.include_rivals_week} onChange={(e) => setScheduleParams(p => ({ ...p, include_rivals_week: e.target.checked, regular_season_weeks: e.target.checked ? 6 : 5 }))} className="w-full px-4 py-2 border rounded-lg" />
+                            </div>
+                      
                     
                     <button onClick={handleCreateSeason} disabled={creating} className="admin-btn admin-btn-primary w-full mt-4">
                         {creating ? "Creating Season..." : "Create & Schedule Season"}
