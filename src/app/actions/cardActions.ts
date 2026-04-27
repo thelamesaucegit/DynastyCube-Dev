@@ -338,7 +338,7 @@ export async function bulkImportAndSync(
         
         // 5. Trigger ELO Sync.
         console.log("Card import successful. Starting ELO sync...");
-        const eloResult = await updateAllCubecobraElo();
+  const eloResult = await updateAllCubecobraElo(tableName);
 
         return {
             success: true,
