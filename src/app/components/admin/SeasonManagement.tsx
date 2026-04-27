@@ -256,7 +256,7 @@ export const SeasonManagement: React.FC = () => {
             </div>
           )}
 
-          {/* CORRECTED: The old "Create New Season" form is removed, leaving only the new Season Planner logic. */}
+          {/*  Season Planner logic */}
           <div className="mb-6">
             {!showPlanner ? (
                  <button onClick={() => setShowPlanner(true)} className="w-full admin-btn admin-btn-primary py-4 text-base">
@@ -308,7 +308,7 @@ export const SeasonManagement: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Regular Season (Weeks)</label>
             <input type="number" value={scheduleParams.regular_season_weeks} onChange={(e) => setScheduleParams(p => ({ ...p, regular_season_weeks: parseInt(e.target.value) || 0 }))} className="w-full px-4 py-2 border rounded-lg" />
         </div>
-        {/* NEW: Rivals Week Checkbox */}
+        
         <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Include All-Rivals Week</label>
             <input 
@@ -318,12 +318,12 @@ export const SeasonManagement: React.FC = () => {
                 className="w-full px-4 py-2 border rounded-lg" 
             />
         </div>
-    </div> {/* This was the first missing closing div for the grid */}
+    </div> 
     
     <button onClick={handleCreateSeason} disabled={creating} className="admin-btn admin-btn-primary w-full mt-4">
         {creating ? "Creating Season..." : "Create & Schedule Season"}
     </button>
-</div> {/* This was the second missing closing div for the "Scheduling" section */}
+</div> 
             )}
           </div>
   
