@@ -35,18 +35,19 @@ const handleDebug = async () => {
         return;
       }
 
-      const poolMsg = res.poolResult?.message || "Pools: No action taken.";
-      const draftMsg = res.draftResult?.message || "Drafts: No action taken.";
+       const resultMessages = res.results.map(r => r.message || `A task completed without a message.`);
+      const summary = resultMessages.join('\n');
+
       setResult(
-        `✅ CubeCobra ELO Sync Complete!\n\n${poolMsg}\n${draftMsg}\n\nOverall: ${res.message}`
+        `✅ CubeCobra ELO Sync Complete!\n\n${summary}\n\nOverall: ${res.message}`
       );
 
-      if (res.poolResult?.errors && res.poolResult.errors.length > 0) {
-        console.error("CubeCobra pool sync errors:", res.poolResult.errors);
-      }
-      if (res.draftResult?.errors && res.draftResult.errors.length > 0) {
-        console.error("CubeCobra draft pick sync errors:", res.draftResult.errors);
-      }
+      // Log any errors from the detailed results
+      res.results.forEach(r => {
+        if (r.errors && r.errors.length > 0) {
+            console.error(`CubeCobra sync errors for a task:`, r.errors);
+        }
+      });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       console.error("Unexpected error during CubeCobra sync:", err);
