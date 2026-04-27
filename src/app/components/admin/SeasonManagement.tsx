@@ -79,7 +79,7 @@ export const SeasonManagement: React.FC = () => {
         setMessage({ type: "success", text: `Season ${seasonNum} and its schedule have been created successfully!` });
         setShowPlanner(false);
         setNewSeasonNumber(""); setNewSeasonName(""); setCubucksAllocation("1000");
-        setScheduleParams({ draft_start_date: '', draft_duration_days: 7, pre_season_duration_days: 10, regular_season_weeks: 6 });
+        setScheduleParams({ draft_start_date: '', draft_duration_days: 7, pre_season_duration_days: 10, regular_season_weeks: 6, include_rivals_week: false });
         loadSeasons();
       } else {
         setMessage({ type: "error", text: result.error || "Failed to create season" });
