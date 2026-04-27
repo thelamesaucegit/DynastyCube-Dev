@@ -6,7 +6,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { invalidateDraftCache } from '@/lib/draftCache';
 import { type AnySupabaseClient } from "@/lib/supabase";
-import { fetchAllCards, fetchOldestPrintings } from "@/lib/scryfall-client";
+import { fetchAllCards, ScryfallCard , fetchOldestPrintings } from "@/lib/scryfall-client";
 import { updateAllCubecobraElo } from "./cardRatingActions";
 
 
