@@ -173,30 +173,43 @@ export interface PoolStatistics {
   availableCards: number;
 }
 
-export async function getPoolStatistics(poolName: PoolTableName): Promise<{ stats: PoolStatistics | null; error?: string }> {
+export async function getPoolStatistics(poolIdentifier: PoolIdentifier): Promise<{ stats: PoolStatistics | null; error?: string }> {
   try {
     const supabase = await createServerClient();
     
-    // --- DYNAMIC STATS CALCULATION ---
-    const { count: totalCards, error: totalError } = await supabase
-      .from(poolName)
-      .select('*', { count: "exact", head: true });
+    let totalCardsQuery;
+    let isLogicalPool = false;
+
+    if (poolIdentifier === 'draft' || poolIdentifier === 'free') {
+        isLogicalPool = true;
+        totalCardsQuery = supabase
+            .from('card_pools')
+            .select('*', { count: "exact", head: true })
+            .eq('pool_name', poolIdentifier);
+    } else {
+        totalCardsQuery = supabase
+            .from(poolIdentifier)
+            .select('*', { count: "exact", head: true });
+    }
+
+    const { count: totalCards, error: totalError } = await totalCardsQuery;
 
     if (totalError) {
-      console.error(`Error fetching total cards count for ${poolName}:`, totalError.message);
+      console.error(`Error fetching total cards count for ${poolIdentifier}:`, totalError.message);
       return { stats: null, error: totalError.message };
     }
 
     let draftedCards = 0;
-    // Only calculate drafted cards for the main pool
-    if (poolName === 'card_pools') {
+    // The concept of "drafted" only applies to logical pools within the main 'card_pools' table.
+    if (isLogicalPool) {
       const { count, error: draftedError } = await supabase
         .from("card_pools")
         .select("id", { count: "exact", head: true })
+        .eq('pool_name', poolIdentifier) // Ensure we count within the same logical pool
         .not("team_draft_picks", "is", null);
       
       if (draftedError) {
-        console.error("Error fetching drafted cards count:", draftedError.message);
+        console.error(`Error fetching drafted cards count for ${poolIdentifier}:`, draftedError.message);
         // Don't fail the whole function, just proceed with drafted as 0
       } else {
         draftedCards = count || 0;
@@ -213,7 +226,7 @@ export async function getPoolStatistics(poolName: PoolTableName): Promise<{ stat
       },
     };
   } catch (error) {
-    console.error(`Unexpected error in getPoolStatistics for ${poolName}:`, error);
+    console.error(`Unexpected error in getPoolStatistics for ${poolIdentifier}:`, error);
     return { stats: null, error: "An unexpected error occurred" };
   }
 }
