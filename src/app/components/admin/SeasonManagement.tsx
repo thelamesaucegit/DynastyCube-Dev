@@ -284,37 +284,46 @@ export const SeasonManagement: React.FC = () => {
                         </div>
                     </div>
                     
-                    {/* --- Schedule Parameters --- */}
-                    <div className="border-t pt-6">
-                        <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-4">Scheduling</h4>
-                        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Draft Start Date</label>
-                                <input type="date" value={scheduleParams.draft_start_date} onChange={(e) => setScheduleParams(p => ({ ...p, draft_start_date: e.target.value }))} className="w-full px-4 py-2 border rounded-lg" />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Draft Duration (Days)</label>
-                                <input type="number" value={scheduleParams.draft_duration_days} onChange={(e) => setScheduleParams(p => ({ ...p, draft_duration_days: parseInt(e.target.value) || 0 }))} className="w-full px-4 py-2 border rounded-lg" />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Pre-Season (Days)</label>
-                                <input type="number" value={scheduleParams.pre_season_duration_days} onChange={(e) => setScheduleParams(p => ({ ...p, pre_season_duration_days: parseInt(e.target.value) || 0 }))} className="w-full px-4 py-2 border rounded-lg" />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Regular Season (Weeks)</label>
-                                <input type="number" value={scheduleParams.regular_season_weeks} onChange={(e) => setScheduleParams(p => ({ ...p, regular_season_weeks: parseInt(e.target.value) || 0 }))} className="w-full px-4 py-2 border rounded-lg" />
-                            </div>
-                          {/* NEW: Rivals Week Checkbox */}
-                    <div>
-                        <label  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Include All-Rivals Week> </label>
-                            <input type="checkbox" checked={scheduleParams.include_rivals_week} onChange={(e) => setScheduleParams(p => ({ ...p, include_rivals_week: e.target.checked, regular_season_weeks: e.target.checked ? 6 : 5 }))} className="w-full px-4 py-2 border rounded-lg" />
-                            </div>
-                      
-                    
-                    <button onClick={handleCreateSeason} disabled={creating} className="admin-btn admin-btn-primary w-full mt-4">
-                        {creating ? "Creating Season..." : "Create & Schedule Season"}
-                    </button>
-                </div>
+                   {/* --- Schedule Parameters --- */}
+<div className="border-t pt-6">
+    <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-4">Scheduling</h4>
+    <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        {/* Draft Start Date */}
+        <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Draft Start Date</label>
+            <input type="date" value={scheduleParams.draft_start_date} onChange={(e) => setScheduleParams(p => ({ ...p, draft_start_date: e.target.value }))} className="w-full px-4 py-2 border rounded-lg" />
+        </div>
+        {/* Draft Duration */}
+        <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Draft Duration (Days)</label>
+            <input type="number" value={scheduleParams.draft_duration_days} onChange={(e) => setScheduleParams(p => ({ ...p, draft_duration_days: parseInt(e.target.value) || 0 }))} className="w-full px-4 py-2 border rounded-lg" />
+        </div>
+        {/* Pre-Season */}
+        <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Pre-Season (Days)</label>
+            <input type="number" value={scheduleParams.pre_season_duration_days} onChange={(e) => setScheduleParams(p => ({ ...p, pre_season_duration_days: parseInt(e.target.value) || 0 }))} className="w-full px-4 py-2 border rounded-lg" />
+        </div>
+        {/* Regular Season */}
+        <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Regular Season (Weeks)</label>
+            <input type="number" value={scheduleParams.regular_season_weeks} onChange={(e) => setScheduleParams(p => ({ ...p, regular_season_weeks: parseInt(e.target.value) || 0 }))} className="w-full px-4 py-2 border rounded-lg" />
+        </div>
+        {/* NEW: Rivals Week Checkbox */}
+        <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Include All-Rivals Week</label>
+            <input 
+                type="checkbox" 
+                checked={scheduleParams.include_rivals_week} 
+                onChange={(e) => setScheduleParams(p => ({ ...p, include_rivals_week: e.target.checked, regular_season_weeks: e.target.checked ? 6 : 5 }))} 
+                className="w-full px-4 py-2 border rounded-lg" 
+            />
+        </div>
+    </div> {/* This was the first missing closing div for the grid */}
+    
+    <button onClick={handleCreateSeason} disabled={creating} className="admin-btn admin-btn-primary w-full mt-4">
+        {creating ? "Creating Season..." : "Create & Schedule Season"}
+    </button>
+</div> {/* This was the second missing closing div for the "Scheduling" section */}
             )}
           </div>
   
