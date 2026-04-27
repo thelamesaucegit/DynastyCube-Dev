@@ -1,3 +1,5 @@
+//src/app/components/admin/CardRatingSync.tsx
+
 "use client";
 import { 
   updateAllCubecobraElo,
