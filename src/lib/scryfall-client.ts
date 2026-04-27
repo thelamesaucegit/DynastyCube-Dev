@@ -96,6 +96,14 @@ export interface ScryfallCard {
   cmc: number;
   released_at: string;
   edhrec_rank?: number; // Lower is more popular
+    legalities: {
+    standard?: 'legal' | 'not_legal' | 'banned';
+    pioneer?: 'legal' | 'not_legal' | 'banned';
+    modern?: 'legal' | 'not_legal' | 'banned';
+    legacy?: 'legal' | 'not_legal' | 'banned' | 'restricted';
+    vintage?: 'legal' | 'not_legal' | 'banned' | 'restricted';
+    pauper?: 'legal' | 'not_legal' | 'banned';
+  };
   image_uris?: {
     small: string;
     normal: string;
