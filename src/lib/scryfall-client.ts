@@ -94,6 +94,7 @@ export interface ScryfallCard {
   color_identity?: string[];
   mana_cost?: string;
   cmc: number;
+  released_at: string;
   edhrec_rank?: number; // Lower is more popular
   image_uris?: {
     small: string;
