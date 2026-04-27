@@ -6,6 +6,10 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { invalidateDraftCache } from '@/lib/draftCache';
 import { type AnySupabaseClient } from "@/lib/supabase";
+import { fetchAllCards, fetchOldestPrintings } from "@/lib/scryfall-client";
+import { updateAllCubecobraElo } from "./cardRatingActions";
+
+
 
 export type PoolTableName = "card_pools" | "the_chamber" | "resort_pool"; 
 
@@ -206,120 +210,120 @@ export async function addCardsToPool(cards: CardData[], poolName: string = "draf
     }
 }
 
-export async function bulkImportCards(
+/**
+ * REVISED CONSOLIDATED FUNCTION
+ * This function now allows duplicate card entries.
+ * 1. Parses every line from the input for card names and optional costs.
+ * 2. Fetches complete data for the unique names from Scryfall.
+ * 3. Creates a distinct record for every line in the input.
+ * 4. Inserts all new cards into the specified database table.
+ * 5. After successful import, triggers the CubeCobra ELO sync.
+ */
+export async function bulkImportAndSync(
   lines: string[],
   defaultCubucksCost: number = 1,
   tableName: PoolTableName = "card_pools"
 ): Promise<{
   success: boolean;
   added: number;
-  skipped: number;
-  failed: string[];
+  failed: { name: string; reason: string }[];
   error?: string;
+  eloSyncMessage?: string;
 }> {
   const supabase = await createClient();
   const poolName = tableName === "the_chamber" ? "chamber" : "draft";
+
   try {
-    const { data: existingCards, error: existingError } = await supabase
-      .from(tableName)
-      .select("card_id");
-    // .eq("pool_name", poolName); // pool_name check is implicit via table name now
-
-    if (existingError) {
-      return {
-        success: false,
-        added: 0,
-        skipped: 0,
-        failed: [],
-        error: existingError.message,
-      };
-    }
-    const existingCardIds = new Set(
-      (existingCards || []).map((c) => c.card_id)
-    );
-    let skipped = 0;
-    const failed: string[] = [];
-    const cardsToInsert: Array<Omit<CardData, "id" | "created_at" | "rating_updated_at">> = [];
-
+    // 1. Parse all input lines into requested cards. Duplicates are preserved.
+    const requestedCards: { name: string; cost: number }[] = [];
     for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed) continue;
-            let cardName = trimmed;
-            let cubucksCost = defaultCubucksCost;
-            const lastCommaIndex = trimmed.lastIndexOf(",");
-            if (lastCommaIndex !== -1) {
-                const possibleCost = trimmed.substring(lastCommaIndex + 1).trim();
-                const parsedCost = parseInt(possibleCost);
-                if (!isNaN(parsedCost) && parsedCost >= 0) {
-                    cardName = trimmed.substring(0, lastCommaIndex).trim();
-                    cubucksCost = parsedCost;
-                }
-            }
-            if (!cardName) continue;
-            await new Promise((r) => setTimeout(r, 100));
-            try {
-                const response = await fetch(`https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(cardName)}`);
-                if (!response.ok) {
-                    failed.push(cardName);
-                    continue;
-                }
-                const card = await response.json();
-                if (existingCardIds.has(card.id)) {
-                    skipped++;
-                    continue;
-                }
-                existingCardIds.add(card.id);
-                let oldestImageUrl: string | undefined;
-                if (card.oracle_id) {
-                    await new Promise(r => setTimeout(r, 100));
-                    const oldestPrintingResponse = await fetch(`https://api.scryfall.com/cards/search?q=oracleid%3A${card.oracle_id}&order=released&dir=asc&unique=prints`);
-                    if (oldestPrintingResponse.ok) {
-                        const oldestPrintingData = await oldestPrintingResponse.json();
-                        oldestImageUrl = oldestPrintingData?.data?.[0]?.image_uris?.normal;
-                    }
-                }
-                cardsToInsert.push({
-                    card_id: card.id,
-                    card_name: card.name,
-                    card_set: card.set_name,
-                    card_type: card.type_line,
-                    rarity: card.rarity,
-                    colors: card.colors || [],
-                    color_identity: card.color_identity || [],
-                    image_url: card.image_uris?.normal || card.image_uris?.small || undefined,
-                    oldest_image_url: oldestImageUrl || card.image_uris?.normal || card.image_uris?.small || undefined,
-                    oracle_id: card.oracle_id,
-                    hidden: card.type_line.toLowerCase().includes('basic land'),
-                    mana_cost: card.mana_cost,
-                    cmc: card.cmc || 0,
-                    cubucks_cost: cubucksCost,
-                    pool_name: poolName,
-                });
-            } catch {
-                failed.push(cardName);
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        let cardName = trimmed;
+        let cubucksCost = defaultCubucksCost;
+        const lastCommaIndex = trimmed.lastIndexOf(",");
+        if (lastCommaIndex !== -1) {
+            const possibleCost = trimmed.substring(lastCommaIndex + 1).trim();
+            const parsedCost = parseInt(possibleCost, 10);
+            if (!isNaN(parsedCost) && parsedCost >= 0) {
+                cardName = trimmed.substring(0, lastCommaIndex).trim();
+                cubucksCost = parsedCost;
             }
         }
-          if (cardsToInsert.length > 0) {
-      const { error: insertError } = await supabase
-        .from(tableName)
-        .insert(cardsToInsert);
-      if (insertError) {
-        return {
-          success: false,
-          added: 0,
-          skipped,
-          failed,
-          error: insertError.message,
-        };
-      }
-      if (tableName === "card_pools") {
-        invalidateDraftCache();
-      }
+        if (cardName) {
+            requestedCards.push({ name: cardName, cost: cubucksCost });
+        }
     }
-        return { success: true, added: cardsToInsert.length, skipped, failed };
-    } catch (error) {
-        return { success: false, added: 0, skipped: 0, failed: [], error: String(error) };
+    
+    if (requestedCards.length === 0) {
+        return { success: true, added: 0, failed: [], eloSyncMessage: "No cards to import." };
     }
+
+    // 2. Get the set of *unique* names to fetch from the API efficiently.
+    const uniqueNamesToFetch = [...new Set(requestedCards.map(req => req.name))];
+    
+    // 3. Fetch all card data from Scryfall for the unique names.
+    const { cards: scryfallResults, notFound, errors: fetchErrors } = await fetchAllCards(uniqueNamesToFetch);
+    const failedImports: { name: string; reason: string }[] = [];
+    notFound.forEach(name => failedImports.push({ name, reason: "Not found on Scryfall" }));
+
+    // Create a map for easy lookup of fetched card data.
+    const scryfallCardMap = new Map<string, ScryfallCard>();
+    scryfallResults.forEach(card => scryfallCardMap.set(card.name.toLowerCase(), card));
+
+    // 4. Prepare a card record for EVERY requested card, not just unique ones.
+    const cardsToInsert: Array<Omit<CardData, "id" | "created_at" | "rating_updated_at">> = [];
+    for (const request of requestedCards) {
+        const cardData = scryfallCardMap.get(request.name.toLowerCase());
+        if (cardData) {
+            cardsToInsert.push({
+                card_id: cardData.id,
+                card_name: cardData.name,
+                card_set: cardData.set_name,
+                card_type: cardData.type_line,
+                rarity: cardData.rarity,
+                colors: cardData.colors || [],
+                color_identity: cardData.color_identity || [],
+                image_url: cardData.image_uris?.normal || cardData.image_uris?.small,
+                // Note: Oldest image URL can be added here if needed by re-fetching, but skipping for simplicity based on new req.
+                oldest_image_url: cardData.image_uris?.normal, 
+                oracle_id: cardData.oracle_id,
+                hidden: cardData.type_line.toLowerCase().includes('basic land'),
+                mana_cost: cardData.mana_cost,
+                cmc: cardData.cmc || 0,
+                cubucks_cost: request.cost,
+                pool_name: poolName,
+            });
+        }
+    }
+
+    // 5. Insert all new card records into the database.
+    if (cardsToInsert.length > 0) {
+        const { error: insertError } = await supabase.from(tableName).insert(cardsToInsert);
+        if (insertError) {
+            return { success: false, added: 0, failed: failedImports, error: `DB insert error: ${insertError.message}` };
+        }
+        if (tableName === "card_pools") {
+            invalidateDraftCache();
+        }
+    }
+    
+    // 6. Trigger CubeCobra ELO Sync.
+    console.log("Card import successful. Starting ELO sync...");
+    const eloResult = await updateAllCubecobraElo();
+
+    return {
+        success: true,
+        added: cardsToInsert.length,
+        failed: failedImports,
+        eloSyncMessage: eloResult.message || "ELO sync did not return a message.",
+    };
+
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return { success: false, added: 0, failed: [], error: errorMessage };
+  }
 }
 
 export async function removeCardFromPool(
