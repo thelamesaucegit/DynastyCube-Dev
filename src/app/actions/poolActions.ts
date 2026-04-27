@@ -3,6 +3,8 @@
 "use server";
 
 import { createServerClient } from "@/lib/supabase";
+import { PoolTableName } from "./cardActions"; // Import the shared type
+
 
 type CardWithDraftInfo = {
     id: string;
@@ -52,33 +54,44 @@ export interface PoolCard {
   drafted_at?: string;
 }
 
-export async function getCardsForPool(poolName: string): Promise<{ cards: PoolCard[]; error?: string }> {
+export async function getCardsForPool(poolName: PoolTableName): Promise<{ cards: PoolCard[]; error?: string }> {
   const supabase = await createServerClient();
   try {
-    // --- THIS IS THE FIX ---
-    // The query now explicitly joins through the 'team_draft_picks' table,
-    // which is the correct relationship defined in your schema.
-    const { data, error } = await supabase
-      .from('card_pools')
-      .select(`
-        *,
-        team_draft_picks (
-          drafted_at,
-          teams ( id, name, emoji )
-        )
-      `)
-      .eq('pool_name', poolName)
-      .order('card_name', { ascending: true });
-    // --- END OF FIX ---
+    let query;
+    // --- THIS IS THE KEY CHANGE ---
+    // We build the query based on the table name.
+    if (poolName === 'card_pools') {
+      // For the main draft pool, we need draft pick information.
+      query = supabase
+        .from('card_pools')
+        .select(`
+          *,
+          team_draft_picks (
+            drafted_at,
+            teams ( id, name, emoji )
+          )
+        `)
+        .order('card_name', { ascending: true });
+    } else {
+      // For other pools like 'the_chamber', we don't need draft info.
+      // This assumes 'resort_pool' also doesn't have draft info.
+      query = supabase
+        .from(poolName) // Dynamically select the table
+        .select('*')
+        .order('card_name', { ascending: true });
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error(`Error fetching cards for pool "${poolName}":`, error);
       return { cards: [], error: error.message };
     }
     
-    const cards: PoolCard[] = (data || []).map((card: CardWithDraftInfo) => {
-      // This logic is now correct because the data shape matches the query
-      const pick = Array.isArray(card.team_draft_picks) ? card.team_draft_picks[0] : card.team_draft_picks;
+    // --- MAPPING LOGIC IS NOW CONDITIONAL ---
+    const cards: PoolCard[] = (data || []).map((card: any) => { // Using 'any' as the shape differs
+      const isDraftPool = 'team_draft_picks' in card;
+      const pick = isDraftPool && Array.isArray(card.team_draft_picks) ? card.team_draft_picks[0] : null;
       const team = pick?.teams;
 
       return {
@@ -95,7 +108,7 @@ export async function getCardsForPool(poolName: string): Promise<{ cards: PoolCa
           cmc: card.cmc ?? undefined,
           cubucks_cost: card.cubucks_cost ?? undefined,
           cubecobra_elo: card.cubecobra_elo ?? undefined,
-          is_drafted: !!pick, // is_drafted is true if a pick exists for this card
+          is_drafted: !!pick,
           drafted_by_team: team && team.id ? { id: team.id, name: team.name, emoji: team.emoji } : undefined,
           drafted_at: pick?.drafted_at ?? undefined,
       };
@@ -165,42 +178,47 @@ export interface PoolStatistics {
   availableCards: number;
 }
 
-export async function getPoolStatistics(poolName?: string): Promise<{ stats: PoolStatistics | null; error?: string }> {
+export async function getPoolStatistics(poolName: PoolTableName): Promise<{ stats: PoolStatistics | null; error?: string }> {
   try {
     const supabase = await createServerClient();
     
-    let totalQuery = supabase.from("card_pools").select("*", { count: "exact", head: true });
-    // Correctly check for drafted status using the join, which is more reliable than `was_drafted`
-    let draftedQuery = supabase.from("card_pools").select("id", { count: "exact", head: true }).not("team_draft_picks", "is", null);
+    // --- DYNAMIC STATS CALCULATION ---
+    const { count: totalCards, error: totalError } = await supabase
+      .from(poolName)
+      .select('*', { count: "exact", head: true });
 
-    if (poolName) {
-        totalQuery = totalQuery.eq('pool_name', poolName);
-        draftedQuery = draftedQuery.eq('pool_name', poolName);
-    }
-
-    const { count: totalCards, error: totalError } = await totalQuery;
     if (totalError) {
-      console.error("Error fetching total cards count:", totalError.message);
+      console.error(`Error fetching total cards count for ${poolName}:`, totalError.message);
       return { stats: null, error: totalError.message };
     }
 
-    const { count: draftedCards, error: draftedError } = await draftedQuery;
-    if (draftedError) {
-      console.error("Error fetching drafted cards count:", draftedError.message);
-      return { stats: null, error: draftedError.message };
+    let draftedCards = 0;
+    // Only calculate drafted cards for the main pool
+    if (poolName === 'card_pools') {
+      const { count, error: draftedError } = await supabase
+        .from("card_pools")
+        .select("id", { count: "exact", head: true })
+        .not("team_draft_picks", "is", null);
+      
+      if (draftedError) {
+        console.error("Error fetching drafted cards count:", draftedError.message);
+        // Don't fail the whole function, just proceed with drafted as 0
+      } else {
+        draftedCards = count || 0;
+      }
     }
-
-    const availableCards = (totalCards || 0) - (draftedCards || 0);
+    
+    const availableCards = (totalCards || 0) - draftedCards;
    
     return {
       stats: {
         totalCards: totalCards || 0,
-        draftedCards: draftedCards || 0,
+        draftedCards: draftedCards,
         availableCards: availableCards,
       },
     };
   } catch (error) {
-    console.error("Unexpected error in getPoolStatistics:", error);
+    console.error(`Unexpected error in getPoolStatistics for ${poolName}:`, error);
     return { stats: null, error: "An unexpected error occurred" };
   }
 }
