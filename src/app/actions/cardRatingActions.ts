@@ -73,7 +73,7 @@ async function fetchEloMapFromS3(): Promise<Map<string, number>> {
  * Helper: Update a table's cubecobra_elo using a pre-fetched ELO map
  */
 async function updateTableCubecobraElo(
-  tableName: "card_pools" | "team_draft_picks",
+  tableName: PoolTableName | "team_draft_picks",
   eloMap: Map<string, number>
 ): Promise<CardRatingResult> {
   try {
@@ -142,7 +142,6 @@ async function updateTableCubecobraElo(
   }
 }
 
-
 /**
  * REPLACED: This now uses the S3 data source instead of a specific cube
  */
@@ -168,21 +167,14 @@ export async function updateAllCubecobraElo(
     }
 
     const syncResults: CardRatingResult[] = [];
-    const tablesToSync: PoolTableName[] = tableName ? [tableName] : ["card_pools"];
-
-    // Always sync team_draft_picks if we are doing a full sync
-    if (!tableName) {
-        // You might want to add 'the_chamber' here for a full sync in the future
-        // For now, let's keep it to card_pools and team_draft_picks for a full sync
-    }
+    const tablesToSync: PoolTableName[] = tableName ? [tableName] : ["card_pools", "the_chamber", "resort_pool"];
 
     for (const table of tablesToSync) {
         const result = await updateTableCubecobraElo(table, eloMap);
         syncResults.push({ ...result, message: `[${table}] ${result.message}` });
     }
 
-    // Always sync draft picks regardless of which pool is being updated, as they are related
-    const draftResult = await updateTableCubecobraElo("team_draft_picks", eloMap);
+   const draftResult = await updateTableCubecobraElo("team_draft_picks", eloMap);
     syncResults.push({ ...draftResult, message: `[team_draft_picks] ${draftResult.message}` });
 
     const totalUpdated = syncResults.reduce((sum, res) => sum + (res.updatedCount || 0), 0);
@@ -194,13 +186,13 @@ export async function updateAllCubecobraElo(
       results: syncResults,
       message: `ELO Sync Complete: ${totalUpdated} updated, ${totalNotFound} not found, ${totalErrors} errors.`,
     };
-
   } catch (error) {
     const message = error instanceof Error ? error.message : "An unknown error occurred.";
     console.error("Unexpected error in updateAllCubecobraElo:", error);
     return { success: false, results: [], message: `Unexpected error: ${message}` };
   }
 }
+
 // NOTE: The single-table update functions and the test function are now deprecated
 // as they rely on the old cube-specific fetch. You can either remove them
 // or leave them if they are used elsewhere for testing specific cubes.
