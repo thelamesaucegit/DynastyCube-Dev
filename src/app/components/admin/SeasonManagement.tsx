@@ -41,6 +41,8 @@ export const SeasonManagement: React.FC = () => {
   const [scheduleParams, setScheduleParams] = useState<SeasonScheduleParams>({
       draft_start_date: '',
       draft_duration_days: 7,
+     draft_total_rounds: 40, // <--- ADD THIS
+    draft_hours_per_pick: 1,
       pre_season_duration_days: 10,
  regular_season_weeks: 5, // Defaulting to 5
       include_rivals_week: false,  });
@@ -303,6 +305,14 @@ export const SeasonManagement: React.FC = () => {
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Draft Duration (Days)</label>
                       <input type="number" value={scheduleParams.draft_duration_days} onChange={(e) => setScheduleParams(p => ({ ...p, draft_duration_days: parseInt(e.target.value) || 0 }))} className="w-full px-4 py-2 border rounded-lg" />
                     </div>
+                     <div>
+      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Draft Rounds</label>
+      <input type="number" value={scheduleParams.draft_total_rounds} onChange={(e) => setScheduleParams(p => ({ ...p, draft_total_rounds: parseInt(e.target.value) || 0 }))} className="w-full px-4 py-2 border rounded-lg" />
+    </div>
+    <div>
+      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Hours Per Pick</label>
+      <input type="number" value={scheduleParams.draft_hours_per_pick} onChange={(e) => setScheduleParams(p => ({ ...p, draft_hours_per_pick: parseInt(e.target.value) || 0 }))} className="w-full px-4 py-2 border rounded-lg" />
+    </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Pre-Season (Days)</label>
                       <input type="number" value={scheduleParams.pre_season_duration_days} onChange={(e) => setScheduleParams(p => ({ ...p, pre_season_duration_days: parseInt(e.target.value) || 0 }))} className="w-full px-4 py-2 border rounded-lg" />
