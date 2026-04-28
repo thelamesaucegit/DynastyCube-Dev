@@ -34,7 +34,8 @@ function shuffleArray<T>(array: T[]): T[] {
 }
 
 /**
- * Generates the full set of matchups for a regular season + rivals week.
+ * Generates the full set of matchups for a regular season + rivals week
+ * using a robust round-robin algorithm to prevent deadlocks.
  * @param teams - The list of participating teams.
  * @param regularSeasonWeeks - The number of weeks in the regular season.
  * @param includeRivalsWeek - Whether to add a final rivals week.
@@ -46,51 +47,53 @@ function generateSeasonMatchups(
   includeRivalsWeek: boolean
 ): Matchup[] {
   const allMatchups: Matchup[] = [];
-  const playedOpponents = new Map<string, Set<string>>();
-  teams.forEach(team => playedOpponents.set(team.id, new Set<string>()));
+  let schedulableTeams = [...teams];
+  
+  // The round-robin algorithm requires an even number of teams.
+  // If we have an odd number, we add a "dummy" team for pairing purposes.
+  const isOdd = schedulableTeams.length % 2 !== 0;
+  if (isOdd) {
+    schedulableTeams.push({ id: "BYE", name: "Bye Week" } as TeamWithDetails);
+  }
 
-  // 1. Generate Regular Season Matchups
+  const teamCount = schedulableTeams.length;
+  const numRounds = teamCount - 1; // For a full round-robin
+  const half = teamCount / 2;
+
+  const teamIndexes = schedulableTeams.map((_, i) => i);
+  const fixedTeamIndex = teamIndexes.shift()!; // Fix one team in place
+
   for (let week = 1; week <= regularSeasonWeeks; week++) {
-    const unpairedTeams = shuffleArray([...teams]);
-    const teamsInThisWeek = new Set<string>();
-    while (unpairedTeams.length >= 2) {
-      const teamA = unpairedTeams.pop();
-      if (!teamA || teamsInThisWeek.has(teamA.id)) continue;
-
-      let opponentIndex = -1;
-      for (let i = 0; i < unpairedTeams.length; i++) {
-        const potentialOpponent = unpairedTeams[i];
-        if (teamsInThisWeek.has(potentialOpponent.id)) continue;
-        
-        const opponentsOfA = playedOpponents.get(teamA.id);
-        if (opponentsOfA && !opponentsOfA.has(potentialOpponent.id)) {
-            opponentIndex = i;
-            break;
-        }
-      }
-
-      if (opponentIndex === -1 && unpairedTeams.length > 0) {
-        opponentIndex = unpairedTeams.findIndex(t => !teamsInThisWeek.has(t.id));
-      }
-      
-      if (opponentIndex !== -1) {
-        const teamB = unpairedTeams.splice(opponentIndex, 1)[0];
-        
+    const roundNumber = week - 1;
+    
+    // Pair the fixed team with the team it's facing this round
+    const opponentForFixed = teamIndexes[roundNumber % numRounds];
+    const teamA = schedulableTeams[fixedTeamIndex];
+    const teamB = schedulableTeams[opponentForFixed];
+    if (teamA.id !== "BYE" && teamB.id !== "BYE") {
         allMatchups.push({ week, teamAId: teamA.id, teamBId: teamB.id });
-        
-        playedOpponents.get(teamA.id)?.add(teamB.id);
-        playedOpponents.get(teamB.id)?.add(teamA.id);
-        teamsInThisWeek.add(teamA.id);
-        teamsInThisWeek.add(teamB.id);
+    }
+
+    // Pair the remaining teams
+    for (let i = 1; i < half; i++) {
+      const teamCIndex = (roundNumber + i) % numRounds;
+      const teamDIndex = (roundNumber + numRounds - i) % numRounds;
+      
+      const teamC = schedulableTeams[teamIndexes[teamCIndex]];
+      const teamD = schedulableTeams[teamIndexes[teamDIndex]];
+      
+      if (teamC.id !== "BYE" && teamD.id !== "BYE") {
+        allMatchups.push({ week, teamAId: teamC.id, teamBId: teamD.id });
       }
     }
   }
 
-  // 2. Generate Rivals Week Matchups
+  // Generate Rivals Week Matchups (this logic remains the same)
   if (includeRivalsWeek) {
     const rivalsWeekNumber = regularSeasonWeeks + 1;
     const teamsByShortName = new Map(teams.map(t => [t.short_name, t]));
     const pairedInRivalsWeek = new Set<string>();
+
     for (const team of teams) {
       if (pairedInRivalsWeek.has(team.id) || !team.rival_short_name) {
         continue;
