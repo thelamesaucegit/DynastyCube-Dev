@@ -241,6 +241,7 @@ export async function createSeasonWithSchedule(
             createScheduleWeek({
                 season_id: newSeasonId,
                 week_number: i + 1,
+              season_number: seasonNumber,
                 start_date: weekStart.toISOString(),
                 end_date: weekEnd.toISOString(),
                 deck_submission_deadline: deckDeadline.toISOString(),
