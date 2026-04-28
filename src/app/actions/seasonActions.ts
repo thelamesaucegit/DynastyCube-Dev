@@ -11,12 +11,31 @@ export interface CardCostChange {
   was_drafted: boolean;
 }
 
-async function verifyAdmin(supabase: any): Promise<{ authorized: boolean; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { authorized: false, error: "Not authenticated" };
-  const { data: userData } = await supabase.from("users").select("is_admin").eq("id", user.id).single();
-  if (!userData?.is_admin) return { authorized: false, error: "Unauthorized" };
-  return { authorized: true };
+async function verifyAdmin(supabase: Awaited<ReturnType<typeof createServerClient>>): Promise<{
+  authorized: boolean;
+  userId?: string;
+  error?: string;
+}> {
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { authorized: false, error: "Not authenticated" };
+  }
+
+  const { data: userData, error: userError } = await supabase
+    .from("users")
+    .select("is_admin")
+    .eq("id", user.id)
+    .single();
+
+  if (userError || !userData?.is_admin) {
+    return { authorized: false, userId: user.id, error: "Unauthorized: Admin access required" };
+  }
+
+  return { authorized: true, userId: user.id };
 }
 
 /**
