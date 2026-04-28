@@ -12,8 +12,7 @@ bulkImportAndSync,
   undraftAllCards,
   clearCardPool,
 } from "@/app/actions/cardActions";
-// This type in your cardActions.ts file should be updated to:
-// export type PoolTableName = "card_pools" | "the_chamber" | "resort_pool";
+
 import type { CardData, PoolTableName } from "@/app/actions/cardActions";
 import { getPoolCardsWithStatus } from "@/app/actions/poolActions";
 import type { PoolCard } from "@/app/actions/poolActions";

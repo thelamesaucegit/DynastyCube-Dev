@@ -60,6 +60,53 @@ export interface PoolCard {
   drafted_at?: string;
 }
 
+export async function getPoolCardsWithStatus(): Promise<{
+  cards: PoolCard[];
+  error?: string;
+}> {
+  try {
+    const supabase = await createServerClient();
+    const { data: allCards, error: cardsError } = await supabase
+      .from("card_pools")
+      .select(`*, team_draft_picks ( id, drafted_at, team_id, teams ( id, name, emoji ) )`)
+      .order("card_name", { ascending: true });
+
+    if (cardsError) {
+      console.error("Error fetching card pool:", cardsError.message);
+      return { cards: [], error: cardsError.message };
+    }
+
+    const cards: PoolCard[] = (allCards || []).map((card: CardWithDraftInfo) => {
+      const pick = Array.isArray(card.team_draft_picks) ? card.team_draft_picks[0] : card.team_draft_picks;
+      const team = pick?.teams ? (Array.isArray(pick.teams) ? pick.teams[0] : pick.teams) : null;
+
+      return {
+        id: card.id,
+        card_id: card.card_id,
+        card_name: card.card_name,
+        card_set: card.card_set ?? undefined,
+        card_type: card.card_type ?? undefined,
+        rarity: card.rarity ?? undefined,
+        colors: card.colors ?? undefined,
+        image_url: card.image_url ?? undefined,
+        oldest_image_url: card.oldest_image_url ?? undefined,
+        mana_cost: card.mana_cost ?? undefined,
+        cmc: card.cmc ?? undefined,
+        cubucks_cost: card.cubucks_cost ?? undefined,
+        cubecobra_elo: card.cubecobra_elo ?? undefined,
+        is_drafted: !!pick,
+        drafted_by_team: team ? { id: team.id, name: team.name, emoji: team.emoji } : undefined,
+        drafted_at: pick?.drafted_at ?? undefined,
+      };
+    });
+
+    return { cards };
+  } catch (error) {
+    console.error("Unexpected error in getPoolCardsWithStatus:", error);
+    return { cards: [], error: "An unexpected error occurred" };
+  }
+}
+
 export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{ cards: PoolCard[]; error?: string }> {
   const supabase = await createServerClient();
   try {
