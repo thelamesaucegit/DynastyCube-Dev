@@ -37,6 +37,7 @@ export interface Season {
 }
 export interface SeasonScheduleParams {
   draft_start_date: string; // ISO String
+  draft_start_time: string; 
   draft_duration_days: number;
     draft_total_rounds: number;      
   draft_hours_per_pick: number; 
