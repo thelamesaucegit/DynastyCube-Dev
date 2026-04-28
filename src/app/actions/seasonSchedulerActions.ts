@@ -10,11 +10,6 @@ import { createScheduledSimMatch } from "./simScheduleActions";
 // TYPES
 // ==================================
 
-// Extend the imported type to safely include the newly-queried rival field.
-interface SchedulableTeam extends TeamWithDetails {
-  rival_short_name?: string | null;
-}
-
 interface Matchup {
   week: number;
   teamAId: string;
@@ -46,7 +41,7 @@ function shuffleArray<T>(array: T[]): T[] {
  * @returns An array of all matchups for the season.
  */
 function generateSeasonMatchups(
-  teams: SchedulableTeam[],
+  teams: TeamWithDetails[],
   regularSeasonWeeks: number,
   includeRivalsWeek: boolean
 ): Matchup[] {
@@ -58,7 +53,6 @@ function generateSeasonMatchups(
   for (let week = 1; week <= regularSeasonWeeks; week++) {
     const unpairedTeams = shuffleArray([...teams]);
     const teamsInThisWeek = new Set<string>();
-
     while (unpairedTeams.length >= 2) {
       const teamA = unpairedTeams.pop();
       if (!teamA || teamsInThisWeek.has(teamA.id)) continue;
@@ -97,7 +91,6 @@ function generateSeasonMatchups(
     const rivalsWeekNumber = regularSeasonWeeks + 1;
     const teamsByShortName = new Map(teams.map(t => [t.short_name, t]));
     const pairedInRivalsWeek = new Set<string>();
-
     for (const team of teams) {
       if (pairedInRivalsWeek.has(team.id) || !team.rival_short_name) {
         continue;
@@ -164,15 +157,12 @@ export async function generateFullSeasonSchedule(
             const timeSlots: string[] = [];
             for (let i = 0; i < gamesPerMatchup; i++) {
                 const gameDate = new Date(weekStartDate);
-                // Distribute games: Mon 6pm, Tue 8pm, Wed 10pm, Thu 12am, Fri 2am (UTC)
                 gameDate.setUTCDate(weekStartDate.getUTCDate() + i);
                 gameDate.setUTCHours(18 + (i * 2), 0, 0, 0); 
                 timeSlots.push(gameDate.toISOString());
             }
 
-            // Schedule the 5 games for the matchup
             for (const timeSlot of timeSlots) {
-                // Ensure season_number is a number, as required by createScheduledSimMatch
                 const seasonNumber = typeof weekInfo.season_number === 'number' ? weekInfo.season_number : parseInt(String(weekInfo.season_number), 10);
                 if (isNaN(seasonNumber)) {
                     console.error(`Invalid season number for week ${weekInfo.id}`);
@@ -209,3 +199,4 @@ export async function generateFullSeasonSchedule(
         return { success: false, error: message };
     }
 }
+
