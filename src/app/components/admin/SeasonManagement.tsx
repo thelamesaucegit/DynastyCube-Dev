@@ -3,6 +3,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { FullSeasonScheduler } from "./FullSeasonScheduler"; 
 
 // CORRECTED: Cleaned up imports to remove duplicates.
 import {
@@ -373,6 +374,12 @@ const ScheduleTabContent: React.FC<{ seasonId: string }> = ({ seasonId }) => {
   const [scheduleTab, setScheduleTab] = useState<"overview" | "create-week" | "schedule-matches" | "extensions">("overview");
   return (
     <>
+      <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+        <FullSeasonScheduler 
+            seasonId={seasonId}
+        />
+    </div>
+
       <div className="flex border-b border-gray-200 dark:border-gray-700">
         <button onClick={() => setScheduleTab("overview")} className={`flex-1 px-6 py-3 text-sm font-medium transition-colors ${scheduleTab === "overview" ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-b-2 border-blue-600" : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"}`}>
           📋 Schedule Overview

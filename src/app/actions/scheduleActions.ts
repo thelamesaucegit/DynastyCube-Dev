@@ -18,6 +18,7 @@ interface BasicMatch {
 export interface ScheduleWeek {
   id: string;
   season_id: string;
+   season_number: number;
   week_number: number;
   start_date: string;
   end_date: string;
@@ -39,6 +40,28 @@ export async function getActiveSeasonNumber(): Promise<number | null> {
     .single();
   if (error || !data) return null;
   return data.season_number;
+}
+
+export async function getActiveSeasonDetails(): Promise<{ 
+  season: { id: string; has_rivals_week: boolean } | null; 
+  error?: string 
+}> {
+    const supabase = await createServerClient(); // Assumes you have a createServerClient here
+    try {
+        const { data, error } = await supabase
+            .from("seasons")
+            .select("id, has_rivals_week")
+            .eq("is_active", true)
+            .single();
+
+        if (error) throw error;
+        return { season: data };
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "An unknown error occurred.";
+        console.error("Error fetching active season details:", message);
+        return { season: null, error: message };
+    }
 }
 /**
  * Get all schedule weeks for a season

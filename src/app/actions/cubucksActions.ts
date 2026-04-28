@@ -190,7 +190,9 @@ export async function createSeasonWithSchedule(
         end_date: overallSeasonEndDate.toISOString(), // The overall end date
         cubucks_allocation: cubucksAllocation,
         is_active: false,
-        phase: 'preseason' // A new season always logically starts in its own pre-season (the off-season before it)
+        phase: 'preseason', // A new season always logically starts in its own pre-season (the off-season before it)
+        has_rivals_week: scheduleParams.include_rivals_week, 
+
       })
       .select()
       .single();
