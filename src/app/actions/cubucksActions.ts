@@ -2,6 +2,8 @@
 "use server";
 
 import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
+import { createScheduleWeek } from "./scheduleActions"; // You will need to import this
+
 
 // ============================================
 // TYPES
@@ -36,6 +38,8 @@ export interface Season {
 export interface SeasonScheduleParams {
   draft_start_date: string; // ISO String
   draft_duration_days: number;
+    draft_total_rounds: number;      
+  draft_hours_per_pick: number; 
   pre_season_duration_days: number;
   regular_season_weeks: number;
   include_rivals_week: boolean;
@@ -145,91 +149,128 @@ export async function createSeasonWithSchedule(
   cubucksAllocation: number,
   scheduleParams: SeasonScheduleParams
 ): Promise<{ success: boolean; seasonId?: string; error?: string }> {
+  const supabase = await createServerClient();
   try {
-    const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return { success: false, error: "Not authenticated" };
-    }
+    if (!user) return { success: false, error: "Not authenticated" };
+
+    // --- Corrected Phase & Date Calculation Logic ---
+    const draftStart = new Date(scheduleParams.draft_start_date);
     
-    // --- Date Calculation Logic ---
-    const startDate = new Date(scheduleParams.draft_start_date);
-    
-    // DRAFT
-    const draftStart = new Date(startDate);
+    // 1. DRAFT PHASE
     const draftEnd = new Date(draftStart);
     draftEnd.setDate(draftStart.getDate() + scheduleParams.draft_duration_days);
 
-    // PRE-SEASON
+    // 2. PRE-SEASON PHASE (comes AFTER draft)
     const preSeasonStart = new Date(draftEnd);
     const preSeasonEnd = new Date(preSeasonStart);
     preSeasonEnd.setDate(preSeasonStart.getDate() + scheduleParams.pre_season_duration_days);
-    
-    // REGULAR SEASON
+
+    // 3. REGULAR SEASON PHASE
     const regularSeasonStart = new Date(preSeasonEnd);
     const regularSeasonEnd = new Date(regularSeasonStart);
     regularSeasonEnd.setDate(regularSeasonStart.getDate() + scheduleParams.regular_season_weeks * 7);
 
-    // POST-SEASON (Playoffs + Off-Season Activities) - Let's allocate a fixed 2 weeks for now.
+    // 4. POST-SEASON PHASE (Playoffs, etc.)
     const postSeasonStart = new Date(regularSeasonEnd);
     const postSeasonEnd = new Date(postSeasonStart);
-    postSeasonEnd.setDate(postSeasonStart.getDate() + 14);
+    postSeasonEnd.setDate(postSeasonStart.getDate() + 14); // Fixed 2 weeks for now
 
-    // The 'preseason' phase for the *next* season begins immediately after this one's post-season ends.
-    // The main 'seasons' table row will span the entire duration.
-    const overallSeasonEndDate = postSeasonEnd;
+    // --- Database Transaction Simulation ---
+    // This will be done as a series of steps with manual rollback on failure.
 
-    // --- Database Transaction ---
-    // 1. Create the main season entry
+    // STEP A: Create the main 'seasons' entry
     const { data: seasonData, error: seasonError } = await supabase
       .from("seasons")
       .insert({
         season_number: seasonNumber,
         season_name: seasonName,
         start_date: draftStart.toISOString(),
-        end_date: overallSeasonEndDate.toISOString(), // The overall end date
+        end_date: postSeasonEnd.toISOString(),
         cubucks_allocation: cubucksAllocation,
         is_active: false,
-        phase: 'preseason', // A new season always logically starts in its own pre-season (the off-season before it)
-        has_rivals_week: scheduleParams.include_rivals_week, 
-
+        phase: 'draft', // A new season now correctly starts in the 'draft' phase.
+        has_rivals_week: scheduleParams.include_rivals_week,
       })
-      .select()
+      .select('id')
       .single();
 
-    if (seasonError) throw seasonError;
+    if (seasonError) throw new Error(`Failed to create season record: ${seasonError.message}`);
+    const newSeasonId = seasonData.id;
 
-    // 2. Create the detailed schedule entries for the Master Clock to use
-    const scheduleToInsert = [
-      { season_id: seasonData.id, phase: 'draft', start_date: draftStart.toISOString(), end_date: draftEnd.toISOString() },
-      { season_id: seasonData.id, phase: 'season', start_date: preSeasonEnd.toISOString(), end_date: regularSeasonEnd.toISOString() }, // Note: 'season' phase is the regular season
-      { season_id: seasonData.id, phase: 'playoffs', start_date: regularSeasonEnd.toISOString(), end_date: postSeasonStart.toISOString() }, // Playoffs are part of post-season
-      { season_id: seasonData.id, phase: 'postseason', start_date: postSeasonStart.toISOString(), end_date: postSeasonEnd.toISOString() }
-    ];
+    // STEP B: Create the 'draft_sessions' entry for this season
+    const { error: draftSessionError } = await supabase
+      .from("draft_sessions")
+      .insert({
+        season_id: newSeasonId,
+        status: "scheduled",
+        name: `${seasonName} Draft`,
+        total_rounds: scheduleParams.draft_total_rounds,
+        hours_per_pick: scheduleParams.draft_hours_per_pick,
+        start_time: draftStart.toISOString(),
+        end_time: draftEnd.toISOString(),
+        started_by: user.id,
+      });
 
-    // The pre-season phase is the time between the previous season ending and this draft starting.
-    // This logic assumes a previous season exists to calculate from, which is complex.
-    // For now, we will manually manage the "Pre-Season" phase time via admin controls.
-    // We will only schedule draft, season, and post-season.
-    
-    const { error: scheduleError } = await supabase
-      .from("season_schedule")
-      .insert(scheduleToInsert.filter(p => p.phase !== 'preseason'));
-
-    if (scheduleError) {
-      // If schedule fails, roll back the season creation for data integrity
-      await supabase.from("seasons").delete().eq("id", seasonData.id);
-      throw scheduleError;
+    if (draftSessionError) {
+      // Rollback Step A if Step B fails
+      await supabase.from("seasons").delete().eq("id", newSeasonId);
+      throw new Error(`Failed to create draft session: ${draftSessionError.message}`);
     }
 
-    return { success: true, seasonId: seasonData.id };
+    // STEP C: Create all the 'schedule_weeks' entries
+    const totalWeeks = scheduleParams.regular_season_weeks + (scheduleParams.include_rivals_week ? 1 : 0);
+    const weekCreationPromises = [];
+
+    for (let i = 0; i < scheduleParams.regular_season_weeks; i++) {
+        const weekStart = new Date(regularSeasonStart);
+        weekStart.setDate(weekStart.getDate() + (i * 7));
+
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+        weekEnd.setHours(23, 59, 59);
+        
+        // Deadlines are set within the week
+        const deckDeadline = new Date(weekStart);
+        deckDeadline.setDate(weekStart.getDate() + 2); // e.g., Wednesday
+        deckDeadline.setHours(23, 59, 59);
+
+        const matchDeadline = new Date(weekEnd);
+
+        weekCreationPromises.push(
+            createScheduleWeek({
+                season_id: newSeasonId,
+                week_number: i + 1,
+                start_date: weekStart.toISOString(),
+                end_date: weekEnd.toISOString(),
+                deck_submission_deadline: deckDeadline.toISOString(),
+                match_completion_deadline: matchDeadline.toISOString(),
+                is_playoff_week: false,
+                is_championship_week: false,
+                notes: `Regular Season Week ${i + 1}`,
+            })
+        );
+    }
+    
+    const weekCreationResults = await Promise.all(weekCreationPromises);
+    const failedWeek = weekCreationResults.find(r => !r.success);
+
+    if (failedWeek) {
+        // Rollback Steps A and B if Step C fails
+        await supabase.from("seasons").delete().eq("id", newSeasonId);
+        // The draft_session will be auto-deleted by the database 'on delete CASCADE' constraint.
+        throw new Error(`Failed to create week ${failedWeek.week?.week_number}: ${failedWeek.error}`);
+    }
+
+    return { success: true, seasonId: newSeasonId };
 
   } catch (error) {
     const message = error instanceof Error ? error.message : "An unknown error occurred";
-    console.error("Error creating season with schedule:", message);
+    console.error("Error creating full season with schedule:", message);
     return { success: false, error: message };
   }
 }
+
 /**
  * Activate a season (deactivates others)
  */
