@@ -1,11 +1,9 @@
-//src/app/components/admin/SeasonManagement.tsx
+// src/app/components/admin/SeasonManagement.tsx
 
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { FullSeasonScheduler } from "./FullSeasonScheduler"; 
-
-// CORRECTED: Cleaned up imports to remove duplicates.
+import { FullSeasonScheduler } from "./FullSeasonScheduler";
 import {
   getSeasons,
   createSeasonWithSchedule,
@@ -13,14 +11,12 @@ import {
   type Season,
   type SeasonScheduleParams,
 } from "@/app/actions/cubucksActions";
-
 import {
   rolloverSeasonCosts,
   initializeSeasonCosts,
   deleteFullSeason,
   type CardCostChange,
 } from "@/app/actions/seasonActions";
-
 import { SeasonPhaseManager } from "./SeasonPhaseManager";
 import { WeekCreator } from "./WeekCreator";
 import { MatchScheduler } from "./MatchScheduler";
@@ -44,33 +40,20 @@ export const SeasonManagement: React.FC = () => {
   const [newSeasonNumber, setNewSeasonNumber] = useState("");
   const [newSeasonName, setNewSeasonName] = useState("");
   const [cubucksAllocation, setCubucksAllocation] = useState("100");
-    const [draftStartTime, setDraftStartTime] = useState("12:00"); 
+  
+  // State for the new time input
+  const [draftStartTime, setDraftStartTime] = useState("12:00"); 
 
-  const [scheduleParams, setScheduleParams] = useState<SeasonScheduleParams>({
+  const [scheduleParams, setScheduleParams] = useState<Omit<SeasonScheduleParams, 'draft_start_time'>>({
       draft_start_date: '',
       draft_duration_days: 7,
-     draft_total_rounds: 40, // <--- ADD THIS
-    draft_hours_per_pick: 1,
- regular_season_weeks: 5, // Defaulting to 5
-      include_rivals_week: false,  });
+      draft_total_rounds: 40,
+      draft_hours_per_pick: 1,
+      regular_season_weeks: 5,
+      include_rivals_week: false,
+  });
+
   const [creating, setCreating] = useState(false);
-
-  const handleDeleteSeason = async (seasonId: string, seasonName: string) => {
-    if (!confirm(
-      `ARE YOU ABSOLUTELY SURE?\n\nThis will permanently delete "${seasonName}" and all of its associated data, including:\n\n- All scheduled weeks\n- All draft sessions\n- All season-specific records\n\nThis action cannot be undone.`
-    )) {
-      return;
-    }
-
-    const result = await deleteFullSeason(seasonId);
-    if (result.success) {
-        setMessage({ type: "success", text: `Successfully deleted season "${seasonName}".` });
-        // Reload the list of seasons to reflect the deletion
-        loadSeasons();
-    } else {
-        setMessage({ type: "error", text: `Error: ${result.error}` });
-    }
-};
   const [rollingOver, setRollingOver] = useState(false);
   const [rolloverChanges, setRolloverChanges] = useState<CardCostChange[]>([]);
   const [showRolloverDetails, setShowRolloverDetails] = useState(false);
@@ -89,23 +72,33 @@ export const SeasonManagement: React.FC = () => {
     }
   };
 
+  const handleDeleteSeason = async (seasonId: string, seasonName: string) => {
+    if (!confirm(`ARE YOU ABSOLUTELY SURE?\n\nThis will permanently delete "${seasonName}" and all of its associated data.`)) return;
+    const result = await deleteFullSeason(seasonId);
+    if (result.success) {
+        setMessage({ type: "success", text: `Successfully deleted season "${seasonName}".` });
+        loadSeasons();
+    } else {
+        setMessage({ type: "error", text: `Error: ${result.error}` });
+    }
+  };
+
   const handleCreateSeason = async () => {
     const seasonNum = parseInt(newSeasonNumber);
     const allocation = parseInt(cubucksAllocation);
-
     if (isNaN(seasonNum) || !newSeasonName || isNaN(allocation) || !scheduleParams.draft_start_date || !draftStartTime) {
       setMessage({ type: "error", text: "Please fill in all Season Planner fields correctly." });
       return;
     }
-
     setCreating(true);
-     try {
+    try {
       // Combine the date/time params before sending
       const fullScheduleParams: SeasonScheduleParams = {
           ...scheduleParams,
           draft_start_time: draftStartTime,
       };
-       const result = await createSeasonWithSchedule(seasonNum, newSeasonName, allocation, fullScheduleParams);
+
+      const result = await createSeasonWithSchedule(seasonNum, newSeasonName, allocation, fullScheduleParams);
       if (result.success) {
         setMessage({ type: "success", text: `Season ${seasonNum} and its schedule have been created successfully!` });
         setShowPlanner(false);
