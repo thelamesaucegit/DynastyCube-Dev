@@ -3,7 +3,7 @@
 "use server";
 
 import { getTeamsWithDetails, type TeamWithDetails } from "./teamActions";
-import { getScheduleWeeks, type ScheduleWeek } from "./scheduleActions";
+import { getScheduleWeeks, } from "./scheduleActions";
 import { createScheduledSimMatch } from "./simScheduleActions";
 
 // ==================================
@@ -25,13 +25,7 @@ interface Matchup {
  * @param array The array to shuffle.
  * @returns The shuffled array.
  */
-function shuffleArray<T>(array: T[]): T[] {
-  for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]];
-  }
-  return array;
-}
+
 
 /**
  * Generates the full set of matchups for a regular season + rivals week
@@ -47,7 +41,7 @@ function generateSeasonMatchups(
   includeRivalsWeek: boolean
 ): Matchup[] {
   const allMatchups: Matchup[] = [];
-  let schedulableTeams = [...teams];
+  const schedulableTeams = [...teams];
   
   // The round-robin algorithm requires an even number of teams.
   // If we have an odd number, we add a "dummy" team for pairing purposes.
