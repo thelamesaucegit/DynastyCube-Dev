@@ -41,7 +41,8 @@ export async function importNextSetToChamber(): Promise<{
     const { data: nextSet, error: fetchSetError } = await supabase
       .from("chamber_records")
       .select("*")
-      .eq("in_chamber", false)
+      .eq("added", false)
+     .eq("in_chamber", false) 
       .eq("bonus", false)
       .order("set_num", { ascending: true })
       .limit(1)
@@ -103,7 +104,7 @@ export async function importNextSetToChamber(): Promise<{
     // 6. Update the record...
     const { error: updateRecordError } = await supabase
       .from("chamber_records")
-      .update({ in_chamber: true, added: true })
+      .update({ in_chamber: true })
       .eq("id", nextSet.id);
 
     if (updateRecordError) {
