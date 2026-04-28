@@ -17,6 +17,7 @@ import {
 import {
   rolloverSeasonCosts,
   initializeSeasonCosts,
+  deleteFullSeason,
   type CardCostChange,
 } from "@/app/actions/seasonActions";
 
@@ -52,6 +53,22 @@ export const SeasonManagement: React.FC = () => {
       include_rivals_week: false,  });
   const [creating, setCreating] = useState(false);
 
+  const handleDeleteSeason = async (seasonId: string, seasonName: string) => {
+    if (!confirm(
+      `ARE YOU ABSOLUTELY SURE?\n\nThis will permanently delete "${seasonName}" and all of its associated data, including:\n\n- All scheduled weeks\n- All draft sessions\n- All season-specific records\n\nThis action cannot be undone.`
+    )) {
+      return;
+    }
+
+    const result = await deleteFullSeason(seasonId);
+    if (result.success) {
+        setMessage({ type: "success", text: `Successfully deleted season "${seasonName}".` });
+        // Reload the list of seasons to reflect the deletion
+        loadSeasons();
+    } else {
+        setMessage({ type: "error", text: `Error: ${result.error}` });
+    }
+};
   const [rollingOver, setRollingOver] = useState(false);
   const [rolloverChanges, setRolloverChanges] = useState<CardCostChange[]>([]);
   const [showRolloverDetails, setShowRolloverDetails] = useState(false);
@@ -360,7 +377,13 @@ setScheduleParams({
                       <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Season {season.season_number} • {season.cubucks_allocation} Cubucks per team</div>
                       <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">Started: {new Date(season.start_date).toLocaleDateString()}</div>
                     </div>
+                    <div className="flex items-center gap-2"> 
                     {!season.is_active && (<button onClick={() => handleActivateSeason(season.id)} className="admin-btn admin-btn-secondary text-sm">Activate</button>)}
+                    <button onClick={() => handleDeleteSeason(season.id, season.season_name)} className="admin-btn admin-btn-danger text-sm">
+                      Delete
+                    </button>
+                                        </div>
+
                   </div>
                 </div>
               ))}
