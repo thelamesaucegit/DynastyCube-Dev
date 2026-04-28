@@ -43,7 +43,6 @@ export const SeasonManagement: React.FC = () => {
       draft_duration_days: 7,
      draft_total_rounds: 40, // <--- ADD THIS
     draft_hours_per_pick: 1,
-      pre_season_duration_days: 10,
  regular_season_weeks: 5, // Defaulting to 5
       include_rivals_week: false,  });
   const [creating, setCreating] = useState(false);
@@ -82,8 +81,14 @@ export const SeasonManagement: React.FC = () => {
         setMessage({ type: "success", text: `Season ${seasonNum} and its schedule have been created successfully!` });
         setShowPlanner(false);
         setNewSeasonNumber(""); setNewSeasonName(""); setCubucksAllocation("100");
-        setScheduleParams({ draft_start_date: '', draft_duration_days: 7, pre_season_duration_days: 10, regular_season_weeks: 6, include_rivals_week: false });
-        loadSeasons();
+setScheduleParams({ 
+    draft_start_date: '', 
+    draft_duration_days: 7, 
+    draft_total_rounds: 40, 
+    draft_hours_per_pick: 1, 
+    regular_season_weeks: 5, 
+    include_rivals_week: false 
+});        loadSeasons();
       } else {
         setMessage({ type: "error", text: result.error || "Failed to create season" });
       }
@@ -313,10 +318,7 @@ export const SeasonManagement: React.FC = () => {
       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Hours Per Pick</label>
       <input type="number" value={scheduleParams.draft_hours_per_pick} onChange={(e) => setScheduleParams(p => ({ ...p, draft_hours_per_pick: parseInt(e.target.value) || 0 }))} className="w-full px-4 py-2 border rounded-lg" />
     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Pre-Season (Days)</label>
-                      <input type="number" value={scheduleParams.pre_season_duration_days} onChange={(e) => setScheduleParams(p => ({ ...p, pre_season_duration_days: parseInt(e.target.value) || 0 }))} className="w-full px-4 py-2 border rounded-lg" />
-                    </div>
+                   
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Regular Season (Weeks)</label>
                       <input type="number" value={scheduleParams.regular_season_weeks} onChange={(e) => setScheduleParams(p => ({ ...p, regular_season_weeks: parseInt(e.target.value) || 0 }))} className="w-full px-4 py-2 border rounded-lg" />
