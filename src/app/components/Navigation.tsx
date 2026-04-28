@@ -42,6 +42,7 @@ import {
   BookOpen,
   Newspaper,
   History,
+Group, 
   Info,
   LayoutGrid,
   Cable,
@@ -167,7 +168,12 @@ export default function Navigation() {
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
                         <Link href="/pools/wire" className="flex items-center gap-2">
-                          <Cable className="size-4" /> The Wire
+                          <Cable className="size-4" /> THE WIRE
+                        </Link>
+                      </DropdownMenuItem>
+  <DropdownMenuItem asChild>
+                        <Link href="/pools/chamber" className="flex items-center gap-2">
+                          <Group className="size-4" /> The Chamber
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
