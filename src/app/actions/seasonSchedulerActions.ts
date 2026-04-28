@@ -155,12 +155,18 @@ export async function generateFullSeasonSchedule(
 
             const weekStartDate = new Date(weekInfo.start_date);
             const timeSlots: string[] = [];
-            for (let i = 0; i < gamesPerMatchup; i++) {
-                const gameDate = new Date(weekStartDate);
-                gameDate.setUTCDate(weekStartDate.getUTCDate() + i);
-                gameDate.setUTCHours(18 + (i * 2), 0, 0, 0); 
-                timeSlots.push(gameDate.toISOString());
-            }
+for (let i = 0; i < gamesPerMatchup; i++) {
+    const gameDate = new Date(weekStartDate); // weekStartDate is always a Thursday
+    
+    // This will schedule games on Thursday, Friday, Saturday, Sunday, Monday
+    gameDate.setUTCDate(weekStartDate.getUTCDate() + i); 
+    
+    // Distribute times for realism (e.g., two evening, one afternoon, etc.)
+    const hours = [19, 21, 15, 19, 21]; // UTC hours: 7pm, 9pm, 3pm, 7pm, 9pm
+    gameDate.setUTCHours(hours[i], 0, 0, 0); 
+    
+    timeSlots.push(gameDate.toISOString());
+}
 
             for (const timeSlot of timeSlots) {
                 const seasonNumber = typeof weekInfo.season_number === 'number' ? weekInfo.season_number : parseInt(String(weekInfo.season_number), 10);
