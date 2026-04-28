@@ -34,6 +34,7 @@ type CardWithDraftInfo = BasePoolCard & {
 };
 
 
+export type PoolIdentifier = 'draft' | 'free' | 'wire' | PoolTableName;
 
 
 export interface PoolCard {
@@ -64,24 +65,15 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
   try {
     let query;
 
-    // Case 1: The identifier is a logical pool within the 'card_pools' table.
     if (poolIdentifier === 'draft' || poolIdentifier === 'free' || poolIdentifier === 'wire') {
       query = supabase
         .from('card_pools')
-        .select(`
-          *,
-          team_draft_picks (
-            drafted_at,
-            teams ( id, name, emoji )
-          )
-        `)
-        .eq('pool_name', poolIdentifier) // Filter by the 'pool_name' column
+        .select(`*, team_draft_picks (drafted_at, teams (id, name, emoji))`)
+        .eq('pool_name', poolIdentifier)
         .order('card_name', { ascending: true });
-    } 
-    // Case 2: The identifier is a separate physical table.
-    else {
+    } else {
       query = supabase
-        .from(poolIdentifier) // Query the table directly
+        .from(poolIdentifier)
         .select('*')
         .order('card_name', { ascending: true });
     }
@@ -93,16 +85,28 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
       return { cards: [], error: error.message };
     }
     
-    const cards: PoolCard[] = (data || []).map((card: any) => {
+    // --- THIS IS THE FIX ---
+    // Use the explicit union type to satisfy the linter instead of 'any'.
+    const cards: PoolCard[] = (data || []).map((card: CardWithDraftInfo | BasePoolCard) => {
       const isDraftableCard = 'team_draft_picks' in card;
       const pick = isDraftableCard && Array.isArray(card.team_draft_picks) ? card.team_draft_picks[0] : null;
       const team = pick?.teams;
 
+      // This mapping logic now works safely for both data shapes.
       return {
           id: card.id,
           card_id: card.card_id,
           card_name: card.card_name,
-          // ... all other properties are mapped the same
+          card_set: card.card_set ?? undefined,
+          card_type: card.card_type ?? undefined,
+          rarity: card.rarity ?? undefined,
+          colors: card.colors ?? undefined,
+          image_url: card.image_url ?? undefined,
+          oldest_image_url: card.oldest_image_url ?? undefined,
+          mana_cost: card.mana_cost ?? undefined,
+          cmc: card.cmc ?? undefined,
+          cubucks_cost: card.cubucks_cost ?? undefined,
+          cubecobra_elo: card.cubecobra_elo ?? undefined,
           is_drafted: !!pick,
           drafted_by_team: team && team.id ? { id: team.id, name: team.name, emoji: team.emoji } : undefined,
           drafted_at: pick?.drafted_at ?? undefined,
@@ -115,54 +119,6 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
     const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
     console.error(`Unexpected error in getCardsForPool for identifier "${poolIdentifier}":`, message);
     return { cards: [], error: message };
-  }
-}
-
-export async function getPoolCardsWithStatus(): Promise<{
-  cards: PoolCard[];
-  error?: string;
-}> {
-  try {
-    const supabase = await createServerClient();
-    const { data: allCards, error: cardsError } = await supabase
-      .from("card_pools")
-      .select(`*, team_draft_picks ( id, drafted_at, team_id, teams ( id, name, emoji ) )`)
-      .order("card_name", { ascending: true });
-
-    if (cardsError) {
-      console.error("Error fetching card pool:", cardsError.message);
-      return { cards: [], error: cardsError.message };
-    }
-
-    // --- FIX: Use the specific CardWithDraftInfo type here as well ---
-    const cards: PoolCard[] = (allCards || []).map((card: CardWithDraftInfo) => {
-      const pick = Array.isArray(card.team_draft_picks) ? card.team_draft_picks[0] : card.team_draft_picks;
-      const team = pick?.teams ? (Array.isArray(pick.teams) ? pick.teams[0] : pick.teams) : null;
-
-      return {
-        id: card.id,
-        card_id: card.card_id,
-        card_name: card.card_name,
-        card_set: card.card_set ?? undefined,
-        card_type: card.card_type ?? undefined,
-        rarity: card.rarity ?? undefined,
-        colors: card.colors ?? undefined,
-        image_url: card.image_url ?? undefined,
-        oldest_image_url: card.oldest_image_url ?? undefined,
-        mana_cost: card.mana_cost ?? undefined,
-        cmc: card.cmc ?? undefined,
-        cubucks_cost: card.cubucks_cost ?? undefined,
-        cubecobra_elo: card.cubecobra_elo ?? undefined,
-        is_drafted: !!pick,
-        drafted_by_team: team ? { id: team.id, name: team.name, emoji: team.emoji } : undefined,
-        drafted_at: pick?.drafted_at ?? undefined,
-      };
-    });
-
-    return { cards };
-  } catch (error) {
-    console.error("Unexpected error in getPoolCardsWithStatus:", error);
-    return { cards: [], error: "An unexpected error occurred" };
   }
 }
 
