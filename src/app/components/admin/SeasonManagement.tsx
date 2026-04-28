@@ -372,14 +372,11 @@ export const SeasonManagement: React.FC = () => {
 
 const ScheduleTabContent: React.FC<{ seasonId: string }> = ({ seasonId }) => {
   const [scheduleTab, setScheduleTab] = useState<"overview" | "create-week" | "schedule-matches" | "extensions">("overview");
-    const [seasonConfig, setSeasonConfig] = useState({ regularSeasonWeeks: 5, includeRivalsWeek: true }); 
   return (
     <>
       <div className="p-6 border-b border-gray-200 dark:border-gray-700">
         <FullSeasonScheduler 
             seasonId={seasonId}
-            regularSeasonWeeks={seasonConfig.regularSeasonWeeks}
-            includeRivalsWeek={seasonConfig.includeRivalsWeek}
         />
     </div>
 
