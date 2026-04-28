@@ -37,6 +37,7 @@ export interface Season {
 }
 export interface SeasonScheduleParams {
   draft_start_date: string; // ISO String
+  draft_start_time: string; 
   draft_duration_days: number;
     draft_total_rounds: number;      
   draft_hours_per_pick: number; 
@@ -154,9 +155,10 @@ export async function createSeasonWithSchedule(
     if (!user) return { success: false, error: "Not authenticated" };
 
     // --- NEW: DYNAMIC PRE-SEASON & DATE CALCULATION ---
-    
+        const localDateTimeString = `${scheduleParams.draft_start_date}T${scheduleParams.draft_start_time}`;
+
     // 1. DRAFT PHASE: This is our fixed starting point.
-    const draftStart = new Date(scheduleParams.draft_start_date);
+    const draftStart = new Date(localDateTimeString);
     const draftEnd = new Date(draftStart);
     draftEnd.setDate(draftStart.getDate() + scheduleParams.draft_duration_days);
 
