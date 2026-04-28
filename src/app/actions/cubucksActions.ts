@@ -40,7 +40,6 @@ export interface SeasonScheduleParams {
   draft_duration_days: number;
     draft_total_rounds: number;      
   draft_hours_per_pick: number; 
-  pre_season_duration_days: number;
   regular_season_weeks: number;
   include_rivals_week: boolean;
   // Post-season duration is fixed (e.g., ~2 weeks for playoffs + off-season votes)
@@ -154,27 +153,41 @@ export async function createSeasonWithSchedule(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
-    // --- Corrected Phase & Date Calculation Logic ---
-    const draftStart = new Date(scheduleParams.draft_start_date);
+    // --- NEW: DYNAMIC PRE-SEASON & DATE CALCULATION ---
     
-    // 1. DRAFT PHASE
+    // 1. DRAFT PHASE: This is our fixed starting point.
+    const draftStart = new Date(scheduleParams.draft_start_date);
     const draftEnd = new Date(draftStart);
     draftEnd.setDate(draftStart.getDate() + scheduleParams.draft_duration_days);
 
-    // 2. PRE-SEASON PHASE (comes AFTER draft)
+    // 2. PRE-SEASON PHASE (Dynamic Calculation)
+    // The pre-season starts the moment the draft ends.
     const preSeasonStart = new Date(draftEnd);
-    const preSeasonEnd = new Date(preSeasonStart);
-    preSeasonEnd.setDate(preSeasonStart.getDate() + scheduleParams.pre_season_duration_days);
+
+    // Calculate the earliest possible end for the pre-season (5-day minimum).
+    const minPreSeasonEndDate = new Date(preSeasonStart);
+    minPreSeasonEndDate.setDate(minPreSeasonEndDate.getDate() + 5);
+
+    // Find the next Wednesday on or after this minimum date.
+    // Day numbers (UTC): Sun=0, Mon=1, Tue=2, Wed=3, Thu=4
+    const preSeasonEndDate = new Date(minPreSeasonEndDate);
+    const daysUntilWednesday = (3 - preSeasonEndDate.getUTCDay() + 7) % 7;
+    preSeasonEndDate.setUTCDate(preSeasonEndDate.getUTCDate() + daysUntilWednesday);
+    preSeasonEndDate.setUTCHours(23, 59, 59, 999); // Pre-season ends at the very end of Wednesday.
 
     // 3. REGULAR SEASON PHASE
-    const regularSeasonStart = new Date(preSeasonEnd);
+    // The regular season starts on the Thursday immediately following the pre-season end.
+    const regularSeasonStart = new Date(preSeasonEndDate);
+    regularSeasonStart.setUTCDate(regularSeasonStart.getUTCDate() + 1);
+    regularSeasonStart.setUTCHours(0, 0, 0, 0); // Starts at the beginning of Thursday.
+
     const regularSeasonEnd = new Date(regularSeasonStart);
     regularSeasonEnd.setDate(regularSeasonStart.getDate() + scheduleParams.regular_season_weeks * 7);
 
-    // 4. POST-SEASON PHASE (Playoffs, etc.)
+    // 4. POST-SEASON PHASE (remains the same)
     const postSeasonStart = new Date(regularSeasonEnd);
     const postSeasonEnd = new Date(postSeasonStart);
-    postSeasonEnd.setDate(postSeasonStart.getDate() + 14); // Fixed 2 weeks for now
+    postSeasonEnd.setDate(postSeasonStart.getDate() + 14);
 
     // --- Database Transaction Simulation ---
     // This will be done as a series of steps with manual rollback on failure.
