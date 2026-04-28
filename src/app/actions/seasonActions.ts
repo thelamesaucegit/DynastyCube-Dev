@@ -11,6 +11,49 @@ export interface CardCostChange {
   was_drafted: boolean;
 }
 
+async function verifyAdmin(supabase: any): Promise<{ authorized: boolean; error?: string }> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { authorized: false, error: "Not authenticated" };
+  const { data: userData } = await supabase.from("users").select("is_admin").eq("id", user.id).single();
+  if (!userData?.is_admin) return { authorized: false, error: "Unauthorized" };
+  return { authorized: true };
+}
+
+/**
+ * Deletes an entire season and all its associated data.
+ * THIS IS A DESTRUCTIVE AND IRREVERSIBLE ACTION.
+ * The database's CASCADE constraint will handle deleting linked schedule_weeks, draft_sessions, etc.
+ * @param seasonId The UUID of the season to delete.
+ */
+export async function deleteFullSeason(
+  seasonId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createServerClient(); // Assumes createServerClient is available
+    const admin = await verifyAdmin(supabase); // Assumes verifyAdmin helper is available or you can copy it
+    if (!admin.authorized) {
+      return { success: false, error: admin.error };
+    }
+
+    const { error } = await supabase
+      .from("seasons")
+      .delete()
+      .eq("id", seasonId);
+
+    if (error) {
+      console.error("Error deleting season:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "An unknown error occurred.";
+    console.error("Unexpected error deleting full season:", message);
+    return { success: false, error: message };
+  }
+}
+
 /**
  * Rollover card costs to a new season
  * - Drafted cards: cost +1
