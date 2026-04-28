@@ -699,24 +699,25 @@ export async function checkDraftTimer(adminClient?: AnySupabaseClient): Promise<
 }> {
   try {
     const supabase = adminClient ?? await createServerClient();
-    
+        const now = new Date().toISOString(); // Get the current time in UTC ISO format
+
     // This function now assumes it's being called because a potentially actionable session exists.
     // It queries for a scheduled OR active session to handle the transition from scheduled->active.
-    const { data: session } = await supabase
+   const { data: session } = await supabase
         .from("draft_sessions")
         .select("*")
-        .in("status", ["scheduled", "active"])
+        .or(`status.eq.active,and(status.eq.scheduled,start_time.lte.${now})`)
         .order("created_at", { ascending: false })
         .limit(1)
         .single();
-
-    // If, in the small window since the gatekeeper ran, the session was completed, we do nothing.
-    if (!session) return { action: "none", message: "No actionable draft session found." };
-
-    const now = new Date();
-
+        
+    // If no such session exists, we can exit early.
+    if (!session) {
+      return { action: "none", message: "No actionable draft session found." };
+    }
+    
     // Case 1: Activate a scheduled draft if its start time has passed.
-    if (session.status === "scheduled" && new Date(session.start_time) <= now) {
+    if (session.status === "scheduled"  {
       console.log(`Activating scheduled draft session ${session.id}.`);
       const result = await activateDraft(session.id, supabase);
       return result.success 
@@ -725,7 +726,7 @@ export async function checkDraftTimer(adminClient?: AnySupabaseClient): Promise<
     }
 
     // Case 2: Handle a pick for an active draft if the deadline has passed.
-    if (session.status === "active" && session.current_pick_deadline && new Date(session.current_pick_deadline) <= now) {
+    if (session.status === "active" && session.current_pick_deadline && new Date(session.current_pick_deadline) <= new Date()) {
       console.log(`Deadline passed for session ${session.id}. Executing auto-pick logic.`);
 
       const { status: draftStatus, error: statusError } = await getDraftStatus(session.id, supabase);
