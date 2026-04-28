@@ -73,6 +73,7 @@ export interface TeamWithDetails {
     image_url: string | null;
     card_name: string;
   } | null;
+   rival_short_name: string | null; 
 }
 
 /**
