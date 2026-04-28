@@ -408,7 +408,8 @@ const ScheduleTabContent: React.FC<{ seasonId: string }> = ({ seasonId }) => {
       </div>
       <div className="p-6">
         {scheduleTab === "overview" && <ScheduleOverview seasonId={seasonId} />}
-        {scheduleTab === "create-week" && <WeekCreator seasonId={seasonId} />}
+        {scheduleTab === "create-week" && activeSeason && (
+        <WeekCreator seasonId={seasonId} seasonNumber={activeSeason.season_number} />}
         {scheduleTab === "schedule-matches" && <MatchScheduler seasonId={seasonId} />}
         {scheduleTab === "extensions" && <MatchExtensionManager seasonId={seasonId} />}
       </div>
