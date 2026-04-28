@@ -28,6 +28,11 @@ import { MatchExtensionManager } from "./MatchExtensionManager";
 
 type SeasonSubTab = "management" | "schedule";
 
+interface ScheduleTabContentProps {
+    seasonId: string;
+    activeSeason: Season | undefined;
+}
+
 export const SeasonManagement: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<SeasonSubTab>("management");
   const [seasons, setSeasons] = useState<Season[]>([]);
@@ -366,7 +371,7 @@ setScheduleParams({
       {activeSubTab === "schedule" && activeSeason && (
         <div className="space-y-8">
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
-            <ScheduleTabContent seasonId={activeSeason.id} />
+<ScheduleTabContent seasonId={activeSeason.id} activeSeason={activeSeason} />
           </div>
         </div>
       )}
@@ -382,7 +387,7 @@ setScheduleParams({
   );
 };
 
-const ScheduleTabContent: React.FC<{ seasonId: string }> = ({ seasonId }) => {
+const ScheduleTabContent: React.FC<ScheduleTabContentProps> = ({ seasonId, activeSeason }) => {
   const [scheduleTab, setScheduleTab] = useState<"overview" | "create-week" | "schedule-matches" | "extensions">("overview");
   return (
     <>
@@ -408,7 +413,8 @@ const ScheduleTabContent: React.FC<{ seasonId: string }> = ({ seasonId }) => {
       </div>
       <div className="p-6">
         {scheduleTab === "overview" && <ScheduleOverview seasonId={seasonId} />}
-        {scheduleTab === "create-week" && <WeekCreator seasonId={seasonId} />}
+        {scheduleTab === "create-week" && activeSeason && (
+        <WeekCreator seasonId={seasonId} seasonNumber={activeSeason.season_number} />}
         {scheduleTab === "schedule-matches" && <MatchScheduler seasonId={seasonId} />}
         {scheduleTab === "extensions" && <MatchExtensionManager seasonId={seasonId} />}
       </div>

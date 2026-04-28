@@ -7,10 +7,11 @@ import { useUserTimezone } from "@/hooks/useUserTimezone";
 
 interface WeekCreatorProps {
   seasonId: string;
+  seasonNumber: number; 
   onWeekCreated?: () => void;
 }
 
-export const WeekCreator: React.FC<WeekCreatorProps> = ({ seasonId, onWeekCreated }) => {
+export const WeekCreator: React.FC<WeekCreatorProps> = ({ seasonId, seasonNumber, onWeekCreated }) => {
   const { timezone } = useUserTimezone();
   const [weekNumber, setWeekNumber] = useState(1);
   const [startDate, setStartDate] = useState("");
@@ -58,6 +59,7 @@ export const WeekCreator: React.FC<WeekCreatorProps> = ({ seasonId, onWeekCreate
       const result = await createScheduleWeek({
         season_id: seasonId,
         week_number: weekNumber,
+        season_number: seasonNumber,
         start_date: start.toISOString(),
         end_date: end.toISOString(),
         deck_submission_deadline: deck.toISOString(),
