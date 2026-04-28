@@ -41,7 +41,10 @@ export async function searchAllCards(
   try {
     while (next_page) {
       await waitForRateLimit();
-      const response = await fetch(next_page);
+      
+      // --- THIS IS THE FIX ---
+      // We explicitly type the 'response' variable as 'Response'.
+      const response: Response = await fetch(next_page);
 
       if (!response.ok) {
         const errorBody = await response.json();
@@ -72,7 +75,6 @@ export async function searchAllCards(
     errors,
   };
 }
-
 export async function fetchOldestPrintings(oracleIds: string[]): Promise<Map<string, string>> {
   if (oracleIds.length === 0) {
     return new Map();
