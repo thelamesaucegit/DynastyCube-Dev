@@ -65,6 +65,7 @@ export interface TeamWithDetails {
   motto: string;
   wins: number;
   losses: number;
+  rival_short_name: string | null;
   primary_color: string | null;
   secondary_color: string | null;
   member_count: number;
@@ -477,7 +478,7 @@ export async function getTeamsWithDetails(includeHidden = false): Promise<{
   try {
     let query = supabase
       .from("teams")
-      .select("id, name, emoji, motto, short_name, wins, losses, primary_color, secondary_color, member_count");
+      .select("id, name, emoji, motto, short_name, wins, losses, primary_color, secondary_color, member_count, rival_short_name");
 
     // THIS IS THE FIX: Only filter for hidden teams if the caller doesn't want them.
     if (!includeHidden) {
