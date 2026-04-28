@@ -69,6 +69,7 @@ export interface TeamWithDetails {
   primary_color: string | null;
   secondary_color: string | null;
   member_count: number;
+  is_hidden?: boolean;
   last_pick: {
     image_url: string | null;
     card_name: string;
