@@ -717,7 +717,7 @@ export async function checkDraftTimer(adminClient?: AnySupabaseClient): Promise<
     }
     
     // Case 1: Activate a scheduled draft if its start time has passed.
-    if (session.status === "scheduled"  {
+    if (session.status === "scheduled")  {
       console.log(`Activating scheduled draft session ${session.id}.`);
       const result = await activateDraft(session.id, supabase);
       return result.success 
