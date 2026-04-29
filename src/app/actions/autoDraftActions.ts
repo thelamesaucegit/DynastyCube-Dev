@@ -374,46 +374,7 @@ export async function executeAutoDraft(
       return { success: false, error: "This team is not on the clock" };
     }
 
-    // --- STEP 2.2b: Early exit if balance is 0 and no queue entries ---
-    // Algorithm picks require funds. Manual queue picks and captain/majority
-    // force picks are allowed even at 0 balance (will be handled below).
-    const { team: teamBalance } = await getTeamBalance(teamId, supabase);
-    const balance = teamBalance?.cubucks_balance ?? 0;
-
-    if (balance <= 0) {
-      const { data: queueCheck } = await supabase
-        .from("team_draft_queue")
-        .select("id")
-        .eq("team_id", teamId)
-        .limit(1);
-
-      if (!queueCheck || queueCheck.length === 0) {
-        // No queue, no funds — skip immediately without computing anything
-        const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId, supabase);
-        const pickNumber = existingPicks.length + 1;
-        const { pick: skippedPick, error: skipError } = await addSkippedPick(
-          teamId, pickNumber, draftSessionId, supabase
-        );
-        if (skipError) return { success: false, source: "skipped", error: skipError };
-
-        // Set pick_source on the skipped record
-        if (skippedPick?.id) {
-          await supabase
-            .from("team_draft_picks")
-            .update({ pick_source: "skipped" })
-            .eq("id", skippedPick.id);
-        }
-
-        const { data: teamData } = await supabase
-          .from('teams').select('name').eq('id', teamId).single();
-        supabase.channel(`draft-updates-${draftSessionId}`).send({
-          type: 'broadcast',
-          event: 'new_pick',
-          payload: { ...skippedPick, team_name: teamData?.name || 'Unknown' },
-        });
-        return { success: true, source: "skipped", pick: { cardId: "skipped", cardName: "SKIPPED", cost: 0 } };
-      }
-    }
+   
 
     // --- Normal flow: queue exists or balance > 0 ---
     const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId, supabase);
