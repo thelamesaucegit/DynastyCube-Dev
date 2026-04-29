@@ -147,20 +147,58 @@ export async function getCardPool(
 
 export async function getAvailableCardsForDraft(poolName: string = "draft", adminClient?: AnySupabaseClient): Promise<{ cards: CardData[]; error?: string }> {
   const supabase = adminClient ?? await createClient();
+  console.log(`[Draft Availability] Checking for pool: "${poolName}"`);
   try {
-    const { data: allCards, error: poolError } = await supabase.from("card_pools").select("*").eq("pool_name", poolName).eq('hidden', false).order("card_name", { ascending: true });
+    const { data: allCards, error: poolError } = await supabase
+      .from("card_pools")
+      .select("id") // Only select 'id' for efficiency
+      .eq("pool_name", poolName)
+      .eq('hidden', false);
+
     if (poolError) {
+      console.error("[Draft Availability] Error fetching from card_pools:", poolError);
       return { cards: [], error: poolError.message };
     }
-    const { data: draftedPicks, error: draftError } = await supabase.from("team_draft_picks").select("card_pool_id").not("card_pool_id", "is", null);
+    console.log(`[Draft Availability] Found ${allCards?.length || 0} total cards in pool "${poolName}".`);
+    if (!allCards || allCards.length === 0) {
+        return { cards: [] };
+    }
+
+    const { data: draftedPicks, error: draftError } = await supabase
+      .from("team_draft_picks")
+      .select("card_pool_id")
+      .not("card_pool_id", "is", null);
+
     if (draftError) {
+      console.error("[Draft Availability] Error fetching from team_draft_picks:", draftError);
       return { cards: [], error: draftError.message };
     }
+
     const draftedInstanceIds = new Set((draftedPicks || []).map(p => p.card_pool_id));
-    const availableCards = (allCards || []).filter(card => !draftedInstanceIds.has(card.id!));
-    return { cards: availableCards };
-  } catch {
-    return { cards: [], error: "An unexpected error occurred" };
+    console.log(`[Draft Availability] Found ${draftedInstanceIds.size} unique drafted card instances.`);
+
+    // Now, let's fetch the FULL data for only the cards that are NOT drafted.
+    const { data: availableCards, error: availableError } = await supabase
+        .from("card_pools")
+        .select("*")
+        .eq("pool_name", poolName)
+        .eq('hidden', false)
+        .not("id", "in", `(${[...draftedInstanceIds].map(id => `'${id}'`).join(',')})`) // Exclude drafted IDs
+        .order("card_name", { ascending: true });
+
+    if(availableError) {
+        console.error("[Draft Availability] Error fetching available card details:", availableError);
+        return { cards: [], error: availableError.message };
+    }
+    
+    console.log(`[Draft Availability] After filtering, there are ${availableCards?.length || 0} cards available.`);
+
+    return { cards: availableCards || [] };
+
+  } catch(error) {
+    const message = error instanceof Error ? error.message : "An unexpected error occurred.";
+    console.error("[Draft Availability] UNEXPECTED CATCH BLOCK ERROR:", message);
+    return { cards: [], error: message };
   }
 }
 
