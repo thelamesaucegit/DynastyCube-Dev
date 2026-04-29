@@ -42,8 +42,7 @@ export const SeasonManagement: React.FC = () => {
   const [newSeasonName, setNewSeasonName] = useState("");
   const [cubucksAllocation, setCubucksAllocation] = useState("100");
 
-  // State for the new time input - DECLARED ONCE
-  const [draftStartTime, setDraftStartTime] = useState("12:00"); 
+
 
   // Updated state to remove pre_season_duration_days
   const [scheduleParams, setScheduleParams] = useState<Omit<SeasonScheduleParams, 'draft_start_time'>>({
