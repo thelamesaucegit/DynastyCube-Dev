@@ -128,12 +128,21 @@ async function executeConfirmedTeamPick(teamId: string, cardPoolId: string, draf
 
 export async function computeAutoDraftPick(teamId: string, draftSessionId: string, adminClient?: AnySupabaseClient): Promise<{ card: CardData | null; algorithmDetails: AlgorithmDetails | null; error?: string; }> {
     try {
+          console.log(`[AutoDraft Debug] Starting computation for team: ${teamId}`);
+
         const { cards: availableCards, error: cardsError } = await getAvailableCardsForDraft("default", adminClient);
-        if (cardsError) return { card: null, algorithmDetails: null, error: cardsError };
+        if (cardsError) {
+            console.error(`[AutoDraft Debug] ERROR fetching available cards: ${cardsError}`);
+            return { card: null, algorithmDetails: null, error: cardsError };
+        }
+        console.log(`[AutoDraft Debug] Found ${availableCards.length} available cards in the draft pool.`);
         if (availableCards.length === 0) return { card: null, algorithmDetails: null, error: "No available cards in the pool" };
+
         const { picks: teamPicks } = await getTeamDraftPicks(teamId, draftSessionId, adminClient);
         const { team: teamBalance } = await getTeamBalance(teamId, adminClient);
         const balance = teamBalance?.cubucks_balance ?? 0;
+        console.log(`[AutoDraft Debug] Team balance: ${balance} Cubucks.`);
+
         const LAND_ELO_MODIFIER = 0.8;
         const AFFINITY_BONUS_PER_PICK = 0.1;
         const ANTI_AFFINITY_PENALTY_PER_PICK = 0.05;
@@ -150,6 +159,7 @@ export async function computeAutoDraftPick(teamId: string, draftSessionId: strin
         const cardsWithElo = availableCards.map(card => { let elo = card.cubecobra_elo || 0; if (card.card_type?.toLowerCase().includes('land')) { elo *= LAND_ELO_MODIFIER; } return { ...card, cubecobra_elo: elo }; }).filter((c) => c.cubecobra_elo > 0).sort((a, b) => b.cubecobra_elo - a.cubecobra_elo);
         const candidatePool = cardsWithElo.length > 0 ? cardsWithElo : [...availableCards].sort((a, b) => a.card_name.localeCompare(b.card_name));
         const top50 = candidatePool.slice(0, 50);
+              console.log(`[AutoDraft Debug] Candidate pool size: ${candidatePool.length}. Top 50 ELO: ${top50[0]?.cubecobra_elo || 'N/A'}`);
         const colorTotals: Record<string, number> = { W: 0, U: 0, B: 0, R: 0, G: 0 };
         for (const card of top50) {
             const elo = card.cubecobra_elo || 0;
@@ -183,20 +193,35 @@ export async function computeAutoDraftPick(teamId: string, draftSessionId: strin
             selectedCard = bestColorlessCard;
             selectedSource = "colorless";
         }
+       if (selectedCard) {
+            console.log(`[AutoDraft Debug] Initial selection: ${selectedCard.card_name} (Cost: ${selectedCard.cubucks_cost || 1})`);
+        } else {
+            console.log(`[AutoDraft Debug] No initial card could be selected by the algorithm.`);
+        }
         if (selectedCard && (selectedCard.cubucks_cost || 1) > balance) {
+                      console.log(`[AutoDraft Debug] Initial pick is too expensive. Searching for affordable alternative...`);
+
             const affordableTop50 = top50.filter(c => (c.cubucks_cost || 1) <= balance);
             if (affordableTop50.length > 0) {
                 selectedCard = affordableTop50[0];
             } else {
                 const anyAffordable = availableCards.filter(c => (c.cubucks_cost || 1) <= balance).sort((a, b) => (b.cubecobra_elo || 0) - (a.cubecobra_elo || 0));
-                selectedCard = anyAffordable[0] || null;
+                          console.log(`[AutoDraft Debug] Found ${anyAffordable.length} affordable cards.`);
+  
+              selectedCard = anyAffordable[0] || null;
             }
+ if (selectedCard) {
+            console.log(`[AutoDraft Debug] Final selection: ${selectedCard.card_name}`);
+        } else {
+            console.error(`[AutoDraft Debug] FINAL RESULT: No affordable card was found. Returning NULL.`);
         }
         const draftedColorCounts = countDraftedColors(teamPicks);
         const algorithmDetails: AlgorithmDetails = { top50CardIds: top50.map((c) => c.card_id), colorTotals, colorAffinityModifiers: colorModifiers, bestColoredCard: bestColoredCard ? { cardId: bestColoredCard.card_id, cardName: bestColoredCard.card_name, elo: bestColoredCard.cubecobra_elo || 0, color: dominantColor || "" } : null, bestColorlessCard: bestColorlessCard ? { cardId: bestColorlessCard.card_id, cardName: bestColorlessCard.card_name, elo: bestColorlessCard.cubecobra_elo || 0 } : null, selectedSource, teamDraftedColorCounts: draftedColorCounts, dominantColor, };
         return { card: selectedCard, algorithmDetails };
     } catch (error) {
         console.error("Error computing auto-draft pick:", error);
+              console.error("Error computing auto-draft pick:", error);
+
         return { card: null, algorithmDetails: null, error: "Failed to compute auto-draft pick" };
     }
 }
