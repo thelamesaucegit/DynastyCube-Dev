@@ -375,7 +375,8 @@ export async function executeAutoDraft(
     }
 
    
-
+const { team: teamBalance } = await getTeamBalance(teamId, supabase);
+const balance = teamBalance?.cubucks_balance ?? 0;
     // --- Normal flow: queue exists or balance > 0 ---
     const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId, supabase);
     const pickNumber = existingPicks.length + 1;
