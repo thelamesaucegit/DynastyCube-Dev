@@ -129,7 +129,7 @@ async function executeConfirmedTeamPick(teamId: string, cardPoolId: string, draf
 export async function computeAutoDraftPick(teamId: string, draftSessionId: string, adminClient?: AnySupabaseClient): Promise<{ card: CardData | null; algorithmDetails: AlgorithmDetails | null; error?: string; }> {
     console.log(`[AutoDraft Debug] Starting computation for team: ${teamId}`);
     try {
-        const { cards: availableCards, error: cardsError } = await getAvailableCardsForDraft("default", adminClient);
+        const { cards: availableCards, error: cardsError } = await getAvailableCardsForDraft("draft", adminClient);
         if (cardsError) {
             console.error(`[AutoDraft Debug] ERROR fetching available cards: ${cardsError}`);
             return { card: null, algorithmDetails: null, error: cardsError };
@@ -242,7 +242,7 @@ export async function getAutoDraftPreview(teamId: string, draftSessionId: string
         if (queueError) { console.error("Error fetching draft queue:", queueError); }
         const queueDepth = (queueEntries || []).length;
         if (queueEntries && queueEntries.length > 0) {
-            const { cards: availableCards } = await getAvailableCardsForDraft("default", adminClient);
+            const { cards: availableCards } = await getAvailableCardsForDraft("draft", adminClient);
             const availableInstanceIds = new Set(availableCards.map((c) => c.id));
             for (const entry of queueEntries) {
                 if (entry.card_pool_id && availableInstanceIds.has(entry.card_pool_id)) {
