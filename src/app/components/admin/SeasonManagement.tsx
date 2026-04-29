@@ -35,7 +35,8 @@ export const SeasonManagement: React.FC = () => {
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  
+  const [draftStartTime, setDraftStartTime] = useState("12:00"); 
+
   const [showPlanner, setShowPlanner] = useState(false);
   const [newSeasonNumber, setNewSeasonNumber] = useState("");
   const [newSeasonName, setNewSeasonName] = useState("");
@@ -300,6 +301,10 @@ export const SeasonManagement: React.FC = () => {
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Draft Start Time</label>
                         <input type="time" value={draftStartTime} onChange={(e) => setDraftStartTime(e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
                     </div>
+                    <div>
+    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Draft Start Time</label>
+    <input type="time" value={draftStartTime} onChange={(e) => setDraftStartTime(e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+</div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Draft Duration (Days)</label>
                       <input type="number" value={scheduleParams.draft_duration_days} onChange={(e) => setScheduleParams(p => ({ ...p, draft_duration_days: parseInt(e.target.value) || 0 }))} className="w-full px-4 py-2 border rounded-lg" />
