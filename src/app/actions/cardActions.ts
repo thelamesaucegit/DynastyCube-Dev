@@ -149,21 +149,8 @@ export async function getAvailableCardsForDraft(poolName: string = "draft", admi
   const supabase = adminClient ?? await createClient();
   console.log(`[Draft Availability] Checking for pool: "${poolName}"`);
   try {
-    const { data: allCards, error: poolError } = await supabase
-      .from("card_pools")
-      .select("id") // Only select 'id' for efficiency
-      .eq("pool_name", poolName)
-      .eq('hidden', false);
-
-    if (poolError) {
-      console.error("[Draft Availability] Error fetching from card_pools:", poolError);
-      return { cards: [], error: poolError.message };
-    }
-    console.log(`[Draft Availability] Found ${allCards?.length || 0} total cards in pool "${poolName}".`);
-    if (!allCards || allCards.length === 0) {
-        return { cards: [] };
-    }
-
+    // This first query to get all IDs is no longer needed, we can do it in one step.
+    
     const { data: draftedPicks, error: draftError } = await supabase
       .from("team_draft_picks")
       .select("card_pool_id")
@@ -174,17 +161,25 @@ export async function getAvailableCardsForDraft(poolName: string = "draft", admi
       return { cards: [], error: draftError.message };
     }
 
-    const draftedInstanceIds = new Set((draftedPicks || []).map(p => p.card_pool_id));
-    console.log(`[Draft Availability] Found ${draftedInstanceIds.size} unique drafted card instances.`);
+    const draftedInstanceIds = (draftedPicks || []).map(p => p.card_pool_id).filter(Boolean) as string[];
+    console.log(`[Draft Availability] Found ${draftedInstanceIds.length} unique drafted card instances.`);
 
-    // Now, let's fetch the FULL data for only the cards that are NOT drafted.
-    const { data: availableCards, error: availableError } = await supabase
+    // --- CORRECTED QUERY ---
+    // Let the Supabase client handle the formatting of the 'in' clause.
+    // We just provide an array of strings.
+
+    let query = supabase
         .from("card_pools")
         .select("*")
         .eq("pool_name", poolName)
-        .eq('hidden', false)
-        .not("id", "in", `(${[...draftedInstanceIds].map(id => `'${id}'`).join(',')})`) // Exclude drafted IDs
-        .order("card_name", { ascending: true });
+        .eq('hidden', false);
+
+    // Only add the .not() filter if there are actually drafted cards to exclude.
+    if (draftedInstanceIds.length > 0) {
+        query = query.not("id", "in", `(${draftedInstanceIds.join(',')})`);
+    }
+
+    const { data: availableCards, error: availableError } = await query.order("card_name", { ascending: true });
 
     if(availableError) {
         console.error("[Draft Availability] Error fetching available card details:", availableError);
@@ -201,7 +196,6 @@ export async function getAvailableCardsForDraft(poolName: string = "draft", admi
     return { cards: [], error: message };
   }
 }
-
 export async function addCardToPool(
   card: CardData,
   tableName: PoolTableName = "card_pools"
