@@ -7,7 +7,8 @@ import Image from "next/image";
 import { createClient } from "@supabase/supabase-js";
 import { getDraftBoardData } from "@/app/actions/liveDraftActions";
 import type { DraftOrderTeam } from "@/app/actions/liveDraftActions";
-import type { DraftPick } from "@/app/draft/[sessionId]/live/page";
+import type { DraftPick } from "@/app/draft/[sessionId]/live/page"; // This now includes color_identity
+import { ColorIdentityGlow } from './ColorIdentityGlow'; 
 import { Button } from "@/app/components/ui/button";
 import { List, Columns } from "lucide-react";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -20,6 +21,7 @@ const supabase = createClient(
 
 type ViewMode = 'list' | 'team';
 
+// MODIFIED DraftCard to accept and use color_identity
 const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small' }> = ({ pick, isNewest, size }) => {
   const { useOldestArt } = useSettings();
   const imageUrl = getCardImageUrl(pick, useOldestArt);
@@ -27,38 +29,46 @@ const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small
 
   if (size === 'large') {
     return (
-      <div className={`
-        bg-gray-800 border border-gray-700 rounded-lg shadow-lg p-3 ${cardClasses}
-        ${isNewest ? "animate-fade-in-down" : "transform hover:scale-105"}
-      `}>
-        <div className="flex justify-between items-center mb-2 text-xs">
-          <span className="font-bold text-white bg-blue-600 px-2 py-1 rounded">#{pick.pick_number}</span>
-          <span className="font-semibold text-gray-300 truncate">{pick.team_name}</span>
-        </div>
-        <Image src={imageUrl || '/placeholder-card.png'} alt={pick.card_name} width={745} height={1040} sizes="100vw" className="w-full h-auto rounded-md shadow-md" />
-        <h3 className="font-semibold text-center text-sm text-gray-100 mt-2 truncate">{pick.card_name}</h3>
+      <div className={`transform hover:scale-105 ${isNewest ? "animate-fade-in-down" : ""}`}>
+        {/* Use ColorIdentityGlow as the wrapper */}
+        <ColorIdentityGlow colors={pick.color_identity}>
+          <div className={`bg-gray-800 rounded-lg shadow-lg p-2 ${cardClasses}`}>
+            <div className="flex justify-between items-center mb-2 text-xs">
+              <span className="font-bold text-white bg-blue-600 px-2 py-1 rounded">#{pick.pick_number}</span>
+              <span className="font-semibold text-gray-300 truncate">{pick.team_name}</span>
+            </div>
+            <Image src={imageUrl || '/placeholder-card.png'} alt={pick.card_name} width={745} height={1040} sizes="100vw" className="w-full h-auto rounded-md shadow-md" />
+            <h3 className="font-semibold text-center text-sm text-gray-100 mt-2 truncate">{pick.card_name}</h3>
+          </div>
+        </ColorIdentityGlow>
       </div>
     );
   }
 
   // Small card for team view
   return (
-    <div className={`
-      bg-gray-800/80 border border-gray-700/50 rounded-md p-1.5 ${cardClasses}
-      ${isNewest ? "animate-fade-in border-green-500/80 ring-1 ring-green-500/80" : ""}
-    `}>
-      <p className="text-xs text-center text-gray-200 truncate font-semibold">{pick.card_name}</p>
-      <p className="text-[10px] text-center text-gray-400">P: {pick.pick_number}</p>
+    <div className={`rounded-md p-0.5 ${isNewest ? "animate-fade-in ring-2 ring-green-400" : ""}`}>
+        <ColorIdentityGlow colors={pick.color_identity} className="!p-0 !rounded-sm">
+            <div className={`bg-gray-800/80 rounded-sm p-1.5 ${cardClasses}`}>
+                <p className="text-xs text-center text-gray-200 truncate font-semibold">{pick.card_name}</p>
+                <p className="text-[10px] text-center text-gray-400">P: {pick.pick_number}</p>
+            </div>
+        </ColorIdentityGlow>
     </div>
   );
 };
 
+// MODIFIED ListView to implement the responsive mobile grid
 const ListView: FC<{ picks: DraftPick[], newestPickId: number | null }> = ({ picks, newestPickId }) => {
   const newestPick = picks.length > 0 ? picks[0] : null;
   const historicalPicks = picks.slice(1);
+  
+  // CONFIGURABLE: Change this value to 3 or 4 to test
+  const mobileGridCols = 3; 
 
   return (
     <div className="space-y-8">
+      {/* Most recent pick is always full width */}
       {newestPick && (
         <div className="max-w-xs mx-auto">
           <DraftCard
@@ -73,14 +83,18 @@ const ListView: FC<{ picks: DraftPick[], newestPickId: number | null }> = ({ pic
       {historicalPicks.length > 0 && (
          <>
           <div className="relative text-center">
-            <div className="absolute inset-0 flex items-center" aria-hidden="true">
-              <div className="w-full border-t border-gray-700" />
-            </div>
-            <div className="relative flex justify-center">
-              <span className="bg-background px-2 text-sm text-muted-foreground">Draft History</span>
-            </div>
+            <div className="absolute inset-0 flex items-center" aria-hidden="true"><div className="w-full border-t border-gray-700" /></div>
+            <div className="relative flex justify-center"><span className="bg-background px-2 text-sm text-muted-foreground">Draft History</span></div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+          
+          {/* NEW: Responsive Grid Logic */}
+          <div className={`
+            grid gap-4 
+            grid-cols-${mobileGridCols} 
+            md:grid-cols-3 
+            lg:grid-cols-4 
+            xl:grid-cols-5
+          `}>
             {historicalPicks.map((pick) => (
               <DraftCard key={pick.id} pick={pick} isNewest={false} size="large" />
             ))}
@@ -91,6 +105,7 @@ const ListView: FC<{ picks: DraftPick[], newestPickId: number | null }> = ({ pic
   );
 };
 
+// MODIFIED TeamView to pass color_identity to DraftCard
 const TeamView: FC<{ picks: DraftPick[], draftOrder: DraftOrderTeam[], newestPickId: number | null }> = ({ picks, draftOrder, newestPickId }) => {
   const picksByTeam = useMemo(() => {
     const grouped: Record<string, DraftPick[]> = {};
@@ -102,7 +117,6 @@ const TeamView: FC<{ picks: DraftPick[], draftOrder: DraftOrderTeam[], newestPic
         grouped[pick.team_id].push(pick);
       }
     }
-    // This sorting remains by pick_number, as requested.
     for (const teamId in grouped) {
       grouped[teamId].sort((a, b) => a.pick_number - b.pick_number);
     }
@@ -138,6 +152,7 @@ const TeamView: FC<{ picks: DraftPick[], draftOrder: DraftOrderTeam[], newestPic
   );
 };
 
+
 interface LiveDraftBoardProps {
   serverPicks: DraftPick[];
   sessionId: string;
@@ -152,23 +167,18 @@ export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoar
   useEffect(() => {
     const fetchDraftOrder = async () => {
       const { draftOrder: fetchedOrder, error } = await getDraftBoardData(sessionId);
-      if (error) {
-        console.error("Failed to fetch draft order:", error);
-      } else {
-        setDraftOrder(fetchedOrder);
-      }
+      if (error) console.error("Failed to fetch draft order:", error);
+      else setDraftOrder(fetchedOrder);
     };
-    if (sessionId) {
-      fetchDraftOrder();
-    }
+    if (sessionId) fetchDraftOrder();
   }, [sessionId]);
 
   useEffect(() => {
     if (!sessionId) return;
-
     const channel = supabase
       .channel(`draft-updates-${sessionId}`)
       .on('broadcast', { event: 'new_pick' }, ({ payload }) => {
+        // MODIFIED: Handle the new color_identity field from the payload
         const newPick: DraftPick = {
           id: payload.id,
           pick_number: payload.pick_number,
@@ -180,6 +190,7 @@ export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoar
           drafted_at: payload.drafted_at,
           team_name: payload.team_name || 'Unknown Team',
           team_id: payload.team_id,
+          color_identity: payload.card_pools?.color_identity || [], // Extract from nested object
         };
         if (!newPick.id || !newPick.team_id) {
           console.warn("Received a pick with missing data, cannot process.", newPick);
@@ -193,14 +204,9 @@ export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoar
         setTimeout(() => setNewestPickId(null), 5000);
       })
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [sessionId]);
 
-  // This is the main sorting logic change for the List View.
-  // It now sorts by the 'drafted_at' timestamp in descending order.
   const sortedPicks = useMemo(() => {
     return [...picks].sort((a, b) => new Date(b.drafted_at).getTime() - new Date(a.drafted_at).getTime());
   }, [picks]);
