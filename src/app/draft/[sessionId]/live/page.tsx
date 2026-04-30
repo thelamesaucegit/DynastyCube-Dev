@@ -12,9 +12,10 @@ export interface DraftPick {
   rarity: string | null;
   image_url: string | null;
   oldest_image_url: string | null;
-  drafted_at: string; // Added field
+  drafted_at: string; 
   team_name: string;
   team_id: string;
+  color_identity: string[] | null; 
 }
 
 interface SupabasePick {
@@ -25,11 +26,12 @@ interface SupabasePick {
   rarity: string | null;
   image_url: string | null;
   oldest_image_url: string | null;
-  drafted_at: string; // Added field
+  drafted_at: string; 
   team_id: string;
   teams: {
     name: string;
   } | null;
+  card_pools: { color_identity: string[] | null; } | null; 
 }
 
 async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
@@ -48,6 +50,7 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
       drafted_at,
       team_id, 
       teams ( name )
+      card_pools ( color_identity )
     `)
     .eq('draft_session_id', sessionId)
     .returns<SupabasePick[]>();
@@ -68,6 +71,7 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
     drafted_at: pick.drafted_at,
     team_id: pick.team_id,
     team_name: pick.teams?.name || 'Unknown Team',
+        color_identity: pick.card_pools?.color_identity || [], 
   }));
 }
 
