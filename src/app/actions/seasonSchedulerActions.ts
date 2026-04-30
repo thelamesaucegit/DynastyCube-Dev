@@ -20,13 +20,62 @@ interface Matchup {
 // ALGORITHM HELPERS
 // ==================================
 
+
 /**
- * Shuffles an array in place using the Fisher-Yates algorithm.
- * @param array The array to shuffle.
- * @returns The shuffled array.
+ * Shuffles an array in place using a seeded pseudo-random number generator
+ * to ensure the shuffle is the same for a given week number, but different between weeks.
  */
+function seededShuffle<T>(array: T[], seed: number): T[] {
+    let m = array.length, t: T, i: number;
+    
+    // Simple pseudo-random number generator based on the seed
+    const random = () => {
+        const x = Math.sin(seed++) * 10000;
+        return x - Math.floor(x);
+    };
 
+    while (m) {
+        i = Math.floor(random() * m--);
+        t = array[m];
+        array[m] = array[i];
+        array[i] = t;
+    }
+    return array;
+}
 
+/**
+ * NEW AND CORRECTED: Generates a shuffled list of all available hourly time slots for a week.
+ * @param weekStartDate - The date the week begins (Thursday).
+ * @param totalGames - The total number of games to schedule for the week.
+ * @param weekNumber - The week number, used as a seed for shuffling.
+ * @returns An array of Date objects representing the scheduled times.
+ */
+function generateWeeklyTimeSlots(
+    weekStartDate: Date,
+    totalGames: number,
+    weekNumber: number
+): Date[] {
+    const potentialSlots: Date[] = [];
+    const daysInScheduleWeek = 6; // Thursday, Friday, Saturday, Sunday, Monday, Tuesday
+    const hoursInDay = 24;
+
+    // 1. Generate a list of EVERY possible hourly slot from Thursday to Tuesday.
+    for (let day = 0; day < daysInScheduleWeek; day++) {
+        for (let hour = 0; hour < hoursInDay; hour++) {
+            const slot = new Date(weekStartDate);
+            slot.setUTCDate(weekStartDate.getUTCDate() + day);
+            slot.setUTCHours(hour, 0, 0, 0);
+            potentialSlots.push(slot);
+        }
+    }
+
+    // 2. Shuffle the entire list of potential slots using the week number as a seed.
+    // This ensures that Week 1's schedule is different from Week 2's, etc.
+    const shuffledSlots = seededShuffle(potentialSlots, weekNumber);
+
+    // 3. Return the number of slots required for the games to be played.
+    return shuffledSlots.slice(0, totalGames);
+}
 /**
  * Generates the full set of matchups for a regular season + rivals week
  * using a robust round-robin algorithm to prevent deadlocks.
@@ -40,70 +89,62 @@ function generateSeasonMatchups(
   regularSeasonWeeks: number,
   includeRivalsWeek: boolean
 ): Matchup[] {
-  const allMatchups: Matchup[] = [];
-  const schedulableTeams = [...teams];
-  
-  // The round-robin algorithm requires an even number of teams.
-  // If we have an odd number, we add a "dummy" team for pairing purposes.
-  const isOdd = schedulableTeams.length % 2 !== 0;
-  if (isOdd) {
-    schedulableTeams.push({ id: "BYE", name: "Bye Week" } as TeamWithDetails);
-  }
-
-  const teamCount = schedulableTeams.length;
-  const numRounds = teamCount - 1; // For a full round-robin
-  const half = teamCount / 2;
-
-  const teamIndexes = schedulableTeams.map((_, i) => i);
-  const fixedTeamIndex = teamIndexes.shift()!; // Fix one team in place
-
-  for (let week = 1; week <= regularSeasonWeeks; week++) {
-    const roundNumber = week - 1;
+    const allMatchups: Matchup[] = [];
+    let schedulableTeams = [...teams];
     
-    // Pair the fixed team with the team it's facing this round
-    const opponentForFixed = teamIndexes[roundNumber % numRounds];
-    const teamA = schedulableTeams[fixedTeamIndex];
-    const teamB = schedulableTeams[opponentForFixed];
-    if (teamA.id !== "BYE" && teamB.id !== "BYE") {
-        allMatchups.push({ week, teamAId: teamA.id, teamBId: teamB.id });
+    const isOdd = schedulableTeams.length % 2 !== 0;
+    if (isOdd) {
+      schedulableTeams.push({ id: "BYE", name: "Bye Week" } as TeamWithDetails);
     }
 
-    // Pair the remaining teams
-    for (let i = 1; i < half; i++) {
-      const teamCIndex = (roundNumber + i) % numRounds;
-      const teamDIndex = (roundNumber + numRounds - i) % numRounds;
-      
-      const teamC = schedulableTeams[teamIndexes[teamCIndex]];
-      const teamD = schedulableTeams[teamIndexes[teamDIndex]];
-      
-      if (teamC.id !== "BYE" && teamD.id !== "BYE") {
-        allMatchups.push({ week, teamAId: teamC.id, teamBId: teamD.id });
-      }
+    const teamCount = schedulableTeams.length;
+    const numRounds = teamCount - 1;
+    const half = teamCount / 2;
+
+    const teamIndexes = schedulableTeams.map((_, i) => i);
+    const fixedTeamIndex = teamIndexes.shift()!;
+
+    for (let week = 1; week <= regularSeasonWeeks; week++) {
+        const roundNumber = week - 1;
+        
+        const opponentForFixed = teamIndexes[roundNumber % numRounds];
+        const teamA = schedulableTeams[fixedTeamIndex];
+        const teamB = schedulableTeams[opponentForFixed];
+        if (teamA.id !== "BYE" && teamB.id !== "BYE") {
+            allMatchups.push({ week, teamAId: teamA.id, teamBId: teamB.id });
+        }
+
+        for (let i = 1; i < half; i++) {
+            const teamCIndex = (roundNumber + i) % numRounds;
+            const teamDIndex = (roundNumber + numRounds - i) % numRounds;
+            
+            const teamC = schedulableTeams[teamIndexes[teamCIndex]];
+            const teamD = schedulableTeams[teamIndexes[teamDIndex]];
+            
+            if (teamC.id !== "BYE" && teamD.id !== "BYE") {
+                allMatchups.push({ week, teamAId: teamC.id, teamBId: teamD.id });
+            }
+        }
     }
-  }
 
-  // Generate Rivals Week Matchups (this logic remains the same)
-  if (includeRivalsWeek) {
-    const rivalsWeekNumber = regularSeasonWeeks + 1;
-    const teamsByShortName = new Map(teams.map(t => [t.short_name, t]));
-    const pairedInRivalsWeek = new Set<string>();
+    if (includeRivalsWeek) {
+        const rivalsWeekNumber = regularSeasonWeeks + 1;
+        const teamsByShortName = new Map(teams.map(t => [t.short_name, t]));
+        const pairedInRivalsWeek = new Set<string>();
 
-    for (const team of teams) {
-      if (pairedInRivalsWeek.has(team.id) || !team.rival_short_name) {
-        continue;
-      }
-      
-      const rival = teamsByShortName.get(team.rival_short_name);
-      if (rival && !pairedInRivalsWeek.has(rival.id)) {
-        allMatchups.push({ week: rivalsWeekNumber, teamAId: team.id, teamBId: rival.id });
-        pairedInRivalsWeek.add(team.id);
-        pairedInRivalsWeek.add(rival.id);
-      }
+        for (const team of teams) {
+            if (pairedInRivalsWeek.has(team.id) || !team.rival_short_name) continue;
+            const rival = teamsByShortName.get(team.rival_short_name);
+            if (rival && !pairedInRivalsWeek.has(rival.id)) {
+                allMatchups.push({ week: rivalsWeekNumber, teamAId: team.id, teamBId: rival.id });
+                pairedInRivalsWeek.add(team.id);
+                pairedInRivalsWeek.add(rival.id);
+            }
+        }
     }
-  }
-
-  return allMatchups;
+    return allMatchups;
 }
+
 
 //Shuffle array function
 
@@ -129,7 +170,6 @@ export async function generateFullSeasonSchedule(
     includeRivalsWeek: boolean
 ): Promise<{ success: boolean; error?: string; scheduledGamesCount?: number }> {
     try {
-        // --- 1. Fetch Data ---
         const [{ teams, error: teamsError }, { weeks, error: weeksError }] = await Promise.all([
             getTeamsWithDetails(false),
             getScheduleWeeks(seasonId)
@@ -145,41 +185,21 @@ export async function generateFullSeasonSchedule(
         if (weeks.length < totalWeeksToSchedule) return { success: false, error: `Requires ${totalWeeksToSchedule} weeks to be created, but only ${weeks.length} were found.` };
         
         const weeksByNumber = new Map(weeks.map(w => [w.week_number, w]));
-
-        // --- 2. Generate Pairings for the whole season ---
         const allMatchups = generateSeasonMatchups(activeTeams, regularSeasonWeeks, includeRivalsWeek);
         if (allMatchups.length === 0) return { success: false, error: "Failed to generate any matchups." };
 
         let totalScheduledGames = 0;
 
-        // --- 3. Loop through each WEEK to schedule its games ---
         for (let weekNum = 1; weekNum <= totalWeeksToSchedule; weekNum++) {
             const weekInfo = weeksByNumber.get(weekNum);
             const matchupsForThisWeek = allMatchups.filter(m => m.week === weekNum);
+            if (!weekInfo || matchupsForThisWeek.length === 0) continue;
 
-            if (!weekInfo || matchupsForThisWeek.length === 0) {
-                console.warn(`Skipping Week ${weekNum} due to missing week info or no matchups.`);
-                continue;
-            }
-
-            // --- NEW: Master Time Slot Logic ---
             const gamesPerMatchup = 5;
             const totalGamesInWeek = matchupsForThisWeek.length * gamesPerMatchup;
-            const weekStartDate = new Date(weekInfo.start_date); // This is a Thursday
-            const weekEndDate = new Date(weekInfo.end_date); // This is a Tuesday
 
-            const availableTimeSlots: Date[] = [];
-            const hoursInWeek = (weekEndDate.getTime() - weekStartDate.getTime()) / (1000 * 60 * 60);
-            const intervalHours = Math.floor(hoursInWeek / totalGamesInWeek);
-
-            for (let i = 0; i < totalGamesInWeek; i++) {
-                const gameDate = new Date(weekStartDate);
-                // Add the interval for each game, rounded to the nearest hour
-                gameDate.setUTCHours(weekStartDate.getUTCHours() + (i * intervalHours));
-                // Snap to the beginning of the hour to keep it clean
-                gameDate.setUTCMinutes(0, 0, 0);
-                availableTimeSlots.push(gameDate);
-            }
+            // *** NEW LOGIC: Use the prioritized time slot generator ***
+            const timeSlots = generateWeeklyTimeSlots(new Date(weekInfo.start_date), totalGamesInWeek, weekNum);
 
             // Create a flat list of all games to be played this week
             const allGamesThisWeek = matchupsForThisWeek.flatMap(matchup => 
@@ -189,18 +209,13 @@ export async function generateFullSeasonSchedule(
                 }))
             );
             
-            // Shuffle the games to randomize the time slots they get
-            shuffleArray(allGamesThisWeek); 
+            // Shuffle the games to randomize which matchups get which prime time slots
+            seededShuffle(allGamesThisWeek, weekNum + 100); // Use a different seed
 
-            // --- 4. Schedule each game in a unique time slot ---
             for (let i = 0; i < allGamesThisWeek.length; i++) {
                 const game = allGamesThisWeek[i];
-                const timeSlot = availableTimeSlots[i];
-
-                if (!timeSlot) {
-                    console.error(`Ran out of time slots for Week ${weekNum}. This should not happen.`);
-                    continue;
-                }
+                const timeSlot = timeSlots[i];
+                if (!timeSlot) continue;
 
                 const seasonNumber = typeof weekInfo.season_number === 'number' ? weekInfo.season_number : parseInt(String(weekInfo.season_number), 10);
                 if (isNaN(seasonNumber)) continue;
@@ -210,7 +225,7 @@ export async function generateFullSeasonSchedule(
                     team2_id: game.teamBId,
                     season_number: seasonNumber,
                     week_number: weekNum,
-                   week_id: weekInfo.id,
+                    week_id: weekInfo.id,
                     match_date: timeSlot.toISOString(),
                     team1_ai_profile: "default",
                     team2_ai_profile: "default",

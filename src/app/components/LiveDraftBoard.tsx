@@ -7,7 +7,7 @@ import Image from "next/image";
 import { createClient } from "@supabase/supabase-js";
 import { getDraftBoardData } from "@/app/actions/liveDraftActions";
 import type { DraftOrderTeam } from "@/app/actions/liveDraftActions";
-import type { DraftPick } from "@/app/draft/[sessionId]/live/page"; // This now includes color_identity
+import type { DraftPick } from "@/app/draft/[sessionId]/live/page";
 import { ColorIdentityGlow } from './ColorIdentityGlow'; 
 import { Button } from "@/app/components/ui/button";
 import { List, Columns } from "lucide-react";
@@ -21,7 +21,7 @@ const supabase = createClient(
 
 type ViewMode = 'list' | 'team';
 
-// MODIFIED DraftCard to accept and use color_identity
+// MODIFIED: 'small' card now applies the glow correctly
 const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small' }> = ({ pick, isNewest, size }) => {
   const { useOldestArt } = useSettings();
   const imageUrl = getCardImageUrl(pick, useOldestArt);
@@ -30,7 +30,6 @@ const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small
   if (size === 'large') {
     return (
       <div className={`transform hover:scale-105 ${isNewest ? "animate-fade-in-down" : ""}`}>
-        {/* Use ColorIdentityGlow as the wrapper */}
         <ColorIdentityGlow colors={pick.color_identity}>
           <div className={`bg-gray-800 rounded-lg shadow-lg p-2 ${cardClasses}`}>
             <div className="flex justify-between items-center mb-2 text-xs">
@@ -45,11 +44,11 @@ const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small
     );
   }
 
-  // Small card for team view
+  // Small card for team view - CORRECTED LOGIC
   return (
-    <div className={`rounded-md p-0.5 ${isNewest ? "animate-fade-in ring-2 ring-green-400" : ""}`}>
-        <ColorIdentityGlow colors={pick.color_identity} className="!p-0 !rounded-sm">
-            <div className={`bg-gray-800/80 rounded-sm p-1.5 ${cardClasses}`}>
+    <div className={`rounded-md ${isNewest ? "ring-2 ring-green-400" : ""}`}>
+        <ColorIdentityGlow colors={pick.color_identity} className="!p-1.5 !rounded-md">
+            <div className={`bg-gray-800/80 rounded-sm`}>
                 <p className="text-xs text-center text-gray-200 truncate font-semibold">{pick.card_name}</p>
                 <p className="text-[10px] text-center text-gray-400">P: {pick.pick_number}</p>
             </div>
@@ -58,7 +57,8 @@ const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small
   );
 };
 
-// MODIFIED ListView to implement the responsive mobile grid
+
+// MODIFIED: ListView now has corrected responsive grid classes
 const ListView: FC<{ picks: DraftPick[], newestPickId: number | null }> = ({ picks, newestPickId }) => {
   const newestPick = picks.length > 0 ? picks[0] : null;
   const historicalPicks = picks.slice(1);
@@ -68,33 +68,17 @@ const ListView: FC<{ picks: DraftPick[], newestPickId: number | null }> = ({ pic
 
   return (
     <div className="space-y-8">
-      {/* Most recent pick is always full width */}
       {newestPick && (
         <div className="max-w-xs mx-auto">
-          <DraftCard
-            key={newestPick.id}
-            pick={newestPick}
-            isNewest={newestPick.id === newestPickId}
-            size="large"
-          />
+          <DraftCard key={newestPick.id} pick={newestPick} isNewest={newestPick.id === newestPickId} size="large" />
         </div>
       )}
-
       {historicalPicks.length > 0 && (
          <>
-          <div className="relative text-center">
-            <div className="absolute inset-0 flex items-center" aria-hidden="true"><div className="w-full border-t border-gray-700" /></div>
-            <div className="relative flex justify-center"><span className="bg-background px-2 text-sm text-muted-foreground">Draft History</span></div>
-          </div>
+          <div className="relative text-center"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-700" /></div><div className="relative flex justify-center"><span className="bg-background px-2 text-sm text-muted-foreground">Draft History</span></div></div>
           
-          {/* NEW: Responsive Grid Logic */}
-          <div className={`
-            grid gap-4 
-            grid-cols-${mobileGridCols} 
-            md:grid-cols-3 
-            lg:grid-cols-4 
-            xl:grid-cols-5
-          `}>
+          {/* CORRECTED RESPONSIVE GRID LOGIC */}
+          <div className={`grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6`}>
             {historicalPicks.map((pick) => (
               <DraftCard key={pick.id} pick={pick} isNewest={false} size="large" />
             ))}
@@ -105,21 +89,12 @@ const ListView: FC<{ picks: DraftPick[], newestPickId: number | null }> = ({ pic
   );
 };
 
-// MODIFIED TeamView to pass color_identity to DraftCard
 const TeamView: FC<{ picks: DraftPick[], draftOrder: DraftOrderTeam[], newestPickId: number | null }> = ({ picks, draftOrder, newestPickId }) => {
   const picksByTeam = useMemo(() => {
     const grouped: Record<string, DraftPick[]> = {};
-    for (const team of draftOrder) {
-      if (team.team_id) grouped[team.team_id] = [];
-    }
-    for (const pick of picks) {
-      if (pick.team_id && grouped[pick.team_id]) {
-        grouped[pick.team_id].push(pick);
-      }
-    }
-    for (const teamId in grouped) {
-      grouped[teamId].sort((a, b) => a.pick_number - b.pick_number);
-    }
+    for (const team of draftOrder) { if (team.team_id) grouped[team.team_id] = []; }
+    for (const pick of picks) { if (pick.team_id && grouped[pick.team_id]) { grouped[pick.team_id].push(pick); } }
+    for (const teamId in grouped) { grouped[teamId].sort((a, b) => a.pick_number - b.pick_number); }
     return grouped;
   }, [picks, draftOrder]);
 
@@ -152,7 +127,6 @@ const TeamView: FC<{ picks: DraftPick[], draftOrder: DraftOrderTeam[], newestPic
   );
 };
 
-
 interface LiveDraftBoardProps {
   serverPicks: DraftPick[];
   sessionId: string;
@@ -177,8 +151,28 @@ export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoar
     if (!sessionId) return;
     const channel = supabase
       .channel(`draft-updates-${sessionId}`)
-      .on('broadcast', { event: 'new_pick' }, ({ payload }) => {
-        // MODIFIED: Handle the new color_identity field from the payload
+      .on('broadcast', { event: 'new_pick' }, async ({ payload }) => {
+        
+        // --- NEW: FETCH MISSING DATA FOR REAL-TIME PICK ---
+        let colorIdentity: string[] | null = [];
+        let teamName = payload.team_name || 'Unknown Team';
+        
+        // 1. Fetch color_identity from card_pools
+        if (payload.card_pool_id) {
+            const { data: cardPoolData } = await supabase
+                .from('card_pools')
+                .select('color_identity')
+                .eq('id', payload.card_pool_id)
+                .single();
+            colorIdentity = cardPoolData?.color_identity || [];
+        }
+        
+        // 2. Fetch team name if it wasn't on the payload (it often isn't)
+        if (teamName === 'Unknown Team') {
+            const { data: teamData } = await supabase.from('teams').select('name').eq('id', payload.team_id).single();
+            teamName = teamData?.name || 'Unknown Team';
+        }
+
         const newPick: DraftPick = {
           id: payload.id,
           pick_number: payload.pick_number,
@@ -188,14 +182,16 @@ export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoar
           image_url: payload.image_url,
           oldest_image_url: payload.oldest_image_url,
           drafted_at: payload.drafted_at,
-          team_name: payload.team_name || 'Unknown Team',
           team_id: payload.team_id,
-          color_identity: payload.card_pools?.color_identity || [], // Extract from nested object
+          team_name: teamName, // Use fetched name
+          color_identity: colorIdentity, // Use fetched color identity
         };
+        
         if (!newPick.id || !newPick.team_id) {
           console.warn("Received a pick with missing data, cannot process.", newPick);
           return;
         }
+
         setPicks(currentPicks => {
           if (currentPicks.some(p => p.id === newPick.id)) return currentPicks;
           return [newPick, ...currentPicks];
