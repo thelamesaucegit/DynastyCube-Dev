@@ -31,6 +31,26 @@ export interface ScheduleWeek {
   updated_at: string;
 }
 
+/**
+ *  HELPER
+ * Get a single week's ID from its season and week number.
+ */
+export async function getWeekId(seasonId: string, weekNumber: number): Promise<string | null> {
+    const supabase = await createServerClient();
+    const { data, error } = await supabase
+        .from("schedule_weeks")
+        .select("id")
+        .eq("season_id", seasonId)
+        .eq("week_number", weekNumber)
+        .maybeSingle();
+
+    if (error) {
+        console.error("Error fetching weekId:", error);
+        return null;
+    }
+    return data?.id || null;
+}
+
 export async function getActiveSeasonNumber(): Promise<number | null> {
   const supabase = await createServerClient();
   const { data, error } = await supabase

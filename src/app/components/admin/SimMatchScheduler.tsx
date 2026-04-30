@@ -3,6 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { getWeekId } from "@/app/actions/scheduleActions"; 
 import { getAllTeams } from "@/app/actions/teamActions";
 import { getAiProfiles } from "@/app/actions/adminActions";
 import { 
@@ -112,6 +113,20 @@ const [deckWarnings, setDeckWarnings] = useState<string[]>([]);
 
         setSubmitting(true);
 
+
+         const { data: activeSeason } = await createClient().from('seasons').select('id').eq('season_number', activeSeasonNumber).single();
+    if (!activeSeason) {
+        setSubmitting(false);
+        return setError(`Season ${activeSeasonNumber} not found.`);
+    }
+    
+    // 2. Fetch the week_id using our new helper
+    const weekId = await getWeekId(activeSeason.id, weekNumber);
+    if (!weekId) {
+        setSubmitting(false);
+        return setError(`Week ${weekNumber} not found for this season.`);
+    }
+        
         const result = await createScheduledSimMatch({
             team1_id: team1Id,
             team2_id: team2Id,
