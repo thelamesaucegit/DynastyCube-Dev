@@ -132,6 +132,7 @@ const [deckWarnings, setDeckWarnings] = useState<string[]>([]);
             team2_id: team2Id,
             season_number: activeSeasonNumber,
             week_number: weekNumber,
+            week_id: weekId,
             match_date: new Date(matchDate).toISOString(),
             team1_ai_profile: team1Profile,
             team2_ai_profile: team2Profile,
