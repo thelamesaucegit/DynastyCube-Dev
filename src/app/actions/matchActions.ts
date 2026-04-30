@@ -45,6 +45,87 @@ export interface MatchGame {
   created_at: string;
 }
 
+export interface UnifiedMatch {
+  id: string;
+  matchType: 'pvp' | 'sim';
+  status: string;
+  home_team: { id: string; name: string; emoji: string; } | null;
+  away_team: { id: string; name: string; emoji: string; } | null;
+  scheduled_for?: string | null; // For sim matches
+  winner_team_id?: string | null;
+}
+
+export async function getWeekMatchesAndSims(weekId: string): Promise<{
+  matches: UnifiedMatch[];
+  error?: string;
+}> {
+  const supabase = await createServerClient();
+  try {
+    // Fetch PvP matches from the 'matches' table
+    const { data: pvpMatches, error: pvpError } = await supabase
+      .from("matches")
+      .select(`
+        id, 
+        status,
+        winner_team_id,
+        home_team:teams!home_team_id(id, name, emoji),
+        away_team:teams!away_team_id(id, name, emoji)
+      `)
+      .eq("week_id", weekId);
+
+    if (pvpError) throw pvpError;
+
+    // Fetch sim matches from the 'schedule' table
+    const { data: simMatches, error: simError } = await supabase
+      .from("schedule")
+      .select(`
+        id, 
+        status,
+        match_date,
+        winner_team_id,
+        home_team:teams!team1_id(id, name, emoji),
+        away_team:teams!team2_id(id, name, emoji)
+      `)
+      .eq("week_id", weekId); // Assumes 'schedule' table has a 'week_id' FK
+
+    if (simError) throw simError;
+
+    const unifiedList: UnifiedMatch[] = [];
+
+    (pvpMatches || []).forEach(m => unifiedList.push({
+      id: m.id,
+      matchType: 'pvp',
+      status: m.status,
+      home_team: m.home_team,
+      away_team: m.away_team,
+      winner_team_id: m.winner_team_id,
+    }));
+
+    (simMatches || []).forEach(m => unifiedList.push({
+      id: m.id,
+      matchType: 'sim',
+      status: m.status,
+      home_team: m.home_team,
+      away_team: m.away_team,
+      scheduled_for: m.match_date,
+      winner_team_id: m.winner_team_id,
+    }));
+    
+    // Sort by date if available, otherwise just keep them grouped
+    unifiedList.sort((a, b) => {
+        const dateA = a.scheduled_for ? new Date(a.scheduled_for).getTime() : 0;
+        const dateB = b.scheduled_for ? new Date(b.scheduled_for).getTime() : 0;
+        return dateA - dateB;
+    });
+
+    return { matches: unifiedList };
+
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "An unexpected error occurred.";
+    return { matches: [], error: message };
+  }
+}
+
 /**
  * Get all matches for a specific week (or all matches if weekId is null)
  */

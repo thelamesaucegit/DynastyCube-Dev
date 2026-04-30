@@ -210,6 +210,7 @@ export async function generateFullSeasonSchedule(
                     team2_id: game.teamBId,
                     season_number: seasonNumber,
                     week_number: weekNum,
+                   week_id: weekInfo.id,
                     match_date: timeSlot.toISOString(),
                     team1_ai_profile: "default",
                     team2_ai_profile: "default",
