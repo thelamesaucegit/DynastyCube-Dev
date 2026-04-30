@@ -328,3 +328,4 @@ export const ScheduleOverview: React.FC<ScheduleOverviewProps> = ({ seasonId }) 
       </div>
     </div>
   );
+};
