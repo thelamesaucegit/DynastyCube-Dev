@@ -9,6 +9,10 @@ import { getTeamBalance } from "@/app/actions/cubucksActions";
 import { getDraftStatus } from "@/app/actions/draftOrderActions";
 import { getDuplicateCardIdSet } from "@/lib/draftCache";
 
+// ============================================================================
+// TYPES
+// ============================================================================
+
 export interface AlgorithmDetails {
   top50CardIds: string[];
   colorTotals: Record<string, number>;
@@ -19,12 +23,14 @@ export interface AlgorithmDetails {
   teamDraftedColorCounts: Record<string, number>;
   dominantColor: string | null;
 }
+
 export interface QueueEntry {
   id?: string; cardPoolId: string; cardId: string; cardName: string; position: number; pinned: boolean;
   source?: "manual_queue" | "algorithm" | "skipped"; cardSet?: string; cardType?: string; rarity?: string; colors?: string[];
   imageUrl?: string; oldest_image_url?: string; manaCost?: string; cmc?: number; cubucksCost?: number; cubecobraElo?: number;
   votes?: string[]; voteThreshold?: number;
 }
+
 export interface AutoDraftPreviewResult {
   nextPick: CardData | null;
   source?: "manual_queue" | "algorithm" | "skipped";
@@ -34,6 +40,10 @@ export interface AutoDraftPreviewResult {
   voteThreshold?: number;
   error?: string;
 }
+
+// ============================================================================
+// HELPERS
+// ============================================================================
 
 async function verifyTeamMembership(teamId: string): Promise<{ authorized: boolean; userId?: string; error?: string }> {
     const supabase = await createServerClient();
@@ -70,6 +80,10 @@ function calculateVoteThreshold(memberCount: number): number {
     return Math.ceil(memberCount * 0.51);
 }
 
+// ============================================================================
+// DRAFT LOGIC
+// ============================================================================
+
 export async function toggleQueuePickVote(teamId: string, cardPoolId: string, draftSessionId: string): Promise<{ success: boolean; pickExecuted: boolean; error?: string }> {
     try {
         const auth = await verifyTeamMembership(teamId);
@@ -104,7 +118,7 @@ export async function toggleQueuePickVote(teamId: string, cardPoolId: string, dr
 
 async function executeConfirmedTeamPick(teamId: string, cardPoolId: string, draftSessionId: string, userId: string) {
     const supabase = await createServerClient();
-    const { cards: availableCards } = await getAvailableCardsForDraft();
+    const { cards: availableCards } = await getAvailableCardsForDraft("draft");
     const card = availableCards.find(c => c.id === cardPoolId);
     if (!card) return { success: false, error: "Card is no longer available to be drafted." };
     const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId);
@@ -126,145 +140,239 @@ async function executeConfirmedTeamPick(teamId: string, cardPoolId: string, draf
     return { success: true, pick: newPick };
 }
 
-export async function computeAutoDraftPick(teamId: string, draftSessionId: string, adminClient?: AnySupabaseClient): Promise<{ card: CardData | null; algorithmDetails: AlgorithmDetails | null; error?: string; }> {
-    console.log(`[AutoDraft Debug] Starting computation for team: ${teamId}`);
-    try {
-        const { cards: availableCards, error: cardsError } = await getAvailableCardsForDraft("draft", adminClient);
-        if (cardsError) {
-            console.error(`[AutoDraft Debug] ERROR fetching available cards: ${cardsError}`);
-            return { card: null, algorithmDetails: null, error: cardsError };
-        }
-        console.log(`[AutoDraft Debug] Found ${availableCards.length} available cards in the draft pool.`);
-        if (availableCards.length === 0) return { card: null, algorithmDetails: null, error: "No available cards in the pool" };
+// Updated to accept the exclusion list
+export async function computeAutoDraftPick(
+  teamId: string,
+  draftSessionId: string,
+  adminClient?: AnySupabaseClient,
+  excludedCardPoolIds: string[] = []
+): Promise<{
+  recommendation: CardData | null;
+  algorithmDetails: AlgorithmDetails | null;
+  error?: string;
+}> {
+  try {
+    const { cards: availableCards, error: cardsError } = await getAvailableCardsForDraft("draft", adminClient);
+    if (cardsError) return { recommendation: null, algorithmDetails: null, error: cardsError };
+    if (availableCards.length === 0) return { recommendation: null, algorithmDetails: null, error: "No available cards in the pool" };
 
-        const { picks: teamPicks } = await getTeamDraftPicks(teamId, draftSessionId, adminClient);
-        const { team: teamBalance } = await getTeamBalance(teamId, adminClient);
-        const balance = teamBalance?.cubucks_balance ?? 0;
-        console.log(`[AutoDraft Debug] Team balance: ${balance} Cubucks.`);
+    const { picks: teamPicks } = await getTeamDraftPicks(teamId, draftSessionId, adminClient);
+    const { team: teamBalance } = await getTeamBalance(teamId, adminClient);
+    const balance = teamBalance?.cubucks_balance ?? 0;
 
-        const LAND_ELO_MODIFIER = 0.8;
-        const AFFINITY_BONUS_PER_PICK = 0.1;
-        const ANTI_AFFINITY_PENALTY_PER_PICK = 0.05;
-        const colorModifiers: Record<string, number> = { W: 1.0, U: 1.0, B: 1.0, R: 1.0, G: 1.0 };
-        const allColors = ["W", "U", "B", "R", "G"];
-        for (const pick of teamPicks) {
-            const pickColors = new Set(pick.colors || []);
-            if (pickColors.size === 0) continue;
-            for (const color of allColors) {
-                if (pickColors.has(color)) { colorModifiers[color] += AFFINITY_BONUS_PER_PICK; } else { colorModifiers[color] -= ANTI_AFFINITY_PENALTY_PER_PICK; }
-            }
-        }
-        for (const color of allColors) { colorModifiers[color] = Math.max(0.5, colorModifiers[color]); }
+    const alreadyDraftedCardConcepts = new Set(teamPicks.map(p => p.card_id));
 
-        const cardsWithElo = availableCards.map(card => { let elo = card.cubecobra_elo || 0; if (card.card_type?.toLowerCase().includes('land')) { elo *= LAND_ELO_MODIFIER; } return { ...card, cubecobra_elo: elo }; }).filter((c) => c.cubecobra_elo > 0).sort((a, b) => b.cubecobra_elo - a.cubecobra_elo);
-        const candidatePool = cardsWithElo.length > 0 ? cardsWithElo : [...availableCards].sort((a, b) => a.card_name.localeCompare(b.card_name));
-        const top50 = candidatePool.slice(0, 50);
-
-        console.log(`[AutoDraft Debug] Candidate pool size: ${candidatePool.length}. Top 50 ELO: ${top50[0]?.cubecobra_elo || 'N/A'}`);
-        
-        const colorTotals: Record<string, number> = { W: 0, U: 0, B: 0, R: 0, G: 0 };
-        for (const card of top50) {
-            const elo = card.cubecobra_elo || 0;
-            if (card.colors && card.colors.length > 0) {
-                const maxModifier = Math.max(...card.colors.map((c) => colorModifiers[c] || 1));
-                const effectiveElo = elo * maxModifier;
-                for (const color of card.colors) { colorTotals[color] += effectiveElo; }
-            }
-        }
-        
-        let dominantColor: string | null = null;
-        let highestTotal = 0;
-        for (const [color, total] of Object.entries(colorTotals)) {
-            if (total > highestTotal) { highestTotal = total; dominantColor = color; }
-        }
-        
-        let bestColoredCard: CardData | null = null;
-        if (dominantColor) {
-            const dominantColorCards = top50.filter((c) => c.colors && c.colors.includes(dominantColor!)).sort((a, b) => (b.cubecobra_elo || 0) - (a.cubecobra_elo || 0));
-            bestColoredCard = dominantColorCards[0] || null;
-        }
-        
-        const colorlessCards = top50.filter((c) => !c.colors || c.colors.length === 0).sort((a, b) => (b.cubecobra_elo || 0) - (a.cubecobra_elo || 0));
-        const bestColorlessCard = colorlessCards[0] || null;
-        
-        let selectedSource: "colored" | "colorless" | "none" = "none";
-        let selectedCard: CardData | null = null;
-        
-        if (bestColorlessCard && (bestColorlessCard.cubecobra_elo || 0) > (bestColoredCard?.cubecobra_elo || 0)) {
-            selectedCard = bestColorlessCard;
-            selectedSource = "colorless";
-        } else if (bestColoredCard) {
-            selectedCard = bestColoredCard;
-            selectedSource = "colored";
-        } else if (bestColorlessCard) {
-            selectedCard = bestColorlessCard;
-            selectedSource = "colorless";
-        }
-
-        if (selectedCard) {
-            console.log(`[AutoDraft Debug] Initial selection: ${selectedCard.card_name} (Cost: ${selectedCard.cubucks_cost || 1})`);
-        } else {
-            console.log(`[AutoDraft Debug] No initial card could be selected by the algorithm.`);
-        }
-
-        if (selectedCard && (selectedCard.cubucks_cost || 1) > balance) {
-            console.log(`[AutoDraft Debug] Initial pick is too expensive. Searching for affordable alternative...`);
-            const anyAffordable = availableCards
-                .filter(c => (c.cubucks_cost || 1) <= balance)
-                .sort((a, b) => (b.cubecobra_elo || 0) - (a.cubecobra_elo || 0));
-            
-            console.log(`[AutoDraft Debug] Found ${anyAffordable.length} affordable cards.`);
-            selectedCard = anyAffordable[0] || null;
-        }
-
-        if (selectedCard) {
-            console.log(`[AutoDraft Debug] Final selection: ${selectedCard.card_name}`);
-        } else {
-            console.error(`[AutoDraft Debug] FINAL RESULT: No affordable card was found. Returning NULL.`);
-        }
-
-        const draftedColorCounts = countDraftedColors(teamPicks);
-        const algorithmDetails: AlgorithmDetails = { top50CardIds: top50.map((c) => c.card_id), colorTotals, colorAffinityModifiers: colorModifiers, bestColoredCard: bestColoredCard ? { cardId: bestColoredCard.card_id, cardName: bestColoredCard.card_name, elo: bestColoredCard.cubecobra_elo || 0, color: dominantColor || "" } : null, bestColorlessCard: bestColorlessCard ? { cardId: bestColorlessCard.card_id, cardName: bestColorlessCard.card_name, elo: bestColorlessCard.cubecobra_elo || 0 } : null, selectedSource, teamDraftedColorCounts: draftedColorCounts, dominantColor, };
-        
-        return { card: selectedCard, algorithmDetails };
-
-    } catch (error) {
-        // Corrected this block to have only one console.error
-        console.error("Error computing auto-draft pick:", error);
-        return { card: null, algorithmDetails: null, error: "Failed to compute auto-draft pick" };
+    // CORE LOGIC CHANGE: Filter out excluded and non-affordable cards upfront
+    const candidatePool = availableCards
+      .filter(card => 
+        card.id && // Ensure card has a unique instance ID
+        !excludedCardPoolIds.includes(card.id) &&
+        !alreadyDraftedCardConcepts.has(card.card_id) &&
+        (card.cubucks_cost || 0) <= balance
+      );
+      
+    if (candidatePool.length === 0) {
+        return { recommendation: null, algorithmDetails: null, error: "No valid or affordable cards available." };
     }
+
+    const LAND_ELO_MODIFIER = 0.8;
+    const AFFINITY_BONUS_PER_PICK = 0.1;
+    const ANTI_AFFINITY_PENALTY_PER_PICK = 0.05;
+    const colorModifiers: Record<string, number> = { W: 1, U: 1, B: 1, R: 1, G: 1 };
+    const allColors = ["W", "U", "B", "R", "G"];
+    for (const pick of teamPicks) {
+      const pickColors = new Set(pick.colors || []);
+      if (pickColors.size === 0) continue;
+      for (const color of allColors) {
+        if (pickColors.has(color)) { colorModifiers[color] += AFFINITY_BONUS_PER_PICK; } else { colorModifiers[color] -= ANTI_AFFINITY_PENALTY_PER_PICK; }
+      }
+    }
+    for (const color of allColors) { colorModifiers[color] = Math.max(0.5, colorModifiers[color]); }
+
+    const sortedCandidates = candidatePool
+        .map(card => {
+            let elo = card.cubecobra_elo || 1200;
+            if (card.card_type?.toLowerCase().includes('land')) elo *= LAND_ELO_MODIFIER;
+            const affinity = card.colors && card.colors.length > 0 ? Math.max(...card.colors.map(c => colorModifiers[c] || 1)) : 1;
+            return { ...card, effective_elo: elo * affinity };
+        })
+        .sort((a, b) => b.effective_elo - a.effective_elo);
+
+    const bestPick = sortedCandidates[0] || null;
+
+    return { recommendation: bestPick, algorithmDetails: null };
+
+  } catch (error) {
+    console.error("Error computing auto-draft pick:", error);
+    return { recommendation: null, algorithmDetails: null, error: "Failed to compute auto-draft pick" };
+  }
 }
 
-export async function getAutoDraftPreview(teamId: string, draftSessionId: string, adminClient?: AnySupabaseClient): Promise<AutoDraftPreviewResult> {
-    try {
-        const supabase = adminClient ?? await createServerClient();
-        const { data: queueEntries, error: queueError } = await supabase.from("team_draft_queue").select("id, card_pool_id, card_id, card_name, position, pinned, votes").eq("team_id", teamId).order("position", { ascending: true });
-        if (queueError) { console.error("Error fetching draft queue:", queueError); }
-        const queueDepth = (queueEntries || []).length;
-        if (queueEntries && queueEntries.length > 0) {
-            const { cards: availableCards } = await getAvailableCardsForDraft("draft", adminClient);
-            const availableInstanceIds = new Set(availableCards.map((c) => c.id));
-            for (const entry of queueEntries) {
-                if (entry.card_pool_id && availableInstanceIds.has(entry.card_pool_id)) {
-                    const card = availableCards.find((c) => c.id === entry.card_pool_id) || null;
-                    const memberCount = await getTeamMemberCount(teamId, adminClient);
-                    return { nextPick: card, source: "manual_queue", queueDepth, votes: entry.votes || [], voteThreshold: calculateVoteThreshold(memberCount), };
-                }
-            }
+// Updated to pass the exclusion list through
+export async function getAutoDraftPreview(
+  teamId: string,
+  draftSessionId: string,
+  adminClient?: AnySupabaseClient,
+  excludedCardPoolIds: string[] = []
+): Promise<AutoDraftPreviewResult> {
+  try {
+    const supabase = adminClient ?? await createServerClient();
+    const { data: queueEntries } = await supabase.from("team_draft_queue").select("*").eq("team_id", teamId).order("position", { ascending: true });
+    
+    if (queueEntries && queueEntries.length > 0) {
+      const { cards: availableCards } = await getAvailableCardsForDraft("draft", adminClient);
+      const availableInstanceIds = new Set(availableCards.map(c => c.id));
+      for (const entry of queueEntries) {
+        if (entry.card_pool_id && availableInstanceIds.has(entry.card_pool_id) && !excludedCardPoolIds.includes(entry.card_pool_id)) {
+          const card = availableCards.find(c => c.id === entry.card_pool_id) || null;
+          const memberCount = await getTeamMemberCount(teamId, adminClient);
+          return { nextPick: card, source: "manual_queue", queueDepth: queueEntries.length, votes: entry.votes || [], voteThreshold: calculateVoteThreshold(memberCount) };
         }
-        const { card, algorithmDetails, error } = await computeAutoDraftPick(teamId, draftSessionId, adminClient);
-        if (card) {
-            const { team: teamBalance } = await getTeamBalance(teamId, adminClient);
-            const balance = teamBalance?.cubucks_balance ?? 0;
-            if ((card.cubucks_cost || 1) > balance) {
-                return { nextPick: null, source: "skipped", queueDepth, error: `Insufficient Cubucks. Need ${card.cubucks_cost || 1}, have ${balance}` };
-            }
-        }
-        return { nextPick: card, source: card ? "algorithm" : "skipped", queueDepth, algorithmDetails: algorithmDetails || undefined, error: card ? error : (error || "No affordable cards available."), };
-    } catch (error) {
-        console.error("Error getting auto-draft preview:", error);
-        return { nextPick: null, source: "algorithm", queueDepth: 0, error: "Failed to get auto-draft preview" };
+      }
     }
+
+    const { recommendation, algorithmDetails, error } = await computeAutoDraftPick(teamId, draftSessionId, adminClient, excludedCardPoolIds);
+    
+    return { 
+      nextPick: recommendation, 
+      source: recommendation ? "algorithm" : "skipped", 
+      queueDepth: 0, 
+      algorithmDetails: algorithmDetails || undefined, 
+      error: error 
+    };
+  } catch (error) {
+    console.error("Error in getAutoDraftPreview:", error);
+    return { nextPick: null, source: "algorithm", queueDepth: 0, error: "Failed to get auto-draft preview" };
+  }
+}
+
+// The main recursive function
+export async function executeAutoDraft(
+  teamId: string,
+  draftSessionId: string,
+  adminClient?: AnySupabaseClient,
+  excludedCardPoolIds: string[] = []
+): Promise<{
+  success: boolean;
+  pick?: { cardId: string; cardName: string; cost: number };
+  source?: "manual_queue" | "algorithm" | "skipped";
+  error?: string;
+}> {
+  try {
+    const supabase = adminClient ?? await createServerClient();
+    const { status: draftStatus, error: statusError } = await getDraftStatus(draftSessionId, supabase);
+
+    if (statusError || !draftStatus || draftStatus.onTheClock.teamId !== teamId) {
+      return { success: false, error: statusError || "Team not on the clock." };
+    }
+
+    const preview = await getAutoDraftPreview(teamId, draftSessionId, supabase, excludedCardPoolIds);
+    const cardToAttempt = preview.nextPick;
+
+    if (!cardToAttempt) {
+      console.error(`[AutoDraft] No valid card found for team ${teamId} after excluding ${excludedCardPoolIds.length} cards. Skipping pick.`);
+      const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId, supabase);
+      const pickNumber = existingPicks.length + 1;
+      await addSkippedPick(teamId, pickNumber, draftSessionId, supabase);
+      // You can add a notification for the skipped pick here if desired
+      return { success: true, source: "skipped", pick: { cardId: "skipped-pick", cardName: "SKIPPED", cost: 0 }};
+    }
+    
+    const { team: teamBalance } = await getTeamBalance(teamId, supabase);
+    const balance = teamBalance?.cubucks_balance ?? 0;
+    const effectiveCost = (preview.source === "manual_queue" && balance <= 0) ? 0 : (cardToAttempt.cubucks_cost || 1);
+
+    const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId, supabase);
+    const pickNumber = existingPicks.length + 1;
+    
+    const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
+        p_team_id: teamId, p_draft_session_id: draftSessionId, p_card_pool_id: cardToAttempt.id,
+        p_card_id: cardToAttempt.card_id, p_card_name: cardToAttempt.card_name,
+        p_card_set: cardToAttempt.card_set, p_card_type: cardToAttempt.card_type,
+        p_rarity: cardToAttempt.rarity, p_colors: cardToAttempt.colors, p_image_url: cardToAttempt.image_url,
+        p_oldest_image_url: cardToAttempt.oldest_image_url, p_mana_cost: cardToAttempt.mana_cost,
+        p_cmc: cardToAttempt.cmc, p_pick_number: pickNumber, p_cost: effectiveCost,
+        p_is_manual_pick: preview.source === "manual_queue", p_user_id: null,
+    }).single();
+    
+    if (rpcError) {
+      if (rpcError.code === '23505' && rpcError.message.includes('unique_drafted_card_instance')) {
+        console.warn(`[AutoDraft] Attempted to draft an already taken card instance: "${cardToAttempt.card_name}" (ID: ${cardToAttempt.id}). Retrying with next best option.`);
+        return executeAutoDraft(teamId, draftSessionId, supabase, [...excludedCardPoolIds, cardToAttempt.id!]);
+      } else {
+        console.error("Atomic auto-draft failed with non-retryable error:", rpcError);
+        return { success: false, error: `Draft failed: ${rpcError.message}` };
+      }
+    }
+
+    const newPick = data as DraftPick;
+    if (!newPick) return { success: false, error: "Draft pick could not be confirmed in the database." };
+
+    console.log(`[AutoDraft] Successfully drafted "${cardToAttempt.card_name}" for team ${teamId}.`);
+    const pickSource = preview.source === "manual_queue" ? "manual_queue" : "algorithm";
+    if (newPick.id) {
+        await supabase.from("team_draft_picks").update({ pick_source: pickSource }).eq("id", newPick.id);
+    }
+    await conditionallyCleanupDraftQueues(cardToAttempt.card_id, supabase);
+    
+    return {
+      success: true,
+      pick: { cardId: cardToAttempt.card_id, cardName: cardToAttempt.card_name, cost: effectiveCost },
+      source: preview.source,
+    };
+
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred.";
+    console.error("Unhandled error in executeAutoDraft:", errorMessage);
+    return { success: false, error: errorMessage };
+  }
+}
+
+export async function captainForcePick(teamId: string, cardPoolId: string, draftSessionId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createServerClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) return { success: false, error: "Not authenticated" };
+    const { data: roleData } = await supabase.from("team_members").select("role").eq("team_id", teamId).eq("user_id", user.id).maybeSingle();
+    if (!roleData || !["captain", "pilot"].includes(roleData.role ?? "")) {
+      return { success: false, error: "Only Captains and Pilots can force a pick." };
+    }
+    const { status: draftStatus } = await getDraftStatus(draftSessionId);
+    if (draftStatus?.onTheClock?.teamId !== teamId) {
+      return { success: false, error: "It is not this team's turn to pick." };
+    }
+    const { cards: availableCards } = await getAvailableCardsForDraft("draft");
+    const card = availableCards.find(c => c.id === cardPoolId);
+    if (!card) return { success: false, error: "Card is no longer available." };
+    const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId);
+    const pickNumber = existingPicks.length + 1;
+    const { team: teamBalance } = await getTeamBalance(teamId);
+    const balance = teamBalance?.cubucks_balance ?? 0;
+    const effectiveCost = balance >= (card.cubucks_cost || 1) ? card.cubucks_cost || 1 : 0;
+    const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
+        p_team_id: teamId, p_draft_session_id: draftSessionId, p_card_pool_id: card.id,
+        p_card_id: card.card_id, p_card_name: card.card_name, p_card_set: card.card_set,
+        p_card_type: card.card_type, p_rarity: card.rarity, p_colors: card.colors,
+        p_image_url: card.image_url, p_oldest_image_url: card.oldest_image_url,
+        p_mana_cost: card.mana_cost, p_cmc: card.cmc, p_pick_number: pickNumber,
+        p_cost: effectiveCost, p_is_manual_pick: true, p_user_id: user.id,
+    }).single();
+    if (rpcError) return { success: false, error: rpcError.message };
+    const newPick = data as DraftPick;
+    if (!newPick) return { success: false, error: "Pick could not be confirmed." };
+    if (newPick.id) {
+      await supabase.from("team_draft_picks").update({ pick_source: "captain_force" }).eq("id", newPick.id);
+    }
+    await conditionallyCleanupDraftQueues(card.card_id);
+    const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
+    supabase.channel(`draft-updates-${draftSessionId}`).send({
+      type: 'broadcast', event: 'new_pick',
+      payload: { ...newPick, team_name: teamData?.name || 'Unknown' },
+    });
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Unexpected error" };
+  }
 }
 
 export async function getTeamDraftQueue(teamId: string, draftSessionId: string, limit: number = 20): Promise<{ queue: QueueEntry[]; error?: string }> {
@@ -274,7 +382,7 @@ export async function getTeamDraftQueue(teamId: string, draftSessionId: string, 
         const memberCount = await getTeamMemberCount(teamId);
         const voteThreshold = calculateVoteThreshold(memberCount);
         if (queueError) { console.error("Error fetching draft queue:", queueError); return { queue: [], error: queueError.message }; }
-        const { cards: availableCards, error: availableError } = await getAvailableCardsForDraft();
+        const { cards: availableCards, error: availableError } = await getAvailableCardsForDraft("draft");
         if (availableError) { console.error("Error fetching available cards for queue:", availableError); return { queue: [], error: availableError }; }
         const availableMap = new Map<string, CardData>();
         for (const card of availableCards) { if (card.id) { availableMap.set(card.id, card); } }
@@ -373,7 +481,7 @@ export async function conditionallyCleanupDraftQueues(draftedCardId: string, adm
       if (error) return { success: false, cleaned: false, error: error.message };
       return { success: true, cleaned: true };
     }
-    const { cards: availableCards } = await getAvailableCardsForDraft();
+    const { cards: availableCards } = await getAvailableCardsForDraft("draft");
     if (!availableCards.some(card => card.card_id === draftedCardId)) {
       const { error } = await supabase.from("team_draft_queue").delete().eq("card_id", draftedCardId);
       if (error) return { success: false, cleaned: false, error: error.message };
@@ -383,228 +491,5 @@ export async function conditionallyCleanupDraftQueues(draftedCardId: string, adm
   } catch (error) {
     console.error("Unexpected error in conditional queue cleanup:", error);
     return { success: false, cleaned: false, error: "Failed to clean up draft queues" };
-  }
-}
-
-export async function executeAutoDraft(
-  teamId: string,
-  draftSessionId: string,
-  adminClient?: AnySupabaseClient
-): Promise<{
-  success: boolean;
-  pick?: { cardId: string; cardName: string; cost: number };
-  source?: "manual_queue" | "algorithm" | "skipped";
-  error?: string;
-  staleDeployment?: boolean;
-}> {
-  try {
-    const supabase = adminClient ?? await createServerClient();
-
-    const { status: draftStatus, error: statusError } = await getDraftStatus(draftSessionId, supabase);
-    if (statusError || !draftStatus) {
-      return { success: false, error: statusError || "No active draft" };
-    }
-    if (draftStatus.onTheClock.teamId !== teamId) {
-      return { success: false, error: "This team is not on the clock" };
-    }
-
-   
-const { team: teamBalance } = await getTeamBalance(teamId, supabase);
-const balance = teamBalance?.cubucks_balance ?? 0;
-    // --- Normal flow: queue exists or balance > 0 ---
-    const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId, supabase);
-    const pickNumber = existingPicks.length + 1;
-    const preview = await getAutoDraftPreview(teamId, draftSessionId, supabase);
-    const card = preview.nextPick;
-
-    if (!card) {
-      const { pick: skippedPick, error: skipError } = await addSkippedPick(
-        teamId, pickNumber, draftSessionId, supabase
-      );
-      if (skipError) return { success: false, source: "skipped", error: skipError };
-
-      if (skippedPick?.id) {
-        await supabase
-          .from("team_draft_picks")
-          .update({ pick_source: "skipped" })
-          .eq("id", skippedPick.id);
-      }
-
-      const { data: teamData } = await supabase
-        .from('teams').select('name').eq('id', teamId).single();
-      supabase.channel(`draft-updates-${draftSessionId}`).send({
-        type: 'broadcast', event: 'new_pick',
-        payload: { ...skippedPick, team_name: teamData?.name || 'Unknown' },
-      });
-      return { success: true, source: "skipped", pick: { cardId: "skipped", cardName: "SKIPPED", cost: 0 } };
-    }
-
-    // For queue picks at 0 balance, pass cost as 0 so the RPC doesn't reject
-    const effectiveCost = (preview.source === "manual_queue" && balance <= 0)
-      ? 0
-      : card.cubucks_cost || 1;
-
-    const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
-      p_team_id: teamId,
-      p_draft_session_id: draftSessionId,
-      p_card_pool_id: card.id,
-      p_card_id: card.card_id,
-      p_card_name: card.card_name,
-      p_card_set: card.card_set,
-      p_card_type: card.card_type,
-      p_rarity: card.rarity,
-      p_colors: card.colors,
-      p_image_url: card.image_url,
-      p_oldest_image_url: card.oldest_image_url,
-      p_mana_cost: card.mana_cost,
-      p_cmc: card.cmc,
-      p_pick_number: pickNumber,
-      p_cost: effectiveCost,
-      p_is_manual_pick: preview.source === "manual_queue",
-      p_user_id: null,
-    }).single();
-
-    if (rpcError) {
-      console.error("Atomic auto-draft failed:", rpcError);
-      return { success: false, error: `Draft failed: ${rpcError.message}` };
-    }
-
-    const newPick = data as DraftPick;
-    if (!newPick) return { success: false, error: "Draft pick could not be confirmed." };
-
-    // --- STEP 2.2a: Record pick source ---
-    const pickSource = preview.source === "manual_queue" ? "manual_queue" : "algorithm";
-    if (newPick.id) {
-      await supabase
-        .from("team_draft_picks")
-        .update({ pick_source: pickSource })
-        .eq("id", newPick.id);
-    }
-
-    await supabase.from("auto_draft_log").insert({
-      team_id: teamId,
-      card_id: card.card_id,
-      card_name: card.card_name,
-      card_pool_id: card.id,
-      pick_source: pickSource,
-      algorithm_details: preview.algorithmDetails ?? null,
-      round_number: pickNumber,
-    });
-
-    await conditionallyCleanupDraftQueues(card.card_id, supabase);
-
-    const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
-    supabase.channel(`draft-updates-${draftSessionId}`).send({
-      type: 'broadcast', event: 'new_pick',
-      payload: { ...newPick, team_name: teamData?.name || 'Unknown' },
-    });
-
-    return {
-      success: true,
-      pick: { cardId: card.card_id, cardName: card.card_name, cost: effectiveCost },
-      source: preview.source,
-    };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    if (errorMessage.includes("Failed to find Server Action")) {
-      return { success: false, error: "Deployment has changed. Please refresh.", staleDeployment: true };
-    }
-    console.error("Unhandled error in executeAutoDraft:", error);
-    return { success: false, error: "An unexpected error occurred." };
-  }
-}
-
-/**
- * Allows a team Captain or Pilot to force a draft pick immediately,
- * bypassing the vote threshold. Allowed even at 0 balance.
- * Records pick_source as 'captain_force'.
- */
-export async function captainForcePick(
-  teamId: string,
-  cardPoolId: string,
-  draftSessionId: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const supabase = await createServerClient();
-
-    // Verify user is authenticated
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) return { success: false, error: "Not authenticated" };
-
-    // Verify user has captain or pilot role on this team
-    const { data: roleData } = await supabase
-      .from("team_members")
-      .select("role")
-      .eq("team_id", teamId)
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (!roleData || !["captain", "pilot"].includes(roleData.role ?? "")) {
-      return { success: false, error: "Only Captains and Pilots can force a pick." };
-    }
-
-    // Verify it's this team's turn
-    const { status: draftStatus } = await getDraftStatus(draftSessionId);
-    if (draftStatus?.onTheClock?.teamId !== teamId) {
-      return { success: false, error: "It is not this team's turn to pick." };
-    }
-
-    // Verify card is available
-    const { cards: availableCards } = await getAvailableCardsForDraft();
-    const card = availableCards.find(c => c.id === cardPoolId);
-    if (!card) return { success: false, error: "Card is no longer available." };
-
-    const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId);
-    const pickNumber = existingPicks.length + 1;
-
-    // Use 0 cost if balance is insufficient — captain force overrides balance gating
-    const { team: teamBalance } = await getTeamBalance(teamId);
-    const balance = teamBalance?.cubucks_balance ?? 0;
-    const effectiveCost = balance >= (card.cubucks_cost || 1) ? card.cubucks_cost || 1 : 0;
-
-    const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
-      p_team_id: teamId,
-      p_draft_session_id: draftSessionId,
-      p_card_pool_id: card.id,
-      p_card_id: card.card_id,
-      p_card_name: card.card_name,
-      p_card_set: card.card_set,
-      p_card_type: card.card_type,
-      p_rarity: card.rarity,
-      p_colors: card.colors,
-      p_image_url: card.image_url,
-      p_oldest_image_url: card.oldest_image_url,
-      p_mana_cost: card.mana_cost,
-      p_cmc: card.cmc,
-      p_pick_number: pickNumber,
-      p_cost: effectiveCost,
-      p_is_manual_pick: true,
-      p_user_id: user.id,
-    }).single();
-
-    if (rpcError) return { success: false, error: rpcError.message };
-
-    const newPick = data as DraftPick;
-    if (!newPick) return { success: false, error: "Pick could not be confirmed." };
-
-    // Record source
-    if (newPick.id) {
-      await supabase
-        .from("team_draft_picks")
-        .update({ pick_source: "captain_force" })
-        .eq("id", newPick.id);
-    }
-
-    await conditionallyCleanupDraftQueues(card.card_id);
-
-    const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
-    supabase.channel(`draft-updates-${draftSessionId}`).send({
-      type: 'broadcast', event: 'new_pick',
-      payload: { ...newPick, team_name: teamData?.name || 'Unknown' },
-    });
-
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Unexpected error" };
   }
 }
