@@ -168,7 +168,6 @@ export const ScheduleOverview: React.FC<ScheduleOverviewProps> = ({ seasonId }) 
     );
   }
 
-  return (
      return (
     <div className="space-y-6">
       <div>
