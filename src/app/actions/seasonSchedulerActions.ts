@@ -128,78 +128,99 @@ export async function generateFullSeasonSchedule(
         if (weeksError || !weeks) return { success: false, error: `Failed to fetch schedule weeks: ${weeksError || "No weeks returned."}` };
         
         const activeTeams = teams.filter(t => t.is_hidden !== true);
-        if (activeTeams.length < 2) return { success: false, error: "At least 2 active (non-hidden) teams are required to generate a schedule." };
+        if (activeTeams.length < 2) return { success: false, error: "At least 2 active teams are required." };
         
-        const totalWeeks = includeRivalsWeek ? regularSeasonWeeks + 1 : regularSeasonWeeks;
-        if (weeks.length < totalWeeks) return { success: false, error: `Schedule generation requires ${totalWeeks} weeks to be created, but only ${weeks.length} were found.` };
+        const totalWeeksToSchedule = includeRivalsWeek ? regularSeasonWeeks + 1 : regularSeasonWeeks;
+        if (weeks.length < totalWeeksToSchedule) return { success: false, error: `Requires ${totalWeeksToSchedule} weeks to be created, but only ${weeks.length} were found.` };
         
         const weeksByNumber = new Map(weeks.map(w => [w.week_number, w]));
 
-        // --- 2. Generate Pairings ---
-        const matchups = generateSeasonMatchups(activeTeams, regularSeasonWeeks, includeRivalsWeek);
-        if (matchups.length === 0) return { success: false, error: "Failed to generate any matchups." };
+        // --- 2. Generate Pairings for the whole season ---
+        const allMatchups = generateSeasonMatchups(activeTeams, regularSeasonWeeks, includeRivalsWeek);
+        if (allMatchups.length === 0) return { success: false, error: "Failed to generate any matchups." };
 
-        // --- 3. Create Time Slots & Schedule Games ---
-        let scheduledGamesCount = 0;
-        const gamesPerMatchup = 5;
+        let totalScheduledGames = 0;
 
-        for (const matchup of matchups) {
-            const weekInfo = weeksByNumber.get(matchup.week);
-            if (!weekInfo) {
-                console.warn(`Could not find week number ${matchup.week} in the database. Skipping matchup.`);
+        // --- 3. Loop through each WEEK to schedule its games ---
+        for (let weekNum = 1; weekNum <= totalWeeksToSchedule; weekNum++) {
+            const weekInfo = weeksByNumber.get(weekNum);
+            const matchupsForThisWeek = allMatchups.filter(m => m.week === weekNum);
+
+            if (!weekInfo || matchupsForThisWeek.length === 0) {
+                console.warn(`Skipping Week ${weekNum} due to missing week info or no matchups.`);
                 continue;
             }
 
-            const weekStartDate = new Date(weekInfo.start_date);
-            const timeSlots: string[] = [];
-for (let i = 0; i < gamesPerMatchup; i++) {
-    const gameDate = new Date(weekStartDate); // weekStartDate is always a Thursday
-    
-    // This will schedule games on Thursday, Friday, Saturday, Sunday, Monday
-    gameDate.setUTCDate(weekStartDate.getUTCDate() + i); 
-    
-    // Distribute times for realism (e.g., two evening, one afternoon, etc.)
-    const hours = [19, 21, 15, 19, 21]; // UTC hours: 7pm, 9pm, 3pm, 7pm, 9pm
-    gameDate.setUTCHours(hours[i], 0, 0, 0); 
-    
-    timeSlots.push(gameDate.toISOString());
-}
+            // --- NEW: Master Time Slot Logic ---
+            const gamesPerMatchup = 5;
+            const totalGamesInWeek = matchupsForThisWeek.length * gamesPerMatchup;
+            const weekStartDate = new Date(weekInfo.start_date); // This is a Thursday
+            const weekEndDate = new Date(weekInfo.end_date); // This is a Tuesday
 
-            for (const timeSlot of timeSlots) {
-                const seasonNumber = typeof weekInfo.season_number === 'number' ? weekInfo.season_number : parseInt(String(weekInfo.season_number), 10);
-                if (isNaN(seasonNumber)) {
-                    console.error(`Invalid season number for week ${weekInfo.id}`);
+            const availableTimeSlots: Date[] = [];
+            const hoursInWeek = (weekEndDate.getTime() - weekStartDate.getTime()) / (1000 * 60 * 60);
+            const intervalHours = Math.floor(hoursInWeek / totalGamesInWeek);
+
+            for (let i = 0; i < totalGamesInWeek; i++) {
+                const gameDate = new Date(weekStartDate);
+                // Add the interval for each game, rounded to the nearest hour
+                gameDate.setUTCHours(weekStartDate.getUTCHours() + (i * intervalHours));
+                // Snap to the beginning of the hour to keep it clean
+                gameDate.setUTCMinutes(0, 0, 0);
+                availableTimeSlots.push(gameDate);
+            }
+
+            // Create a flat list of all games to be played this week
+            const allGamesThisWeek = matchupsForThisWeek.flatMap(matchup => 
+                Array.from({ length: gamesPerMatchup }).map(() => ({
+                    teamAId: matchup.teamAId,
+                    teamBId: matchup.teamBId
+                }))
+            );
+            
+            // Shuffle the games to randomize the time slots they get
+            shuffleArray(allGamesThisWeek); 
+
+            // --- 4. Schedule each game in a unique time slot ---
+            for (let i = 0; i < allGamesThisWeek.length; i++) {
+                const game = allGamesThisWeek[i];
+                const timeSlot = availableTimeSlots[i];
+
+                if (!timeSlot) {
+                    console.error(`Ran out of time slots for Week ${weekNum}. This should not happen.`);
                     continue;
                 }
+
+                const seasonNumber = typeof weekInfo.season_number === 'number' ? weekInfo.season_number : parseInt(String(weekInfo.season_number), 10);
+                if (isNaN(seasonNumber)) continue;
                 
                 const result = await createScheduledSimMatch({
-                    team1_id: matchup.teamAId,
-                    team2_id: matchup.teamBId,
+                    team1_id: game.teamAId,
+                    team2_id: game.teamBId,
                     season_number: seasonNumber,
-                    week_number: matchup.week,
-                    match_date: timeSlot,
+                    week_number: weekNum,
+                    match_date: timeSlot.toISOString(),
                     team1_ai_profile: "default",
                     team2_ai_profile: "default",
                 });
 
                 if (result.success) {
-                    scheduledGamesCount++;
+                    totalScheduledGames++;
                 } else {
-                    console.warn(`Warning scheduling game for week ${matchup.week} between ${matchup.teamAId} and ${matchup.teamBId}:`, result.error);
+                    console.warn(`Warning scheduling a game for week ${weekNum}:`, result.error);
                 }
             }
         }
 
-        if (scheduledGamesCount === 0) {
-            return { success: false, error: "No games were scheduled. Check server logs for warnings, especially regarding decklists." };
+        if (totalScheduledGames === 0 && allMatchups.length > 0) {
+            return { success: false, error: "No games were scheduled. Check server logs for warnings." };
         }
 
-        return { success: true, scheduledGamesCount };
+        return { success: true, scheduledGamesCount: totalScheduledGames };
 
     } catch (error: unknown) {
-        console.error("Critical error in generateFullSeasonSchedule:", error);
         const message = error instanceof Error ? error.message : "An unknown critical error occurred.";
+        console.error("Critical error in generateFullSeasonSchedule:", message);
         return { success: false, error: message };
     }
 }
-
