@@ -7,6 +7,7 @@ import { getWeekMatchesAndSims, type UnifiedMatch } from "@/app/actions/matchAct
 import { useUserTimezone } from "@/hooks/useUserTimezone";
 import { formatDateTime } from "@/app/utils/timezoneUtils";
 import type { ScheduleWeek } from "@/app/actions/scheduleActions";
+import { Bot, Swords } from "lucide-react";
 
 interface ScheduleOverviewProps {
   seasonId: string;
