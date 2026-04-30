@@ -19,6 +19,7 @@ export interface ScheduledSimMatch {
     team1_id: string;
     team2_id: string;
     status: string;
+     week_id: string; 
     winner_team_id: string | null;
     sim_match_id: string | null;
     pvp_match_id: string | null;
@@ -265,6 +266,7 @@ export async function createScheduledSimMatch(params: {
     team2_id: string;
     season_number: number;
     week_number: number;
+     week_id: string; 
     match_date: string;
     team1_ai_profile: string;
     team2_ai_profile: string;
@@ -347,6 +349,7 @@ export async function createScheduledSimMatch(params: {
             team2_id: params.team2_id,
             season_number: params.season_number,
             week_number: params.week_number,
+            week_id: params.week_id,
             match_date: params.match_date,
             status: 'scheduled',
             team1_ai_profile: params.team1_ai_profile,
