@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from "react";
 import { getScheduleWeeks, updateScheduleWeek, deleteScheduleWeek } from "@/app/actions/scheduleActions";
-import { getWeekMatches } from "@/app/actions/matchActions";
+import { getWeekMatchesAndSims, type UnifiedMatch } from "@/app/actions/matchActions"; 
 import { useUserTimezone } from "@/hooks/useUserTimezone";
 import { formatDateTime } from "@/app/utils/timezoneUtils";
 import type { ScheduleWeek } from "@/app/actions/scheduleActions";
@@ -13,7 +13,7 @@ interface ScheduleOverviewProps {
 }
 
 interface WeekWithMatches extends ScheduleWeek {
-  matchCount: number;
+ matches: UnifiedMatch[];
   status: "past" | "current" | "upcoming";
 }
 
@@ -48,7 +48,11 @@ export const ScheduleOverview: React.FC<ScheduleOverviewProps> = ({ seasonId }) 
       const now = new Date();
       const weeksWithData = await Promise.all(
         weeksData.map(async (week) => {
-          const { matches } = await getWeekMatches(week.id);
+          const { matches, error: matchesError } = await getWeekMatchesAndSims(week.id);
+          if (matchesError) {
+            console.error(`Failed to load matches for week ${week.week_number}:`, matchesError);
+          }
+
 
           // Determine week status
           const startDate = new Date(week.start_date);
@@ -65,7 +69,7 @@ export const ScheduleOverview: React.FC<ScheduleOverviewProps> = ({ seasonId }) 
 
           return {
             ...week,
-            matchCount: matches.length,
+   matches: matches || [],
             status,
           };
         })
@@ -165,6 +169,7 @@ export const ScheduleOverview: React.FC<ScheduleOverviewProps> = ({ seasonId }) 
   }
 
   return (
+     return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
@@ -205,12 +210,12 @@ export const ScheduleOverview: React.FC<ScheduleOverviewProps> = ({ seasonId }) 
         </div>
       </div>
 
-      {/* Weeks Table */}
+      {/* Weeks List */}
       <div className="space-y-4">
         {weeks.map((week) => (
           <div
             key={week.id}
-            className={`border rounded-lg p-6 ${
+            className={`border rounded-lg ${
               week.status === "current"
                 ? "bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700"
                 : week.status === "past"
@@ -218,105 +223,85 @@ export const ScheduleOverview: React.FC<ScheduleOverviewProps> = ({ seasonId }) 
                 : "bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700"
             }`}
           >
-            {/* Week Header */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                  Week {week.week_number}
-                </h3>
-                {week.is_playoff_week && (
-                  <span className="text-xs px-2 py-1 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200 font-medium">
-                    🏆 Playoff
-                  </span>
+            <div className="p-6">
+                {/* Week Header */}
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                        <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                        Week {week.week_number}
+                        </h3>
+                        {week.is_playoff_week && ( <span className="text-xs px-2 py-1 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200 font-medium">🏆 Playoff</span> )}
+                        {week.is_championship_week && ( <span className="text-xs px-2 py-1 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 font-medium">👑 Championship</span> )}
+                        <span className={`text-xs px-2 py-1 rounded font-medium ${ week.status === "current" ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200" : week.status === "past" ? "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300" : "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200" }`}>
+                        {week.status === "current" ? "● In Progress" : week.status === "past" ? "✓ Completed" : "○ Upcoming"}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {week.status !== "past" && (
+                        <button onClick={() => handleExtendWeek(week.id)} disabled={extendingWeek === week.id} className="text-sm px-3 py-2 rounded-md bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 text-white font-medium transition-colors disabled:cursor-not-allowed">
+                            {extendingWeek === week.id ? "Extending..." : `Extend +${extensionDays}d`}
+                        </button>
+                        )}
+                        <button onClick={() => handleDeleteWeek(week.id)} disabled={deletingWeek === week.id} className="text-sm px-3 py-2 rounded-md bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white font-medium transition-colors disabled:cursor-not-allowed">
+                        {deletingWeek === week.id ? "Deleting..." : "Delete"}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Week Details Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Week Duration</p>
+                        <p className="text-sm text-gray-900 dark:text-gray-100">{formatDateTime(week.start_date, timezone)} → {formatDateTime(week.end_date, timezone)}</p>
+                    </div>
+                    <div>
+                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Matches Scheduled</p>
+                        <p className="text-sm text-gray-900 dark:text-gray-100">{week.matches.length} {week.matches.length === 1 ? "match" : "matches"}</p>
+                    </div>
+                    <div>
+                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">📝 Deck Submission Deadline</p>
+                        <p className="text-sm text-gray-900 dark:text-gray-100">{formatDateTime(week.deck_submission_deadline, timezone)}</p>
+                    </div>
+                    <div>
+                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">🎮 Match Completion Deadline</p>
+                        <p className="text-sm text-gray-900 dark:text-gray-100">{formatDateTime(week.match_completion_deadline, timezone)}</p>
+                    </div>
+                </div>
+
+                {/* Notes */}
+                {week.notes && (
+                    <div className="border-t border-gray-200 dark:border-gray-700 pt-3 mt-3">
+                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Notes</p>
+                        <p className="text-sm text-gray-700 dark:text-gray-300">{week.notes}</p>
+                    </div>
                 )}
-                {week.is_championship_week && (
-                  <span className="text-xs px-2 py-1 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 font-medium">
-                    👑 Championship
-                  </span>
-                )}
-                <span
-                  className={`text-xs px-2 py-1 rounded font-medium ${
-                    week.status === "current"
-                      ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200"
-                      : week.status === "past"
-                      ? "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
-                      : "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200"
-                  }`}
-                >
-                  {week.status === "current" ? "● In Progress" : week.status === "past" ? "✓ Completed" : "○ Upcoming"}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                {week.status !== "past" && (
-                  <button
-                    onClick={() => handleExtendWeek(week.id)}
-                    disabled={extendingWeek === week.id}
-                    className="text-sm px-3 py-2 rounded-md bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 text-white font-medium transition-colors disabled:cursor-not-allowed"
-                  >
-                    {extendingWeek === week.id ? "Extending..." : `Extend +${extensionDays}d`}
-                  </button>
-                )}
-                <button
-                  onClick={() => handleDeleteWeek(week.id)}
-                  disabled={deletingWeek === week.id}
-                  className="text-sm px-3 py-2 rounded-md bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white font-medium transition-colors disabled:cursor-not-allowed"
-                >
-                  {deletingWeek === week.id ? "Deleting..." : "Delete"}
-                </button>
-              </div>
             </div>
-
-            {/* Week Details Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              {/* Dates */}
-              <div>
-                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">
-                  Week Duration
-                </p>
-                <p className="text-sm text-gray-900 dark:text-gray-100">
-                  {formatDateTime(week.start_date, timezone)} →{" "}
-                  {formatDateTime(week.end_date, timezone)}
-                </p>
-              </div>
-
-              {/* Match Count */}
-              <div>
-                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">
-                  Matches Scheduled
-                </p>
-                <p className="text-sm text-gray-900 dark:text-gray-100">
-                  {week.matchCount} {week.matchCount === 1 ? "match" : "matches"}
-                </p>
-              </div>
-
-              {/* Deck Deadline */}
-              <div>
-                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">
-                  📝 Deck Submission Deadline
-                </p>
-                <p className="text-sm text-gray-900 dark:text-gray-100">
-                  {formatDateTime(week.deck_submission_deadline, timezone)}
-                </p>
-              </div>
-
-              {/* Match Deadline */}
-              <div>
-                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">
-                  🎮 Match Completion Deadline
-                </p>
-                <p className="text-sm text-gray-900 dark:text-gray-100">
-                  {formatDateTime(week.match_completion_deadline, timezone)}
-                </p>
-              </div>
-            </div>
-
-            {/* Notes */}
-            {week.notes && (
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-3 mt-3">
-                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">
-                  Notes
-                </p>
-                <p className="text-sm text-gray-700 dark:text-gray-300">{week.notes}</p>
+            
+            {/* *** NEW SECTION: MATCH LIST *** */}
+            {week.matches.length > 0 && (
+              <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/20 px-6 py-4">
+                <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-3">Scheduled Matches</h4>
+                <div className="space-y-2">
+                  {week.matches.map(match => (
+                    <div key={match.id} className="flex items-center justify-between text-sm p-2 rounded-md bg-white dark:bg-gray-800/50 shadow-sm border border-gray-200 dark:border-gray-700">
+                      <div className="flex items-center gap-3">
+                        {match.matchType === 'sim' 
+                          ? <Bot className="h-4 w-4 text-blue-500 flex-shrink-0" title="Simulated Match"/> 
+                          : <Swords className="h-4 w-4 text-red-500 flex-shrink-0" title="Player vs Player Match"/>
+                        }
+                        <span className="font-mono text-xs text-gray-500 dark:text-gray-400 w-20 truncate">{match.status}</span>
+                        <div className="flex items-center gap-2">
+                            <span className="font-medium text-gray-900 dark:text-gray-100">{match.home_team?.name || 'TBD'}</span>
+                            <span className="text-gray-400">vs</span>
+                            <span className="font-medium text-gray-900 dark:text-gray-100">{match.away_team?.name || 'TBD'}</span>
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        {match.scheduled_for ? formatDateTime(match.scheduled_for, timezone) : 'Unscheduled'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -326,30 +311,21 @@ export const ScheduleOverview: React.FC<ScheduleOverviewProps> = ({ seasonId }) 
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-gray-200 dark:border-gray-700 pt-6">
         <div className="text-center">
-          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            {weeks.length}
-          </p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{weeks.length}</p>
           <p className="text-sm text-gray-600 dark:text-gray-400">Total Weeks</p>
         </div>
         <div className="text-center">
-          <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-            {weeks.filter((w) => w.status === "upcoming").length}
-          </p>
+          <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{weeks.filter((w) => w.status === "upcoming").length}</p>
           <p className="text-sm text-gray-600 dark:text-gray-400">Upcoming</p>
         </div>
         <div className="text-center">
-          <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-            {weeks.filter((w) => w.status === "current").length}
-          </p>
+          <p className="text-2xl font-bold text-green-600 dark:text-green-400">{weeks.filter((w) => w.status === "current").length}</p>
           <p className="text-sm text-gray-600 dark:text-gray-400">In Progress</p>
         </div>
         <div className="text-center">
-          <p className="text-2xl font-bold text-gray-600 dark:text-gray-400">
-            {weeks.reduce((sum, w) => sum + w.matchCount, 0)}
-          </p>
+          <p className="text-2xl font-bold text-gray-600 dark:text-gray-400">{weeks.reduce((sum, w) => sum + w.matches.length, 0)}</p>
           <p className="text-sm text-gray-600 dark:text-gray-400">Total Matches</p>
         </div>
       </div>
     </div>
   );
-};
