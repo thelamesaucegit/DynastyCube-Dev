@@ -31,6 +31,39 @@ export interface ScheduleWeek {
   updated_at: string;
 }
 
+export async function getWeekIdByNumber(
+    seasonNumber: number,
+    weekNumber: number
+): Promise<{ weekId: string | null; error?: string }> {
+    const supabase = await createServerClient(); // Uses the correct server client
+    try {
+        const { data: season, error: seasonError } = await supabase
+            .from('seasons')
+            .select('id')
+            .eq('season_number', seasonNumber)
+            .single();
+
+        if (seasonError || !season) {
+            return { weekId: null, error: `Season ${seasonNumber} not found.` };
+        }
+
+        const { data: week, error: weekError } = await supabase
+            .from('schedule_weeks')
+            .select('id')
+            .eq('season_id', season.id)
+            .eq('week_number', weekNumber)
+            .single();
+
+        if (weekError || !week) {
+            return { weekId: null, error: `Week ${weekNumber} not found in season ${seasonNumber}.` };
+        }
+
+        return { weekId: week.id, error: undefined };
+    } catch (e) {
+        const message = e instanceof Error ? e.message : 'An unexpected error occurred';
+        return { weekId: null, error: message };
+    }
+}
 /**
  *  HELPER
  * Get a single week's ID from its season and week number.
