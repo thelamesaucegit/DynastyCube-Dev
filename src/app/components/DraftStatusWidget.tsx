@@ -3,12 +3,13 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import Link from 'next/link'; // Import the Link component
 import { getDraftStatus, type DraftStatus } from "@/app/actions/draftOrderActions";
 import { getTeamDraftPicks } from "@/app/actions/draftActions";
 import { getActiveDraftSession, type DraftSession } from "@/app/actions/draftSessionActions";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
-import { Clock, ChevronRight, Timer, CalendarClock, PartyPopper } from "lucide-react";
+import { Clock, ChevronRight, Timer, CalendarClock, PartyPopper, Trophy } from "lucide-react"; // Added Trophy
 
 interface DraftStatusWidgetProps {
   variant: "full" | "compact" | "team";
@@ -36,32 +37,43 @@ export function DraftStatusWidget({ variant, teamId }: DraftStatusWidgetProps) {
       try {
         const sessionResult = await getActiveDraftSession();
         const activeSession = sessionResult.session;
-        
-        const statusResult = await getDraftStatus(activeSession?.id);
-        const newStatus = statusResult.status;
+        setSession(activeSession); // Set session state regardless of status
 
-        if (prevStatusRef.current && newStatus && activeSession) {
-          if (newStatus.totalPicks > prevStatusRef.current.totalPicks) {
-            const justPickedTeam = prevStatusRef.current.onTheClock;
-            const { picks } = await getTeamDraftPicks(justPickedTeam.teamId, activeSession.id);
-            const validPicks = picks.filter((p) => p.card_id !== "skipped-pick");
-            
-            if (validPicks.length > 0) {
-              const lastPick = validPicks[validPicks.length - 1];
-              setRecentPick({
-                teamName: justPickedTeam.teamName,
-                teamEmoji: justPickedTeam.teamEmoji,
-                cardName: lastPick.card_name,
-              });
-              if (timerRef.current) clearTimeout(timerRef.current);
-              timerRef.current = setTimeout(() => setRecentPick(null), 10000);
-            }
-          }
+        // *** NEW LOGIC: Handle 'completed' state upfront ***
+        if (activeSession?.status === 'completed') {
+          setStatus(null); // No need to fetch draft status if completed
+          setLoading(false);
+          return;
         }
 
-        setStatus(newStatus);
-        setSession(activeSession);
-        prevStatusRef.current = newStatus;
+        // Only fetch status if the session is active, scheduled, or paused
+        if (activeSession) {
+            const statusResult = await getDraftStatus(activeSession.id);
+            const newStatus = statusResult.status;
+
+            if (prevStatusRef.current && newStatus && activeSession.status === 'active') {
+              if (newStatus.totalPicks > prevStatusRef.current.totalPicks) {
+                const justPickedTeam = prevStatusRef.current.onTheClock;
+                const { picks } = await getTeamDraftPicks(justPickedTeam.teamId, activeSession.id);
+                const validPicks = picks.filter((p) => p.card_id !== "skipped-pick");
+                
+                if (validPicks.length > 0) {
+                  const lastPick = validPicks[validPicks.length - 1];
+                  setRecentPick({
+                    teamName: justPickedTeam.teamName,
+                    teamEmoji: justPickedTeam.teamEmoji,
+                    cardName: lastPick.card_name,
+                  });
+                  if (timerRef.current) clearTimeout(timerRef.current);
+                  timerRef.current = setTimeout(() => setRecentPick(null), 10000);
+                }
+              }
+            }
+            setStatus(newStatus);
+            prevStatusRef.current = newStatus;
+        } else {
+            setStatus(null);
+        }
 
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
@@ -74,7 +86,6 @@ export function DraftStatusWidget({ variant, teamId }: DraftStatusWidgetProps) {
 
     loadStatus();
     const interval = setInterval(loadStatus, 10000);
-
     return () => {
       clearInterval(interval);
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -83,22 +94,28 @@ export function DraftStatusWidget({ variant, teamId }: DraftStatusWidgetProps) {
 
   if (loading) return null;
 
+  // *** NEW RENDER LOGIC ***
+  if (session?.status === "completed") {
+    // Pass the session ID to the completed widget
+    return <CompletedWidget sessionId={session.id} />;
+  }
+
+  if (session?.status === "scheduled") {
+    return <ScheduledWidget session={session} />;
+  }
+
+  // If there's no session and no status, render nothing
   if (!status) {
-    if (session && session.status === "scheduled") {
-      return <ScheduledWidget session={session} />;
-    }
     return null;
   }
 
-  if (session?.status === "completed") {
-    return <CompletedWidget />;
-  }
-
+  // Render the appropriate widget based on variant
   if (variant === "full") return <FullWidget status={status} session={session} recentPick={recentPick} />;
   if (variant === "compact") return <CompactWidget status={status} session={session} recentPick={recentPick} />;
   return <TeamWidget status={status} session={session} teamId={teamId || ""} recentPick={recentPick} />;
 }
 
+// useCountdown and useStartCountdown helpers remain the same...
 function useCountdown(deadline: string | null | undefined): string {
   const [display, setDisplay] = useState("");
   useEffect(() => {
@@ -123,8 +140,6 @@ function useCountdown(deadline: string | null | undefined): string {
   }, [deadline]);
   return display;
 }
-
-// Other components (ScheduledWidget, FullWidget, etc.) remain the same...
 
 function useStartCountdown(startTime: string | null | undefined): string {
   const [display, setDisplay] = useState("");
@@ -156,6 +171,7 @@ function useStartCountdown(startTime: string | null | undefined): string {
   return display;
 }
 
+
 function ScheduledWidget({ session }: { session: DraftSession }) {
   const startCountdown = useStartCountdown(session.start_time);
   return (
@@ -186,14 +202,21 @@ function ScheduledWidget({ session }: { session: DraftSession }) {
   );
 }
 
-function CompletedWidget() {
+// *** MODIFIED CompletedWidget to accept sessionId and link to results ***
+function CompletedWidget({ sessionId }: { sessionId: string }) {
   return (
     <section>
-      <Card className="border border-muted bg-muted/20">
-        <CardContent className="py-3 px-5">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Clock className="size-4" />
-            <span className="font-medium">The draft has been completed.</span>
+      <Card className="border-2 border-green-500/30 bg-gradient-to-r from-green-500/5 to-teal-500/5">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Trophy className="size-6 text-green-500" />
+              <h2 className="text-lg font-bold">Draft Complete!</h2>
+            </div>
+            <Link href={`/draft/${sessionId}/live`} className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors">
+                View the Draft Results
+                <ChevronRight className="size-4" />
+            </Link>
           </div>
         </CardContent>
       </Card>
@@ -201,13 +224,13 @@ function CompletedWidget() {
   );
 }
 
+// FullWidget, CompactWidget, and TeamWidget remain the same
 function FullWidget({ status, session, recentPick }: { status: DraftStatus; session: DraftSession | null; recentPick: RecentPickData | null }) {
-  const pickCountdown = useCountdown(session?.current_pick_deadline); // Use the new column
+  const pickCountdown = useCountdown(session?.current_pick_deadline);
   const startCountdown = useStartCountdown(session?.status === "scheduled" ? session.start_time : null);
   const isScheduled = session?.status === "scheduled";
   const isActive = session?.status === "active";
   const isPaused = session?.status === "paused";
-
   return (
     <section>
       {recentPick && (
@@ -292,8 +315,7 @@ function FullWidget({ status, session, recentPick }: { status: DraftStatus; sess
 }
 
 function CompactWidget({ status, session, recentPick }: { status: DraftStatus; session: DraftSession | null; recentPick: RecentPickData | null }) {
-  const pickCountdown = useCountdown(session?.current_pick_deadline); // Use the new column
-
+  const pickCountdown = useCountdown(session?.current_pick_deadline);
   return (
     <Card className="border-amber-500/30 bg-gradient-to-r from-amber-500/5 to-orange-500/5 mb-6">
       <CardContent className="py-3 px-4">
@@ -338,10 +360,8 @@ function TeamWidget({ status, session, teamId, recentPick }: { status: DraftStat
   const isOnClock = status.onTheClock.teamId === teamId;
   const isOnDeck = status.onDeck.teamId === teamId;
   const teamEntry = status.draftOrder.find((t) => t.teamId === teamId);
-  const pickCountdown = useCountdown(session?.current_pick_deadline); // Use the new column
-
+  const pickCountdown = useCountdown(session?.current_pick_deadline);
   if (!teamEntry) return null;
-
   return (
     <Card className={`mb-6 border-2 transition-colors ${isOnClock ? "border-green-500/40 bg-green-500/5" : isOnDeck ? "border-yellow-500/40 bg-yellow-500/5" : "border-border"}`}>
       <CardContent className="py-4 px-5">
