@@ -286,8 +286,9 @@ export const ScheduleOverview: React.FC<ScheduleOverviewProps> = ({ seasonId }) 
                     <div key={match.id} className="flex items-center justify-between text-sm p-2 rounded-md bg-white dark:bg-gray-800/50 shadow-sm border border-gray-200 dark:border-gray-700">
                       <div className="flex items-center gap-3">
                         {match.matchType === 'sim' 
-                          ? <Bot className="h-4 w-4 text-blue-500 flex-shrink-0" title="Simulated Match"/> 
-                          : <Swords className="h-4 w-4 text-red-500 flex-shrink-0" title="Player vs Player Match"/>
+                          ? <span title="Simulated Match"><Bot className="h-4 w-4 text-blue-500 flex-shrink-0"/></span> 
+  : <span title="Player vs Player Match"><Swords className="h-4 w-4 text-red-500 flex-shrink-0"/></span>
+
                         }
                         <span className="font-mono text-xs text-gray-500 dark:text-gray-400 w-20 truncate">{match.status}</span>
                         <div className="flex items-center gap-2">
