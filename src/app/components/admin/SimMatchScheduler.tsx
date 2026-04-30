@@ -3,9 +3,8 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { getWeekId } from "@/app/actions/scheduleActions"; 
+import { getWeekIdByNumber } from "@/app/actions/scheduleActions"; 
 import { getAllTeams } from "@/app/actions/teamActions";
-import { createServerClient } from "@supabase/ssr";
 import { getAiProfiles } from "@/app/actions/adminActions";
 import { 
     createScheduledSimMatch, 
@@ -94,46 +93,41 @@ const [deckWarnings, setDeckWarnings] = useState<string[]>([]);
         });
     }, [team2Id]);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError(null);
-        setSuccess(null);
-
-        if (!team1Id || !team2Id) return setError("Please select both teams");
-        if (team1Id === team2Id) return setError("Teams must be different");
-        if (!team1Profile || !team2Profile) return setError("Please select AI profiles for both teams");
-        if (!matchDate) return setError("Please set a match date");
-
-        // Warn if no deck and no override
-        if (team1DeckInfo && !team1DeckInfo.available && !deck1Override) {
-            return setError("Team 1 has no draft picks. Please provide a manual deck override.");
-        }
-        if (team2DeckInfo && !team2DeckInfo.available && !deck2Override) {
-            return setError("Team 2 has no draft picks. Please provide a manual deck override.");
-        }
-
-        setSubmitting(true);
-
-
-         const { data: activeSeason } = await createServerClient().from('seasons').select('id').eq('season_number', activeSeasonNumber).single();
-    if (!activeSeason) {
-        setSubmitting(false);
-        return setError(`Season ${activeSeasonNumber} not found.`);
+   const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    
+    // --- All validation checks remain the same ---
+    if (!team1Id || !team2Id) return setError("Please select both teams");
+    if (team1Id === team2Id) return setError("Teams must be different");
+    if (!team1Profile || !team2Profile) return setError("Please select AI profiles for both teams");
+    if (!matchDate) return setError("Please set a match date");
+    if (team1DeckInfo && !team1DeckInfo.available && !deck1Override) {
+        return setError("Team 1 has no draft picks. Please provide a manual deck override.");
+    }
+    if (team2DeckInfo && !team2DeckInfo.available && !deck2Override) {
+        return setError("Team 2 has no draft picks. Please provide a manual deck override.");
     }
     
-    // 2. Fetch the week_id using our new helper
-    const weekId = await getWeekId(activeSeason.id, weekNumber);
-    if (!weekId) {
-        setSubmitting(false);
-        return setError(`Week ${weekNumber} not found for this season.`);
-    }
-        
+    setSubmitting(true);
+
+    try {
+        // --- NEW, CORRECTED LOGIC ---
+        // 1. Call the new server action to get the weekId
+        const { weekId, error: weekIdError } = await getWeekIdByNumber(activeSeasonNumber, weekNumber);
+
+        if (weekIdError || !weekId) {
+            throw new Error(weekIdError || "Could not determine the week ID for this match.");
+        }
+
+        // 2. Call the createScheduledSimMatch action with all required props
         const result = await createScheduledSimMatch({
             team1_id: team1Id,
             team2_id: team2Id,
             season_number: activeSeasonNumber,
             week_number: weekNumber,
-            week_id: weekId,
+            week_id: weekId, // Pass the fetched weekId
             match_date: new Date(matchDate).toISOString(),
             team1_ai_profile: team1Profile,
             team2_ai_profile: team2Profile,
@@ -144,16 +138,20 @@ const [deckWarnings, setDeckWarnings] = useState<string[]>([]);
         if (result.success) {
             setSuccess(`Match scheduled for ${new Date(matchDate).toLocaleString()}. The sim will trigger automatically.`);
             setDeckWarnings(result.deckWarnings || []);
-            // Reset form
             setTeam1Id(""); setTeam2Id("");
             setTeam1Profile(""); setTeam2Profile("");
             setMatchDate(""); setDeck1Override(""); setDeck2Override("");
             await loadData();
         } else {
-            setError(result.error || "Failed to schedule match");
+            throw new Error(result.error || "Failed to schedule match");
         }
+    } catch (e) {
+        const message = e instanceof Error ? e.message : "An unexpected error occurred.";
+        setError(message);
+    } finally {
         setSubmitting(false);
-    };
+    }
+};
 
     const handleDelete = async (id: string, label: string) => {
         if (!confirm(`Delete scheduled match: ${label}?\n\nThis cannot be undone.`)) return;
