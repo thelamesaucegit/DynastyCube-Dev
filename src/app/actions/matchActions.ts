@@ -61,13 +61,10 @@ export async function getWeekMatchesAndSims(weekId: string): Promise<{
 }> {
   const supabase = await createServerClient();
   try {
-    // Fetch PvP matches from the 'matches' table
     const { data: pvpMatches, error: pvpError } = await supabase
       .from("matches")
       .select(`
-        id, 
-        status,
-        winner_team_id,
+        id, status, winner_team_id,
         home_team:teams!home_team_id(id, name, emoji),
         away_team:teams!away_team_id(id, name, emoji)
       `)
@@ -75,43 +72,51 @@ export async function getWeekMatchesAndSims(weekId: string): Promise<{
 
     if (pvpError) throw pvpError;
 
-    // Fetch sim matches from the 'schedule' table
     const { data: simMatches, error: simError } = await supabase
       .from("schedule")
       .select(`
-        id, 
-        status,
-        match_date,
-        winner_team_id,
+        id, status, match_date, winner_team_id,
         home_team:teams!team1_id(id, name, emoji),
         away_team:teams!team2_id(id, name, emoji)
       `)
-      .eq("week_id", weekId); // Assumes 'schedule' table has a 'week_id' FK
+      .eq("week_id", weekId);
 
     if (simError) throw simError;
 
     const unifiedList: UnifiedMatch[] = [];
 
-    (pvpMatches || []).forEach(m => unifiedList.push({
-      id: m.id,
-      matchType: 'pvp',
-      status: m.status,
-      home_team: m.home_team,
-      away_team: m.away_team,
-      winner_team_id: m.winner_team_id,
-    }));
+    (pvpMatches || []).forEach(m => {
+        // --- THE FIX IS HERE ---
+        // Supabase can type a to-one join as an array. We take the first element.
+        const homeTeam = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team;
+        const awayTeam = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
 
-    (simMatches || []).forEach(m => unifiedList.push({
-      id: m.id,
-      matchType: 'sim',
-      status: m.status,
-      home_team: m.home_team,
-      away_team: m.away_team,
-      scheduled_for: m.match_date,
-      winner_team_id: m.winner_team_id,
-    }));
+        unifiedList.push({
+            id: m.id,
+            matchType: 'pvp',
+            status: m.status,
+            home_team: homeTeam || null,
+            away_team: awayTeam || null,
+            winner_team_id: m.winner_team_id,
+        });
+    });
+
+    (simMatches || []).forEach(m => {
+        // --- AND ALSO HERE ---
+        const homeTeam = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team;
+        const awayTeam = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
+
+        unifiedList.push({
+            id: m.id,
+            matchType: 'sim',
+            status: m.status,
+            home_team: homeTeam || null,
+            away_team: awayTeam || null,
+            scheduled_for: m.match_date,
+            winner_team_id: m.winner_team_id,
+        });
+    });
     
-    // Sort by date if available, otherwise just keep them grouped
     unifiedList.sort((a, b) => {
         const dateA = a.scheduled_for ? new Date(a.scheduled_for).getTime() : 0;
         const dateB = b.scheduled_for ? new Date(b.scheduled_for).getTime() : 0;
