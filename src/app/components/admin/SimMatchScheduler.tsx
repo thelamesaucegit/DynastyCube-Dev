@@ -5,6 +5,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { getWeekId } from "@/app/actions/scheduleActions"; 
 import { getAllTeams } from "@/app/actions/teamActions";
+import { createServerClient } from "@supabase/ssr";
 import { getAiProfiles } from "@/app/actions/adminActions";
 import { 
     createScheduledSimMatch, 
@@ -114,7 +115,7 @@ const [deckWarnings, setDeckWarnings] = useState<string[]>([]);
         setSubmitting(true);
 
 
-         const { data: activeSeason } = await createClient().from('seasons').select('id').eq('season_number', activeSeasonNumber).single();
+         const { data: activeSeason } = await createServerClient().from('seasons').select('id').eq('season_number', activeSeasonNumber).single();
     if (!activeSeason) {
         setSubmitting(false);
         return setError(`Season ${activeSeasonNumber} not found.`);
