@@ -90,7 +90,7 @@ function generateSeasonMatchups(
   includeRivalsWeek: boolean
 ): Matchup[] {
     const allMatchups: Matchup[] = [];
-    let schedulableTeams = [...teams];
+    const schedulableTeams = [...teams];
     
     const isOdd = schedulableTeams.length % 2 !== 0;
     if (isOdd) {
@@ -146,16 +146,7 @@ function generateSeasonMatchups(
 }
 
 
-//Shuffle array function
 
-function shuffleArray<T>(arr: T[]): T[] {
-  const shuffled = [...arr];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
-}
 
 // ==================================
 // ORCHESTRATION ACTION
