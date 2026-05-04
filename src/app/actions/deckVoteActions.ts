@@ -213,6 +213,41 @@ export async function resolveDeckVotePoll(
         if (!success) {
             return { success: false, error: `Poll resolved but deck submission failed: ${error}` };
         }
+        // 6. Auto-generate next week's poll
+         const { data: currentWeekData, error: weekError } = await supabase
+            .from('weeks')
+            .select('season_phase, ends_at')
+            .eq('id', weekId)
+            .single();
+
+        if (weekError || !currentWeekData) {
+            console.error(`[resolveDeckVotePoll] Could not find week data for weekId: ${weekId} to chain the next vote.`);
+        } else if (currentWeekData.season_phase === 'season') {
+            // This is a regular season week, so we chain the next vote.
+            const { data: nextWeek, error: nextWeekError } = await supabase
+                .from('weeks')
+                .select('id, ends_at')
+                .gt('starts_at', currentWeekData.ends_at)
+                .order('starts_at', { ascending: true })
+                .limit(1)
+                .single();
+
+            if (nextWeekError || !nextWeek) {
+                console.log(`[resolveDeckVotePoll] No upcoming week found after week ${weekId}. End of season.`);
+            } else {
+                // The next poll will end at the same time the next week completes.
+                const nextPollEndsAt = nextWeek.ends_at; 
+                
+                console.log(`[resolveDeckVotePoll] Auto-creating next deck vote for team ${poll.team_id} for week ${nextWeek.id}, ending at ${nextPollEndsAt}`);
+
+                // Fire-and-forget the creation of the next poll.
+                createDeckVotePoll(poll.team_id, nextWeek.id, nextPollEndsAt).then(result => {
+                    if (!result.success) {
+                        console.error(`[resolveDeckVotePoll] Failed to auto-create next poll: ${result.error}`);
+                    }
+                });
+            }
+        }
 
         return { 
             success: true, 
