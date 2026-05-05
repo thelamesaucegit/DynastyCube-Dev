@@ -27,6 +27,8 @@ export function VoteManagement() {
   const [selectedPoll, setSelectedPoll] = useState<Poll | null>(null);
   const [results, setResults] = useState<TypedPollResults | null>(null);
   const [showResults, setShowResults] = useState(false);
+    const [initiating, setInitiating] = useState(false);
+
 
   // Form state
   const [formData, setFormData] = useState({
