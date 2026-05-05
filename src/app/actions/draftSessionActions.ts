@@ -7,6 +7,8 @@ import { getDraftStatus, type DraftStatus } from "@/app/actions/draftOrderAction
 import { executeAutoDraft } from "@/app/actions/autoDraftActions";
 import { addSkippedPick } from "@/app/actions/draftActions"; 
 import { generatePlaceholderDeck } from "@/app/actions/deckGenerationActions";
+import { createDeckVotePoll } from "@/app/actions/deckVoteActions";
+
 
 
 // ============================================================================
@@ -592,31 +594,51 @@ export async function completeDraft(
       // The draft is complete, but this part failed. Log it for admin review.
     }
  // Generate placeholder decks for all teams in the draft.
-    const { data: sessionData } = await supabase
-      .from('draft_sessions')
-      .select('season_id')
-      .eq('id', sessionId)
-      .single();
+   const { data: firstWeek, error: weekError } = await supabase
+        .from('weeks')
+        .select('id, ends_at')
+        .order('starts_at', { ascending: true })
+        .limit(1)
+        .single();
 
-    const { data: teams, error: teamsError } = await supabase
-      .from('draft_order')
-      .select('team_id')
-      .eq('season_id', sessionData?.season_id);
+    if (weekError || !firstWeek) {
+        console.error("CRITICAL: Could not find the first week of the season. No deck votes will be created.", weekError);
+        // We can continue to generate decks but cannot create polls.
+    }
+
+    // Get all teams from the draft order for this season
+    const { data: sessionData } = await supabase.from('draft_sessions').select('season_id').eq('id', sessionId).single();
+    const { data: teams, error: teamsError } = await supabase.from('draft_order').select('team_id').eq('season_id', sessionData?.season_id);
 
     if (teamsError) {
-        console.error("Error fetching teams for placeholder deck generation:", teamsError);
+        console.error("Error fetching teams for post-draft actions:", teamsError);
     }
 
     if (teams) {
-      console.log(`Generating placeholder decks for ${teams.length} teams in session ${sessionId}...`);
+      console.log(`Starting post-draft actions for ${teams.length} teams in session ${sessionId}...`);
       for (const team of teams) {
+          // Step 1: Generate the placeholder deck (existing logic)
           const { success, error: deckError } = await generatePlaceholderDeck(team.team_id, sessionId);
           if (!success) {
               console.error(`Failed to generate placeholder deck for team ${team.team_id}: ${deckError}`);
+              continue; // Skip this team if deck generation fails
+          }
+          console.log(`Successfully generated placeholder deck for team ${team.team_id}.`);
+
+          // Step 2: If we found a valid first week, create the first deck vote poll
+          if (firstWeek) {
+              console.log(`Triggering first deck vote for team ${team.team_id} for week ${firstWeek.id}`);
+              const { success: pollSuccess, error: pollError } = await createDeckVotePoll(
+                  team.team_id,
+                  firstWeek.id,
+                  firstWeek.ends_at // The first vote completes when the first week ends
+              );
+              if (!pollSuccess) {
+                  console.error(`Failed to create first deck vote poll for team ${team.team_id}: ${pollError}`);
+              }
           }
       }
     }
-    
     await supabase.rpc("notify_all_users_draft", {
       p_notification_type: "draft_completed",
       p_message: "The draft has been completed by an admin.",
