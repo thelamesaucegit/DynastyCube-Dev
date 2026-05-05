@@ -87,12 +87,11 @@ export async function manuallyInitiateFirstDeckVotes(): Promise<{ success: boole
         }
 
         // 2. Find Week 1 of that season
-        const { data: firstWeek, error: weekError } = await supabase
-            .from("weeks")
-            .select("id, starts_at")
+         const { data: firstWeek, error: weekError } = await supabase
+            .from("schedule_weeks") 
+            .select("id, start_date") 
             .eq("season_id", activeSeason.id)
-            .order("starts_at", { ascending: true })
-            .limit(1)
+            .eq("week_number", 1) 
             .single();
 
         if (weekError || !firstWeek) {
@@ -100,7 +99,7 @@ export async function manuallyInitiateFirstDeckVotes(): Promise<{ success: boole
         }
 
         // 3. Calculate the poll's end date (Wednesday before Week 1 starts)
-        const week1StartDate = new Date(firstWeek.starts_at);
+        const week1StartDate = new Date(firstWeek.start_date);
         const dayOfWeek = week1StartDate.getUTCDay(); // Sunday = 0, Thursday = 4
 
         // Find the most recent Wednesday. If start day is Thurs (4), Wednesday is 1 day before.
