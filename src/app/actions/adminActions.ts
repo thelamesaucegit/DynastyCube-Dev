@@ -72,7 +72,7 @@ async function createClient() {
 }
 
 export async function manuallyInitiateFirstDeckVotes(): Promise<{ success: boolean; message: string }> {
-    const supabase = createServerClient();
+    const supabase = await createClient();
 
     try {
         // 1. Find the active season
