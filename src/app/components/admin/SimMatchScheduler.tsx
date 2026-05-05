@@ -10,7 +10,6 @@ import {
     createScheduledSimMatch, 
     getScheduledSimMatches, 
     deleteScheduledSimMatch,
-    getTeamCurrentDecklist,
     type ScheduledSimMatch 
 } from "@/app/actions/simScheduleActions";
 
@@ -36,7 +35,7 @@ export const SimMatchScheduler: React.FC<SimMatchSchedulerProps> = ({ activeSeas
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
-const [deckWarnings, setDeckWarnings] = useState<string[]>([]);
+
     // Form state
     const [team1Id, setTeam1Id] = useState("");
     const [team2Id, setTeam2Id] = useState("");
@@ -47,10 +46,6 @@ const [deckWarnings, setDeckWarnings] = useState<string[]>([]);
     const [showDeckOverrides, setShowDeckOverrides] = useState(false);
     const [deck1Override, setDeck1Override] = useState("");
     const [deck2Override, setDeck2Override] = useState("");
-
-    // Deck preview state
-    const [team1DeckInfo, setTeam1DeckInfo] = useState<{ cardCount: number; available: boolean } | null>(null);
-    const [team2DeckInfo, setTeam2DeckInfo] = useState<{ cardCount: number; available: boolean } | null>(null);
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -72,26 +67,7 @@ const [deckWarnings, setDeckWarnings] = useState<string[]>([]);
 
     useEffect(() => { loadData(); }, [loadData]);
 
-    // Check deck availability when team selection changes
-    useEffect(() => {
-        if (!team1Id) { setTeam1DeckInfo(null); return; }
-        getTeamCurrentDecklist(team1Id).then(result => {
-            setTeam1DeckInfo({ 
-                cardCount: result.cardCount, 
-                available: !!result.decklist 
-            });
-        });
-    }, [team1Id]);
 
-    useEffect(() => {
-        if (!team2Id) { setTeam2DeckInfo(null); return; }
-        getTeamCurrentDecklist(team2Id).then(result => {
-            setTeam2DeckInfo({ 
-                cardCount: result.cardCount, 
-                available: !!result.decklist 
-            });
-        });
-    }, [team2Id]);
 
    const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,12 +79,6 @@ const [deckWarnings, setDeckWarnings] = useState<string[]>([]);
     if (team1Id === team2Id) return setError("Teams must be different");
     if (!team1Profile || !team2Profile) return setError("Please select AI profiles for both teams");
     if (!matchDate) return setError("Please set a match date");
-    if (team1DeckInfo && !team1DeckInfo.available && !deck1Override) {
-        return setError("Team 1 has no draft picks. Please provide a manual deck override.");
-    }
-    if (team2DeckInfo && !team2DeckInfo.available && !deck2Override) {
-        return setError("Team 2 has no draft picks. Please provide a manual deck override.");
-    }
     
     setSubmitting(true);
 
@@ -137,7 +107,6 @@ const [deckWarnings, setDeckWarnings] = useState<string[]>([]);
 
         if (result.success) {
             setSuccess(`Match scheduled for ${new Date(matchDate).toLocaleString()}. The sim will trigger automatically.`);
-            setDeckWarnings(result.deckWarnings || []);
             setTeam1Id(""); setTeam2Id("");
             setTeam1Profile(""); setTeam2Profile("");
             setMatchDate(""); setDeck1Override(""); setDeck2Override("");
@@ -190,14 +159,7 @@ const [deckWarnings, setDeckWarnings] = useState<string[]>([]);
                     <div className="bg-green-50 dark:bg-green-900/20 border border-green-300 dark:border-green-700 rounded-lg p-4 text-green-800 dark:text-green-200 text-sm">
                         ✓ {success}
                     </div>
-                    {deckWarnings.length > 0 && (
-                        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg p-3 text-sm text-yellow-800 dark:text-yellow-200">
-                            <p className="font-medium mb-1">⚠ Deck warnings:</p>
-                            <ul className="list-disc list-inside space-y-1">
-                                {deckWarnings.map((w, i) => <li key={i}>{w}</li>)}
-                            </ul>
-                        </div>
-                    )}
+               
                 </>
             )}
             {error && (
@@ -257,14 +219,8 @@ const [deckWarnings, setDeckWarnings] = useState<string[]>([]);
                             ))}
                         </select>
 
-                        {/* Deck availability indicator */}
-                        {team1DeckInfo && (
-                            <p className={`text-xs ${team1DeckInfo.available ? "text-green-600 dark:text-green-400" : "text-orange-600 dark:text-orange-400"}`}>
-                                {team1DeckInfo.available 
-                                    ? `✓ ${team1DeckInfo.cardCount} cards in draft picks` 
-                                    : "⚠ No draft picks found — deck override required"}
-                            </p>
-                        )}
+                       
+                       
 
                         <label className="block text-sm font-medium text-gray-900 dark:text-gray-100">
                             Team 1 AI Profile
@@ -301,13 +257,7 @@ const [deckWarnings, setDeckWarnings] = useState<string[]>([]);
                             ))}
                         </select>
 
-                        {team2DeckInfo && (
-                            <p className={`text-xs ${team2DeckInfo.available ? "text-green-600 dark:text-green-400" : "text-orange-600 dark:text-orange-400"}`}>
-                                {team2DeckInfo.available 
-                                    ? `✓ ${team2DeckInfo.cardCount} cards in draft picks` 
-                                    : "⚠ No draft picks found — deck override required"}
-                            </p>
-                        )}
+                       
 
                         <label className="block text-sm font-medium text-gray-900 dark:text-gray-100">
                             Team 2 AI Profile
