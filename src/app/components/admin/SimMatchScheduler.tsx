@@ -220,7 +220,7 @@ export const SimMatchScheduler: React.FC<SimMatchSchedulerProps> = ({ activeSeas
                         </select>
 
                        
-                        {team1DeckInfo }
+                       
 
                         <label className="block text-sm font-medium text-gray-900 dark:text-gray-100">
                             Team 1 AI Profile
@@ -257,7 +257,7 @@ export const SimMatchScheduler: React.FC<SimMatchSchedulerProps> = ({ activeSeas
                             ))}
                         </select>
 
-                        {team2DeckInfo }
+                       
 
                         <label className="block text-sm font-medium text-gray-900 dark:text-gray-100">
                             Team 2 AI Profile
