@@ -15,6 +15,10 @@ import {
   type TeamPollResult,
 } from "@/app/actions/voteActions";
 
+import { manuallyInitiateFirstDeckVotes } from "@/app/actions/adminActions";
+
+
+
 export function VoteManagement() {
   const { user } = useAuth();
   const [polls, setPolls] = useState<Poll[]>([]);
@@ -23,6 +27,8 @@ export function VoteManagement() {
   const [selectedPoll, setSelectedPoll] = useState<Poll | null>(null);
   const [results, setResults] = useState<TypedPollResults | null>(null);
   const [showResults, setShowResults] = useState(false);
+    const [initiating, setInitiating] = useState(false);
+
 
   // Form state
   const [formData, setFormData] = useState({
@@ -103,7 +109,27 @@ const handleCreatePoll = async () => {
       alert("❌ " + (result.error || "An unknown error occurred."));
     }
   };
-
+const handleInitiateFirstVotes = async () => {
+    if (!confirm("Are you sure you want to manually initiate the first deck vote for ALL teams? This should only be used if the automated process failed after the draft.")) {
+      return;
+    }
+    setInitiating(true);
+    try {
+      const result = await manuallyInitiateFirstDeckVotes();
+      if (result.success) {
+        alert("✅ " + result.message);
+        loadPolls(); // Reload polls to see the newly created ones
+      } else {
+        alert("❌ " + result.message);
+      }
+    } catch (error) {
+      console.error("Error initiating first deck votes:", error);
+      alert("❌ An unexpected client-side error occurred.");
+    } finally {
+      setInitiating(false);
+    }
+  };
+  
   const handleToggleActive = async (pollId: string, currentStatus: boolean) => {
     const result = await togglePollActive(pollId, !currentStatus);
     if (result.success) {
@@ -207,7 +233,21 @@ const handleCreatePoll = async () => {
           {showCreateForm ? "Cancel" : "+ Create New Poll"}
         </button>
       </div>
-
+<div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="font-bold text-yellow-800 dark:text-yellow-200">Manual Actions</h4>
+            <p className="text-sm text-yellow-700 dark:text-yellow-400">Use these actions for manual overrides or to fix failed processes.</p>
+          </div>
+          <button
+            onClick={handleInitiateFirstVotes}
+            disabled={initiating}
+            className="bg-yellow-600 hover:bg-yellow-700 text-white px-5 py-2.5 rounded-lg font-semibold transition-colors disabled:bg-yellow-400 disabled:cursor-not-allowed"
+          >
+            {initiating ? "Initiating..." : "Initiate Week 1 Deck Votes"}
+          </button>
+        </div>
+      </div>
       {/* Create Poll Form */}
       {showCreateForm && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-md">

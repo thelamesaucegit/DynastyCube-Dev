@@ -8,6 +8,8 @@ import { cookies } from "next/headers";
 import { fetchAllCards } from "@/lib/scryfall-client";
 import { GameState } from "@/app/types";
 import { invalidateDraftCache } from "@/lib/draftCache";
+import { createDeckVotePoll } from "@/app/actions/deckVoteActions";
+
 
 interface Team {
   id: string;
@@ -69,6 +71,88 @@ async function createClient() {
   );
 }
 
+export async function manuallyInitiateFirstDeckVotes(): Promise<{ success: boolean; message: string }> {
+    const supabase = await createClient();
+
+    try {
+        // 1. Find the active season
+        const { data: activeSeason, error: seasonError } = await supabase
+            .from("seasons")
+            .select("id")
+            .eq("is_active", true)
+            .single();
+
+        if (seasonError || !activeSeason) {
+            return { success: false, message: "No active season found." };
+        }
+
+        // 2. Find Week 1 of that season
+        const { data: firstWeek, error: weekError } = await supabase
+            .from("weeks")
+            .select("id, starts_at")
+            .eq("season_id", activeSeason.id)
+            .order("starts_at", { ascending: true })
+            .limit(1)
+            .single();
+
+        if (weekError || !firstWeek) {
+            return { success: false, message: "Could not find Week 1 for the active season." };
+        }
+
+        // 3. Calculate the poll's end date (Wednesday before Week 1 starts)
+        const week1StartDate = new Date(firstWeek.starts_at);
+        const dayOfWeek = week1StartDate.getUTCDay(); // Sunday = 0, Thursday = 4
+
+        // Find the most recent Wednesday. If start day is Thurs (4), Wednesday is 1 day before.
+        // If start day is Wed (3), it's the same day.
+        const daysToSubtract = (dayOfWeek + 7 - 3) % 7;
+        const pollEndDate = new Date(week1StartDate);
+        pollEndDate.setUTCDate(pollEndDate.getUTCDate() - daysToSubtract);
+        
+        // Set time to 10 PM Central Time, which is 3 AM UTC the next day during Daylight Time
+        // This is a simplification; a library like `date-fns-tz` would be more robust.
+        pollEndDate.setUTCHours(3, 0, 0, 0); // Corresponds to 10 PM CDT the day before
+
+        const pollEndsAtISO = pollEndDate.toISOString();
+
+        // 4. Get all teams for the season
+        const { data: teams, error: teamsError } = await supabase
+            .from("draft_order")
+            .select("team_id")
+            .eq("season_id", activeSeason.id);
+
+        if (teamsError || !teams || teams.length === 0) {
+            return { success: false, message: "No teams found for the active season." };
+        }
+
+        // 5. Initiate a vote for each team
+        let successCount = 0;
+        let errorCount = 0;
+        for (const team of teams) {
+            const result = await createDeckVotePoll(team.team_id, firstWeek.id, pollEndsAtISO);
+            if (result.success) {
+                successCount++;
+            } else {
+                errorCount++;
+                console.error(`Failed to create deck vote for team ${team.team_id}: ${result.error}`);
+            }
+        }
+
+        if (errorCount > 0) {
+            return { 
+                success: false, 
+                message: `Processed all teams. Succeeded for ${successCount}, but failed for ${errorCount}. Check server logs for details.`
+            };
+        }
+
+        return { success: true, message: `Successfully initiated Week 1 deck votes for all ${successCount} teams.` };
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "An unexpected error occurred.";
+        console.error("Error in manuallyInitiateFirstDeckVotes:", message);
+        return { success: false, message };
+    }
+}
 // --- NEW FUNCTION TO FETCH TEST DECKLISTS ---
 export async function getTestDecklists(): Promise<{ p1_deck: string, p2_deck: string }> {
     const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
