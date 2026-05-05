@@ -299,49 +299,15 @@ export async function createScheduledSimMatch(params: {
     //    This is best-effort — deck lookup has its own fallback if weekId is null
     const weekId = await resolveWeekId(params.season_number, params.week_number);
 
-    const deckWarnings: string[] = [];
+    const finalDeck1Override = params.deck1_override 
+        ? await resolveDeckOverride(params.deck1_override, 1, params.team1_id) 
+        : null;
+        
+    const finalDeck2Override = params.deck2_override 
+        ? await resolveDeckOverride(params.deck2_override, 2, params.team2_id) 
+        : null;
 
-    // 3. Process and validate deck overrides
-    let deck1Override: string | null = null;
-    let deck2Override: string | null = null;
-
-    if (params.deck1_override) {
-        const resolved = await resolveDeckOverride(params.deck1_override, 1, params.team1_id);
-        if (!resolved) {
-            return { success: false, error: 'Could not resolve deck override for Team 1. If using "test", ensure test_decklists slot 1 exists.' };
-        }
-        deck1Override = resolved;
-    } else {
-        const result = await getTeamCurrentDecklist(params.team1_id, weekId ?? undefined);
-        if (!result.decklist) {
-            return { success: false, error: `No active decklist found for Team 1. ${result.error ?? 'Please provide a manual deck override.'}` };
-        }
-        if (result.source === 'latest_submission') {
-            deckWarnings.push(`Team 1: No submission for Week ${params.week_number} — will use most recent submission at sim time.`);
-        } else if (result.source === 'none') {
-            deckWarnings.push(`Team 1: No deck submission found — will build from deck cards at sim time.`);
-        }
-    }
-
-    if (params.deck2_override) {
-        const resolved = await resolveDeckOverride(params.deck2_override, 2, params.team2_id);
-        if (!resolved) {
-            return { success: false, error: 'Could not resolve deck override for Team 2. If using "test", ensure test_decklists slot 2 exists.' };
-        }
-        deck2Override = resolved;
-    } else {
-        const result = await getTeamCurrentDecklist(params.team2_id, weekId ?? undefined);
-        if (!result.decklist) {
-            return { success: false, error: `No active decklist found for Team 2. ${result.error ?? 'Please provide a manual deck override.'}` };
-        }
-        if (result.source === 'latest_submission') {
-            deckWarnings.push(`Team 2: No submission for Week ${params.week_number} — will use most recent submission at sim time.`);
-        } else if (result.source === 'none') {
-            deckWarnings.push(`Team 2: No deck submission found — will build from deck cards at sim time.`);
-        }
-    }
-
-    // 4. Insert into schedule — cron job reads these values at sim time
+    // Insert into schedule. deck overrides will be NULL if not provided, which is now expected.
     const { data: scheduleRow, error: scheduleError } = await supabase
         .from('schedule')
         .insert({
@@ -349,13 +315,13 @@ export async function createScheduledSimMatch(params: {
             team2_id: params.team2_id,
             season_number: params.season_number,
             week_number: params.week_number,
-            week_id: params.week_id,
+            week_id: params.week_id, // This is crucial for the JIT lookup
             match_date: params.match_date,
             status: 'scheduled',
             team1_ai_profile: params.team1_ai_profile,
             team2_ai_profile: params.team2_ai_profile,
-            deck1_override: deck1Override,
-            deck2_override: deck2Override,
+            deck1_override: finalDeck1Override, // Will be null if not provided
+            deck2_override: finalDeck2Override, // Will be null if not provided
         })
         .select('id')
         .single();
@@ -367,7 +333,6 @@ export async function createScheduledSimMatch(params: {
     return {
         success: true,
         scheduleId: scheduleRow.id,
-        deckWarnings: deckWarnings.length > 0 ? deckWarnings : undefined,
     };
 }
 /**
