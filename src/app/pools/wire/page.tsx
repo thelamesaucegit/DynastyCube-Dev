@@ -20,7 +20,7 @@ const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
     const [searchTerm, setSearchTerm] = useState("");
   
-  const loadWireData = async () => {
+  const loadWireData = async (page: number, search: string) => {
     setLoading(true);
     setError(null);
     try {
