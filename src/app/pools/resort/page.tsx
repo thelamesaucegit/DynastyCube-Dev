@@ -160,7 +160,7 @@ export default function ResortPage() {
         </div>
       ) : filteredCards.length === 0 ? (
         <div className="text-center py-16 border rounded-lg">
-          <p className="text-xl font-semibold">No cards found matching "{searchTerm}".</p>
+          <p className="text-xl font-semibold">No cards found matching &quot;{searchTerm}&quot;.</p>
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
