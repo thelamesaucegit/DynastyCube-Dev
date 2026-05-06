@@ -28,7 +28,9 @@ import {
   addCardToDeck,
   updateDeckCardQuantity,
   removeCardFromDeck,
+  updateDeckDetails,
 } from "@/app/actions/draftActions";
+import { addDeckToActivePoll } from "@/app/actions/deckVoteActions"; 
 import type { DraftPick, Deck, DeckCard } from "@/app/actions/draftActions";
 import { useSettings } from "@/contexts/SettingsContext";
 import { getCardImageUrl } from "@/app/utils/cardUtils";
@@ -130,12 +132,19 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
   const [selectedDeck, setSelectedDeck] = useState<Deck | null>(null);
   const [deckCards, setDeckCards] = useState<DeckCard[]>([]);
   const [loading, setLoading] = useState(true);
+   // Create / Edit Modals State
   const [showNewDeckModal, setShowNewDeckModal] = useState(false);
   const [newDeckName, setNewDeckName] = useState("");
   const [newDeckDescription, setNewDeckDescription] = useState("");
   const [newDeckFormat, setNewDeckFormat] = useState("standard");
+const [showEditDeckModal, setShowEditDeckModal] = useState(false);
+  const [editDeckName, setEditDeckName] = useState("");
+  const [editDeckDescription, setEditDeckDescription] = useState("");
+
+  
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+    const [voteLoading, setVoteLoading] = useState(false);
   const [activeCategory, setActiveCategory] = useState<"mainboard" | "sideboard" | "maybeboard">("mainboard");
   const [activeDragPick, setActiveDragPick] = useState<DraftPick | null>(null);
 
@@ -216,7 +225,36 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
       setError(result.error || "Failed to create deck");
     }
   };
+const handleEditDeck = async () => {
+    if (!editDeckName.trim()) return setError("Deck name is required");
+    const result = await updateDeckDetails(selectedDeck!.id!, {
+      deck_name: editDeckName, description: editDeckDescription
+    });
+    
+    if (result.success) {
+      setSuccess("Deck updated successfully!");
+      setShowEditDeckModal(false);
+      setSelectedDeck(prev => prev ? { ...prev, deck_name: editDeckName, description: editDeckDescription } : null);
+      await loadData();
+      setTimeout(() => setSuccess(null), 3000);
+    } else {
+      setError(result.error || "Failed to update deck");
+    }
+  };
 
+  // --- NEW: Handle Add To Vote ---
+  const handleAddDeckToVote = async () => {
+    if (!selectedDeck) return;
+    setVoteLoading(true);
+    const result = await addDeckToActivePoll(teamId, selectedDeck.id!);
+    if (result.success) {
+      setSuccess(result.message || "Deck added to the current vote!");
+    } else {
+      setError(result.error || "Failed to add deck to vote.");
+    }
+    setTimeout(() => { setSuccess(null); setError(null); }, 4000);
+    setVoteLoading(false);
+  };
   const handleDeleteDeck = async (deckId: string) => {
     if (!confirm("Are you sure you want to delete this deck?")) return;
     const result = await deleteDeck(deckId);
@@ -273,61 +311,58 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
 
   // Add a basic land to the deck
   const handleAddBasicLand = async (landName: string) => {
-    if (!selectedDeck) {
-      setError("Please select a deck first");
-      return;
-    }
-    // Check if this basic land is already in the deck
+    if (!selectedDeck) return setError("Please select a deck first");
+
     const existingLand = deckCards.find(
-      (dc) => dc.card_name === landName && dc.category === activeCategory
+      (dc) => dc.card_name.toLowerCase() === landName.toLowerCase() && dc.category === activeCategory
     );
-    if (existingLand && existingLand.id) {
-      // Update existing land quantity
+
+    if (existingLand && existingLand.id && !existingLand.id.startsWith('temp-')) {
       const newQuantity = (existingLand.quantity || 1) + 1;
+      
+      // Optimistic update to stop rapid clicking
+      setDeckCards(prev => prev.map(dc => dc.id === existingLand.id ? { ...dc, quantity: newQuantity } : dc));
+      
       const result = await updateDeckCardQuantity(existingLand.id, newQuantity);
-      if (result.success) {
-        setSuccess(`Added ${landName} to ${activeCategory}!`);
-        await loadDeckCards(selectedDeck.id!);
-        setTimeout(() => setSuccess(null), 1000);
-      } else {
-        setError(result.error || "Failed to add basic land");
+      if (!result.success) {
+        setError(result.error || "Failed to update basic land");
+        await loadDeckCards(selectedDeck.id!); // rollback
       }
-    } else {
-      // Add new basic land
+    } else if (!existingLand) {
+      const tempId = 'temp-' + Date.now();
+      
+      // Optimistic insert
+      setDeckCards(prev => [...prev, { id: tempId, card_name: landName, category: activeCategory, quantity: 1, deck_id: selectedDeck.id!, card_id: `basic-${landName.toLowerCase()}` }]);
+
       const result = await addCardToDeck({
-        deck_id: selectedDeck.id!,
-        draft_pick_id: undefined,
-        card_id: `basic-${landName.toLowerCase()}`,
-        card_name: landName,
-        quantity: 1,
-        category: activeCategory,
+        deck_id: selectedDeck.id!, draft_pick_id: undefined, card_id: `basic-${landName.toLowerCase()}`,
+        card_name: landName, quantity: 1, category: activeCategory,
       });
+
       if (result.success) {
-        setSuccess(`Added ${landName} to ${activeCategory}!`);
         await loadDeckCards(selectedDeck.id!);
-        setTimeout(() => setSuccess(null), 1000);
       } else {
         setError(result.error || "Failed to add basic land");
+        setDeckCards(prev => prev.filter(dc => dc.id !== tempId)); // rollback
       }
     }
   };
-
+  
   // Update basic land quantity
   const handleUpdateBasicLandQuantity = async (landName: string, newQuantity: number) => {
     if (!selectedDeck) return;
     const existingLand = deckCards.find(
-      (dc) => dc.card_name === landName && dc.category === activeCategory
+      (dc) => dc.card_name.toLowerCase() === landName.toLowerCase() && dc.category === activeCategory
     );
-    if (!existingLand) return;
+    if (!existingLand || existingLand.id?.startsWith('temp-')) return;
+
     if (newQuantity <= 0) {
-      // Remove the land
+      setDeckCards(prev => prev.filter(dc => dc.id !== existingLand.id)); // Optimistic remove
       await handleRemoveCardFromDeck(existingLand.id!, landName);
-    } else if (existingLand.id) {
-      // Update quantity
+    } else {
+      setDeckCards(prev => prev.map(dc => dc.id === existingLand.id ? { ...dc, quantity: newQuantity } : dc)); // Optimistic update
       const result = await updateDeckCardQuantity(existingLand.id, newQuantity);
-      if (result.success) {
-        await loadDeckCards(selectedDeck.id!);
-      }
+      if (!result.success) await loadDeckCards(selectedDeck.id!); // Rollback
     }
   };
 
@@ -660,7 +695,30 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
           </div>
         </div>
       )}
+{/* NEW: Edit Deck Modal */}
+      {showEditDeckModal && isUserTeamMember && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full shadow-2xl">
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">Edit Deck Details</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Deck Name *</label>
+                <input type="text" value={editDeckName} onChange={(e) => setEditDeckName(e.target.value)} className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Description</label>
+                <textarea value={editDeckDescription} onChange={(e) => setEditDeckDescription(e.target.value)} rows={3} className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" />
+              </div>
+              <div className="flex gap-2 pt-4">
+                <button onClick={handleEditDeck} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium">Save Changes</button>
+                <button onClick={() => setShowEditDeckModal(false)} className="flex-1 bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 text-gray-900 dark:text-gray-100 px-4 py-2 rounded-lg font-medium">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
+        
       {/* Deck Builder Interface - Full editing for team members */}
       {selectedDeck && isUserTeamMember && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -751,7 +809,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
           </div>
           {/* Right: Deck Contents */}
           <div className="lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-4">
+           <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
               <div>
                 <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
                   {selectedDeck.deck_name}
@@ -762,28 +820,39 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                   </p>
                 )}
               </div>
-              <div className="flex gap-2">
+              
+              <div className="flex gap-2 flex-wrap items-center">
+                {/* NEW: Add To Vote Button */}
+                <button
+                  onClick={handleAddDeckToVote}
+                  disabled={voteLoading}
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1 disabled:bg-purple-400"
+                >
+                  {voteLoading ? "Adding..." : "➕ Add to Vote"}
+                </button>
+
                 <div className="relative group">
-                  <button
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1"
-                  >
+                  <button className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1">
                     📥 Export
                   </button>
-                  <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-700 rounded-lg shadow-lg border border-gray-200 dark:border-gray-600 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
-                    <button
-                      onClick={handleExportToCockatrice}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-t-lg transition-colors"
-                    >
-                      Cockatrice (.cod)
-                    </button>
-                    <button
-                      onClick={handleExportToArena}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-b-lg transition-colors"
-                    >
-                      MTG Arena (.txt)
-                    </button>
+                  <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-700 rounded-lg shadow-lg border opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+                    <button onClick={handleExportToCockatrice} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 rounded-t-lg">Cockatrice (.cod)</button>
+                    <button onClick={handleExportToArena} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 rounded-b-lg">MTG Arena (.txt)</button>
                   </div>
                 </div>
+
+                {/* NEW: Edit Button */}
+                <button
+                  onClick={() => {
+                    setEditDeckName(selectedDeck.deck_name);
+                    setEditDeckDescription(selectedDeck.description || "");
+                    setShowEditDeckModal(true);
+                  }}
+                  className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white text-sm font-medium px-2 border-l border-gray-300 dark:border-gray-600 pl-4"
+                >
+                  ✏️ Edit
+                </button>
+                
                 <button
                   onClick={() => handleDeleteDeck(selectedDeck.id!)}
                   className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 text-sm font-medium"
@@ -792,62 +861,40 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                 </button>
               </div>
             </div>
-            {/* Category Tabs */}
+
+            {/* FIX: Tab Counts (Calculates true quantities) */}
             <div className="flex gap-2 mb-4 border-b border-gray-200 dark:border-gray-700">
               {[
-                { id: "mainboard" as const, label: "Mainboard", count: mainboardCards.length },
-                { id: "sideboard" as const, label: "Sideboard", count: sideboardCards.length },
-                { id: "maybeboard" as const, label: "Maybeboard", count: maybeboardCards.length },
+                { id: "mainboard" as const, label: "Mainboard", count: mainboardCards.reduce((acc, c) => acc + (c.quantity || 1), 0) },
+                { id: "sideboard" as const, label: "Sideboard", count: sideboardCards.reduce((acc, c) => acc + (c.quantity || 1), 0) },
+                { id: "maybeboard" as const, label: "Maybeboard", count: maybeboardCards.reduce((acc, c) => acc + (c.quantity || 1), 0) },
               ].map((category) => (
                 <button
                   key={category.id}
                   onClick={() => setActiveCategory(category.id)}
-                  className={`
-                    px-4 py-2 font-medium transition-colors relative
-                    ${
-                      activeCategory === category.id
-                        ? "text-blue-600 dark:text-blue-400"
-                        : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
-                    }
-                  `}
+                  className={`px-4 py-2 font-medium transition-colors relative ${activeCategory === category.id ? "text-blue-600 dark:text-blue-400" : "text-gray-600 hover:text-gray-900"}`}
                 >
                   {category.label} ({category.count})
-                  {activeCategory === category.id && (
-                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 dark:bg-blue-400"></div>
-                  )}
+                  {activeCategory === category.id && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 dark:bg-blue-400"></div>}
                 </button>
               ))}
             </div>
+
             {/* Current Category Cards */}
-            <DroppableZone
-              id={`category-${activeCategory}`}
-              className="space-y-2 max-h-[500px] overflow-y-auto min-h-[200px] p-4 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600"
-            >
+            <DroppableZone id={`category-${activeCategory}`} className="space-y-2 max-h-[500px] overflow-y-auto min-h-[200px] p-4 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
               {getCardsByCategory(activeCategory).length === 0 ? (
-                <div className="text-center py-12 text-gray-500 dark:text-gray-500">
+                <div className="text-center py-12 text-gray-500">
                   <p className="text-lg mb-2">No cards in {activeCategory}</p>
                   <p className="text-sm">Drag cards here or click to add them</p>
                 </div>
               ) : (
                 getCardsByCategory(activeCategory).map((card) => (
-                  <div
-                    key={card.id}
-                    className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700"
-                  >
-                    <span className="text-gray-700 dark:text-gray-300 font-mono text-sm">
-                      {card.quantity}x
-                    </span>
+                  <div key={card.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border">
+                    <span className="text-gray-700 dark:text-gray-300 font-mono text-sm">{card.quantity}x</span>
                     <div className="flex-1">
-                      <p className="font-semibold text-gray-900 dark:text-gray-100">
-                        {card.card_name}
-                      </p>
+                      <p className="font-semibold">{card.card_name}</p>
                     </div>
-                    <button
-                      onClick={() => handleRemoveCardFromDeck(card.id!, card.card_name)}
-                      className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 text-sm"
-                    >
-                      Remove
-                    </button>
+                    <button onClick={() => handleRemoveCardFromDeck(card.id!, card.card_name)} className="text-red-600 hover:text-red-700 text-sm">Remove</button>
                   </div>
                 ))
               )}
@@ -975,63 +1022,38 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
             </p>
           )}
           {/* Category Tabs - Read Only */}
-          <div className="flex gap-2 mb-4 border-b border-gray-200 dark:border-gray-700">
+         <div className="flex gap-2 mb-4 border-b border-gray-200 dark:border-gray-700">
             {[
-              { id: "mainboard" as const, label: "Mainboard", count: deckCards.filter(c => c.category === "mainboard").length },
-              { id: "sideboard" as const, label: "Sideboard", count: deckCards.filter(c => c.category === "sideboard").length },
-              { id: "maybeboard" as const, label: "Maybeboard", count: deckCards.filter(c => c.category === "maybeboard").length },
+              { id: "mainboard" as const, label: "Mainboard", count: deckCards.filter(c => c.category === "mainboard").reduce((acc, c) => acc + (c.quantity || 1), 0) },
+              { id: "sideboard" as const, label: "Sideboard", count: deckCards.filter(c => c.category === "sideboard").reduce((acc, c) => acc + (c.quantity || 1), 0) },
+              { id: "maybeboard" as const, label: "Maybeboard", count: deckCards.filter(c => c.category === "maybeboard").reduce((acc, c) => acc + (c.quantity || 1), 0) },
             ].map((category) => (
               <button
                 key={category.id}
                 onClick={() => setActiveCategory(category.id)}
-                className={`
-                  px-4 py-2 font-medium transition-colors relative
-                  ${
-                    activeCategory === category.id
-                      ? "text-blue-600 dark:text-blue-400"
-                      : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
-                  }
-                `}
+                className={`px-4 py-2 font-medium transition-colors relative ${activeCategory === category.id ? "text-blue-600 dark:text-blue-400" : "text-gray-600 hover:text-gray-900"}`}
               >
                 {category.label} ({category.count})
-                {activeCategory === category.id && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 dark:bg-blue-400"></div>
-                )}
+                {activeCategory === category.id && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 dark:bg-blue-400"></div>}
               </button>
             ))}
           </div>
-          {/* Card List - Read Only */}
+
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {deckCards
-              .filter((card) => card.category === activeCategory)
-              .map((card) => (
-                <div
-                  key={card.id}
-                  className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700"
-                >
-                  <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
-                    {card.card_name}
-                  </p>
-                  {(card.quantity || 1) > 1 && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      x{card.quantity}
-                    </p>
-                  )}
+            {deckCards.filter((card) => card.category === activeCategory).map((card) => (
+                <div key={card.id} className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border">
+                  <p className="font-semibold text-sm truncate">{card.card_name}</p>
+                  {(card.quantity || 1) > 1 && <p className="text-xs text-gray-500">x{card.quantity}</p>}
                 </div>
-              ))}
+            ))}
           </div>
-          {deckCards.filter((card) => card.category === activeCategory).length === 0 && (
-            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-              No cards in {activeCategory}
-            </div>
-          )}
-          <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
-            <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
-              This is a read-only view. Join {teamName} to edit decks.
-            </p>
+          
+          <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border">
+            <p className="text-sm text-gray-500 text-center">This is a read-only view. Join {teamName} to edit decks.</p>
           </div>
         </div>
       )}
+
       {/* No Deck Selected */}
       {!selectedDeck && decks.length > 0 && isUserTeamMember && (
         <div className="text-center py-12 text-gray-500 dark:text-gray-500">
