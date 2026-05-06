@@ -37,6 +37,7 @@ export interface WireCard extends CardData {
 export async function getWireCards(
     page: number = 1, 
     pageSize: number = 50
+    searchTerm: string = ""
 ): Promise<{ cards: WireCard[]; totalCount: number; error?: string }> {
     const supabase = await createServerClient();
     const from = (page - 1) * pageSize;
@@ -48,23 +49,24 @@ export async function getWireCards(
         let seasonId: string | null = null;
 
         // Get the active season and the user's team (if they have one)
-        const { session: activeSession } = await getActiveDraftSession();
-        if (activeSession) {
-            seasonId = activeSession.season_id;
-        }
-
+   const { data: activeSeason } = await supabase.from('seasons').select('id').eq('is_active', true).single();
+        if (activeSeason) seasonId = activeSeason.id;
         if (user && seasonId) {
             const { data: teamMember } = await supabase.from('team_members').select('team_id').eq('user_id', user.id).single();
-            if (teamMember) {
-                userTeamId = teamMember.team_id;
-            }
+            if (teamMember) userTeamId = teamMember.team_id;
         }
         
-        // Fetch paginated cards currently on The Wire and get exact total count
-        const { data: wireCardsData, error: cardsError, count } = await supabase
+        // --- NEW: Build query conditionally with search ---
+        let query = supabase
             .from('card_pools')
             .select('*', { count: 'exact' })
-            .eq('pool_name', 'wire')
+            .eq('pool_name', 'wire');
+
+        if (searchTerm && searchTerm.trim() !== "") {
+            query = query.ilike('card_name', `%${searchTerm.trim()}%`);
+        }
+
+        const { data: wireCardsData, error: cardsError, count } = await query
             .order('on_wire_since', { ascending: true })
             .range(from, to);
 
