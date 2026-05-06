@@ -2,14 +2,14 @@
 
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { getResortCards, type ResortCard } from "@/app/actions/resortActions";
-// CORRECTED: Import the correct function from the correct file
 import { getCurrentSeason } from "@/app/actions/seasonPhaseActions"; 
 import { useAuth } from "@/contexts/AuthContext";
 import { getUserTeam } from "@/app/actions/teamActions";
-import { Loader2, AlertCircle, Info } from "lucide-react";
+import { Loader2, AlertCircle, Info, Search } from "lucide-react";
 import { ResortNominationCard } from "@/app/components/ResortNominationCard";
+import { Input } from "@/app/components/ui/input";
 
 // Define the Team type locally for state management
 interface Team {
@@ -22,6 +22,7 @@ export default function ResortPage() {
   const { user } = useAuth();
   const [team, setTeam] = useState<Team | null>(null);
   const [resortCards, setResortCards] = useState<ResortCard[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
   const [isPostseason, setIsPostseason] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +89,13 @@ export default function ResortPage() {
     };
     reloadCards();
   };
+  
+  const filteredCards = useMemo(() => {
+    if (!searchTerm) return resortCards;
+    return resortCards.filter(card => 
+      card.card_name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [resortCards, searchTerm]);
 
   if (loading) {
     return (
@@ -128,14 +136,36 @@ export default function ResortPage() {
         )}
       </div>
 
+     {/* --- NEW SEARCH BAR --- */}
+      {resortCards.length > 0 && (
+        <div className="mb-8 p-4 border rounded-xl bg-card shadow-sm">
+          <label className="block text-sm font-medium text-muted-foreground mb-2">Search Resort Pool</label>
+          <div className="relative max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input 
+                  type="text" 
+                  value={searchTerm} 
+                  onChange={(e) => setSearchTerm(e.target.value)} 
+                  placeholder="Search by card name..." 
+                  className="pl-10" 
+              />
+          </div>
+        </div>
+      )}
+
       {resortCards.length === 0 ? (
         <div className="text-center py-16 border rounded-lg">
           <p className="text-xl font-semibold">The Resort Pool is currently empty.</p>
           <p className="text-muted-foreground mt-2">An admin must add cards before voting can begin.</p>
         </div>
+      ) : filteredCards.length === 0 ? (
+        <div className="text-center py-16 border rounded-lg">
+          <p className="text-xl font-semibold">No cards found matching "{searchTerm}".</p>
+        </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-          {resortCards.map((card) => (
+          {/* Loop over filteredCards instead of resortCards */}
+          {filteredCards.map((card) => (
             <ResortNominationCard 
               key={card.id} 
               card={card} 
