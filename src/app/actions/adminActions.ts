@@ -112,7 +112,7 @@ export async function manuallyInitiateFirstDeckVotes(): Promise<{ success: boole
         // This is a simplification; a library like `date-fns-tz` would be more robust.
         pollEndDate.setUTCHours(27, 0, 0, 0); // Corresponds to 10 PM CDT the day before
 
-        const pollEndsAtISO = pollEndDate.toISOString();
+        let pollEndsAtISO = pollEndDate.toISOString();
 if (pollEndDate < new Date()) {
             console.warn(`Calculated poll end date (${pollEndsAtISO}) is in the past. Defaulting to 24 hours from now.`);
             const fallbackDate = new Date();
