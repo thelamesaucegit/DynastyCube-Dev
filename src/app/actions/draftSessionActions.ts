@@ -6,7 +6,7 @@ import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 import { getDraftStatus, type DraftStatus } from "@/app/actions/draftOrderActions";
 import { executeAutoDraft } from "@/app/actions/autoDraftActions";
 import { addSkippedPick } from "@/app/actions/draftActions"; 
-import { generatePlaceholderDeck } from "@/app/actions/deckGenerationActions";
+import { generatePlaceholderDeck, submitDeckForWeek } from "@/app/actions/deckGenerationActions";
 import { createDeckVotePoll } from "@/app/actions/deckVoteActions";
 
 
@@ -618,20 +618,32 @@ export async function completeDraft(
       console.log(`Starting post-draft actions for ${teams.length} teams in session ${sessionId}...`);
       for (const team of teams) {
           // Step 1: Generate the placeholder deck (existing logic)
-          const { success, error: deckError } = await generatePlaceholderDeck(team.team_id, sessionId);
+           const { success, deckId, error: deckError } = await generatePlaceholderDeck(team.team_id, sessionId);
+          
           if (!success) {
               console.error(`Failed to generate placeholder deck for team ${team.team_id}: ${deckError}`);
-              continue; // Skip this team if deck generation fails
+              continue; // Skip to next team
           }
           console.log(`Successfully generated placeholder deck for team ${team.team_id}.`);
 
-          // Step 2: If we found a valid first week, create the first deck vote poll
           if (firstWeek) {
+              // ==========================================================
+              // NEW STEP 1.5: Immediately submit it as the active deck
+              // ==========================================================
+              if (deckId) {
+                  console.log(`Setting placeholder deck as official active deck for Week 1...`);
+                  const submitResult = await submitDeckForWeek(deckId, team.team_id, firstWeek.id);
+                  if (!submitResult.success) {
+                      console.error(`Failed to submit placeholder deck for team ${team.team_id}:`, submitResult.error);
+                  }
+              }
+
+              // Step 2: Trigger the first deck vote poll (Existing logic)
               console.log(`Triggering first deck vote for team ${team.team_id} for week ${firstWeek.id}`);
               const { success: pollSuccess, error: pollError } = await createDeckVotePoll(
                   team.team_id,
                   firstWeek.id,
-                  firstWeek.ends_at // The first vote completes when the first week ends
+                  firstWeek.ends_at 
               );
               if (!pollSuccess) {
                   console.error(`Failed to create first deck vote poll for team ${team.team_id}: ${pollError}`);
