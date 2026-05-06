@@ -24,20 +24,21 @@ const [currentPage, setCurrentPage] = useState(1);
     setLoading(true);
     setError(null);
     try {
-      const { cards, error: fetchError } = await getWireCards();
+      const { cards, totalCount: count, error: fetchError } = await getWireCards(page, PAGE_SIZE, search);
       if (fetchError) {
         setError(fetchError);
       } else {
         setWireCards(cards);
+        setTotalCount(count);
       }
     } catch (err) {
       setError("An unexpected error occurred while fetching wire data.");
-      console.error(err);
     } finally {
       setLoading(false);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
+  
  useEffect(() => {
     const timer = setTimeout(() => {
       setCurrentPage(1); // Reset to page 1 on new search
@@ -73,6 +74,7 @@ const handleBidSuccess = () => {
 
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8">
+      {/* Header Section */}
       <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h1 className="text-4xl font-bold tracking-tight mb-2">The Wire</h1>
@@ -84,21 +86,23 @@ const handleBidSuccess = () => {
           {totalCount} Cards Available
         </div>
       </div>
-{/* --- NEW SEARCH BAR --- */}
+
+      {/* Search Bar Section */}
       <div className="mb-8 p-4 border rounded-xl bg-card shadow-sm">
-         <label className="block text-sm font-medium text-muted-foreground mb-2">Search The Wire</label>
-         <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input 
-                type="text" 
-                value={searchTerm} 
-                onChange={(e) => setSearchTerm(e.target.value)} 
-                placeholder="Search by card name..." 
-                className="pl-10" 
-            />
-         </div>
+        <label className="block text-sm font-medium text-muted-foreground mb-2">Search The Wire</label>
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input 
+            type="text" 
+            value={searchTerm} 
+            onChange={(e) => setSearchTerm(e.target.value)} 
+            placeholder="Search by card name..." 
+            className="pl-10" 
+          />
+        </div>
       </div>
-      
+
+      {/* Error Message */}
       {error && (
         <div className="mb-6 p-4 border border-destructive/50 bg-destructive/10 rounded-lg flex items-center gap-3 text-destructive">
           <AlertCircle className="h-5 w-5" />
@@ -106,10 +110,13 @@ const handleBidSuccess = () => {
         </div>
       )}
 
+      {/* Cards Grid or Empty States */}
       {wireCards.length === 0 && !loading ? (
         <div className="text-center py-16 border rounded-lg">
-          <p className="text-xl font-semibold">The Wire is currently empty.</p>
-          <p className="text-muted-foreground mt-2">Check back later.</p>
+          <p className="text-xl font-semibold">No cards found.</p>
+          <p className="text-muted-foreground mt-2">
+            {searchTerm ? "Try adjusting your search terms." : "The Wire is currently empty."}
+          </p>
         </div>
       ) : (
         <>
@@ -149,7 +156,7 @@ const handleBidSuccess = () => {
       {/* Loading Overlay for page transitions */}
       {loading && wireCards.length > 0 && (
         <div className="fixed inset-0 bg-background/40 backdrop-blur-sm z-50 flex items-center justify-center">
-             <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
         </div>
       )}
     </div>
