@@ -587,7 +587,10 @@ export async function completeDraft(
         pool_name: 'wire', 
         on_wire_since: new Date().toISOString() 
       })
-      .eq('pool_name', 'draft'); // Move all cards remaining in the 'draft' pool
+      .eq('pool_name', 'draft');
+    .eq('was_drafted', false);
+    
+    // Move all cards remaining in the 'draft' pool
 
     if (wireError) {
       console.error("Critical error: Failed to move undrafted cards to The Wire:", wireError);
