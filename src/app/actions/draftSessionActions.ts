@@ -587,7 +587,7 @@ export async function completeDraft(
         pool_name: 'wire', 
         on_wire_since: new Date().toISOString() 
       })
-      .eq('pool_name', 'draft');
+      .eq('pool_name', 'draft')
     .eq('was_drafted', false);
     
     // Move all cards remaining in the 'draft' pool
