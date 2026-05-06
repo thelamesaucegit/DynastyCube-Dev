@@ -119,9 +119,14 @@ export async function placeWireBid(cardPoolId: string, bidAmount: number): Promi
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return { success: false, error: "Authentication required." };
         
-        const { session: activeSession } = await getActiveDraftSession();
-        if (!activeSession) return { success: false, error: "There is no active season." };
-        const seasonId = activeSession.season_id;
+          const { data: activeSeason } = await supabase
+            .from('seasons')
+            .select('id')
+            .eq('is_active', true)
+            .single();
+            
+        if (!activeSeason) return { success: false, error: "There is no active season." };
+        const seasonId = activeSeason.id;
         
         const { data: teamMember } = await supabase.from('team_members').select('team_id').eq('user_id', user.id).single();
         if (!teamMember) return { success: false, error: "You are not a member of any team." };
