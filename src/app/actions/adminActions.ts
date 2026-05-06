@@ -110,10 +110,15 @@ export async function manuallyInitiateFirstDeckVotes(): Promise<{ success: boole
         
         // Set time to 10 PM Central Time, which is 3 AM UTC the next day during Daylight Time
         // This is a simplification; a library like `date-fns-tz` would be more robust.
-        pollEndDate.setUTCHours(3, 0, 0, 0); // Corresponds to 10 PM CDT the day before
+        pollEndDate.setUTCHours(27, 0, 0, 0); // Corresponds to 10 PM CDT the day before
 
         const pollEndsAtISO = pollEndDate.toISOString();
-
+if (pollEndDate < new Date()) {
+            console.warn(`Calculated poll end date (${pollEndsAtISO}) is in the past. Defaulting to 24 hours from now.`);
+            const fallbackDate = new Date();
+            fallbackDate.setHours(fallbackDate.getHours() + 24);
+            pollEndsAtISO = fallbackDate.toISOString();
+        }
         // 4. Get all teams for the season
         const { data: teams, error: teamsError } = await supabase
             .from("draft_order")
