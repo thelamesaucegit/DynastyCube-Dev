@@ -34,8 +34,14 @@ export interface WireCard extends CardData {
 /**
  * Fetches all cards on The Wire and includes the current user's team's bid amount.
  */
-export async function getWireCards(): Promise<{ cards: WireCard[]; error?: string }> {
+export async function getWireCards(
+    page: number = 1, 
+    pageSize: number = 50
+): Promise<{ cards: WireCard[]; totalCount: number; error?: string }> {
     const supabase = await createServerClient();
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
     try {
         const { data: { user } } = await supabase.auth.getUser();
         let userTeamId: string | null = null;
@@ -46,6 +52,7 @@ export async function getWireCards(): Promise<{ cards: WireCard[]; error?: strin
         if (activeSession) {
             seasonId = activeSession.season_id;
         }
+
         if (user && seasonId) {
             const { data: teamMember } = await supabase.from('team_members').select('team_id').eq('user_id', user.id).single();
             if (teamMember) {
@@ -53,28 +60,36 @@ export async function getWireCards(): Promise<{ cards: WireCard[]; error?: strin
             }
         }
         
-        // Fetch all cards currently on The Wire
-        const { data: wireCardsData, error: cardsError } = await supabase
+        // Fetch paginated cards currently on The Wire and get exact total count
+        const { data: wireCardsData, error: cardsError, count } = await supabase
             .from('card_pools')
-            .select('*')
+            .select('*', { count: 'exact' })
             .eq('pool_name', 'wire')
-            .order('on_wire_since', { ascending: true });
+            .order('on_wire_since', { ascending: true })
+            .range(from, to);
 
         if (cardsError) {
-            return { cards: [], error: "Failed to fetch cards from The Wire." };
+            return { cards: [], totalCount: 0, error: "Failed to fetch cards from The Wire." };
         }
 
-        if (!userTeamId || !seasonId) {
-            // If no user or season, return the cards without any bid info
-            return { cards: wireCardsData };
+        const totalCount = count || 0;
+
+        if (!userTeamId || !seasonId || !wireCardsData || wireCardsData.length === 0) {
+            // If no user, no season, or no cards on this page, return without bid info
+            return { cards: wireCardsData || [], totalCount };
         }
 
-        // Fetch the current team's bids for this season
+        // We only need to fetch bids for the cards that are ACTUALLY on this page.
+        // This is a massive performance boost over fetching all bids for all cards.
+        const cardIdsOnThisPage = wireCardsData.map(c => c.id);
+
+        // Fetch the current team's bids for this season, strictly for cards on this page
         const { data: teamBids } = await supabase
             .from('wire_bids')
             .select('card_pool_id, bid_amount')
             .eq('team_id', userTeamId)
-            .eq('season_id', seasonId);
+            .eq('season_id', seasonId)
+            .in('card_pool_id', cardIdsOnThisPage);
         
         const bidMap = new Map(teamBids?.map(b => [b.card_pool_id, b.bid_amount]) || []);
 
@@ -84,15 +99,13 @@ export async function getWireCards(): Promise<{ cards: WireCard[]; error?: strin
             currentUserTeamBid: bidMap.get(card.id),
         }));
 
-        return { cards: cardsWithBids };
-
+        return { cards: cardsWithBids, totalCount };
     } catch (error) {
         const message = error instanceof Error ? error.message : "An unexpected error occurred.";
         console.error("Error in getWireCards:", message);
-        return { cards: [], error: message };
+        return { cards: [], totalCount: 0, error: message };
     }
 }
-
 /**
  * Places or updates a team's bid on a card on The Wire.
  */
