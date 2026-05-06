@@ -36,7 +36,7 @@ export interface WireCard extends CardData {
  */
 export async function getWireCards(
     page: number = 1, 
-    pageSize: number = 50
+    pageSize: number = 50,
     searchTerm: string = ""
 ): Promise<{ cards: WireCard[]; totalCount: number; error?: string }> {
     const supabase = await createServerClient();
