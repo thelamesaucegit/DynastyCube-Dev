@@ -196,7 +196,7 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
         if (!activeSession) return { success: true, processedBids: 0, movedToFreeAgency: 0, error: "No active season found." };
         const seasonId = activeSession.season_id;
 
-        // 1. Get all cards on the wire for more than 48 hours
+        // 1. Get all cards on the wire for more than 48 hours 
         const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
         const { data: processableCards, error: cardError } = await supabase
             .from('card_pools')
@@ -222,19 +222,16 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
         if (orderError) throw new Error(`Failed to fetch draft order for tie-breakers: ${orderError.message}`);
         const tieBreakerMap = new Map(draftOrder?.map(o => [o.team_id, o.lottery_number]) || []);
         
-        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
         // 3. Loop through each card and process its bids
         for (const card of processableCards) {
             const bidsForCard = allBids?.filter(b => b.card_pool_id === card.id) || [];
 
             // Case A: No bids on the card
-            if (bidsForCard.length === 0) {
-                if (card.on_wire_since && card.on_wire_since <= sevenDaysAgo) {
-                    await supabase.from('card_pools').update({ pool_name: 'free' }).eq('id', card.id);
-                    movedToFreeAgency++;
-                    console.log(`Card ${card.id} moved to Free Agency.`);
-                }
+     if (bidsForCard.length === 0) {
+                await supabase.from('card_pools').update({ pool_name: 'free', on_wire_since: null }).eq('id', card.id);
+                movedToFreeAgency++;
+                console.log(`Card ${card.id} moved to Free Agency.`);
                 continue;
             }
 
