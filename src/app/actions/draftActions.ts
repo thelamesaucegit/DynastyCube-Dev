@@ -52,7 +52,48 @@ export interface DeckCard {
   is_commander?: boolean;
   category?: string;
 }
+export async function updateDeckDetails(
+  deckId: string,
+  updates: { deck_name?: string; description?: string; format?: string; is_public?: boolean }
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createServerClient();
 
+  try {
+    const teamId = await getDeckTeamId(deckId);
+    if (!teamId) return { success: false, error: "Deck not found" };
+
+    const authCheck = await verifyTeamMembership(teamId, supabase);
+    if (!authCheck.authorized) return { success: false, error: authCheck.error };
+
+    // 1. Update the deck
+    const { error } = await supabase
+      .from("team_decks")
+      .update({
+        ...(updates.deck_name && { deck_name: updates.deck_name }),
+        ...(updates.description !== undefined && { description: updates.description }),
+        ...(updates.format && { format: updates.format }),
+        ...(updates.is_public !== undefined && { is_public: updates.is_public }),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", deckId);
+
+    if (error) return { success: false, error: error.message };
+
+    // 2. Sync with active polls: If the name changed, update any poll options linked to this deck
+    if (updates.deck_name) {
+        const { error: syncError } = await supabase
+            .from('poll_options')
+            .update({ option_text: updates.deck_name })
+            .eq('deck_id', deckId);
+            
+        if (syncError) console.error("Failed to sync poll option text on deck rename:", syncError);
+    }
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: "An unexpected error occurred" };
+  }
+}
 async function verifyTeamMembership(
   teamId: string,
   client: AnySupabaseClient
