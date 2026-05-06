@@ -125,7 +125,84 @@ export async function createDeckVotePoll(
         return { success: false, error: e instanceof Error ? e.message : 'Unexpected error' };
     }
 }
+/**
+ * Adds an existing deck as a new option to the team's currently active deck vote.
+ */
+export async function addDeckToActivePoll(
+    teamId: string,
+    deckId: string
+): Promise<{ success: boolean; message?: string; error?: string }> {
+    const supabase = createServiceClient(); 
+    
+    try {
+        // 1. Get the currently active team deck vote poll
+        const { data: poll, error: pollError } = await supabase
+            .from('polls')
+            .select('id')
+            .eq('team_id', teamId)
+            .eq('vote_type', 'team')
+            .eq('is_active', true)
+            .single();
+            
+        if (pollError || !poll) {
+            return { success: false, error: "There is no active deck vote going on right now." };
+        }
 
+        // 2. Check if this deck is already an option in this poll
+        const { data: existingOption } = await supabase
+            .from('poll_options')
+            .select('id')
+            .eq('poll_id', poll.id)
+            .eq('deck_id', deckId)
+            .maybeSingle();
+            
+        if (existingOption) {
+            return { success: false, error: "This deck is already an option in the active vote." };
+        }
+
+        // 3. Get the deck's name to use as the option text
+        const { data: deck, error: deckError } = await supabase
+            .from('team_decks')
+            .select('deck_name')
+            .eq('id', deckId)
+            .single();
+            
+        if (deckError || !deck) {
+            return { success: false, error: "Deck not found." };
+        }
+
+        // 4. Get current max option_order so we append it to the end
+        const { data: maxOrderData } = await supabase
+            .from('poll_options')
+            .select('option_order')
+            .eq('poll_id', poll.id)
+            .order('option_order', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+            
+        const nextOrder = (maxOrderData?.option_order ?? -1) + 1;
+
+        // 5. Insert the new option
+        const { error: insertError } = await supabase
+            .from('poll_options')
+            .insert({
+                poll_id: poll.id,
+                option_text: deck.deck_name,
+                option_order: nextOrder,
+                deck_id: deckId,
+                vote_count: 0
+            });
+
+        if (insertError) {
+            return { success: false, error: `Failed to add option: ${insertError.message}` };
+        }
+
+        return { success: true, message: "Deck successfully added to the active vote!" };
+
+    } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'Unexpected error' };
+    }
+}
 /**
  * Resolve a deck vote poll — determine winner and create deck_submissions entry.
  * 
