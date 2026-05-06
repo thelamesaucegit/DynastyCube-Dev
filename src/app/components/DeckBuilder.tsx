@@ -311,7 +311,7 @@ const handleEditDeck = async () => {
 
   // Add a basic land to the deck
   const handleAddBasicLand = async (landName: string) => {
-    if (!selectedDeck) return setError("Please select a deck first");
+    if (!selectedDeck?.id) return setError("Please select a deck first");
 
     const existingLand = deckCards.find(
       (dc) => dc.card_name.toLowerCase() === landName.toLowerCase() && dc.category === activeCategory
@@ -319,50 +319,48 @@ const handleEditDeck = async () => {
 
     if (existingLand && existingLand.id && !existingLand.id.startsWith('temp-')) {
       const newQuantity = (existingLand.quantity || 1) + 1;
-      
-      // Optimistic update to stop rapid clicking
       setDeckCards(prev => prev.map(dc => dc.id === existingLand.id ? { ...dc, quantity: newQuantity } : dc));
       
-      const result = await updateDeckCardQuantity(existingLand.id, newQuantity);
+      // FIX: Added '!' non-null assertion for TypeScript
+      const result = await updateDeckCardQuantity(existingLand.id!, newQuantity);
       if (!result.success) {
         setError(result.error || "Failed to update basic land");
-        await loadDeckCards(selectedDeck.id!); // rollback
+        await loadDeckCards(selectedDeck.id!); 
       }
     } else if (!existingLand) {
       const tempId = 'temp-' + Date.now();
-      
-      // Optimistic insert
       setDeckCards(prev => [...prev, { id: tempId, card_name: landName, category: activeCategory, quantity: 1, deck_id: selectedDeck.id!, card_id: `basic-${landName.toLowerCase()}` }]);
-
+      
       const result = await addCardToDeck({
-        deck_id: selectedDeck.id!, draft_pick_id: undefined, card_id: `basic-${landName.toLowerCase()}`,
+        deck_id: selectedDeck.id, draft_pick_id: undefined, card_id: `basic-${landName.toLowerCase()}`,
         card_name: landName, quantity: 1, category: activeCategory,
       });
 
       if (result.success) {
-        await loadDeckCards(selectedDeck.id!);
+        await loadDeckCards(selectedDeck.id);
       } else {
         setError(result.error || "Failed to add basic land");
-        setDeckCards(prev => prev.filter(dc => dc.id !== tempId)); // rollback
+        setDeckCards(prev => prev.filter(dc => dc.id !== tempId));
       }
     }
   };
-  
-  // Update basic land quantity
+
   const handleUpdateBasicLandQuantity = async (landName: string, newQuantity: number) => {
-    if (!selectedDeck) return;
+    if (!selectedDeck?.id) return;
     const existingLand = deckCards.find(
       (dc) => dc.card_name.toLowerCase() === landName.toLowerCase() && dc.category === activeCategory
     );
-    if (!existingLand || existingLand.id?.startsWith('temp-')) return;
+    if (!existingLand || !existingLand.id || existingLand.id.startsWith('temp-')) return;
 
     if (newQuantity <= 0) {
-      setDeckCards(prev => prev.filter(dc => dc.id !== existingLand.id)); // Optimistic remove
+      setDeckCards(prev => prev.filter(dc => dc.id !== existingLand.id));
       await handleRemoveCardFromDeck(existingLand.id!, landName);
     } else {
-      setDeckCards(prev => prev.map(dc => dc.id === existingLand.id ? { ...dc, quantity: newQuantity } : dc)); // Optimistic update
-      const result = await updateDeckCardQuantity(existingLand.id, newQuantity);
-      if (!result.success) await loadDeckCards(selectedDeck.id!); // Rollback
+      setDeckCards(prev => prev.map(dc => dc.id === existingLand.id ? { ...dc, quantity: newQuantity } : dc));
+      
+      // FIX: Added '!' non-null assertion for TypeScript
+      const result = await updateDeckCardQuantity(existingLand.id!, newQuantity);
+      if (!result.success) await loadDeckCards(selectedDeck.id!);
     }
   };
 
