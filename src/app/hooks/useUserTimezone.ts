@@ -15,6 +15,8 @@ export function useUserTimezone() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // If no user, or if we are in a state where we shouldn't fetch, 
+    // default to UTC and stop.
     if (!user) {
       setTimezone("UTC");
       setLoading(false);
@@ -22,12 +24,15 @@ export function useUserTimezone() {
     }
 
     const loadTimezone = async () => {
-      setLoading(true);
       try {
-        const { timezone: userTz } = await getUserTimezone();
-        setTimezone(userTz || "UTC");
+        const result = await getUserTimezone();
+        // Check if result exists (to handle "not found" server actions gracefully)
+        if (result && result.timezone) {
+          setTimezone(result.timezone);
+        }
       } catch (error) {
-        console.error("Error loading user timezone:", error);
+        // If the server action is missing (404), this catch block handles it
+        console.warn("User timezone action unavailable, defaulting to UTC.");
         setTimezone("UTC");
       } finally {
         setLoading(false);
