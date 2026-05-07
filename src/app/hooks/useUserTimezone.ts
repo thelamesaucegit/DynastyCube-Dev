@@ -15,26 +15,40 @@ export function useUserTimezone() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
+
     if (!user) {
-      setTimezone("UTC");
-      setLoading(false);
+      if (isMounted) {
+        setTimezone("UTC");
+        setLoading(false);
+      }
       return;
     }
 
     const loadTimezone = async () => {
-      setLoading(true);
+      if (isMounted) setLoading(true);
       try {
-        const { timezone: userTz } = await getUserTimezone();
-        setTimezone(userTz || "UTC");
+        const result = await getUserTimezone();
+        if (isMounted && result?.timezone) {
+          setTimezone(result.timezone);
+        } else if (isMounted) {
+          setTimezone("UTC");
+        }
       } catch (error) {
-        console.error("Error loading user timezone:", error);
-        setTimezone("UTC");
+        // Catch ANY error (including Next.js UnrecognizedActionError)
+        // and safely default to UTC so the app doesn't crash.
+        console.warn("[Timezone Hook] Server Action failed or unavailable. Defaulting to UTC.");
+        if (isMounted) setTimezone("UTC");
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
     loadTimezone();
+
+    return () => {
+      isMounted = false;
+    };
   }, [user]);
 
   return { timezone, loading };

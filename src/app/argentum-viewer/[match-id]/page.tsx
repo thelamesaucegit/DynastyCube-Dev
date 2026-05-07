@@ -76,9 +76,8 @@ interface PageProps {
 }
 
 export default function ReplayPage(props: PageProps) {
-    // Safely unwrap the promise
     const unwrappedParams = use(props.params);
-    const matchId = unwrappedParams.matchId;
+    const matchId = unwrappedParams?.matchId; // Use optional chaining
 
     const responsiveSizes = useResponsive();
     const [data, setData] = useState<{
@@ -89,7 +88,12 @@ export default function ReplayPage(props: PageProps) {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        if (!matchId) return;
+        console.log("[Viewer Debug] useEffect triggered. Current matchId:", matchId);
+        
+        if (!matchId) {
+            console.log("[Viewer Debug] matchId is still null/undefined. Waiting...");
+            return;
+        }
 
         async function fetchData() {
             setIsLoading(true);
