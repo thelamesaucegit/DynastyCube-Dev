@@ -1,7 +1,7 @@
 // src/app/actions/scheduleActions.ts
 "use server";
 
-import { createServerClient } from "@/lib/supabase";
+import { createServerClient, createAdminClient } from "@/lib/supabase";
 
 interface BasicMatch {
   id: string;
@@ -414,7 +414,7 @@ export async function getActiveSeasonSchedule(): Promise<{
   success: boolean;
   error?: string;
 }> {
-  const supabase = await createServerClient();
+  const supabase = createAdminClient(); 
 
   try {
     // Get active season
@@ -481,7 +481,7 @@ export async function getAllSeasons(): Promise<{
   success: boolean;
   error?: string;
 }> {
-  const supabase = await createServerClient();
+  const supabase = createAdminClient(); 
 
   try {
     const { data: seasons, error } = await supabase
