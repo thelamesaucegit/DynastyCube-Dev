@@ -1,7 +1,7 @@
 // src/app/actions/matchActions.ts
 "use server";
 
-import { createServerClient } from "@/lib/supabase";
+import { createServerClient, createAdminClient } from "@/lib/supabase";
 
 // Alias for compatibility
 const createClient = createServerClient;
@@ -62,7 +62,8 @@ export async function getWeekMatchesAndSims(weekId: string): Promise<{
   matches: UnifiedMatch[];
   error?: string;
 }> {
-  const supabase = await createServerClient();
+    const supabase = createAdminClient(); 
+
   try {
     // 1. Fetch PvP Matches
     const { data: pvpMatches, error: pvpError } = await supabase
