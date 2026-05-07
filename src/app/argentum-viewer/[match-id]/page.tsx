@@ -1,11 +1,9 @@
 // src/app/argentum-viewer/[matchId]/page.tsx
-
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import React, { useState, useEffect, use } from 'react';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
-import { getPublicMatchReplayData } from './public-actions'; // Using our new public action
+import { getPublicMatchReplayData } from './public-actions'; 
 import { getCardDataForReplay } from '@/app/actions/cardActions';
 import type { SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientPlayer, ClientZone, ReplayCardData } from '@/types';
 import { ResponsiveContext } from '@/components/game/board/shared';
@@ -13,6 +11,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
 import { produce } from 'immer';
 
+// --- (Reconstruction logic remains unchanged) ---
 function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
     return (item as SpectatorStateDiff).isDiff === true;
 }
@@ -71,9 +70,16 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     return reconstructed;
 }
 
-export default function ReplayPage() {
-    const params = useParams();
-    const matchId = params.matchId as string;
+// --- FIX: Use PageProps and React.use() to safely unwrap params ---
+interface PageProps {
+    params: Promise<{ matchId: string }>;
+}
+
+export default function ReplayPage(props: PageProps) {
+    // Safely unwrap the promise
+    const unwrappedParams = use(props.params);
+    const matchId = unwrappedParams.matchId;
+
     const responsiveSizes = useResponsive();
     const [data, setData] = useState<{
         gameStates: SpectatorStateUpdate[] | null;
@@ -83,17 +89,13 @@ export default function ReplayPage() {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        if (!matchId) {
-            console.log("[Viewer Debug] No matchId found in params yet.");
-            return;
-        }
+        if (!matchId) return;
 
         async function fetchData() {
             setIsLoading(true);
             console.log(`[Viewer Debug] Initiating fetch for matchId: ${matchId}`);
             
             try {
-                // Step 1: Fetch Raw Game States
                 console.log("[Viewer Debug] Calling getPublicMatchReplayData...");
                 const { gameStates: rawGameStates } = await getPublicMatchReplayData(matchId);
                 
@@ -102,7 +104,6 @@ export default function ReplayPage() {
                 }
                 console.log(`[Viewer Debug] Success! Retrieved ${rawGameStates.length} raw game states.`);
                 
-                // Step 2: Reconstruct States
                 console.log("[Viewer Debug] Reconstructing game states...");
                 const finalGameStates = reconstructGameStates(rawGameStates as ReplayStateItem[]);
                 const validStates = finalGameStates.filter(s => s?.gameState != null);
@@ -110,9 +111,7 @@ export default function ReplayPage() {
                 if (validStates.length === 0) {
                     throw new Error("No valid game states remained after reconstruction.");
                 }
-                console.log(`[Viewer Debug] Reconstruction complete. ${validStates.length} valid states ready.`);
                 
-                // Step 3: Extract Card Names
                 const allCardNames = new Set<string>();
                 validStates.forEach(state => {
                     if (state.gameState.cards) {
@@ -121,9 +120,7 @@ export default function ReplayPage() {
                         }
                     }
                 });
-                console.log(`[Viewer Debug] Found ${allCardNames.size} unique cards to fetch data for.`);
                 
-                // Step 4: Fetch Card Data
                 console.log("[Viewer Debug] Calling getCardDataForReplay...");
                 const cardDataMapFromAction = await getCardDataForReplay(Array.from(allCardNames));
                 
@@ -132,10 +129,8 @@ export default function ReplayPage() {
                 }
                 
                 const cardDataMap = Object.fromEntries(cardDataMapFromAction);
-                console.log(`[Viewer Debug] Success! Card data mapped for ${Object.keys(cardDataMap).length} cards.`);
+                console.log(`[Viewer Debug] Success! Card data mapped.`);
 
-                // Final Step: Set State
-                console.log("[Viewer Debug] Setting final data state. UI should render now.");
                 setData({ gameStates: validStates, cardDataMap });
 
             } catch (error) {
