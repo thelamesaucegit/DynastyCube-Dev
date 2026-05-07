@@ -184,7 +184,7 @@ export default function SchedulePage() {
           <CardContent className="py-16 text-center">
             <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h2 className="text-2xl font-bold mb-2">No Schedule Available</h2>
-            <p className="text-muted-foreground">The schedule for this season hasn't been set up yet.</p>
+            <p className="text-muted-foreground">The schedule for this season hasn&apos;t been set up yet.</p>
           </CardContent>
         </Card>
       ) : (
