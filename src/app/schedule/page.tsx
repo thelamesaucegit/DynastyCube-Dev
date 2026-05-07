@@ -252,18 +252,22 @@ export default function SchedulePage() {
                                     <span className="font-semibold text-lg">{match.home_team?.name || 'TBD'}</span>
                                   </div>
                                   
-                                  <div className="flex items-center gap-3 text-center px-4">
-                                    {match.status === 'completed' && match.home_team_wins !== undefined ? (
-                                      <>
-                                        <span className={`text-xl font-bold ${match.home_team_wins > match.away_team_wins ? 'text-primary' : 'text-muted-foreground'}`}>{match.home_team_wins}</span>
-                                        <span className="text-muted-foreground text-sm font-medium">VS</span>
-                                        <span className={`text-xl font-bold ${match.away_team_wins > match.home_team_wins ? 'text-primary' : 'text-muted-foreground'}`}>{match.away_team_wins}</span>
-                                      </>
-                                    ) : (
-                                      <span className="text-muted-foreground text-sm font-medium">VS</span>
-                                    )}
-                                  </div>
-
+                                  {/* Score / VS */}
+<div className="flex items-center gap-3 text-center px-4">
+  {match.status === 'completed' ? (
+    <>
+      <span className={`text-xl font-bold ${match.home_team_wins > match.away_team_wins ? 'text-primary' : 'text-muted-foreground'}`}>
+        {match.home_team_wins}
+      </span>
+      <span className="text-muted-foreground text-sm font-medium">VS</span>
+      <span className={`text-xl font-bold ${match.away_team_wins > match.home_team_wins ? 'text-primary' : 'text-muted-foreground'}`}>
+        {match.away_team_wins}
+      </span>
+    </>
+  ) : (
+    <span className="text-muted-foreground text-sm font-medium">VS</span>
+  )}
+</div>
                                   <div className="flex items-center gap-2 flex-1 justify-end">
                                     <span className="font-semibold text-lg">{match.away_team?.name || 'TBD'}</span>
                                     <span className="text-2xl">{match.away_team?.emoji}</span>
