@@ -51,8 +51,11 @@ export interface UnifiedMatch {
   status: string;
   home_team: { id: string; name: string; emoji: string; } | null;
   away_team: { id: string; name: string; emoji: string; } | null;
-  scheduled_for?: string | null; // For sim matches
+  scheduled_for?: string | null;
   winner_team_id?: string | null;
+  home_team_wins?: number; // Added
+  away_team_wins?: number; // Added
+  sim_match_id?: string | null; // Added for replay links
 }
 
 export async function getWeekMatchesAndSims(weekId: string): Promise<{
@@ -61,10 +64,11 @@ export async function getWeekMatchesAndSims(weekId: string): Promise<{
 }> {
   const supabase = await createServerClient();
   try {
+    // 1. Fetch PvP Matches
     const { data: pvpMatches, error: pvpError } = await supabase
       .from("matches")
       .select(`
-        id, status, winner_team_id,
+        id, status, winner_team_id, home_team_wins, away_team_wins,
         home_team:teams!home_team_id(id, name, emoji),
         away_team:teams!away_team_id(id, name, emoji)
       `)
@@ -72,10 +76,12 @@ export async function getWeekMatchesAndSims(weekId: string): Promise<{
 
     if (pvpError) throw pvpError;
 
+    // 2. Fetch Sim Matches (from 'schedule' table)
     const { data: simMatches, error: simError } = await supabase
       .from("schedule")
       .select(`
-        id, status, match_date, winner_team_id,
+        id, status, match_date, winner_team_id, sim_match_id,
+        team1_id, team2_id,
         home_team:teams!team1_id(id, name, emoji),
         away_team:teams!team2_id(id, name, emoji)
       `)
@@ -85,12 +91,10 @@ export async function getWeekMatchesAndSims(weekId: string): Promise<{
 
     const unifiedList: UnifiedMatch[] = [];
 
+    // Process PvP matches into the unified format
     (pvpMatches || []).forEach(m => {
-        // --- THE FIX IS HERE ---
-        // Supabase can type a to-one join as an array. We take the first element.
         const homeTeam = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team;
         const awayTeam = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
-
         unifiedList.push({
             id: m.id,
             matchType: 'pvp',
@@ -98,13 +102,23 @@ export async function getWeekMatchesAndSims(weekId: string): Promise<{
             home_team: homeTeam || null,
             away_team: awayTeam || null,
             winner_team_id: m.winner_team_id,
+            home_team_wins: m.home_team_wins || 0,
+            away_team_wins: m.away_team_wins || 0,
         });
     });
 
+    // Process Sim matches into the unified format
     (simMatches || []).forEach(m => {
-        // --- AND ALSO HERE ---
         const homeTeam = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team;
         const awayTeam = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
+        
+        // Derive sim scores (Sims are single games, so 1-0 or 0-1)
+        let hWins = 0;
+        let aWins = 0;
+        if (m.status === 'completed' && m.winner_team_id) {
+            if (m.winner_team_id === m.team1_id) hWins = 1;
+            else if (m.winner_team_id === m.team2_id) aWins = 1;
+        }
 
         unifiedList.push({
             id: m.id,
@@ -114,6 +128,9 @@ export async function getWeekMatchesAndSims(weekId: string): Promise<{
             away_team: awayTeam || null,
             scheduled_for: m.match_date,
             winner_team_id: m.winner_team_id,
+            sim_match_id: m.sim_match_id, // For the replay link
+            home_team_wins: hWins,
+            away_team_wins: aWins
         });
     });
     
@@ -124,7 +141,6 @@ export async function getWeekMatchesAndSims(weekId: string): Promise<{
     });
 
     return { matches: unifiedList };
-
   } catch (error) {
     const message = error instanceof Error ? error.message : "An unexpected error occurred.";
     return { matches: [], error: message };
