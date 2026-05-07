@@ -53,8 +53,8 @@ export interface UnifiedMatch {
   away_team: { id: string; name: string; emoji: string; } | null;
   scheduled_for?: string | null;
   winner_team_id?: string | null;
-  home_team_wins?: number; // Added
-  away_team_wins?: number; // Added
+  home_team_wins: number; // Added
+  away_team_wins: number; // Added
   sim_match_id?: string | null; // Added for replay links
 }
 
