@@ -247,8 +247,8 @@ export async function createSeasonWithSchedule(
         
         // Deadlines are set within the week
         const deckDeadline = new Date(weekStart);
-        deckDeadline.setDate(weekStart.getDate() + 2); // e.g., Wednesday
-        deckDeadline.setHours(23, 59, 59);
+        deckDeadline.setDate(weekStart.getDate() - 1); // e.g., Wednesday
+        deckDeadline.setHours(21, 59, 59);
 
         const matchDeadline = new Date(weekEnd);
 
