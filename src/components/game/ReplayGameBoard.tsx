@@ -63,8 +63,12 @@ export function ReplayGameBoard({ topOffset = 0, snapshot, cardDataMap }: Replay
                     </div>
                 </div>
 
-                <div style={{ ...styles.centerArea, gap: responsive.isMobile ? 6 : 16 }}>
-                    {/* --- THIS IS THE FIX: Pass the theme object from player2 --- */}
+            <div style={{ 
+                    ...styles.centerArea, 
+                    gap: responsive.isMobile ? 6 : 16,
+                    position: 'relative', 
+                    zIndex: 100 
+                }}>
                     <div style={styles.centerLifeSection}><LifeDisplay life={player2.life} playerId={entityId(player2.playerId)} playerName={player2.name} spectatorMode={true} theme={player2.theme} /></div>
                     
                     <StepStrip
@@ -80,7 +84,6 @@ export function ReplayGameBoard({ topOffset = 0, snapshot, cardDataMap }: Replay
                         activePlayerName={activePlayer?.name}
                     />
                     
-                    {/* --- THIS IS THE FIX: Pass the theme object from player1 --- */}
                     <div style={styles.centerLifeSection}><LifeDisplay life={player1.life} isPlayer playerId={entityId(player1.playerId)} playerName={player1.name} spectatorMode={true} theme={player1.theme} /></div>
                 </div>
                 
