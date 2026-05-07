@@ -77,7 +77,7 @@ export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldest
                 gap: '8px', 
                 justifyContent: 'center',
                 width: '100%',
-                order: isOpponent ? 0 : 2
+                order: isOpponent ? 2 : 0
             }}
         >
             {groupedCreatures.map((group) => (
@@ -111,7 +111,7 @@ export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldest
                 gap: '8px', 
                 justifyContent: 'center',
                 width: '100%',
-                order: isOpponent ? 2 : 0
+                order: isOpponent ? 0 : 2
             }}
         >
             {groupedLands.map((group) => (
