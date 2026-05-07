@@ -4,8 +4,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
-import { getMatchReplayData } from '@/app/admin/argentum-viewer/data-actions';
 import { getCardDataForReplay } from '@/app/actions/cardActions';
+import { getPublicMatchReplayData } from './public-actions';
 import type { SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientPlayer, ClientZone, ReplayCardData } from '@/types';
 import { ResponsiveContext } from '@/components/game/board/shared';
 import { useResponsive } from '@/hooks/useResponsive';
@@ -86,7 +86,7 @@ export default function ReplayPage() {
         async function fetchData() {
             setIsLoading(true);
             try {
-                const { gameStates: rawGameStates } = await getMatchReplayData(matchId);
+const { gameStates: rawGameStates } = await getPublicMatchReplayData(matchId);
                 if (!rawGameStates || rawGameStates.length === 0) {
                     throw new Error("No game states found for this match.");
                 }
