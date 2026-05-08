@@ -291,46 +291,48 @@ export async function resolveDeckVotePoll(
             return { success: false, error: `Poll resolved but deck submission failed: ${error}` };
         }
         // 6. Auto-generate next week's poll
-         const { data: currentWeekData, error: weekError } = await supabase
-            .from('weeks')
-            .select('season_phase, ends_at')
-            .eq('id', weekId)
+          const { data: currentWeekData, error: weekError } = await supabase
+        .from('schedule_weeks')
+        .select('season_id, week_number, end_date')
+        .eq('id', weekId)
+        .single();
+
+    if (weekError || !currentWeekData) {
+        console.error(`[resolveDeckVotePoll] Could not find week data for weekId: ${weekId} to chain the next vote.`, weekError);
+    } else {
+        // Find the next chronological week in the SAME season
+        const { data: nextWeek, error: nextWeekError } = await supabase
+            .from('schedule_weeks')
+            .select('id, deck_submission_deadline, is_playoff_week, is_championship_week')
+            .eq('season_id', currentWeekData.season_id)
+            .eq('week_number', currentWeekData.week_number + 1)
             .single();
 
-        if (weekError || !currentWeekData) {
-            console.error(`[resolveDeckVotePoll] Could not find week data for weekId: ${weekId} to chain the next vote.`);
-        } else if (currentWeekData.season_phase === 'season') {
-            // This is a regular season week, so we chain the next vote.
-            const { data: nextWeek, error: nextWeekError } = await supabase
-                .from('weeks')
-                .select('id, ends_at')
-                .gt('starts_at', currentWeekData.ends_at)
-                .order('starts_at', { ascending: true })
-                .limit(1)
-                .single();
-
-            if (nextWeekError || !nextWeek) {
-                console.log(`[resolveDeckVotePoll] No upcoming week found after week ${weekId}. End of season.`);
-            } else {
-                // The next poll will end at the same time the next week completes.
-                const nextPollEndsAt = nextWeek.ends_at; 
-                
-                console.log(`[resolveDeckVotePoll] Auto-creating next deck vote for team ${poll.team_id} for week ${nextWeek.id}, ending at ${nextPollEndsAt}`);
-
-                // Fire-and-forget the creation of the next poll.
-                createDeckVotePoll(poll.team_id, nextWeek.id, nextPollEndsAt).then(result => {
-                    if (!result.success) {
-                        console.error(`[resolveDeckVotePoll] Failed to auto-create next poll: ${result.error}`);
-                    }
-                });
-            }
+        if (nextWeekError || !nextWeek) {
+            console.log(`[resolveDeckVotePoll] No upcoming week found after week ${currentWeekData.week_number}. End of season.`);
+        } else {
+            // We want the poll to end exactly when the deck submission deadline happens for the upcoming week
+            const nextPollEndsAt = nextWeek.deck_submission_deadline; 
+            
+            console.log(`[resolveDeckVotePoll] Auto-creating next deck vote for team ${poll.team_id} for week ${nextWeek.id}, ending at ${nextPollEndsAt}`);
+            
+            // Fire-and-forget the creation of the next poll.
+            createDeckVotePoll(poll.team_id, nextWeek.id, nextPollEndsAt).then(result => {
+                if (!result.success) {
+                    console.error(`[resolveDeckVotePoll] Failed to auto-create next poll: ${result.error}`);
+                } else {
+                    console.log(`[resolveDeckVotePoll] Successfully queued next poll for team ${poll.team_id}`);
+                }
+            });
         }
+    }
 
-        return { 
-            success: true, 
-            winningDeckId: winner.deck_id, 
-            submissionId 
-        };
+    return { 
+        success: true, 
+        winningDeckId: winner.deck_id, 
+        submissionId 
+    };
+
 
     } catch (e) {
         return { success: false, error: e instanceof Error ? e.message : 'Unexpected error' };
