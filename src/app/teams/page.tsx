@@ -142,10 +142,13 @@ export default function TeamsPage() {
                 <CardContent className="flex-grow flex flex-col w-full">
                   <div className="flex-grow flex flex-col items-center justify-center gap-4 mb-4 p-4 rounded-lg bg-muted/30 w-full border border-border/50">
                     
-                    <div className="text-center w-full">
-                      <p className="text-xs font-semibold text-muted-foreground tracking-wider mb-1">RECORD</p>
-                      <p className="text-xl font-bold">{team.wins} - {team.losses}</p>
-                    </div>
+                 <div 
+  className="text-center w-full"
+  title={`Tiebreaker Stats\nIndividual Game Wins: ${team.game_wins}\nIndividual Game Losses: ${team.game_losses}`}
+>
+  <p className="text-xs font-semibold text-muted-foreground tracking-wider mb-1">RECORD</p>
+  <p className="text-xl font-bold cursor-help">{team.wins} - {team.losses}</p>
+</div>
                     
                     {seasonPhase === "draft" && (
                       <div className="text-center border-t border-border/50 pt-4 w-full">
