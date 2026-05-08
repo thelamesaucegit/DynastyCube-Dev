@@ -45,7 +45,7 @@ export function ReplayStackDisplay({ snapshot, cardDataMap, useOldestArt }: Repl
       const imageUrl = useOldestArt 
               ? cardImageData?.oldest_image_url ?? cardImageData?.image_url ?? card.imageUri
               : cardImageData?.image_url ?? card.imageUri;      
-      return (
+   return (
               <CardPreview
                 key={card.id}
                 card={{
@@ -53,8 +53,14 @@ export function ReplayStackDisplay({ snapshot, cardDataMap, useOldestArt }: Repl
                   image_url: cardImageData?.image_url,
                   oldest_image_url: cardImageData?.oldest_image_url,
                 }}
+                // FIX: Move the structural style object HERE
+                style={{ 
+                  ...styles.stackItem, 
+                  marginTop: index === 0 ? 0 : -stackImageHeight + cardOffset, 
+                  zIndex: index + 1 
+                }}
               >
-                <div data-card-id={card.id} style={{ ...styles.stackItem, marginTop: index === 0 ? 0 : -stackImageHeight + cardOffset, zIndex: index + 1 }}>
+                <div data-card-id={card.id}>
                   <img
                     src={imageUrl || ''}
                     alt={card.name}
