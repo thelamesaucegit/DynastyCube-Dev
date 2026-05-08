@@ -348,6 +348,6 @@ export function HandFan({
             </CardPreview>
         );
       })}
-    </div>
+   
   );
 }
