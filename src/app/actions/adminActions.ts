@@ -78,7 +78,7 @@ export async function manuallyTriggerDeckVotesForWeek(
     seasonId: string,
     weekNumber: number
 ): Promise<{ success: boolean; createdCount: number; error?: string }> {
-    const supabase = createServiceClient();
+    const supabase = createClient();
     
     try {
         // 1. Find the target week to get its ID and exact deadline
@@ -222,7 +222,7 @@ if (pollEndDate < new Date()) {
 }
 // --- NEW FUNCTION TO FETCH TEST DECKLISTS ---
 export async function getTestDecklists(): Promise<{ p1_deck: string, p2_deck: string }> {
-    const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
     try {
         const { data, error } = await supabase.from('test_decklists').select('player_slot, decklist');
         if (error) throw error;
@@ -239,7 +239,7 @@ export async function getTestDecklists(): Promise<{ p1_deck: string, p2_deck: st
 
 
 export async function getMatchReplay(matchId: string): Promise<MatchReplayData | null> {
-    const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
     if (!matchId) {
         console.error("getMatchReplay called with invalid matchId");
         return null;
@@ -287,7 +287,7 @@ export async function getMatchReplay(matchId: string): Promise<MatchReplayData |
 
 
 export async function backfillOracleData(): Promise<{ success: boolean; updated: number; failed: number; errors: string[] }> {
-  const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
   const errors: string[] = [];
   let updatedCount = 0;
   let failedCount = 0;
@@ -344,7 +344,7 @@ export async function backfillOracleData(): Promise<{ success: boolean; updated:
 }
 
 export async function validateAndCanonicalizeDeck(cardNames: string[]): Promise<{ valid: Map<string, string>; invalid: string[]; }> {
-  const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
   const BASIC_LANDS = new Map<string, string>([["mountain", "Mountain"],["forest", "Forest"],["island", "Island"],["plains", "Plains"],["swamp", "Swamp"],]);
   const lowerCaseNames = [...new Set(cardNames.map(name => name.trim().toLowerCase()).filter(Boolean))];
   const validCanonicalMap = new Map<string, string>();
