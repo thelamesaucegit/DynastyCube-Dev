@@ -229,7 +229,7 @@ function ReplayCardRow({ zoneId, snapshot, cardDataMap, useOldestArt, faceDown =
 // HandFan (The "Dumb" Renderer)
 // ========================================================================
 
-export function HandFan({ // <-- THIS IS THE FIX
+export function HandFan({
   cards,
   cardDataMap,
   useOldestArt,
@@ -261,9 +261,10 @@ export function HandFan({ // <-- THIS IS THE FIX
     showFaceUp: true,
     isGhost: true,
   }));
-  const items = [...baseItems, ...ghostItems];
 
+  const items = [...baseItems, ...ghostItems];
   const cardCount = items.length;
+
   const maxRotation = Math.min(12, 40 / Math.max(cardCount, 1));
   const maxVerticalOffset = Math.min(15, 45 / Math.max(cardCount, 1));
   const overlapFactor = Math.max(0.5, 0.85 - (cardCount * 0.025));
@@ -282,7 +283,7 @@ export function HandFan({ // <-- THIS IS THE FIX
         const zIndex = 50 - Math.abs(index - Math.floor(cardCount / 2));
         const key = item.type === 'card' ? item.card.id : `placeholder-${item.index}`;
         
-        // This is the crucial positioning math
+        // This is the crucial positioning math applied to a style object
         const wrapperStyle: React.CSSProperties = {
             position: 'absolute', 
             left, 
@@ -319,6 +320,7 @@ export function HandFan({ // <-- THIS IS THE FIX
             );
         }
 
+        // The card preview logic
         const cardImageData = cardDataMap?.[item.card.name];
         return (
             <CardPreview
@@ -328,7 +330,7 @@ export function HandFan({ // <-- THIS IS THE FIX
                     image_url: cardImageData?.image_url ?? null,
                     oldest_image_url: cardImageData?.oldest_image_url ?? null,
                 }}
-                style={wrapperStyle} // FIX: Pass the complex fan style to the wrapper
+                style={wrapperStyle} // Pass the complex fan style to the wrapper
             >
                 <div onMouseEnter={() => !inverted && setHoveredIndex(index)} onMouseLeave={() => !inverted && setHoveredIndex(null)}>
                     <ReplayGameCard
@@ -344,19 +346,6 @@ export function HandFan({ // <-- THIS IS THE FIX
                     />
                 </div>
             </CardPreview>
-        );
-      })}
-    </div>
-  );
-        return (
-          <div
-            key={key}
-            style={{ position: 'absolute', left, ...(inverted ? { top: edgeMargin, transform: `translateY(${verticalOffset}px) rotate(${rotation}deg)` } : { bottom: edgeMargin, transform: `translateY(${-verticalOffset}px) rotate(${rotation}deg)` }), transformOrigin: inverted ? 'top center' : 'bottom center', zIndex, transition: 'all 0.12s ease-out', cursor: interactive ? 'pointer' : 'default' }}
-            onMouseEnter={() => !inverted && setHoveredIndex(index)}
-            onMouseLeave={() => !inverted && setHoveredIndex(null)}
-          >
-            {renderCard()}
-          </div>
         );
       })}
     </div>
