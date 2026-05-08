@@ -28,6 +28,23 @@ async function createClient() {
     }
   );
 }
+// 1. Define the exact shape returned by the RPC
+export interface RpcTeamStatRow {
+    id: string;
+    name: string;
+    emoji: string;
+    motto: string;
+    short_name: string;
+    primary_color: string | null;
+    secondary_color: string | null;
+    member_count: number;
+    rival_short_name: string | null;
+    is_hidden: boolean;
+    wins: number;
+    losses: number;
+    game_wins: number;
+    game_losses: number;
+}
 
 export interface TeamMember {
   id: string;
@@ -440,47 +457,51 @@ export async function getTeamsWithDetails(includeHidden = false): Promise<{
   const supabase = await createClient();
 
   try {
-    // 1. Call the RPC function directly
+    // 1. Call the RPC function and explicitly type the expected return data
     const { data: teamsData, error: teamsError } = await supabase
-      .rpc('get_teams_with_stats', { p_include_hidden: includeHidden });
+      .rpc('get_teams_with_stats', { p_include_hidden: includeHidden })
+      .returns<RpcTeamStatRow[]>();
 
     if (teamsError) {
       console.error("Error fetching teams via RPC:", teamsError);
       return { teams: [], error: teamsError.message };
     }
 
+    if (!teamsData || teamsData.length === 0) return { teams: [] };
+
     // 2. Get latest picks
     const lastPickMap = new Map<string, { image_url: string | null; card_name: string }>();
-    const { data: latestPicks, error: picksError } = await supabase.rpc('get_latest_pick_for_each_team'); 
+    const { data: latestPicks } = await supabase.rpc('get_latest_pick_for_each_team'); 
     
-    if (picksError || !latestPicks) {
-        const { data: allPicks } = await supabase
-          .from("team_draft_picks")
-          .select("team_id, image_url, card_name, pick_number")
-          .neq("card_id", "skipped-pick")
-          .order("pick_number", { ascending: false });
-
-        if (allPicks) {
-          for (const pick of allPicks) {
-            if (pick.team_id && !lastPickMap.has(pick.team_id)) {
-              lastPickMap.set(pick.team_id, { image_url: pick.image_url, card_name: pick.card_name });
-            }
-          }
-        }
-    } else {
-        for (const pick of latestPicks) {
+    if (latestPicks) {
+        (latestPicks as Array<{team_id: string, image_url: string, card_name: string}>).forEach(pick => {
             lastPickMap.set(pick.team_id, { image_url: pick.image_url, card_name: pick.card_name });
-        }
+        });
     }
 
-    // 3. Map to final interface
-    const enrichedTeams: TeamWithDetails[] = (teamsData as any[]).map(team => ({
-        ...team,
+    // 3. Map to final interface with 100% type safety
+    const enrichedTeams: TeamWithDetails[] = teamsData.map((team: RpcTeamStatRow) => ({
+        id: team.id,
+        short_name: team.short_name,
+        name: team.name,
+        emoji: team.emoji,
+        motto: team.motto,
+        wins: team.wins,
+        losses: team.losses,
+        game_wins: team.game_wins,
+        game_losses: team.game_losses,
+        rival_short_name: team.rival_short_name,
+        primary_color: team.primary_color,
+        secondary_color: team.secondary_color,
+        member_count: team.member_count,
+        is_hidden: team.is_hidden,
         last_pick: lastPickMap.get(team.id) || null,
     }));
 
     return { teams: enrichedTeams };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error("Unexpected error fetching team details:", errorMessage);
     return { teams: [], error: "An unexpected error occurred" };
   }
 }
