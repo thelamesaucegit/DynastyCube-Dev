@@ -65,6 +65,8 @@ export interface TeamWithDetails {
   motto: string;
   wins: number;
   losses: number;
+  game_wins: number; // Added to interface
+  game_losses: number; // Added to interface
   rival_short_name: string | null;
   primary_color: string | null;
   secondary_color: string | null;
@@ -75,6 +77,28 @@ export interface TeamWithDetails {
     card_name: string;
   } | null;
 }
+
+export interface TeamRecordData {
+    wins: number;
+    losses: number;
+    game_wins: number;
+    game_losses: number;
+}
+
+interface RawTeamResponse {
+    id: string;
+    name: string;
+    emoji: string;
+    motto: string;
+    short_name: string;
+    primary_color: string | null;
+    secondary_color: string | null;
+    member_count: number;
+    rival_short_name: string | null;
+    is_hidden: boolean;
+    team_records_view: TeamRecordData | TeamRecordData[] | null;
+}
+
 
 /**
  * Get all users for dropdown selection (Admin only)
@@ -478,11 +502,10 @@ export async function getTeamsWithDetails(includeHidden = false): Promise<{
   const supabase = await createClient();
 
   try {
-    // 1. Fetch teams and JOIN our new team_records_view
     let query = supabase
       .from("teams")
       .select(`
-        id, name, emoji, motto, short_name, primary_color, secondary_color, member_count, rival_short_name,
+        id, name, emoji, motto, short_name, primary_color, secondary_color, member_count, rival_short_name, is_hidden,
         team_records_view(wins, losses, game_wins, game_losses)
       `);
 
@@ -490,46 +513,57 @@ export async function getTeamsWithDetails(includeHidden = false): Promise<{
       query = query.eq('is_hidden', false);
     }
 
-    const { data: teamsData, error: teamsError } = await query;
+    const { data, error: teamsError } = await query;
 
     if (teamsError) {
       console.error("Error fetching teams:", teamsError);
       return { teams: [], error: teamsError.message };
     }
 
-    if (!teamsData) {
-      return { teams: [] };
-    }
+    const teamsData = (data as unknown) as RawTeamResponse[];
 
-    const { data: latestPicks, error: picksError } = await supabase.rpc('get_latest_pick_for_each_team'); 
+    if (!teamsData) return { teams: [] };
+
+    // 2. Get latest picks (keep your existing logic)
     const lastPickMap = new Map<string, { image_url: string | null; card_name: string }>();
-    if (!picksError && latestPicks) {
-        for (const pick of latestPicks) {
+    const { data: latestPicks } = await supabase.rpc('get_latest_pick_for_each_team'); 
+    
+    if (latestPicks) {
+        (latestPicks as Array<{team_id: string, image_url: string, card_name: string}>).forEach(pick => {
             lastPickMap.set(pick.team_id, { image_url: pick.image_url, card_name: pick.card_name });
-        }
+        });
     }
 
-    // 3. Map the data to the final interface
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const enrichedTeams: any[] = teamsData.map(team => {
-      // Extract the record from the joined view, defaulting to 0 if they haven't played
+    // 3. Map with strict typing
+    const enrichedTeams: TeamWithDetails[] = teamsData.map(team => {
+      // Supabase joins can be an object or an array of 1 object
       const record = Array.isArray(team.team_records_view) 
         ? team.team_records_view[0] 
         : team.team_records_view;
 
       return {
-        ...team,
+        id: team.id,
+        short_name: team.short_name,
+        name: team.name,
+        emoji: team.emoji,
+        motto: team.motto,
         wins: record?.wins || 0,
         losses: record?.losses || 0,
-        game_wins: record?.game_wins || 0,    // NEW: Expose individual game wins
-        game_losses: record?.game_losses || 0, // NEW: Expose individual game losses
+        game_wins: record?.game_wins || 0,
+        game_losses: record?.game_losses || 0,
+        rival_short_name: team.rival_short_name,
+        primary_color: team.primary_color,
+        secondary_color: team.secondary_color,
+        member_count: team.member_count,
+        is_hidden: team.is_hidden,
         last_pick: lastPickMap.get(team.id) || null,
       };
     });
 
     return { teams: enrichedTeams };
   } catch (error) {
-    console.error("Unexpected error fetching team details:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error("Unexpected error fetching team details:", errorMessage);
     return { teams: [], error: "An unexpected error occurred" };
   }
 }
