@@ -458,23 +458,33 @@ export async function getTeamsWithDetails(includeHidden = false): Promise<{
 
   try {
     // 1. Call the RPC function and explicitly type the expected return data
-    const { data: teamsData, error: teamsError } = await supabase
+    const rpcResponse = await supabase
       .rpc('get_teams_with_stats', { p_include_hidden: includeHidden })
       .returns<RpcTeamStatRow[]>();
+
+    const teamsData = rpcResponse.data;
+    const teamsError = rpcResponse.error;
 
     if (teamsError) {
       console.error("Error fetching teams via RPC:", teamsError);
       return { teams: [], error: teamsError.message };
     }
 
-    if (!teamsData || teamsData.length === 0) return { teams: [] };
+    // FIX: Check if teamsData exists AND has length in a way that satisfies strict typing
+    if (!teamsData || teamsData.length === 0) {
+      return { teams: [] };
+    }
 
-    // 2. Get latest picks
+    // 2. Get latest picks with strict typing
     const lastPickMap = new Map<string, { image_url: string | null; card_name: string }>();
-    const { data: latestPicks } = await supabase.rpc('get_latest_pick_for_each_team'); 
+    const picksResponse = await supabase
+      .rpc('get_latest_pick_for_each_team')
+      .returns<Array<{ team_id: string; image_url: string | null; card_name: string }>>();
     
+    const latestPicks = picksResponse.data;
+
     if (latestPicks) {
-        (latestPicks as Array<{team_id: string, image_url: string, card_name: string}>).forEach(pick => {
+        latestPicks.forEach(pick => {
             lastPickMap.set(pick.team_id, { image_url: pick.image_url, card_name: pick.card_name });
         });
     }
