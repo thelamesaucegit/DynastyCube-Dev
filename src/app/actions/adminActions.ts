@@ -144,7 +144,7 @@ export async function manuallyTriggerDeckVotesForWeek(
     }
 }
 export async function manuallyInitiateFirstDeckVotes(): Promise<{ success: boolean; message: string }> {
-    const supabase = await createServiceRoleClient();
+    const supabase =  createServiceRoleClient();
 
     try {
         // 1. Find the active season
@@ -418,7 +418,7 @@ export async function backfillColorIdentity(): Promise<{ success: boolean; updat
 }
 
 export async function backfillCMCForDraftPicks(): Promise<{ success: boolean; updated: number; failed: number; errors: string[]; }> {
-    const supabase = await createServiceRoleClient();
+    const supabase =  createServiceRoleClient();
     let updatedCount = 0;
     let failedCount = 0;
     const errors: string[] = [];
@@ -453,7 +453,7 @@ export async function backfillCMCForDraftPicks(): Promise<{ success: boolean; up
 }
 
 export async function backfillCMCForCardPools(): Promise<{ success: boolean; updated: number; failed: number; errors: string[]; }> {
-    const supabase = await createServiceRoleClient();
+    const supabase =  createServiceRoleClient();
     let updatedCount = 0;
     let failedCount = 0;
     const errors: string[] = [];
@@ -501,7 +501,7 @@ export async function backfillAllCMCData(): Promise<{ success: boolean; draftPic
 }
 
 export async function getAiProfiles(): Promise<AiProfile[]> {
-    const supabase = await createServiceRoleClient();
+    const supabase =  createServiceRoleClient();
     const { data, error } = await supabase.from('ai_profiles').select('id, profile_name').order('profile_name', { ascending: true });
     if (error) {
         console.error('Error fetching AI profiles:', error);
