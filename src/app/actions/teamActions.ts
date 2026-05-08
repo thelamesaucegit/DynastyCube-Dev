@@ -470,8 +470,8 @@ export async function getTeamsWithDetails(includeHidden = false): Promise<{
       return { teams: [], error: teamsError.message };
     }
 
-    // FIX: Check if teamsData exists AND has length in a way that satisfies strict typing
-    if (!teamsData || teamsData.length === 0) {
+    // FIX: Narrow the type using Array.isArray to satisfy strict TypeScript
+    if (!Array.isArray(teamsData) || teamsData.length === 0) {
       return { teams: [] };
     }
 
@@ -483,7 +483,7 @@ export async function getTeamsWithDetails(includeHidden = false): Promise<{
     
     const latestPicks = picksResponse.data;
 
-    if (latestPicks) {
+    if (Array.isArray(latestPicks)) {
         latestPicks.forEach(pick => {
             lastPickMap.set(pick.team_id, { image_url: pick.image_url, card_name: pick.card_name });
         });
