@@ -1,4 +1,5 @@
 // src/app/components/admin/VoteManagement.tsx
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -15,9 +16,10 @@ import {
   type TeamPollResult,
 } from "@/app/actions/voteActions";
 
-import { manuallyInitiateFirstDeckVotes } from "@/app/actions/adminActions";
-
-
+// Use the new dynamic override function
+import { manuallyTriggerDeckVotesForWeek } from "@/app/actions/deckVoteActions";
+// Need this to find the current season ID for the override
+import { getActiveSeason } from "@/app/actions/cubucksActions"; 
 
 export function VoteManagement() {
   const { user } = useAuth();
@@ -27,8 +29,7 @@ export function VoteManagement() {
   const [selectedPoll, setSelectedPoll] = useState<Poll | null>(null);
   const [results, setResults] = useState<TypedPollResults | null>(null);
   const [showResults, setShowResults] = useState(false);
-    const [initiating, setInitiating] = useState(false);
-
+  const [initiating, setInitiating] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -39,8 +40,7 @@ export function VoteManagement() {
     showResultsBeforeEnd: true,
     voteType: "individual" as VoteType,
     options: ["", ""],
-        activateOnChampionship: false, 
-
+    activateOnChampionship: false, 
   });
 
   useEffect(() => {
@@ -61,7 +61,7 @@ export function VoteManagement() {
     }
   };
 
-const handleCreatePoll = async () => {
+  const handleCreatePoll = async () => {
     if (!user) return;
     
     if (!formData.title.trim()) {
@@ -77,7 +77,6 @@ const handleCreatePoll = async () => {
       alert("❌ At least 2 options are required");
       return;
     }
-
     const result = await createPoll(
       formData.title,
       formData.description || null,
@@ -93,7 +92,6 @@ const handleCreatePoll = async () => {
     if (result.success) {
       alert("✅ " + result.message);
       setShowCreateForm(false);
-      // CORRECTED: The missing property is now included in the reset object.
       setFormData({
         title: "",
         description: "",
@@ -102,28 +100,50 @@ const handleCreatePoll = async () => {
         showResultsBeforeEnd: true,
         voteType: "individual",
         options: ["", ""],
-        activateOnChampionship: false, // This was the missing piece
+        activateOnChampionship: false,
       });
       loadPolls();
     } else {
       alert("❌ " + (result.error || "An unknown error occurred."));
     }
   };
-const handleInitiateFirstVotes = async () => {
-    if (!confirm("Are you sure you want to manually initiate the first deck vote for ALL teams? This should only be used if the automated process failed after the draft.")) {
+
+  // --- UPDATED RECOVERY LOGIC ---
+  const handleInitiateFirstVotes = async () => {
+    const input = prompt("Enter the Week Number to generate deck votes for (e.g., 2):");
+    if (!input) return;
+
+    const weekNumber = parseInt(input, 10);
+    if (isNaN(weekNumber) || weekNumber < 1) {
+        alert("❌ Please enter a valid week number.");
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to generate deck votes for ALL teams for Week ${weekNumber}?`)) {
       return;
     }
+
     setInitiating(true);
     try {
-      const result = await manuallyInitiateFirstDeckVotes();
+      // 1. Get the active season ID
+      const { season, error: seasonError } = await getActiveSeason();
+      if (seasonError || !season) {
+         alert("❌ Could not find an active season.");
+         setInitiating(false);
+         return;
+      }
+
+      // 2. Trigger the generation
+      const result = await manuallyTriggerDeckVotesForWeek(season.id, weekNumber);
+
       if (result.success) {
-        alert("✅ " + result.message);
-        loadPolls(); // Reload polls to see the newly created ones
+        alert(`✅ Successfully created ${result.createdCount} deck vote polls for Week ${weekNumber}.`);
+        loadPolls(); 
       } else {
-        alert("❌ " + result.message);
+        alert("❌ " + result.error);
       }
     } catch (error) {
-      console.error("Error initiating first deck votes:", error);
+      console.error("Error initiating deck votes:", error);
       alert("❌ An unexpected client-side error occurred.");
     } finally {
       setInitiating(false);
@@ -144,7 +164,6 @@ const handleInitiateFirstVotes = async () => {
     if (!confirm("Are you sure you want to delete this poll? This cannot be undone.")) {
       return;
     }
-
     const result = await deletePoll(pollId);
     if (result.success) {
       alert("✅ " + result.message);
@@ -157,7 +176,6 @@ const handleInitiateFirstVotes = async () => {
   const handleViewResults = async (poll: Poll) => {
     setSelectedPoll(poll);
     setShowResults(true);
-
     const result = await getPollResultsByType(poll.id);
     if (result.success && result.results) {
       setResults(result.results);
@@ -201,7 +219,7 @@ const handleInitiateFirstVotes = async () => {
 
   const getDefaultEndDate = () => {
     const date = new Date();
-    date.setDate(date.getDate() + 7); // 7 days from now
+    date.setDate(date.getDate() + 7); 
     return date.toISOString().slice(0, 16);
   };
 
@@ -233,7 +251,8 @@ const handleInitiateFirstVotes = async () => {
           {showCreateForm ? "Cancel" : "+ Create New Poll"}
         </button>
       </div>
-<div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-4">
+
+      <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-4">
         <div className="flex items-center justify-between">
           <div>
             <h4 className="font-bold text-yellow-800 dark:text-yellow-200">Manual Actions</h4>
@@ -244,10 +263,11 @@ const handleInitiateFirstVotes = async () => {
             disabled={initiating}
             className="bg-yellow-600 hover:bg-yellow-700 text-white px-5 py-2.5 rounded-lg font-semibold transition-colors disabled:bg-yellow-400 disabled:cursor-not-allowed"
           >
-            {initiating ? "Initiating..." : "Initiate Week 1 Deck Votes"}
+            {initiating ? "Initiating..." : "Trigger Missing Deck Votes"}
           </button>
         </div>
       </div>
+
       {/* Create Poll Form */}
       {showCreateForm && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-md">
@@ -367,13 +387,15 @@ const handleInitiateFirstVotes = async () => {
                   Allow multiple selections
                 </span>
               </label>
- <label className="flex items-center gap-3 cursor-pointer pt-3 border-t border-gray-200 dark:border-gray-600">
-                  <input type="checkbox" checked={formData.activateOnChampionship} onChange={(e) => setFormData({ ...formData, activateOnChampionship: e.target.checked })} className="w-4 h-4 text-blue-600" />
-                  <div>
-                    <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">Activate when Championship begins</span>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">The poll will be created as Inactive and will be automatically activated when the Championship match starts.</p>
-                  </div>
-                </label>
+
+              <label className="flex items-center gap-3 cursor-pointer pt-3 border-t border-gray-200 dark:border-gray-600">
+                <input type="checkbox" checked={formData.activateOnChampionship} onChange={(e) => setFormData({ ...formData, activateOnChampionship: e.target.checked })} className="w-4 h-4 text-blue-600" />
+                <div>
+                  <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">Activate when Championship begins</span>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">The poll will be created as Inactive and will be automatically activated when the Championship match starts.</p>
+                </div>
+              </label>
+
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -426,6 +448,7 @@ const handleInitiateFirstVotes = async () => {
             const now = new Date();
             const endsAt = new Date(poll.ends_at);
             const isEnded = endsAt < now;
+            
             const statusColor = poll.is_active
               ? isEnded
                 ? "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300"
@@ -471,7 +494,7 @@ const handleInitiateFirstVotes = async () => {
                     </div>
                   </div>
                 </div>
-
+                
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => handleViewResults(poll)}
