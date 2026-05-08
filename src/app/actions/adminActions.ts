@@ -2,13 +2,15 @@
 
 "use server";
 
-import { createClient as createServiceRoleClient } from "@supabase/supabase-js";
+import { createClient as createSupabaseJsClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+
 import { fetchAllCards } from "@/lib/scryfall-client";
 import { GameState } from "@/app/types";
 import { invalidateDraftCache } from "@/lib/draftCache";
 import { createDeckVotePoll } from "@/app/actions/deckVoteActions";
+
 
 
 interface Team {
@@ -68,6 +70,13 @@ async function createClient() {
         },
       },
     }
+  );
+}
+
+function createServiceRoleClient() {
+  return createSupabaseJsClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_KEY! 
   );
 }
 /**
