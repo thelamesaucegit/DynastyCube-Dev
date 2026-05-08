@@ -476,66 +476,60 @@ export async function getTeamsWithDetails(includeHidden = false): Promise<{
   error?: string;
 }> {
   const supabase = await createClient();
+
   try {
+    // 1. Fetch teams and JOIN our new team_records_view
     let query = supabase
       .from("teams")
-      .select("id, name, emoji, motto, short_name, wins, losses, primary_color, secondary_color, member_count, rival_short_name");
+      .select(`
+        id, name, emoji, motto, short_name, primary_color, secondary_color, member_count, rival_short_name,
+        team_records_view(wins, losses, game_wins, game_losses)
+      `);
 
-    // THIS IS THE FIX: Only filter for hidden teams if the caller doesn't want them.
     if (!includeHidden) {
       query = query.eq('is_hidden', false);
     }
-    const { data: teams, error: teamsError } = await query;
+
+    const { data: teamsData, error: teamsError } = await query;
 
     if (teamsError) {
       console.error("Error fetching teams:", teamsError);
       return { teams: [], error: teamsError.message };
     }
 
-    if (!teams) {
+    if (!teamsData) {
       return { teams: [] };
     }
 
-    // 2. Get the most recent draft pick for every team in a single query
-    const { data: latestPicks, error: picksError } = await supabase
-      .rpc('get_latest_pick_for_each_team'); // Assumes an RPC function for efficiency
-
-    // Fallback if RPC doesn't exist (less efficient but works)
+    const { data: latestPicks, error: picksError } = await supabase.rpc('get_latest_pick_for_each_team'); 
     const lastPickMap = new Map<string, { image_url: string | null; card_name: string }>();
-
-    if (picksError || !latestPicks) {
-        console.warn("Could not use RPC 'get_latest_pick_for_each_team'. Falling back to client-side logic. Error:", picksError?.message);
-        
-        const { data: allPicks } = await supabase
-          .from("team_draft_picks")
-          .select("team_id, image_url, card_name, pick_number")
-          .neq("card_id", "skipped-pick") // Skip skipped picks
-          .order("pick_number", { ascending: false });
-
-        if (allPicks) {
-          for (const pick of allPicks) {
-            if (pick.team_id && !lastPickMap.has(pick.team_id)) {
-              lastPickMap.set(pick.team_id, { image_url: pick.image_url, card_name: pick.card_name });
-            }
-          }
-        }
-    } else {
-        // If RPC exists and works
+    if (!picksError && latestPicks) {
         for (const pick of latestPicks) {
             lastPickMap.set(pick.team_id, { image_url: pick.image_url, card_name: pick.card_name });
         }
     }
 
-    // 3. Combine the data
-    const enrichedTeams: TeamWithDetails[] = teams.map(team => ({
-      ...team,
-      last_pick: lastPickMap.get(team.id) || null,
-    }));
+    // 3. Map the data to the final interface
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const enrichedTeams: any[] = teamsData.map(team => {
+      // Extract the record from the joined view, defaulting to 0 if they haven't played
+      const record = Array.isArray(team.team_records_view) 
+        ? team.team_records_view[0] 
+        : team.team_records_view;
+
+      return {
+        ...team,
+        wins: record?.wins || 0,
+        losses: record?.losses || 0,
+        game_wins: record?.game_wins || 0,    // NEW: Expose individual game wins
+        game_losses: record?.game_losses || 0, // NEW: Expose individual game losses
+        last_pick: lastPickMap.get(team.id) || null,
+      };
+    });
 
     return { teams: enrichedTeams };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("Unexpected error fetching team details:", errorMessage);
+    console.error("Unexpected error fetching team details:", error);
     return { teams: [], error: "An unexpected error occurred" };
   }
 }
