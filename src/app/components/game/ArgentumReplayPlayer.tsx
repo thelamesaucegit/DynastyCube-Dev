@@ -19,8 +19,8 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap }: Argentu
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
     const totalStates = initialGameStates.length;
-      // 1 = Normal (1500ms), 1.5 = Fast (1000ms), 2 = Fastest (750ms)
-    const [playbackSpeed, setPlaybackSpeed] = useState<1 | 1.5 | 2>(1);
+      // 1 = Normal (1500ms),  2 = Fast (750ms), 4 = Fastest (375ms)
+    const [playbackSpeed, setPlaybackSpeed] = useState<1 | 2 | 4 >(1);
 
 
     const currentSnapshot = useMemo(() => {
@@ -47,8 +47,8 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap }: Argentu
     const handleSliderChange = (value: number[]) => setCurrentIndex(value[0]);
      const handleSpeedToggle = () => {
         setPlaybackSpeed(current => {
-            if (current === 1) return 1.5;
-            if (current === 1.5) return 2;
+            if (current === 1) return 2;
+            if (current === 2) return 4;
             return 1; // Loop back to normal
         });
     };
