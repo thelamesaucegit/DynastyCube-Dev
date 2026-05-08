@@ -440,29 +440,14 @@ export async function getTeamsWithDetails(includeHidden = false): Promise<{
   const supabase = await createClient();
 
   try {
-    // 1. Fetch teams and JOIN our new team_records_view
-    // FIX: Make sure is_hidden is specifically pulled so we can filter locally if needed
-    let query = supabase
-      .from("teams")
-      .select(`
-        id, name, emoji, motto, short_name, primary_color, secondary_color, member_count, rival_short_name, is_hidden,
-        team_records_view(wins, losses, game_wins, game_losses)
-      `);
-
-    if (!includeHidden) {
-      query = query.eq('is_hidden', false);
-    }
-
-    const { data, error: teamsError } = await query;
+    // 1. Call the RPC function directly
+    const { data: teamsData, error: teamsError } = await supabase
+      .rpc('get_teams_with_stats', { p_include_hidden: includeHidden });
 
     if (teamsError) {
-      console.error("Error fetching teams:", teamsError);
+      console.error("Error fetching teams via RPC:", teamsError);
       return { teams: [], error: teamsError.message };
     }
-
-    const teamsData = (data as unknown) as RawTeamResponse[];
-
-    if (!teamsData || teamsData.length === 0) return { teams: [] };
 
     // 2. Get latest picks
     const lastPickMap = new Map<string, { image_url: string | null; card_name: string }>();
@@ -489,34 +474,13 @@ export async function getTeamsWithDetails(includeHidden = false): Promise<{
     }
 
     // 3. Map to final interface
-    const enrichedTeams: TeamWithDetails[] = teamsData.map(team => {
-      const record = Array.isArray(team.team_records_view) 
-        ? team.team_records_view[0] 
-        : team.team_records_view;
-
-      return {
-        id: team.id,
-        short_name: team.short_name,
-        name: team.name,
-        emoji: team.emoji,
-        motto: team.motto,
-        wins: record?.wins || 0,
-        losses: record?.losses || 0,
-        game_wins: record?.game_wins || 0,
-        game_losses: record?.game_losses || 0,
-        rival_short_name: team.rival_short_name,
-        primary_color: team.primary_color,
-        secondary_color: team.secondary_color,
-        member_count: team.member_count,
-        is_hidden: team.is_hidden,
+    const enrichedTeams: TeamWithDetails[] = (teamsData as any[]).map(team => ({
+        ...team,
         last_pick: lastPickMap.get(team.id) || null,
-      };
-    });
+    }));
 
     return { teams: enrichedTeams };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    console.error("Unexpected error fetching team details:", errorMessage);
     return { teams: [], error: "An unexpected error occurred" };
   }
 }
