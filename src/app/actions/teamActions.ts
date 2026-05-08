@@ -21,9 +21,7 @@ async function createClient() {
               cookieStore.set(name, value, options)
             );
           } catch {
-            // The `setAll` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing
-            // user sessions.
+           
           }
         },
       },
@@ -36,13 +34,13 @@ export interface TeamMember {
   user_id: string;
   team_id: string;
   user_email: string;
-  user_display_name?: string; // Add display name field
+  user_display_name?: string;
   joined_at: string;
 }
 
 export interface Team {
   id: string;         // UUID primary key
-  short_name: string; // URL-safe identifier e.g. 'shards', 'ninja'
+  short_name: string; // URL slug e.g. 'shards', 'ninja'
   name: string;
   emoji: string;
   motto: string;
@@ -57,6 +55,13 @@ export interface UserForDropdown {
   email?: string;
 }
 
+export interface TeamRecordData {
+    wins: number;
+    losses: number;
+    game_wins: number;
+    game_losses: number;
+}
+
 export interface TeamWithDetails {
   id: string;
   short_name: string;
@@ -65,8 +70,8 @@ export interface TeamWithDetails {
   motto: string;
   wins: number;
   losses: number;
-  game_wins: number; // Added to interface
-  game_losses: number; // Added to interface
+  game_wins: number;
+  game_losses: number;
   rival_short_name: string | null;
   primary_color: string | null;
   secondary_color: string | null;
@@ -78,13 +83,7 @@ export interface TeamWithDetails {
   } | null;
 }
 
-export interface TeamRecordData {
-    wins: number;
-    losses: number;
-    game_wins: number;
-    game_losses: number;
-}
-
+// Define the shape of the raw joined response from Supabase
 interface RawTeamResponse {
     id: string;
     name: string;
@@ -99,7 +98,6 @@ interface RawTeamResponse {
     team_records_view: TeamRecordData | TeamRecordData[] | null;
 }
 
-
 /**
  * Get all users for dropdown selection (Admin only)
  */
@@ -113,12 +111,10 @@ export async function getUsersForDropdown(): Promise<{
       .from("users")
       .select("id, display_name, discord_username")
       .order("display_name");
-
     if (error) {
       console.error("Error fetching users for dropdown:", error);
       return { users: [], error: error.message };
     }
-
     return {
       users: (data || []).map((u) => ({
         id: u.id,
@@ -146,12 +142,10 @@ export async function getTeamByShortName(
       .select("*")
       .eq("short_name", shortName)
       .single();
-
     if (error) {
       if (error.code === "PGRST116") return { team: null };
       return { team: null, error: error.message };
     }
-
     return { team: data };
   } catch (error) {
     console.error("Unexpected error fetching team by short_name:", error);
@@ -165,46 +159,33 @@ export async function getTeamByShortName(
 export async function getTeamsWithMembers(): Promise<Team[]> {
   const supabase = await createClient();
   try {
-    // Fetch all teams
     const { data: teams, error: teamsError } = await supabase
       .from("teams")
       .select("*")
       .order("name");
-
     if (teamsError) {
       console.error("Error fetching teams:", teamsError);
       return [];
     }
-
-    // Fetch all team members
     const { data: members, error: membersError } = await supabase
       .from("team_members")
       .select("*");
-
     if (membersError) {
       console.error("Error fetching team members:", membersError);
       return teams || [];
     }
-
-    // Fetch all users to get display names
     const { data: users, error: usersError } = await supabase
       .from("users")
       .select("id, display_name, discord_username");
-
     if (usersError) {
       console.error("Error fetching users:", usersError);
-      // Continue without display names if users query fails
     }
-
-    // Create a map of user_id -> display_name for quick lookup
     const userDisplayNames = new Map(
       (users || []).map((u) => [
         u.id,
         u.display_name || u.discord_username || "Unknown User"
       ])
     );
-
-    // Combine teams with their members, adding display names
     const teamsWithMembers = (teams || []).map((team) => ({
       ...team,
       members: (members || [])
@@ -214,7 +195,6 @@ export async function getTeamsWithMembers(): Promise<Team[]> {
           user_display_name: userDisplayNames.get(member.user_id) || "Unknown User",
         })),
     }));
-
     return teamsWithMembers;
   } catch (error) {
     console.error("Unexpected error fetching teams:", error);
@@ -231,31 +211,23 @@ export async function addMemberToTeam(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
   try {
-    // Get user for audit purposes (non-blocking)
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    // Insert team member
+    const { data: { user } } = await supabase.auth.getUser();
     const { error } = await supabase
       .from("team_members")
       .insert({
         team_id: teamId,
         user_email: userEmail.toLowerCase(),
-        user_id: user?.id || null, // Optional: for audit trail
+        user_id: user?.id || null,
       })
       .select()
       .single();
-
     if (error) {
-      // Check if it's a duplicate entry error
       if (error.code === "23505") {
         return { success: false, error: "User already in this team" };
       }
       console.error("Error adding member to team:", error);
       return { success: false, error: error.message };
     }
-
     return { success: true };
   } catch (error) {
     console.error("Unexpected error adding member:", error);
@@ -272,30 +244,23 @@ export async function addMemberToTeamById(
 ): Promise<{ success: boolean; memberId?: string; error?: string }> {
   const supabase = await createClient();
   try {
-    // Get the user's profile to get their email/display name
     const { data: userProfile, error: profileError } = await supabase
       .from("users")
       .select("id, display_name, discord_username")
       .eq("id", userId)
       .single();
-
     if (profileError || !userProfile) {
       return { success: false, error: "User not found" };
     }
-
-    // Check if user is already in the team
     const { data: existingMember } = await supabase
       .from("team_members")
       .select("id")
       .eq("team_id", teamId)
       .eq("user_id", userId)
       .single();
-
     if (existingMember) {
       return { success: false, error: "User is already a member of this team" };
     }
-
-    // Insert team member with user_id
     const { data, error } = await supabase
       .from("team_members")
       .insert({
@@ -305,12 +270,10 @@ export async function addMemberToTeamById(
       })
       .select("id")
       .single();
-
     if (error) {
       console.error("Error adding member to team:", error);
       return { success: false, error: error.message };
     }
-
     return { success: true, memberId: data.id };
   } catch (error) {
     console.error("Unexpected error adding member:", error);
@@ -332,12 +295,10 @@ export async function removeMemberFromTeam(
       .delete()
       .eq("team_id", teamId)
       .eq("user_email", userEmail.toLowerCase());
-
     if (error) {
       console.error("Error removing member from team:", error);
       return { success: false, error: error.message };
     }
-
     return { success: true };
   } catch (error) {
     console.error("Unexpected error removing member:", error);
@@ -358,12 +319,10 @@ export async function getTeamMembers(
       .select("*")
       .eq("team_id", teamId)
       .order("joined_at", { ascending: false });
-
     if (error) {
       console.error("Error fetching team members:", error);
       return { members: [], error: error.message };
     }
-
     return { members: data || [] };
   } catch (error) {
     console.error("Unexpected error fetching team members:", error);
@@ -379,38 +338,30 @@ export async function getUserTeam(
 ): Promise<{ team: Team | null; error?: string }> {
   const supabase = await createClient();
   try {
-    // Get the team membership for this email
     const { data: membership, error: memberError } = await supabase
       .from("team_members")
       .select("team_id")
       .eq("user_email", userEmail.toLowerCase())
       .single();
-
     if (memberError) {
-      // User not in any team (expected case)
       if (memberError.code === "PGRST116") {
         return { team: null };
       }
       console.error("Error fetching user team:", memberError);
       return { team: null, error: memberError.message };
     }
-
     if (!membership) {
       return { team: null };
     }
-
-    // Get the team details
     const { data: team, error: teamError } = await supabase
       .from("teams")
       .select("*")
       .eq("id", membership.team_id)
       .single();
-
     if (teamError) {
       console.error("Error fetching team details:", teamError);
       return { team: null, error: teamError.message };
     }
-
     return { team: team || null };
   } catch (error) {
     console.error("Unexpected error fetching user team:", error);
@@ -430,35 +381,24 @@ export async function joinTeam(
     if (!userEmail) {
       return { success: false, error: "User email not provided" };
     }
-
-    // Check if already in a team
     const { data: existing } = await supabase
       .from("team_members")
       .select("id")
       .eq("user_email", userEmail.toLowerCase())
       .single();
-
     if (existing) {
       return { success: false, error: "You are already in a team" };
     }
-
-    // Get user ID for audit trail (optional)
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    // Add to team
+    const { data: { user } } = await supabase.auth.getUser();
     const { error } = await supabase.from("team_members").insert({
       team_id: teamId,
       user_email: userEmail.toLowerCase(),
       user_id: user?.id || null,
     });
-
     if (error) {
       console.error("Error joining team:", error);
       return { success: false, error: error.message };
     }
-
     return { success: true };
   } catch (error) {
     console.error("Unexpected error joining team:", error);
@@ -479,12 +419,10 @@ export async function getAllTeams(): Promise<{
       .from("teams")
       .select("id, short_name, name, emoji, motto")
       .order("name");
-
     if (error) {
       console.error("Error fetching teams:", error);
       return { teams: [], error: error.message };
     }
-
     return { teams: data || [] };
   } catch (error) {
     console.error("Unexpected error fetching teams:", error);
@@ -502,6 +440,8 @@ export async function getTeamsWithDetails(includeHidden = false): Promise<{
   const supabase = await createClient();
 
   try {
+    // 1. Fetch teams and JOIN our new team_records_view
+    // FIX: Make sure is_hidden is specifically pulled so we can filter locally if needed
     let query = supabase
       .from("teams")
       .select(`
@@ -522,21 +462,34 @@ export async function getTeamsWithDetails(includeHidden = false): Promise<{
 
     const teamsData = (data as unknown) as RawTeamResponse[];
 
-    if (!teamsData) return { teams: [] };
+    if (!teamsData || teamsData.length === 0) return { teams: [] };
 
-    // 2. Get latest picks (keep your existing logic)
+    // 2. Get latest picks
     const lastPickMap = new Map<string, { image_url: string | null; card_name: string }>();
-    const { data: latestPicks } = await supabase.rpc('get_latest_pick_for_each_team'); 
+    const { data: latestPicks, error: picksError } = await supabase.rpc('get_latest_pick_for_each_team'); 
     
-    if (latestPicks) {
-        (latestPicks as Array<{team_id: string, image_url: string, card_name: string}>).forEach(pick => {
+    if (picksError || !latestPicks) {
+        const { data: allPicks } = await supabase
+          .from("team_draft_picks")
+          .select("team_id, image_url, card_name, pick_number")
+          .neq("card_id", "skipped-pick")
+          .order("pick_number", { ascending: false });
+
+        if (allPicks) {
+          for (const pick of allPicks) {
+            if (pick.team_id && !lastPickMap.has(pick.team_id)) {
+              lastPickMap.set(pick.team_id, { image_url: pick.image_url, card_name: pick.card_name });
+            }
+          }
+        }
+    } else {
+        for (const pick of latestPicks) {
             lastPickMap.set(pick.team_id, { image_url: pick.image_url, card_name: pick.card_name });
-        });
+        }
     }
 
-    // 3. Map with strict typing
+    // 3. Map to final interface
     const enrichedTeams: TeamWithDetails[] = teamsData.map(team => {
-      // Supabase joins can be an object or an array of 1 object
       const record = Array.isArray(team.team_records_view) 
         ? team.team_records_view[0] 
         : team.team_records_view;
