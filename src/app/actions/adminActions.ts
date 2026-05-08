@@ -78,7 +78,7 @@ export async function manuallyTriggerDeckVotesForWeek(
     seasonId: string,
     weekNumber: number
 ): Promise<{ success: boolean; createdCount: number; error?: string }> {
-    const supabase = createClient();
+    const supabase = createServiceRoleClient();
     
     try {
         // 1. Find the target week to get its ID and exact deadline
@@ -135,7 +135,7 @@ export async function manuallyTriggerDeckVotesForWeek(
     }
 }
 export async function manuallyInitiateFirstDeckVotes(): Promise<{ success: boolean; message: string }> {
-    const supabase = await createClient();
+    const supabase = await createServiceRoleClient();
 
     try {
         // 1. Find the active season
@@ -222,7 +222,7 @@ if (pollEndDate < new Date()) {
 }
 // --- NEW FUNCTION TO FETCH TEST DECKLISTS ---
 export async function getTestDecklists(): Promise<{ p1_deck: string, p2_deck: string }> {
-    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+    const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
     try {
         const { data, error } = await supabase.from('test_decklists').select('player_slot, decklist');
         if (error) throw error;
@@ -239,7 +239,7 @@ export async function getTestDecklists(): Promise<{ p1_deck: string, p2_deck: st
 
 
 export async function getMatchReplay(matchId: string): Promise<MatchReplayData | null> {
-    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+    const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
     if (!matchId) {
         console.error("getMatchReplay called with invalid matchId");
         return null;
@@ -287,7 +287,7 @@ export async function getMatchReplay(matchId: string): Promise<MatchReplayData |
 
 
 export async function backfillOracleData(): Promise<{ success: boolean; updated: number; failed: number; errors: string[] }> {
-  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+  const supabase = createServiceRoleClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
   const errors: string[] = [];
   let updatedCount = 0;
   let failedCount = 0;
@@ -409,7 +409,7 @@ export async function backfillColorIdentity(): Promise<{ success: boolean; updat
 }
 
 export async function backfillCMCForDraftPicks(): Promise<{ success: boolean; updated: number; failed: number; errors: string[]; }> {
-    const supabase = await createClient();
+    const supabase = await createServiceRoleClient();
     let updatedCount = 0;
     let failedCount = 0;
     const errors: string[] = [];
@@ -444,7 +444,7 @@ export async function backfillCMCForDraftPicks(): Promise<{ success: boolean; up
 }
 
 export async function backfillCMCForCardPools(): Promise<{ success: boolean; updated: number; failed: number; errors: string[]; }> {
-    const supabase = await createClient();
+    const supabase = await createServiceRoleClient();
     let updatedCount = 0;
     let failedCount = 0;
     const errors: string[] = [];
@@ -492,7 +492,7 @@ export async function backfillAllCMCData(): Promise<{ success: boolean; draftPic
 }
 
 export async function getAiProfiles(): Promise<AiProfile[]> {
-    const supabase = await createClient();
+    const supabase = await createServiceRoleClient();
     const { data, error } = await supabase.from('ai_profiles').select('id, profile_name').order('profile_name', { ascending: true });
     if (error) {
         console.error('Error fetching AI profiles:', error);
