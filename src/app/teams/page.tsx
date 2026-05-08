@@ -140,11 +140,7 @@ export default function TeamsPage() {
                   </p>
                 </CardHeader>
                 <CardContent className="flex-grow flex flex-col w-full">
-                  <div className="flex-grow flex flex-col items-center justify-center gap-4 mb-4 p-4 rounded-lg bg-muted/30 w-full border border-border/50">
-                    
-                 <div className="flex-grow flex flex-col items-center justify-center gap-4 mb-4 p-4 rounded-lg bg-muted/30 w-full border border-border/50">
-    
-    <div 
+                        <div 
         className="text-center w-full group/record relative" 
         title={`Tiebreaker: ${team.game_wins} Individual Game Wins - ${team.game_losses} Losses`}
     >
