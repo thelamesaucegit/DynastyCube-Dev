@@ -281,18 +281,31 @@ export function HandFan({ // <-- THIS IS THE FIX
         const left = index * cardSpacing;
         const zIndex = 50 - Math.abs(index - Math.floor(cardCount / 2));
         const key = item.type === 'card' ? item.card.id : `placeholder-${item.index}`;
+        
+        // This is the crucial positioning math
+        const wrapperStyle: React.CSSProperties = {
+            position: 'absolute', 
+            left, 
+            ...(inverted ? { top: edgeMargin, transform: `translateY(${verticalOffset}px) rotate(${rotation}deg)` } : { bottom: edgeMargin, transform: `translateY(${-verticalOffset}px) rotate(${rotation}deg)` }), 
+            transformOrigin: inverted ? 'top center' : 'bottom center', 
+            zIndex, 
+            transition: 'all 0.12s ease-out', 
+            cursor: interactive ? 'pointer' : 'default' 
+        };
 
-        const renderCard = () => {
-            if (item.type === 'placeholder') {
-                return (
+        if (item.type === 'placeholder') {
+            return (
+                <div key={key} style={wrapperStyle}>
                     <div style={{ width: fittingWidth, height: cardHeight, borderRadius: 6, border: '2px solid #333', boxShadow: '0 2px 8px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
                         <img src={CARD_BACK_IMAGE_URL} alt="Card back" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
                     </div>
-                );
-            }
+                </div>
+            );
+        }
 
-            if (interactive) {
-                return (
+        if (interactive) {
+            return (
+                <div key={key} style={wrapperStyle} onMouseEnter={() => !inverted && setHoveredIndex(index)} onMouseLeave={() => !inverted && setHoveredIndex(null)}>
                     <GameCard
                         card={item.card}
                         faceDown={faceDown && !item.showFaceUp}
@@ -302,18 +315,22 @@ export function HandFan({ // <-- THIS IS THE FIX
                         inHand={interactive && !faceDown}
                         isGhost={item.isGhost}
                     />
-                );
-            }
+                </div>
+            );
+        }
 
-            const cardImageData = cardDataMap?.[item.card.name];
-            return (
-                <CardPreview
-                    card={{
-                        card_name: item.card.name,
-                        image_url: cardImageData?.image_url ?? null,
-                        oldest_image_url: cardImageData?.oldest_image_url ?? null,
-                    }}
-                >
+        const cardImageData = cardDataMap?.[item.card.name];
+        return (
+            <CardPreview
+                key={key}
+                card={{
+                    card_name: item.card.name,
+                    image_url: cardImageData?.image_url ?? null,
+                    oldest_image_url: cardImageData?.oldest_image_url ?? null,
+                }}
+                style={wrapperStyle} // FIX: Pass the complex fan style to the wrapper
+            >
+                <div onMouseEnter={() => !inverted && setHoveredIndex(index)} onMouseLeave={() => !inverted && setHoveredIndex(null)}>
                     <ReplayGameCard
                         cardData={{
                             name: item.card.name,
@@ -325,10 +342,12 @@ export function HandFan({ // <-- THIS IS THE FIX
                         width={`${fittingWidth}px`}
                         height={`${cardHeight}px`}
                     />
-                </CardPreview>
-            );
-        };
-        
+                </div>
+            </CardPreview>
+        );
+      })}
+    </div>
+  );
         return (
           <div
             key={key}
