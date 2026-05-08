@@ -70,7 +70,70 @@ async function createClient() {
     }
   );
 }
+/**
+ * Manual override to generate deck vote polls for a specific week.
+ * Use this to recover if the cron job or chaining logic fails.
+ */
+export async function manuallyTriggerDeckVotesForWeek(
+    seasonId: string,
+    weekNumber: number
+): Promise<{ success: boolean; createdCount: number; error?: string }> {
+    const supabase = createServiceClient();
+    
+    try {
+        // 1. Find the target week to get its ID and exact deadline
+        const { data: targetWeek, error: weekError } = await supabase
+            .from('schedule_weeks')
+            .select('id, deck_submission_deadline, is_playoff_week')
+            .eq('season_id', seasonId)
+            .eq('week_number', weekNumber)
+            .single();
 
+        if (weekError || !targetWeek) {
+            return { success: false, createdCount: 0, error: `Could not find Week ${weekNumber} for the season.` };
+        }
+
+        if (targetWeek.is_playoff_week) {
+             return { success: false, createdCount: 0, error: `Cannot generate polls for playoff weeks.` };
+        }
+
+        // 2. Find all active teams in the season
+        // We use draft_order as a proxy for "teams in this season" 
+        const { data: teams, error: teamsError } = await supabase
+            .from("draft_order")
+            .select("team_id")
+            .eq("season_id", seasonId);
+
+        if (teamsError || !teams || teams.length === 0) {
+            return { success: false, createdCount: 0, error: "No teams found for the season." };
+        }
+
+        // 3. Create the polls using the EXACT deadline stored on the schedule_weeks row
+        let createdCount = 0;
+        const pollEndsAt = targetWeek.deck_submission_deadline;
+
+        for (const team of teams) {
+            const result = await createDeckVotePoll(team.team_id, targetWeek.id, pollEndsAt);
+            if (result.success) {
+                createdCount++;
+            } else {
+                console.error(`Failed to create deck vote for team ${team.team_id}: ${result.error}`);
+            }
+        }
+
+        return { 
+            success: true, 
+            createdCount 
+        };
+
+    } catch (e) {
+        return { 
+            success: false, 
+            createdCount: 0, 
+            error: e instanceof Error ? e.message : 'Unexpected error' 
+        };
+    }
+}
 export async function manuallyInitiateFirstDeckVotes(): Promise<{ success: boolean; message: string }> {
     const supabase = await createClient();
 
