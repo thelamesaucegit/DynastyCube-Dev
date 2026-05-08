@@ -142,10 +142,22 @@ export default function TeamsPage() {
                 <CardContent className="flex-grow flex flex-col w-full">
                   <div className="flex-grow flex flex-col items-center justify-center gap-4 mb-4 p-4 rounded-lg bg-muted/30 w-full border border-border/50">
                     
-                    <div className="text-center w-full">
-                      <p className="text-xs font-semibold text-muted-foreground tracking-wider mb-1">RECORD</p>
-                      <p className="text-xl font-bold">{team.wins} - {team.losses}</p>
-                    </div>
+                 <div className="flex-grow flex flex-col items-center justify-center gap-4 mb-4 p-4 rounded-lg bg-muted/30 w-full border border-border/50">
+    
+    <div 
+        className="text-center w-full group/record relative" 
+        title={`Tiebreaker: ${team.game_wins} Individual Game Wins - ${team.game_losses} Losses`}
+    >
+        <p className="text-xs font-semibold text-muted-foreground tracking-wider mb-1 cursor-help">RECORD</p>
+        <p className="text-xl font-bold cursor-help">{team.wins} - {team.losses}</p>
+        
+        {/* Optional: A more styled tooltip if you don't like the browser default 'title' */}
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover text-popover-foreground text-xs rounded shadow-xl border opacity-0 group-hover/record:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+            <p className="font-bold border-b border-border mb-1">Tiebreaker Detail</p>
+            <p>{team.game_wins}W - {team.game_losses}L in Individual Games</p>
+        </div>
+    </div>
+    
                     
                     {seasonPhase === "draft" && (
                       <div className="text-center border-t border-border/50 pt-4 w-full">
