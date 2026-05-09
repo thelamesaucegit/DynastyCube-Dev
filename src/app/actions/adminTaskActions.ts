@@ -3,6 +3,7 @@
 "use server";
 
 import { createServerClient } from "@supabase/ssr";
+import { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 
@@ -83,7 +84,7 @@ async function requireAdmin() {
 // NOTIFICATION HELPERS
 // ============================================================================
 
-async function notifyAllAdmins(supabase: any, type: string, message: string, excludeUserId?: string) {
+async function notifyAllAdmins(supabase: SupabaseClient, type: string, message: string, excludeUserId?: string) {
   const { data: admins } = await supabase.from('users').select('id').eq('is_admin', true);
   if (!admins) return;
 
@@ -100,7 +101,7 @@ async function notifyAllAdmins(supabase: any, type: string, message: string, exc
   }
 }
 
-async function notifySingleUser(supabase: any, userId: string, type: string, message: string) {
+async function notifySingleUser(supabase: SupabaseClient, userId: string, type: string, message: string) {
   await supabase.from('notifications').insert({
     user_id: userId,
     notification_type: type,
@@ -143,9 +144,10 @@ export async function getAdminTasks(includeArchived = false): Promise<{ success:
     })) as AdminTask[];
 
     return { success: true, tasks };
-  } catch (error: any) {
-    console.error("Error fetching admin tasks:", error);
-    return { success: false, error: error.message };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("Error fetching admin tasks:", errorMessage);
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -195,9 +197,10 @@ export async function createAdminTask(data: {
 
     revalidatePath('/admin/tasks');
     return { success: true };
-  } catch (error: any) {
-    console.error("Error creating admin task:", error);
-    return { success: false, error: error.message };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("Error creating admin task:", errorMessage);
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -206,7 +209,7 @@ export async function updateTaskStatus(taskId: string, status: 'active' | 'compl
     const { user, display_name } = await requireAdmin();
     const supabase = await createClient();
 
-    const updatePayload: any = { status };
+    const updatePayload: { status: string; completed_at?: string | null } = { status };
     if (status === 'completed') {
       updatePayload.completed_at = new Date().toISOString();
     } else {
@@ -228,8 +231,9 @@ export async function updateTaskStatus(taskId: string, status: 'active' | 'compl
 
     revalidatePath('/admin/tasks');
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -243,8 +247,9 @@ export async function toggleSubtask(subtaskId: string, isCompleted: boolean): Pr
 
     revalidatePath('/admin/tasks');
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -258,8 +263,9 @@ export async function claimTask(taskId: string): Promise<{ success: boolean; err
 
     revalidatePath('/admin/tasks');
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -280,14 +286,15 @@ export async function assignTask(taskId: string, assigneeId: string, assigneeNam
 
     revalidatePath('/admin/tasks');
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return { success: false, error: errorMessage };
   }
 }
 
 export async function requestTaskOwnership(taskId: string, currentOwnerId: string, taskTitle: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const { user, display_name } = await requireAdmin();
+    const { display_name } = await requireAdmin();
     const supabase = await createClient();
 
     await notifySingleUser(
@@ -298,8 +305,9 @@ export async function requestTaskOwnership(taskId: string, currentOwnerId: strin
     );
 
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -345,8 +353,9 @@ export async function duplicateTask(taskId: string): Promise<{ success: boolean;
 
     revalidatePath('/admin/tasks');
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -364,8 +373,8 @@ export async function reorderTasks(taskUpdates: { id: string; order_index: numbe
 
     revalidatePath('/admin/tasks');
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return { success: false, error: errorMessage };
   }
 }
-
