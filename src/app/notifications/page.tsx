@@ -221,7 +221,6 @@ export default function NotificationsPage() {
                 <div className="text-xs text-muted-foreground">Unread</div>
               </div>
             </div>
-
             <div className="flex items-center gap-3">
               {/* Filter Buttons */}
               <div className="flex gap-1">
@@ -240,7 +239,6 @@ export default function NotificationsPage() {
                   Unread ({unreadCount})
                 </Button>
               </div>
-
               {/* Mark All Read Button */}
               {unreadCount > 0 && (
                 <Button
@@ -297,7 +295,6 @@ export default function NotificationsPage() {
                   <div className="shrink-0 mt-0.5">
                     {getNotificationIcon(notification.notification_type)}
                   </div>
-
                   {/* Content */}
                   <div className="flex-1 min-w-0">
                     {/* Type Badge */}
@@ -311,30 +308,30 @@ export default function NotificationsPage() {
                         </Badge>
                       )}
                     </div>
-
                     {/* Message */}
                     <p className="text-base mb-2">
                       {notification.message}
                     </p>
-
                     {/* Footer */}
-                  {notification.notification_type.startsWith('admin_task') ? (
-  <Link
-    href="/admin/tasks"
-    className="text-primary hover:underline font-medium flex items-center gap-1"
-  >
-    View Task Board
-    <ExternalLink className="h-3 w-3" />
-  </Link>
-) : (
-  <Link
-    href={`/trades/${notification.trade_id}`}
-    className="text-primary hover:underline font-medium flex items-center gap-1"
-  >
-    View Trade
-    <ExternalLink className="h-3 w-3" />
-  </Link>
-)}
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <span>{formatDateTime(notification.created_at)}</span>
+                      {notification.notification_type.startsWith('admin_task') ? (
+                        <Link
+                          href="/admin/tasks"
+                          className="text-primary hover:underline font-medium flex items-center gap-1"
+                        >
+                          View Task Board
+                          <ExternalLink className="h-3 w-3" />
+                        </Link>
+                      ) : (
+                        <Link
+                          href={`/trades/${notification.trade_id}`}
+                          className="text-primary hover:underline font-medium flex items-center gap-1"
+                        >
+                          View Trade
+                          <ExternalLink className="h-3 w-3" />
+                        </Link>
+                      )}
                       {!notification.is_read && (
                         <button
                           onClick={() => handleMarkAsRead(notification.id)}
