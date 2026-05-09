@@ -1,11 +1,10 @@
 // src/components/game/board/HandZone.tsx
-
 "use client";
 
 import React, { useState, useMemo } from 'react';
 import { useZoneCards, useZone } from '@/store/selectors';
 import type { ZoneId, ClientCard } from '@/types';
-import  { zoneIdEquals } from '@/types';
+import { zoneIdEquals } from '@/types';
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
 import { calculateFittingCardWidth } from '@/hooks/useResponsive';
 import { useResponsiveContext } from './shared';
@@ -19,7 +18,6 @@ import { useSettings } from '@/contexts/SettingsContext';
 // ========================================================================
 // PROPS INTERFACES
 // ========================================================================
-
 interface CardRowProps {
   zoneId: ZoneId;
   snapshot?: SpectatorStateUpdate;
@@ -45,7 +43,7 @@ interface ReplayCardRowProps {
     zoneId: ZoneId;
     snapshot: SpectatorStateUpdate;
     cardDataMap: Record<string, ReplayCardData>;
-  useOldestArt?: boolean;
+    useOldestArt?: boolean;
     faceDown?: boolean;
     small?: boolean;
     inverted?: boolean;
@@ -69,7 +67,6 @@ interface HandFanProps {
 // ========================================================================
 // ROUTER COMPONENT
 // ========================================================================
-
 export function CardRow(props: CardRowProps) {
   if (props.snapshot && props.cardDataMap) {
     return <ReplayCardRow {...props} snapshot={props.snapshot} cardDataMap={props.cardDataMap} useOldestArt={props.useOldestArt ?? false} />;
@@ -80,7 +77,6 @@ export function CardRow(props: CardRowProps) {
 // ========================================================================
 // LIVE COMPONENT (uses hooks and original GameCard)
 // ========================================================================
-
 function LiveCardRow({ zoneId, faceDown = false, interactive = false, small = false, inverted = false, ghostCards = [] }: LiveCardRowProps) {
   const cards = useZoneCards(zoneId);
   const zone = useZone(zoneId);
@@ -146,7 +142,6 @@ function LiveCardRow({ zoneId, faceDown = false, interactive = false, small = fa
 // ========================================================================
 // REPLAY COMPONENT (zero hooks, uses ReplayGameCard)
 // ========================================================================
-
 function ReplayCardRow({ zoneId, snapshot, cardDataMap, useOldestArt, faceDown = false, small = false, inverted = false }: ReplayCardRowProps) {
   const responsive = useResponsiveContext();
   
@@ -171,10 +166,9 @@ function ReplayCardRow({ zoneId, snapshot, cardDataMap, useOldestArt, faceDown =
   const baseWidth = small ? responsive.smallCardWidth : responsive.cardWidth;
   const minWidth = small ? 30 : 45;
   const fittingWidth = calculateFittingCardWidth(cardCount, availableWidth, responsive.cardGap, baseWidth, minWidth);
-
   const cardHeight = Math.round(fittingWidth * 1.4);
   const hasRevealedCards = faceDown && cards.length > 0;
-  const shouldShowFan = (faceDown && inverted) || (faceDown && !inverted);
+  const shouldShowFan = true; // Always show fan in replay
 
   if (shouldShowFan) {
     return (
@@ -228,7 +222,6 @@ function ReplayCardRow({ zoneId, snapshot, cardDataMap, useOldestArt, faceDown =
 // ========================================================================
 // HandFan (The "Dumb" Renderer)
 // ========================================================================
-
 export function HandFan({
   cards,
   cardDataMap,
@@ -283,7 +276,6 @@ export function HandFan({
         const zIndex = 50 - Math.abs(index - Math.floor(cardCount / 2));
         const key = item.type === 'card' ? item.card.id : `placeholder-${item.index}`;
         
-        // This is the crucial positioning math applied to a style object
         const wrapperStyle: React.CSSProperties = {
             position: 'absolute', 
             left, 
@@ -320,7 +312,6 @@ export function HandFan({
             );
         }
 
-        // The card preview logic
         const cardImageData = cardDataMap?.[item.card.name];
         return (
             <CardPreview
@@ -330,7 +321,7 @@ export function HandFan({
                     image_url: cardImageData?.image_url ?? null,
                     oldest_image_url: cardImageData?.oldest_image_url ?? null,
                 }}
-                style={wrapperStyle} // Pass the complex fan style to the wrapper
+                style={wrapperStyle}
             >
                 <div onMouseEnter={() => !inverted && setHoveredIndex(index)} onMouseLeave={() => !inverted && setHoveredIndex(null)}>
                     <ReplayGameCard

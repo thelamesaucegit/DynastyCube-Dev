@@ -17,7 +17,7 @@ import {
 } from "@/app/actions/voteActions";
 
 // Use the new dynamic override function
-import { manuallyTriggerDeckVotesForWeek } from "@/app/actions/deckVoteActions";
+import { manuallyTriggerDeckVotesForWeek } from "@/app/actions/adminActions";
 // Need this to find the current season ID for the override
 import { getActiveSeason } from "@/app/actions/cubucksActions"; 
 
