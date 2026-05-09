@@ -122,6 +122,18 @@ export default function NotificationsPage() {
         return <Megaphone className="h-6 w-6 text-amber-500" />;
       case "draft_completed":
         return <Trophy className="h-6 w-6 text-yellow-500" />;
+          case "admin_task_created":
+        return <ClipboardList className="h-6 w-6 text-blue-500" />;
+      case "admin_task_completed":
+        return <CheckSquare className="h-6 w-6 text-emerald-500" />;
+      case "admin_task_due_soon":
+        return <AlertCircle className="h-6 w-6 text-yellow-500" />;
+      case "admin_task_past_due":
+        return <AlertTriangle className="h-6 w-6 text-destructive" />;
+      case "admin_task_assigned":
+        return <UserPlus className="h-6 w-6 text-purple-500" />;
+      case "admin_task_ownership_request":
+        return <Hand className="h-6 w-6 text-orange-500" />;
       default:
         return <Bell className="h-6 w-6 text-muted-foreground" />;
     }
@@ -151,6 +163,18 @@ export default function NotificationsPage() {
         return "On Deck";
       case "draft_completed":
         return "Draft Completed";
+        case "admin_task_created":
+        return "New Admin Task";
+      case "admin_task_completed":
+        return "Task Completed";
+      case "admin_task_due_soon":
+        return "Task Due Soon";
+      case "admin_task_past_due":
+        return "Task Overdue";
+      case "admin_task_assigned":
+        return "Task Assigned";
+      case "admin_task_ownership_request":
+        return "Ownership Request";
       default:
         return "Notification";
     }
