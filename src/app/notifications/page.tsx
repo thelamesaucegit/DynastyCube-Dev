@@ -25,6 +25,11 @@ import {
   Trophy,
   AlertTriangle,
   CalendarDays,
+   ClipboardList,
+  CheckSquare,
+  AlertCircle,
+  UserPlus,
+  Hand,
 } from "lucide-react";
 
 interface Notification {
