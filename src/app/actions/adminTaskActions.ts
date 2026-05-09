@@ -3,7 +3,7 @@
 "use server";
 
 import { createServerClient } from "@supabase/ssr";
-import { SupabaseClient } from "@supabase/supabase-js";
+import { SupabaseClient, createClient as createSupabaseJsClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 
@@ -40,9 +40,10 @@ export interface AdminTask {
 }
 
 // ============================================================================
-// CLIENT & AUTH HELPERS
+// CLIENT, AUTH & ERROR HELPERS
 // ============================================================================
 
+// Standard client for fetching the user's session
 async function createClient() {
   const cookieStore = await cookies();
   return createServerClient(
@@ -63,13 +64,35 @@ async function createClient() {
   );
 }
 
+// Service Role client for bypassing RLS after admin verification
+function createServiceRoleClient() {
+  return createSupabaseJsClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_KEY!
+  );
+}
+
+// Helper to safely parse Supabase JSON errors without using 'any'
+function parseError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'object' && error !== null) {
+    const errObj = error as Record<string, unknown>;
+    if (typeof errObj.message === 'string') return errObj.message;
+    if (typeof errObj.details === 'string') return errObj.details;
+    return JSON.stringify(error);
+  }
+  return String(error);
+}
+
 // Ensures the calling user is authenticated and is an admin
 async function requireAdmin() {
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) throw new Error("Unauthorized");
 
-  const { data: userData } = await supabase
+  // We use the service role here just in case RLS blocks selecting from users table as well
+  const supabaseAdmin = createServiceRoleClient();
+  const { data: userData } = await supabaseAdmin
     .from('users')
     .select('is_admin, display_name')
     .eq('id', user.id)
@@ -84,8 +107,8 @@ async function requireAdmin() {
 // NOTIFICATION HELPERS
 // ============================================================================
 
-async function notifyAllAdmins(supabase: SupabaseClient, type: string, message: string, excludeUserId?: string) {
-  const { data: admins } = await supabase.from('users').select('id').eq('is_admin', true);
+async function notifyAllAdmins(supabaseAdmin: SupabaseClient, type: string, message: string, excludeUserId?: string) {
+  const { data: admins } = await supabaseAdmin.from('users').select('id').eq('is_admin', true);
   if (!admins) return;
 
   const notificationsToInsert = admins
@@ -97,12 +120,12 @@ async function notifyAllAdmins(supabase: SupabaseClient, type: string, message: 
     }));
 
   if (notificationsToInsert.length > 0) {
-    await supabase.from('notifications').insert(notificationsToInsert);
+    await supabaseAdmin.from('notifications').insert(notificationsToInsert);
   }
 }
 
-async function notifySingleUser(supabase: SupabaseClient, userId: string, type: string, message: string) {
-  await supabase.from('notifications').insert({
+async function notifySingleUser(supabaseAdmin: SupabaseClient, userId: string, type: string, message: string) {
+  await supabaseAdmin.from('notifications').insert({
     user_id: userId,
     notification_type: type,
     message: message,
@@ -116,9 +139,9 @@ async function notifySingleUser(supabase: SupabaseClient, userId: string, type: 
 export async function getAdminTasks(includeArchived = false): Promise<{ success: boolean; tasks?: AdminTask[]; error?: string }> {
   try {
     await requireAdmin();
-    const supabase = await createClient();
+    const supabaseAdmin = createServiceRoleClient();
 
-    let query = supabase
+    let query = supabaseAdmin
       .from('admin_tasks')
       .select(`
         *,
@@ -145,7 +168,7 @@ export async function getAdminTasks(includeArchived = false): Promise<{ success:
 
     return { success: true, tasks };
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = parseError(error);
     console.error("Error fetching admin tasks:", errorMessage);
     return { success: false, error: errorMessage };
   }
@@ -160,10 +183,10 @@ export async function createAdminTask(data: {
 }): Promise<{ success: boolean; error?: string }> {
   try {
     const { user, display_name } = await requireAdmin();
-    const supabase = await createClient();
+    const supabaseAdmin = createServiceRoleClient();
 
     // 1. Insert Parent Task
-    const { data: newTask, error: taskError } = await supabase
+    const { data: newTask, error: taskError } = await supabaseAdmin
       .from('admin_tasks')
       .insert({
         title: data.title,
@@ -184,12 +207,12 @@ export async function createAdminTask(data: {
         title: title,
         order_index: index,
       }));
-      await supabase.from('admin_subtasks').insert(subtasksToInsert);
+      await supabaseAdmin.from('admin_subtasks').insert(subtasksToInsert);
     }
 
     // 3. Notify Admins
     await notifyAllAdmins(
-      supabase, 
+      supabaseAdmin, 
       'admin_task_created', 
       `${display_name || 'An admin'} created a new task: "${data.title}"`, 
       user.id
@@ -198,7 +221,7 @@ export async function createAdminTask(data: {
     revalidatePath('/admin/tasks');
     return { success: true };
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = parseError(error);
     console.error("Error creating admin task:", errorMessage);
     return { success: false, error: errorMessage };
   }
@@ -207,7 +230,7 @@ export async function createAdminTask(data: {
 export async function updateTaskStatus(taskId: string, status: 'active' | 'completed' | 'archived', taskTitle: string): Promise<{ success: boolean; error?: string }> {
   try {
     const { user, display_name } = await requireAdmin();
-    const supabase = await createClient();
+    const supabaseAdmin = createServiceRoleClient();
 
     const updatePayload: { status: string; completed_at?: string | null } = { status };
     if (status === 'completed') {
@@ -216,13 +239,13 @@ export async function updateTaskStatus(taskId: string, status: 'active' | 'compl
       updatePayload.completed_at = null; // Reset if moving back to active
     }
 
-    const { error } = await supabase.from('admin_tasks').update(updatePayload).eq('id', taskId);
+    const { error } = await supabaseAdmin.from('admin_tasks').update(updatePayload).eq('id', taskId);
     if (error) throw error;
 
     // Notify if marked completed
     if (status === 'completed') {
       await notifyAllAdmins(
-        supabase, 
+        supabaseAdmin, 
         'admin_task_completed', 
         `${display_name || 'An admin'} completed the task: "${taskTitle}"`, 
         user.id
@@ -232,7 +255,7 @@ export async function updateTaskStatus(taskId: string, status: 'active' | 'compl
     revalidatePath('/admin/tasks');
     return { success: true };
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = parseError(error);
     return { success: false, error: errorMessage };
   }
 }
@@ -240,15 +263,15 @@ export async function updateTaskStatus(taskId: string, status: 'active' | 'compl
 export async function toggleSubtask(subtaskId: string, isCompleted: boolean): Promise<{ success: boolean; error?: string }> {
   try {
     await requireAdmin();
-    const supabase = await createClient();
+    const supabaseAdmin = createServiceRoleClient();
 
-    const { error } = await supabase.from('admin_subtasks').update({ is_completed: isCompleted }).eq('id', subtaskId);
+    const { error } = await supabaseAdmin.from('admin_subtasks').update({ is_completed: isCompleted }).eq('id', subtaskId);
     if (error) throw error;
 
     revalidatePath('/admin/tasks');
     return { success: true };
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = parseError(error);
     return { success: false, error: errorMessage };
   }
 }
@@ -256,15 +279,15 @@ export async function toggleSubtask(subtaskId: string, isCompleted: boolean): Pr
 export async function claimTask(taskId: string): Promise<{ success: boolean; error?: string }> {
   try {
     const { user } = await requireAdmin();
-    const supabase = await createClient();
+    const supabaseAdmin = createServiceRoleClient();
 
-    const { error } = await supabase.from('admin_tasks').update({ claimed_by: user.id }).eq('id', taskId);
+    const { error } = await supabaseAdmin.from('admin_tasks').update({ claimed_by: user.id }).eq('id', taskId);
     if (error) throw error;
 
     revalidatePath('/admin/tasks');
     return { success: true };
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = parseError(error);
     return { success: false, error: errorMessage };
   }
 }
@@ -272,13 +295,13 @@ export async function claimTask(taskId: string): Promise<{ success: boolean; err
 export async function assignTask(taskId: string, assigneeId: string, assigneeName: string, taskTitle: string): Promise<{ success: boolean; error?: string }> {
   try {
     const { display_name } = await requireAdmin();
-    const supabase = await createClient();
+    const supabaseAdmin = createServiceRoleClient();
 
-    const { error } = await supabase.from('admin_tasks').update({ claimed_by: assigneeId }).eq('id', taskId);
+    const { error } = await supabaseAdmin.from('admin_tasks').update({ claimed_by: assigneeId }).eq('id', taskId);
     if (error) throw error;
 
     await notifySingleUser(
-      supabase,
+      supabaseAdmin,
       assigneeId,
       'admin_task_assigned',
       `${display_name || 'An admin'} assigned you to a task: "${taskTitle}"`
@@ -287,7 +310,7 @@ export async function assignTask(taskId: string, assigneeId: string, assigneeNam
     revalidatePath('/admin/tasks');
     return { success: true };
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = parseError(error);
     return { success: false, error: errorMessage };
   }
 }
@@ -295,10 +318,10 @@ export async function assignTask(taskId: string, assigneeId: string, assigneeNam
 export async function requestTaskOwnership(taskId: string, currentOwnerId: string, taskTitle: string): Promise<{ success: boolean; error?: string }> {
   try {
     const { display_name } = await requireAdmin();
-    const supabase = await createClient();
+    const supabaseAdmin = createServiceRoleClient();
 
     await notifySingleUser(
-      supabase,
+      supabaseAdmin,
       currentOwnerId,
       'admin_task_ownership_request',
       `${display_name || 'Another admin'} is requesting to take over your task: "${taskTitle}". You can unassign yourself to let them claim it.`
@@ -306,7 +329,7 @@ export async function requestTaskOwnership(taskId: string, currentOwnerId: strin
 
     return { success: true };
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = parseError(error);
     return { success: false, error: errorMessage };
   }
 }
@@ -314,10 +337,10 @@ export async function requestTaskOwnership(taskId: string, currentOwnerId: strin
 export async function duplicateTask(taskId: string): Promise<{ success: boolean; error?: string }> {
   try {
     const { user } = await requireAdmin();
-    const supabase = await createClient();
+    const supabaseAdmin = createServiceRoleClient();
 
     // 1. Fetch original task & subtasks
-    const { data: original, error: fetchError } = await supabase
+    const { data: original, error: fetchError } = await supabaseAdmin
       .from('admin_tasks')
       .select('*, subtasks:admin_subtasks(*)')
       .eq('id', taskId)
@@ -326,7 +349,7 @@ export async function duplicateTask(taskId: string): Promise<{ success: boolean;
     if (fetchError || !original) throw new Error("Task not found");
 
     // 2. Insert Duplicate Task (stripping out specifics like completion status/claims)
-    const { data: newTask, error: insertError } = await supabase
+    const { data: newTask, error: insertError } = await supabaseAdmin
       .from('admin_tasks')
       .insert({
         title: `${original.title} (Copy)`,
@@ -348,13 +371,13 @@ export async function duplicateTask(taskId: string): Promise<{ success: boolean;
         order_index: st.order_index,
         is_completed: false // Reset completion status
       }));
-      await supabase.from('admin_subtasks').insert(subtasksToInsert);
+      await supabaseAdmin.from('admin_subtasks').insert(subtasksToInsert);
     }
 
     revalidatePath('/admin/tasks');
     return { success: true };
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = parseError(error);
     return { success: false, error: errorMessage };
   }
 }
@@ -362,19 +385,20 @@ export async function duplicateTask(taskId: string): Promise<{ success: boolean;
 export async function reorderTasks(taskUpdates: { id: string; order_index: number }[]): Promise<{ success: boolean; error?: string }> {
   try {
     await requireAdmin();
-    const supabase = await createClient();
+    const supabaseAdmin = createServiceRoleClient();
 
     // Perform a bulk update using an upsert or Promise.all. Promise.all is fine for small-scale admin boards.
     await Promise.all(
       taskUpdates.map((update) => 
-        supabase.from('admin_tasks').update({ order_index: update.order_index }).eq('id', update.id)
+        supabaseAdmin.from('admin_tasks').update({ order_index: update.order_index }).eq('id', update.id)
       )
     );
 
     revalidatePath('/admin/tasks');
     return { success: true };
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = parseError(error);
     return { success: false, error: errorMessage };
   }
 }
+```
