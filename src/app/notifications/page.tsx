@@ -318,15 +318,23 @@ export default function NotificationsPage() {
                     </p>
 
                     {/* Footer */}
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <span>{formatDateTime(notification.created_at)}</span>
-                      <Link
-                        href={`/trades/${notification.trade_id}`}
-                        className="text-primary hover:underline font-medium flex items-center gap-1"
-                      >
-                        View Trade
-                        <ExternalLink className="h-3 w-3" />
-                      </Link>
+                  {notification.notification_type.startsWith('admin_task') ? (
+  <Link
+    href="/admin/tasks"
+    className="text-primary hover:underline font-medium flex items-center gap-1"
+  >
+    View Task Board
+    <ExternalLink className="h-3 w-3" />
+  </Link>
+) : (
+  <Link
+    href={`/trades/${notification.trade_id}`}
+    className="text-primary hover:underline font-medium flex items-center gap-1"
+  >
+    View Trade
+    <ExternalLink className="h-3 w-3" />
+  </Link>
+)}
                       {!notification.is_read && (
                         <button
                           onClick={() => handleMarkAsRead(notification.id)}
