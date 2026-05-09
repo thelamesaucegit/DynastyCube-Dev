@@ -171,6 +171,18 @@ export const NotificationBell: React.FC = () => {
         return "📣";
       case "draft_completed":
         return "🏆";
+          case "admin_task_created":
+        return "📋";
+      case "admin_task_completed":
+        return "✅";
+      case "admin_task_due_soon":
+        return "⏳";
+      case "admin_task_past_due":
+        return "🚨";
+      case "admin_task_assigned":
+        return "👤";
+      case "admin_task_ownership_request":
+        return "✋";
       default:
         return "🔔";
     }

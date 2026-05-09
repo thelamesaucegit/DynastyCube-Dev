@@ -47,7 +47,8 @@ Group,
   LayoutGrid,
   Cable,
   Sparkles,
-  Palmtree, // 1. Icon imported
+  Palmtree, 
+   CheckSquare ,
 } from "lucide-react";
 import { getDraftSessions, type DraftSession } from "@/app/actions/draftSessionActions";
 
@@ -229,17 +230,29 @@ export default function Navigation() {
                   </DropdownMenu>
                 </NavigationMenuItem>
                 {user && isAdmin && (
-                  <NavigationMenuItem>
-                    <Link href="/admin" legacyBehavior passHref>
-                      <NavigationMenuLink
-                        className={`${navigationMenuTriggerStyle()} bg-transparent flex items-center gap-1.5 ${isActive("/admin") ? "bg-orange-500/20 text-orange-600 dark:text-orange-400 font-medium" : "text-orange-600 dark:text-orange-400 hover:bg-orange-500/10"}`}
-                      >
-                        <Shield className="size-3.5" />
-                        Admin
-                      </NavigationMenuLink>
-                    </Link>
-                  </NavigationMenuItem>
-                )}
+                   <>
+    <NavigationMenuItem>
+      <Link href="/admin" legacyBehavior passHref>
+        <NavigationMenuLink
+          className={`${navigationMenuTriggerStyle()} bg-transparent flex items-center gap-1.5 ${isActive("/admin") && !isActive("/admin/tasks") ? "bg-orange-500/20 text-orange-600 dark:text-orange-400 font-medium" : "text-orange-600 dark:text-orange-400 hover:bg-orange-500/10"}`}
+        >
+          <Shield className="size-3.5" />
+          Admin
+        </NavigationMenuLink>
+      </Link>
+    </NavigationMenuItem>
+    <NavigationMenuItem>
+      <Link href="/admin/tasks" legacyBehavior passHref>
+        <NavigationMenuLink
+          className={`${navigationMenuTriggerStyle()} bg-transparent flex items-center gap-1.5 ${isActive("/admin/tasks") ? "bg-orange-500/20 text-orange-600 dark:text-orange-400 font-medium" : "text-orange-600 dark:text-orange-400 hover:bg-orange-500/10"}`}
+        >
+          <CheckSquare className="size-3.5" />
+          Task Board
+        </NavigationMenuLink>
+      </Link>
+    </NavigationMenuItem>
+  </>
+)}
               </NavigationMenuList>
             </NavigationMenu>
           </nav>
@@ -366,16 +379,20 @@ export default function Navigation() {
                   Glossary
                 </Link>
                 {user && isAdmin && (
-                  <>
-                    <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-                      Admin
-                    </div>
-                    <Link href="/admin" onClick={() => setMobileMenuOpen(false)} className="mx-2 px-4 py-2 rounded-md text-left transition-colors text-orange-600 dark:text-orange-400 hover:bg-orange-500/10 flex items-center gap-2">
-                      <Shield className="size-4" />
-                      Dashboard
-                    </Link>
-                  </>
-                )}
+                   <>
+    <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+      Admin
+    </div>
+    <Link href="/admin" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors flex items-center gap-2 ${isActive("/admin") && !isActive("/admin/tasks") ? "bg-orange-500/20 text-orange-600 dark:text-orange-400 font-medium" : "text-orange-600 dark:text-orange-400 hover:bg-orange-500/10"}`}>
+      <Shield className="size-4" />
+      Dashboard
+    </Link>
+    <Link href="/admin/tasks" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors flex items-center gap-2 ${isActive("/admin/tasks") ? "bg-orange-500/20 text-orange-600 dark:text-orange-400 font-medium" : "text-orange-600 dark:text-orange-400 hover:bg-orange-500/10"}`}>
+      <CheckSquare className="size-4" />
+      Task Board
+    </Link>
+  </>
+)}
                 {user && (
                   <div className="flex items-center gap-3 px-4 py-2 border-t mt-4 pt-6">
                     <ReportButton />
