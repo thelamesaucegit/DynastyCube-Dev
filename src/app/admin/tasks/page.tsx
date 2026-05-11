@@ -22,7 +22,7 @@ import {
 import {
   CheckSquare, Plus, GripVertical, Link as LinkIcon, Calendar, 
   UserPlus, Hand, Copy, Trash2, Clock, CheckCircle2, Circle,
-  Tag, X, ChevronDown, ChevronUp, AlertCircle
+  Tag, X, ChevronDown, ChevronUp, AlertCircle, Pencil
 } from "lucide-react";
 
 // Initialize standard Supabase client for fetching admin list
@@ -59,6 +59,11 @@ export default function AdminTaskBoard() {
   const [newTaskTag, setNewTaskTag] = useState("Feature");
   const [newTaskDeadline, setNewTaskDeadline] = useState("");
   const [newSubtasks, setNewSubtasks] = useState<string[]>([""]);
+
+   // Edit Task Form State
+  const [editTaskData, setEditTaskData] = useState<AdminTask | null>(null);
+  const [editSubtasks, setEditSubtasks] = useState<{id?: string, title: string, is_completed: boolean}[]>([]);
+
 
   useEffect(() => {
     loadTasks();
@@ -105,17 +110,40 @@ export default function AdminTaskBoard() {
     });
     
     setIsCreateModalOpen(false);
-    resetForm();
+    resetCreateForm();
     loadTasks();
   };
 
-  const resetForm = () => {
+  const resetCreateForm = () => {
     setNewTaskTitle("");
     setNewTaskLink("");
     setNewTaskTag("Feature");
     setNewTaskDeadline("");
     setNewSubtasks([""]);
   };
+
+  const openEditModal = (task: AdminTask) => {
+    setEditTaskData({ ...task });
+    setEditSubtasks(task.subtasks ? task.subtasks.map(st => ({ id: st.id, title: st.title, is_completed: st.is_completed })) : []);
+  };
+
+  const handleUpdateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editTaskData || !editTaskData.title.trim()) return;
+
+    const validSubtasks = editSubtasks.filter(st => st.title.trim() !== "");
+    await updateAdminTask(editTaskData.id, {
+      title: editTaskData.title,
+      reference_link: editTaskData.reference_link,
+      tag: editTaskData.tag,
+      deadline: editTaskData.deadline,
+      subtasks: validSubtasks
+    });
+
+    setEditTaskData(null);
+    loadTasks();
+  };
+
 
   // --- Drag and Drop Logic ---
   const handleDragStart = (e: React.DragEvent, id: string) => {
@@ -329,6 +357,14 @@ export default function AdminTaskBoard() {
                     {/* Action Buttons */}
                     <div className="flex items-center gap-1 mt-2">
                       <button 
+                        title="Edit Task"
+                        onClick={() => openEditModal(task)}
+                        className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary rounded transition"
+                      >
+                        <Pencil className="size-4" />
+                      </button>
+                    <div className="flex items-center gap-1 mt-2">
+                      <button 
                         title="Duplicate Task"
                         onClick={async () => { await duplicateTask(task.id); loadTasks(); }}
                         className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary rounded transition"
@@ -429,7 +465,71 @@ export default function AdminTaskBoard() {
           </div>
         </div>
       )}
+{/* EDIT MODAL */}
+      {editTaskData && (
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border shadow-xl rounded-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-4 border-b flex justify-between items-center bg-muted/30">
+              <h2 className="text-lg font-bold">Edit Task</h2>
+              <button onClick={() => setEditTaskData(null)} className="text-muted-foreground hover:text-foreground">
+                <X className="size-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleUpdateTask} className="p-4 overflow-y-auto flex-1 space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Title *</label>
+                <input required type="text" value={editTaskData.title} onChange={e => setEditTaskData({...editTaskData, title: e.target.value})} className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Tag</label>
+                  <select value={editTaskData.tag || "Maintenance"} onChange={e => setEditTaskData({...editTaskData, tag: e.target.value})} className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                    {Object.keys(TAG_COLORS).map(tag => <option key={tag} value={tag}>{tag}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Deadline (Optional)</label>
+                  <input type="date" value={editTaskData.deadline ? editTaskData.deadline.split('T')[0] : ""} onChange={e => setEditTaskData({...editTaskData, deadline: e.target.value})} className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                </div>
+              </div>
 
+              <div>
+                <label className="block text-sm font-medium mb-1">Reference URL (Optional)</label>
+                <input type="url" value={editTaskData.reference_link || ""} onChange={e => setEditTaskData({...editTaskData, reference_link: e.target.value})} className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Subtasks (Checklist)</label>
+                <div className="space-y-2">
+                  {editSubtasks.map((st, i) => (
+                    <div key={i} className="flex gap-2">
+                      <input type="text" value={st.title} onChange={e => {
+                        const newArr = [...editSubtasks];
+                        newArr[i].title = e.target.value;
+                        setEditSubtasks(newArr);
+                      }} className="flex-1 rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+                      
+                      <button type="button" onClick={() => setEditSubtasks(editSubtasks.filter((_, idx) => idx !== i))} className="p-1.5 text-muted-foreground hover:text-destructive">
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => setEditSubtasks([...editSubtasks, { title: "", is_completed: false }])} className="text-sm text-primary hover:underline flex items-center gap-1 mt-2">
+                    <Plus className="size-3" /> Add Subtask
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t mt-6 flex justify-end gap-2">
+                <button type="button" onClick={() => setEditTaskData(null)} className="px-4 py-2 rounded-md hover:bg-secondary text-sm font-medium">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90">Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {/* ASSIGN MODAL */}
       {assignModalData.isOpen && (
         <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
