@@ -239,7 +239,7 @@ export async function editAdminTask(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     await requireAdmin();
-    const supabase = await createClient();
+    const supabase = await createServiceRoleClient();
 
     // 1. Update the parent task fields
     const { error: updateError } = await supabase
