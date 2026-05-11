@@ -2,7 +2,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { AdminRoute } from "@/app/components/admin/AdminRoute";
 import { useAuth } from "@/contexts/AuthContext";
 import { createClient } from "@supabase/supabase-js";
@@ -16,13 +16,14 @@ import {
   requestTaskOwnership,
   duplicateTask,
   reorderTasks,
+  updateAdminTask,
   type AdminTask,
 } from "@/app/actions/adminTaskActions";
 
 import {
-  CheckSquare, Plus, GripVertical, Link as LinkIcon, Calendar, 
+  CheckSquare, Plus, GripVertical, Link as LinkIcon, 
   UserPlus, Hand, Copy, Trash2, Clock, CheckCircle2, Circle,
-  Tag, X, ChevronDown, ChevronUp, AlertCircle, Pencil
+  X, AlertTriangle, Pencil
 } from "lucide-react";
 
 // Initialize standard Supabase client for fetching admin list
@@ -53,17 +54,16 @@ export default function AdminTaskBoard() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [assignModalData, setAssignModalData] = useState<{isOpen: boolean, taskId: string, taskTitle: string}>({ isOpen: false, taskId: "", taskTitle: "" });
   
-  // New Task Form
+  // New Task Form State
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskLink, setNewTaskLink] = useState("");
   const [newTaskTag, setNewTaskTag] = useState("Feature");
   const [newTaskDeadline, setNewTaskDeadline] = useState("");
   const [newSubtasks, setNewSubtasks] = useState<string[]>([""]);
 
-   // Edit Task Form State
+  // Edit Task Form State
   const [editTaskData, setEditTaskData] = useState<AdminTask | null>(null);
   const [editSubtasks, setEditSubtasks] = useState<{id?: string, title: string, is_completed: boolean}[]>([]);
-
 
   useEffect(() => {
     loadTasks();
@@ -144,12 +144,10 @@ export default function AdminTaskBoard() {
     loadTasks();
   };
 
-
   // --- Drag and Drop Logic ---
   const handleDragStart = (e: React.DragEvent, id: string) => {
     setDraggedTaskId(id);
     e.dataTransfer.effectAllowed = "move";
-    // Slight delay to allow UI to render dragged image before changing opacity
     setTimeout(() => {
       const el = document.getElementById(`task-${id}`);
       if (el) el.style.opacity = "0.4";
@@ -181,14 +179,16 @@ export default function AdminTaskBoard() {
     }
     setDraggedTaskId(null);
 
-    // Save new order to DB
     const updates = tasks.map((t, index) => ({ id: t.id, order_index: index }));
     await reorderTasks(updates);
   };
 
   const isOverdue = (deadline: string | null) => {
     if (!deadline) return false;
-    return new Date(deadline) < new Date();
+    // Set time to end of day to avoid premature overdue marking based on timezones
+    const dlDate = new Date(deadline);
+    dlDate.setHours(23, 59, 59, 999);
+    return dlDate < new Date();
   };
 
   return (
@@ -246,7 +246,7 @@ export default function AdminTaskBoard() {
               <div
                 key={task.id}
                 id={`task-${task.id}`}
-                draggable={filter === "active"} // Only allow dragging in main view
+                draggable={filter === "active"}
                 onDragStart={(e) => handleDragStart(e, task.id)}
                 onDragOver={(e) => handleDragOver(e, task.id)}
                 onDragEnd={handleDragEnd}
@@ -296,7 +296,7 @@ export default function AdminTaskBoard() {
                             : 'bg-secondary text-muted-foreground border-border'
                         }`}>
                           <Clock className="size-3" />
-                          {new Date(task.deadline).toLocaleDateString()}
+                          {new Date(task.deadline).toLocaleDateString(undefined, { timeZone: 'UTC' })}
                         </span>
                       )}
                     </div>
@@ -340,7 +340,6 @@ export default function AdminTaskBoard() {
                         />
                         <span className="truncate max-w-[80px]">{task.claimed_by_user.display_name.split(' ')[0]}</span>
                         
-                        {/* Custom Tooltip */}
                         <div className="absolute bottom-full right-0 mb-2 w-max px-3 py-1.5 bg-foreground text-background text-xs rounded shadow-lg opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none z-10">
                           Claimed by {task.claimed_by_user.display_name}
                         </div>
@@ -363,7 +362,6 @@ export default function AdminTaskBoard() {
                       >
                         <Pencil className="size-4" />
                       </button>
-                    <div className="flex items-center gap-1 mt-2">
                       <button 
                         title="Duplicate Task"
                         onClick={async () => { await duplicateTask(task.id); loadTasks(); }}
@@ -465,7 +463,8 @@ export default function AdminTaskBoard() {
           </div>
         </div>
       )}
-{/* EDIT MODAL */}
+
+      {/* EDIT MODAL */}
       {editTaskData && (
         <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-card border border-border shadow-xl rounded-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
@@ -530,6 +529,7 @@ export default function AdminTaskBoard() {
           </div>
         </div>
       )}
+
       {/* ASSIGN MODAL */}
       {assignModalData.isOpen && (
         <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
@@ -541,7 +541,7 @@ export default function AdminTaskBoard() {
               </button>
             </div>
             <div className="p-4 space-y-2">
-              <p className="text-sm text-muted-foreground mb-4">Select an admin to assign to <strong>&quot;{assignModalData.taskTitle}&quot;</strong>:</p>
+              <p className="text-sm text-muted-foreground mb-4">Select an admin to assign to <strong>"{assignModalData.taskTitle}"</strong>:</p>
               {admins.map(admin => (
                 <button
                   key={admin.id}
@@ -560,7 +560,6 @@ export default function AdminTaskBoard() {
           </div>
         </div>
       )}
-
     </AdminRoute>
   );
 }
