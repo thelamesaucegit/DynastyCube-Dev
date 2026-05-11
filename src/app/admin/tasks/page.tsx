@@ -557,7 +557,7 @@ export default function AdminTaskBoard() {
               </button>
             </div>
             <div className="p-4 space-y-2">
-              <p className="text-sm text-muted-foreground mb-4">Select an admin to assign to <strong>"{assignModalData.taskTitle}"</strong>:</p>
+              <p className="text-sm text-muted-foreground mb-4">Select an admin to assign to <strong>&quot;{assignModalData.taskTitle}&quot;</strong>:</p>
               {admins.map(admin => (
                 <button
                   key={admin.id}
