@@ -227,7 +227,7 @@ export async function createAdminTask(data: {
   }
 }
 
-export async function updateAdminTask(
+export async function editAdminTask(
   taskId: string,
   updates: {
     title: string;
