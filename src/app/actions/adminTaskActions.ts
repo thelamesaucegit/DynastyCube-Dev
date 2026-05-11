@@ -227,6 +227,72 @@ export async function createAdminTask(data: {
   }
 }
 
+export async function editAdminTask(
+  taskId: string,
+  updates: {
+    title: string;
+    reference_link?: string;
+    tag?: string;
+    deadline?: string;
+    newSubtaskTitles?: string[];
+  }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const supabase = await createClient();
+
+    // 1. Update the parent task fields
+    const { error: updateError } = await supabase
+      .from('admin_tasks')
+      .update({
+        title: updates.title,
+        reference_link: updates.reference_link || null,
+        tag: updates.tag || null,
+        deadline: updates.deadline || null,
+      })
+      .eq('id', taskId);
+
+    if (updateError) throw updateError;
+
+    // 2. Insert any new subtasks
+    if (updates.newSubtaskTitles && updates.newSubtaskTitles.length > 0) {
+      // First, get the current max order_index so we append them to the end
+      const { data: existingSubtasks } = await supabase
+        .from('admin_subtasks')
+        .select('order_index')
+        .eq('task_id', taskId)
+        .order('order_index', { ascending: false })
+        .limit(1);
+        
+      let nextIndex = 0;
+      if (existingSubtasks && existingSubtasks.length > 0) {
+        nextIndex = existingSubtasks[0].order_index + 1;
+      }
+
+      const subtasksToInsert = updates.newSubtaskTitles.map((title, index) => ({
+        task_id: taskId,
+        title: title,
+        order_index: nextIndex + index,
+        is_completed: false
+      }));
+
+      const { error: subtaskError } = await supabase
+        .from('admin_subtasks')
+        .insert(subtasksToInsert);
+
+      if (subtaskError) throw subtaskError;
+    }
+
+    revalidatePath('/admin/tasks');
+    return { success: true };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("Error editing admin task:", errorMessage);
+    return { success: false, error: errorMessage };
+  }
+}
+
+
 export async function updateTaskStatus(taskId: string, status: 'active' | 'completed' | 'archived', taskTitle: string): Promise<{ success: boolean; error?: string }> {
   try {
     const { user, display_name } = await requireAdmin();
