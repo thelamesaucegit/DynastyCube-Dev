@@ -1,3 +1,4 @@
+
 // src/app/actions/autoDraftActions.ts
 
 "use server";
@@ -8,6 +9,7 @@ import { getTeamDraftPicks, addSkippedPick, type DraftPick } from "@/app/actions
 import { getTeamBalance } from "@/app/actions/cubucksActions";
 import { getDraftStatus } from "@/app/actions/draftOrderActions";
 import { getDuplicateCardIdSet } from "@/lib/draftCache";
+import { applyHatModifier } from "@/app/actions/hatActions"; // <-- Added Hat import
 
 // ============================================================================
 // TYPES
@@ -49,8 +51,10 @@ async function verifyTeamMembership(teamId: string): Promise<{ authorized: boole
     const supabase = await createServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) return { authorized: false, error: "You must be logged in to perform this action" };
+
     const { data: membership, error: membershipError } = await supabase.from("team_members").select("id").eq("team_id", teamId).eq("user_id", user.id).single();
     if (membershipError || !membership) return { authorized: false, userId: user.id, error: "You must be a member of this team" };
+
     return { authorized: true, userId: user.id };
 }
 
@@ -88,20 +92,27 @@ export async function toggleQueuePickVote(teamId: string, cardPoolId: string, dr
     try {
         const auth = await verifyTeamMembership(teamId);
         if (!auth.authorized || !auth.userId) return { success: false, pickExecuted: false, error: auth.error };
+
         const supabase = await createServerClient();
         const { data: queueEntry, error: fetchError } = await supabase.from("team_draft_queue").select("id, votes, position").eq("team_id", teamId).eq("card_pool_id", cardPoolId).single();
+        
         if (fetchError || !queueEntry) return { success: false, pickExecuted: false, error: "Queue entry not found" };
+
         let currentVotes: string[] = queueEntry.votes || [];
         const hasVoted = currentVotes.includes(auth.userId);
+
         if (hasVoted) {
             currentVotes = currentVotes.filter(id => id !== auth.userId);
         } else {
             currentVotes.push(auth.userId);
         }
+
         const { error: updateError } = await supabase.from("team_draft_queue").update({ votes: currentVotes }).eq("id", queueEntry.id);
         if (updateError) return { success: false, pickExecuted: false, error: "Failed to record vote" };
+
         const memberCount = await getTeamMemberCount(teamId);
         const threshold = calculateVoteThreshold(memberCount);
+
         if (currentVotes.length >= threshold && queueEntry.position === 1) {
             const { status: draftStatus } = await getDraftStatus(draftSessionId);
             if (draftStatus?.onTheClock?.teamId === teamId) {
@@ -120,23 +131,40 @@ async function executeConfirmedTeamPick(teamId: string, cardPoolId: string, draf
     const supabase = await createServerClient();
     const { cards: availableCards } = await getAvailableCardsForDraft("draft");
     const card = availableCards.find(c => c.id === cardPoolId);
+
     if (!card) return { success: false, error: "Card is no longer available to be drafted." };
+
     const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId);
+    const pickNumber = existingPicks.length + 1;
+
+    // --- HAT LOGIC INCORPORATED ---
+    let effectiveCost = card.cubucks_cost || 1;
+    if (pickNumber === 1) {
+        // If this is the very first pick of the season, apply the hat modifiers
+        effectiveCost = await applyHatModifier(teamId, effectiveCost);
+    }
+    // ------------------------------
+
     const { data, error } = await supabase.rpc("execute_atomic_draft_pick", {
         p_team_id: teamId, p_draft_session_id: draftSessionId, p_card_pool_id: card.id, p_card_id: card.card_id,
         p_card_name: card.card_name, p_card_set: card.card_set, p_card_type: card.card_type,
         p_rarity: card.rarity, p_colors: card.colors, p_image_url: card.image_url,
         p_oldest_image_url: card.oldest_image_url, p_mana_cost: card.mana_cost, p_cmc: card.cmc,
-        p_pick_number: existingPicks.length + 1, p_cost: card.cubucks_cost || 1,
+        p_pick_number: pickNumber, p_cost: effectiveCost,
         p_is_manual_pick: true, p_user_id: userId,
     }).single();
+
     if (error) { console.error("Atomic draft pick failed (manual):", error); return { success: false, error: error.message }; }
+
     const newPick = data as DraftPick;
     if (!newPick) return { success: false, error: "Draft pick could not be confirmed in the database." };
+
     await conditionallyCleanupDraftQueues(card.card_id);
+
     const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
     const channel = supabase.channel(`draft-updates-${draftSessionId}`);
     await channel.send({ type: 'broadcast', event: 'new_pick', payload: { ...newPick, team_name: teamData?.name || 'Unknown Team' }, });
+
     return { success: true, pick: newPick };
 }
 
@@ -162,10 +190,13 @@ export async function computeAutoDraftPick(
 
     const alreadyDraftedCardConcepts = new Set(teamPicks.map(p => p.card_id));
 
-    // CORE LOGIC CHANGE: Filter out excluded and non-affordable cards upfront
+    // Wait to apply hat modifier here since we are just checking affordability, we can safely 
+    // estimate using base affordability unless we want the algorithm to know the exact cost.
+    // For simplicity, the algorithm filters based on base affordability.
+
     const candidatePool = availableCards
       .filter(card => 
-        card.id && // Ensure card has a unique instance ID
+        card.id && 
         !excludedCardPoolIds.includes(card.id) &&
         !alreadyDraftedCardConcepts.has(card.card_id) &&
         (card.cubucks_cost || 0) <= balance
@@ -178,8 +209,10 @@ export async function computeAutoDraftPick(
     const LAND_ELO_MODIFIER = 0.8;
     const AFFINITY_BONUS_PER_PICK = 0.1;
     const ANTI_AFFINITY_PENALTY_PER_PICK = 0.05;
+
     const colorModifiers: Record<string, number> = { W: 1, U: 1, B: 1, R: 1, G: 1 };
     const allColors = ["W", "U", "B", "R", "G"];
+
     for (const pick of teamPicks) {
       const pickColors = new Set(pick.colors || []);
       if (pickColors.size === 0) continue;
@@ -187,6 +220,7 @@ export async function computeAutoDraftPick(
         if (pickColors.has(color)) { colorModifiers[color] += AFFINITY_BONUS_PER_PICK; } else { colorModifiers[color] -= ANTI_AFFINITY_PENALTY_PER_PICK; }
       }
     }
+
     for (const color of allColors) { colorModifiers[color] = Math.max(0.5, colorModifiers[color]); }
 
     const sortedCandidates = candidatePool
@@ -201,14 +235,12 @@ export async function computeAutoDraftPick(
     const bestPick = sortedCandidates[0] || null;
 
     return { recommendation: bestPick, algorithmDetails: null };
-
   } catch (error) {
     console.error("Error computing auto-draft pick:", error);
     return { recommendation: null, algorithmDetails: null, error: "Failed to compute auto-draft pick" };
   }
 }
 
-// Updated to pass the exclusion list through
 export async function getAutoDraftPreview(
   teamId: string,
   draftSessionId: string,
@@ -222,6 +254,7 @@ export async function getAutoDraftPreview(
     if (queueEntries && queueEntries.length > 0) {
       const { cards: availableCards } = await getAvailableCardsForDraft("draft", adminClient);
       const availableInstanceIds = new Set(availableCards.map(c => c.id));
+
       for (const entry of queueEntries) {
         if (entry.card_pool_id && availableInstanceIds.has(entry.card_pool_id) && !excludedCardPoolIds.includes(entry.card_pool_id)) {
           const card = availableCards.find(c => c.id === entry.card_pool_id) || null;
@@ -261,7 +294,6 @@ export async function executeAutoDraft(
   try {
     const supabase = adminClient ?? await createServerClient();
     const { status: draftStatus, error: statusError } = await getDraftStatus(draftSessionId, supabase);
-
     if (statusError || !draftStatus || draftStatus.onTheClock.teamId !== teamId) {
       return { success: false, error: statusError || "Team not on the clock." };
     }
@@ -274,17 +306,22 @@ export async function executeAutoDraft(
       const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId, supabase);
       const pickNumber = existingPicks.length + 1;
       await addSkippedPick(teamId, pickNumber, draftSessionId, supabase);
-      // You can add a notification for the skipped pick here if desired
       return { success: true, source: "skipped", pick: { cardId: "skipped-pick", cardName: "SKIPPED", cost: 0 }};
     }
     
     const { team: teamBalance } = await getTeamBalance(teamId, supabase);
     const balance = teamBalance?.cubucks_balance ?? 0;
-    const effectiveCost = (preview.source === "manual_queue" && balance <= 0) ? 0 : (cardToAttempt.cubucks_cost || 1);
-
     const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId, supabase);
     const pickNumber = existingPicks.length + 1;
-    
+
+    // --- HAT LOGIC INCORPORATED ---
+    let baseCost = cardToAttempt.cubucks_cost || 1;
+    if (pickNumber === 1) {
+        baseCost = await applyHatModifier(teamId, baseCost);
+    }
+    const effectiveCost = (preview.source === "manual_queue" && balance <= 0) ? 0 : baseCost;
+    // ------------------------------
+
     const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
         p_team_id: teamId, p_draft_session_id: draftSessionId, p_card_pool_id: cardToAttempt.id,
         p_card_id: cardToAttempt.card_id, p_card_name: cardToAttempt.card_name,
@@ -309,6 +346,7 @@ export async function executeAutoDraft(
     if (!newPick) return { success: false, error: "Draft pick could not be confirmed in the database." };
 
     console.log(`[AutoDraft] Successfully drafted "${cardToAttempt.card_name}" for team ${teamId}.`);
+
     const pickSource = preview.source === "manual_queue" ? "manual_queue" : "algorithm";
     if (newPick.id) {
         await supabase.from("team_draft_picks").update({ pick_source: pickSource }).eq("id", newPick.id);
@@ -320,7 +358,6 @@ export async function executeAutoDraft(
       pick: { cardId: cardToAttempt.card_id, cardName: cardToAttempt.card_name, cost: effectiveCost },
       source: preview.source,
     };
-
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred.";
     console.error("Unhandled error in executeAutoDraft:", errorMessage);
@@ -333,22 +370,35 @@ export async function captainForcePick(teamId: string, cardPoolId: string, draft
     const supabase = await createServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) return { success: false, error: "Not authenticated" };
+
     const { data: roleData } = await supabase.from("team_members").select("role").eq("team_id", teamId).eq("user_id", user.id).maybeSingle();
     if (!roleData || !["captain", "pilot"].includes(roleData.role ?? "")) {
       return { success: false, error: "Only Captains and Pilots can force a pick." };
     }
+
     const { status: draftStatus } = await getDraftStatus(draftSessionId);
     if (draftStatus?.onTheClock?.teamId !== teamId) {
       return { success: false, error: "It is not this team's turn to pick." };
     }
+
     const { cards: availableCards } = await getAvailableCardsForDraft("draft");
     const card = availableCards.find(c => c.id === cardPoolId);
     if (!card) return { success: false, error: "Card is no longer available." };
+
     const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId);
     const pickNumber = existingPicks.length + 1;
+
     const { team: teamBalance } = await getTeamBalance(teamId);
     const balance = teamBalance?.cubucks_balance ?? 0;
-    const effectiveCost = balance >= (card.cubucks_cost || 1) ? card.cubucks_cost || 1 : 0;
+
+    // --- HAT LOGIC INCORPORATED ---
+    let baseCost = card.cubucks_cost || 1;
+    if (pickNumber === 1) {
+        baseCost = await applyHatModifier(teamId, baseCost);
+    }
+    const effectiveCost = balance >= baseCost ? baseCost : 0;
+    // ------------------------------
+
     const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
         p_team_id: teamId, p_draft_session_id: draftSessionId, p_card_pool_id: card.id,
         p_card_id: card.card_id, p_card_name: card.card_name, p_card_set: card.card_set,
@@ -357,18 +407,23 @@ export async function captainForcePick(teamId: string, cardPoolId: string, draft
         p_mana_cost: card.mana_cost, p_cmc: card.cmc, p_pick_number: pickNumber,
         p_cost: effectiveCost, p_is_manual_pick: true, p_user_id: user.id,
     }).single();
+
     if (rpcError) return { success: false, error: rpcError.message };
+
     const newPick = data as DraftPick;
     if (!newPick) return { success: false, error: "Pick could not be confirmed." };
+
     if (newPick.id) {
       await supabase.from("team_draft_picks").update({ pick_source: "captain_force" }).eq("id", newPick.id);
     }
     await conditionallyCleanupDraftQueues(card.card_id);
+
     const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
     supabase.channel(`draft-updates-${draftSessionId}`).send({
       type: 'broadcast', event: 'new_pick',
       payload: { ...newPick, team_name: teamData?.name || 'Unknown' },
     });
+
     return { success: true };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : "Unexpected error" };
@@ -379,15 +434,21 @@ export async function getTeamDraftQueue(teamId: string, draftSessionId: string, 
     try {
         const supabase = await createServerClient();
         const { data: manualEntries, error: queueError } = await supabase.from("team_draft_queue").select("id, card_pool_id, card_id, card_name, position, pinned, votes").eq("team_id", teamId).order("position", { ascending: true });
+        
         const memberCount = await getTeamMemberCount(teamId);
         const voteThreshold = calculateVoteThreshold(memberCount);
+
         if (queueError) { console.error("Error fetching draft queue:", queueError); return { queue: [], error: queueError.message }; }
+
         const { cards: availableCards, error: availableError } = await getAvailableCardsForDraft("draft");
         if (availableError) { console.error("Error fetching available cards for queue:", availableError); return { queue: [], error: availableError }; }
+
         const availableMap = new Map<string, CardData>();
         for (const card of availableCards) { if (card.id) { availableMap.set(card.id, card); } }
+
         const queue: QueueEntry[] = [];
         const usedInstanceIds = new Set<string>();
+
         for (const entry of manualEntries || []) {
             if (entry.card_pool_id) {
                 const cardData = availableMap.get(entry.card_pool_id);
@@ -397,10 +458,13 @@ export async function getTeamDraftQueue(teamId: string, draftSessionId: string, 
                 }
             }
         }
+
         if (queue.length < limit) {
             const { picks: teamPicks } = await getTeamDraftPicks(teamId, draftSessionId);
             const draftedColorCounts = countDraftedColors(teamPicks);
+
             const remainingCards = availableCards.filter((c) => c.id && !usedInstanceIds.has(c.id) && c.cubecobra_elo != null).map((card) => { let modifier = 1; if (card.colors && card.colors.length > 0) { modifier = Math.max(...card.colors.map((c) => 1 + 0.01 * (draftedColorCounts[c] || 0))); } return { card, effectiveElo: (card.cubecobra_elo || 0) * modifier }; }).sort((a, b) => b.effectiveElo - a.effectiveElo);
+
             for (const { card } of remainingCards) {
                 if (queue.length >= limit) break;
                 queue.push({ cardPoolId: card.id || "", cardId: card.card_id, cardName: card.card_name, position: queue.length + 1, pinned: false, source: "algorithm", cardSet: card.card_set, cardType: card.card_type, rarity: card.rarity, colors: card.colors, imageUrl: card.image_url ?? undefined, oldest_image_url: card.oldest_image_url ?? undefined, manaCost: card.mana_cost ?? undefined, cmc: card.cmc ?? undefined, cubucksCost: card.cubucks_cost ?? undefined, cubecobraElo: card.cubecobra_elo ?? undefined, });
@@ -417,12 +481,16 @@ export async function setTeamDraftQueue(teamId: string, entries: Array<{ cardPoo
     try {
         const auth = await verifyTeamMembership(teamId);
         if (!auth.authorized || !auth.userId) return { success: false, error: auth.error };
+
         const supabase = await createServerClient();
         const { data: existingQueue } = await supabase.from("team_draft_queue").select("card_pool_id, votes").eq("team_id", teamId);
+        
         const voteMap = new Map<string, string[]>();
         existingQueue?.forEach(e => voteMap.set(e.card_pool_id, e.votes || []));
+
         const { error: deleteError } = await supabase.from("team_draft_queue").delete().eq("team_id", teamId);
         if (deleteError) { console.error("Error clearing draft queue:", deleteError); return { success: false, error: deleteError.message }; }
+
         if (entries.length > 0) {
             const rows = entries.map((entry, index) => ({ team_id: teamId, card_pool_id: entry.cardPoolId, card_id: entry.cardId, card_name: entry.cardName, position: index + 1, pinned: entry.pinned || false, added_by: auth.userId, votes: voteMap.get(entry.cardPoolId) || [], }));
             const { error: insertError } = await supabase.from("team_draft_queue").insert(rows);
@@ -436,12 +504,16 @@ export async function pinCardToQueue(teamId: string, cardPoolId: string, cardId:
     try {
         const auth = await verifyTeamMembership(teamId);
         if (!auth.authorized || !auth.userId) return { success: false, error: auth.error };
+
         const supabase = await createServerClient();
         await supabase.from("team_draft_queue").delete().eq("team_id", teamId).eq("card_pool_id", cardPoolId);
+
         const { data: existingEntries } = await supabase.from("team_draft_queue").select("id, position").eq("team_id", teamId).gte("position", position).order("position", { ascending: false });
         for (const entry of existingEntries || []) { await supabase.from("team_draft_queue").update({ position: entry.position + 1 }).eq("id", entry.id); }
+
         const { error: insertError } = await supabase.from("team_draft_queue").insert({ team_id: teamId, card_pool_id: cardPoolId, card_id: cardId, card_name: cardName, position, pinned: true, added_by: auth.userId, });
         if (insertError) { console.error("Error pinning card to queue:", insertError); return { success: false, error: insertError.message }; }
+
         return { success: true };
     } catch (error) { console.error("Error pinning card to queue:", error); return { success: false, error: "Failed to pin card to queue" }; }
 }
@@ -450,13 +522,17 @@ export async function removeFromQueue(teamId: string, cardPoolId: string): Promi
     try {
         const auth = await verifyTeamMembership(teamId);
         if (!auth.authorized) return { success: false, error: auth.error };
+
         const supabase = await createServerClient();
         const { data: entry } = await supabase.from("team_draft_queue").select("position").eq("team_id", teamId).eq("card_pool_id", cardPoolId).single();
         if (!entry) return { success: true };
+
         const { error: deleteError } = await supabase.from("team_draft_queue").delete().eq("team_id", teamId).eq("card_pool_id", cardPoolId);
         if (deleteError) return { success: false, error: deleteError.message };
+
         const { data: remaining } = await supabase.from("team_draft_queue").select("id, position").eq("team_id", teamId).gt("position", entry.position).order("position", { ascending: true });
         for (const item of remaining || []) { await supabase.from("team_draft_queue").update({ position: item.position - 1 }).eq("id", item.id); }
+
         return { success: true };
     } catch (error) { console.error("Error removing from queue:", error); return { success: false, error: "Failed to remove from queue" }; }
 }
@@ -465,9 +541,11 @@ export async function clearTeamDraftQueue(teamId: string): Promise<{ success: bo
     try {
         const auth = await verifyTeamMembership(teamId);
         if (!auth.authorized) return { success: false, error: auth.error };
+
         const supabase = await createServerClient();
         const { error } = await supabase.from("team_draft_queue").delete().eq("team_id", teamId);
         if (error) return { success: false, error: error.message };
+
         return { success: true };
     } catch (error) { console.error("Error clearing draft queue:", error); return { success: false, error: "Failed to clear draft queue" }; }
 }
@@ -476,17 +554,20 @@ export async function conditionallyCleanupDraftQueues(draftedCardId: string, adm
   try {
     const supabase = adminClient ?? await createServerClient();
     const duplicateSet = await getDuplicateCardIdSet();
+
     if (!duplicateSet.has(draftedCardId)) {
       const { error } = await supabase.from("team_draft_queue").delete().eq("card_id", draftedCardId);
       if (error) return { success: false, cleaned: false, error: error.message };
       return { success: true, cleaned: true };
     }
+
     const { cards: availableCards } = await getAvailableCardsForDraft("draft");
     if (!availableCards.some(card => card.card_id === draftedCardId)) {
       const { error } = await supabase.from("team_draft_queue").delete().eq("card_id", draftedCardId);
       if (error) return { success: false, cleaned: false, error: error.message };
       return { success: true, cleaned: true };
     }
+
     return { success: true, cleaned: false };
   } catch (error) {
     console.error("Unexpected error in conditional queue cleanup:", error);
