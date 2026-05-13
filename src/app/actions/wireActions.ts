@@ -1,5 +1,4 @@
-//src/app/actions/wireActions.ts
-
+// src/app/actions/wireActions.ts
 "use server";
 
 import { createServerClient, createAdminClient } from "@/lib/supabase";
@@ -18,19 +17,14 @@ export interface WireBid {
     placed_at: string;
 }
 
-// Extends CardData to include the user's team's specific bid for UI display
 export interface WireCard extends CardData {
     currentUserTeamBid?: number;
 }
-
 
 // ============================================
 // PUBLIC-FACING ACTIONS (for UI)
 // ============================================
 
-/**
- * Fetches all non-hidden cards on The Wire and includes the current user's team's bid amount.
- */
 export async function getWireCards(): Promise<{ cards: WireCard[]; error?: string }> {
     const supabase = await createServerClient();
 
@@ -47,7 +41,6 @@ export async function getWireCards(): Promise<{ cards: WireCard[]; error?: strin
             if (teamMember) userTeamId = teamMember.team_id;
         }
         
-        // Fetch ALL non-hidden cards currently on the wire
         const { data: wireCardsData, error: cardsError } = await supabase
             .from('card_pools')
             .select('*')
@@ -60,10 +53,9 @@ export async function getWireCards(): Promise<{ cards: WireCard[]; error?: strin
         }
 
         if (!userTeamId || !seasonId || !wireCardsData || wireCardsData.length === 0) {
-            return { cards: wireCardsData || [] };
+            return { cards: (wireCardsData as WireCard[]) || [] };
         }
 
-        // Fetch the current team's bids for this season
         const cardIds = wireCardsData.map(c => c.id);
         const { data: teamBids } = await supabase
             .from('wire_bids')
@@ -77,7 +69,7 @@ export async function getWireCards(): Promise<{ cards: WireCard[]; error?: strin
         const cardsWithBids: WireCard[] = wireCardsData.map(card => ({
             ...card,
             currentUserTeamBid: bidMap.get(card.id),
-        }));
+        })) as WireCard[];
 
         return { cards: cardsWithBids };
     } catch (error: unknown) {
@@ -87,11 +79,9 @@ export async function getWireCards(): Promise<{ cards: WireCard[]; error?: strin
     }
 }
 
-/**
- * Places or updates a team's bid on a card on The Wire.
- */
 export async function placeWireBid(cardPoolId: string, bidAmount: number): Promise<{ success: boolean; error?: string }> {
     const supabase = await createServerClient();
+
     try {
         if (bidAmount < 1) {
             return { success: false, error: "Bid must be at least 1 Cubuck." };
@@ -100,7 +90,7 @@ export async function placeWireBid(cardPoolId: string, bidAmount: number): Promi
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return { success: false, error: "Authentication required." };
         
-          const { data: activeSeason } = await supabase
+        const { data: activeSeason } = await supabase
             .from('seasons')
             .select('id')
             .eq('is_active', true)
@@ -113,7 +103,6 @@ export async function placeWireBid(cardPoolId: string, bidAmount: number): Promi
         if (!teamMember) return { success: false, error: "You are not a member of any team." };
         const teamId = teamMember.team_id;
 
-        // Check card ownership history
         const { data: card } = await supabase.from('card_pools').select('card_id').eq('id', cardPoolId).single();
         if (!card) return { success: false, error: "Card not found." };
         
@@ -134,7 +123,6 @@ export async function placeWireBid(cardPoolId: string, bidAmount: number): Promi
             return { success: false, error: "Your team has previously cut this card this season and cannot place a bid on it." };
         }
 
-        // Upsert the bid
         const { error: bidError } = await supabase.from('wire_bids').upsert({
             card_pool_id: cardPoolId,
             team_id: teamId,
@@ -149,24 +137,17 @@ export async function placeWireBid(cardPoolId: string, bidAmount: number): Promi
         }
 
         return { success: true };
-    } catch (error) {
-        const message = error instanceof Error ? error.message : "An unexpected error occurred.";
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
         console.error("Error in placeWireBid:", message);
         return { success: false, error: message };
     }
 }
 
-
 // ============================================
 // CRON JOB ACTION (for automated processing)
 // ============================================
 
-/**
- * Processes all outstanding wire bids. Intended to be called by a scheduled cron job.
- */
-/**
- * Processes all outstanding wire bids. Intended to be called by a scheduled cron job.
- */
 export async function processWireBids(): Promise<{ success: boolean; processedBids: number; movedToFreeAgency: number; error?: string }> {
     console.log("Starting Wire bid processing...");
     const supabase = createAdminClient(); 
@@ -186,7 +167,20 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
 
         const seasonId = activeSeason.id;
 
-        // 1. Get all cards on the wire for more than 48 hours (Added card_name for notifications)
+        // Fetch the draft session for the current season (so we can log the picks)
+        const { data: draftSession } = await supabase
+            .from('draft_sessions')
+            .select('id')
+            .eq('season_id', seasonId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        const draftSessionId = draftSession?.id;
+        if (!draftSessionId) {
+            return { success: false, processedBids: 0, movedToFreeAgency: 0, error: "No draft session found for the active season. Required for pick logging." };
+        }
+
         const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
         const { data: processableCards, error: cardError } = await supabase
             .from('card_pools')
@@ -195,6 +189,7 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
             .lte('on_wire_since', twoDaysAgo);
 
         if (cardError) throw new Error(`Failed to fetch processable cards: ${cardError.message}`);
+        
         if (!processableCards || processableCards.length === 0) {
             console.log("No cards on The Wire are ready for processing.");
             return { success: true, processedBids: 0, movedToFreeAgency: 0 };
@@ -203,8 +198,6 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
         console.log(`Found ${processableCards.length} cards to process.`);
         const cardIds = processableCards.map(c => c.id);
 
-        // 2. Fetch required context for processing and notifications
-        // STRICT TYPING APPLIED HERE to prevent "Unexpected any"
         const { data: allBidsData, error: bidsError } = await supabase.from('wire_bids').select('*').in('card_pool_id', cardIds);
         if (bidsError) throw new Error(`Failed to fetch bids: ${bidsError.message}`);
         const allBids = (allBidsData as WireBid[]) || [];
@@ -213,7 +206,6 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
         if (orderError) throw new Error(`Failed to fetch draft order for tie-breakers: ${orderError.message}`);
         const tieBreakerMap = new Map(draftOrder?.map(o => [o.team_id, o.lottery_number]) || []);
 
-        // Pre-fetch teams and members for notifications
         const { data: teamsData } = await supabase.from('teams').select('id, name, emoji');
         const teamMap = new Map(teamsData?.map(t => [t.id, t]) || []);
 
@@ -224,14 +216,11 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
             teamMembersMap.get(tm.team_id)!.push(tm.user_id);
         });
 
-        // Array to collect all notifications for bulk insertion
         const notificationsToInsert: { user_id: string; notification_type: string; message: string; }[] = [];
 
-        // 3. Loop through each card and process its bids
         for (const card of processableCards) {
             const bidsForCard: WireBid[] = allBids.filter(b => b.card_pool_id === card.id);
 
-            // Case A: No bids on the card
             if (bidsForCard.length === 0) {
                 await supabase.from('card_pools').update({ pool_name: 'free', on_wire_since: null }).eq('id', card.id);
                 movedToFreeAgency++;
@@ -239,7 +228,6 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
                 continue;
             }
 
-            // Case B: Bids exist, find the winner
             let highestBid = 0;
             bidsForCard.forEach(b => { if (b.bid_amount > highestBid) highestBid = b.bid_amount; });
 
@@ -249,7 +237,6 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
             if (topBidders.length === 1) {
                 winner = topBidders[0];
             } else {
-                // STRICT TYPING APPLIED TO REDUCE ARGUMENTS
                 winner = topBidders.reduce((best: WireBid, current: WireBid): WireBid => {
                     const bestRank = tieBreakerMap.get(best.team_id) ?? 999;
                     const currentRank = tieBreakerMap.get(current.team_id) ?? 999;
@@ -258,12 +245,11 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
             }
             console.log(`Card ${card.id}: Team ${winner.team_id} won with a bid of ${winner.bid_amount}.`);
 
-            // 4. Process the winning transaction
             const { error: rpcError } = await supabase.rpc('process_wire_win', {
                 p_team_id: winner.team_id,
                 p_card_pool_id: card.id,
                 p_winning_bid: winner.bid_amount,
-                p_season_id: seasonId 
+                p_draft_session_id: draftSessionId 
             });
 
             if (rpcError) {
@@ -271,7 +257,6 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
             } else {
                 processedBids++;
 
-                // Queue Winner Notifications
                 const winnerUsers = teamMembersMap.get(winner.team_id) || [];
                 winnerUsers.forEach(userId => {
                     notificationsToInsert.push({
@@ -281,7 +266,6 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
                     });
                 });
 
-                // Queue Loser Notifications
                 const losingBids = bidsForCard.filter(b => b.team_id !== winner.team_id);
                 const losingTeams = [...new Set(losingBids.map(b => b.team_id))];
                 const winnerTeamInfo = teamMap.get(winner.team_id);
@@ -300,7 +284,6 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
             }
         }
 
-        // 5. Clean up processed bids and dispatch notifications
         if (cardIds.length > 0) {
             await supabase.from('wire_bids').delete().in('card_pool_id', cardIds);
         }
