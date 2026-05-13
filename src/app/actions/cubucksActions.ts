@@ -686,15 +686,30 @@ export async function refundDraftPick(
   cardName: string
 ): Promise<{ success: boolean; refundAmount?: number; error?: string }> {
   try {
+    console.log(`[Cut/Refund] Starting process for pick ID: ${draftPickId}, card: ${cardName}`);
     const supabase = await createServerClient();
 
     // Verify user is authenticated and is a member of the team
     const authCheck = await verifyTeamMembership(teamId);
     if (!authCheck.authorized) {
+      console.error("[Cut/Refund] Auth check failed:", authCheck.error);
       return { success: false, error: authCheck.error };
     }
 
-    // Find the original draft transaction to get the cost
+    // 1. Fetch the draft pick to get the card_pool_id BEFORE we delete it
+    console.log(`[Cut/Refund] Fetching original draft pick details...`);
+    const { data: draftPick, error: draftPickError } = await supabase
+      .from("team_draft_picks")
+      .select("card_pool_id")
+      .eq("id", draftPickId)
+      .single();
+
+    if (draftPickError || !draftPick) {
+      console.error("[Cut/Refund] Failed to find draft pick to refund:", draftPickError);
+      return { success: false, error: "Draft pick not found in database." };
+    }
+
+    // 2. Find the original transaction to get the accurate cost
     const { data: originalTransaction, error: txError } = await supabase
       .from("cubucks_transactions")
       .select("*")
@@ -705,58 +720,42 @@ export async function refundDraftPick(
       .limit(1)
       .single();
 
-    if (txError || !originalTransaction) {
-      console.error("Error finding original transaction:", txError);
-      // If we can't find the transaction, try to get cost from card pool
-      const { data: cardPool } = await supabase
-        .from("card_pools")
-        .select("cubucks_cost")
-        .eq("card_id", cardId)
-        .single();
+    // The original transaction amount is negative (spent), so we refund the absolute value. 
+    // Default to 1 if not found.
+    const refundAmount = (!txError && originalTransaction) ? Math.abs(originalTransaction.amount) : 1;
+    console.log(`[Cut/Refund] Calculated refund amount: ${refundAmount}`);
 
-      // Default to 1 if we can't find the cost
-      const refundAmount = cardPool?.cubucks_cost || 1;
-
-      // Proceed with refund using the card pool cost
-      return await processRefund(supabase, teamId, draftPickId, cardId, cardName, refundAmount, authCheck.userId!);
-    }
-
-    // The original transaction amount is negative (spent), so we refund the absolute value
-    const refundAmount = Math.abs(originalTransaction.amount);
-
-    return await processRefund(supabase, teamId, draftPickId, cardId, cardName, refundAmount, authCheck.userId!);
-  } catch (error) {
-    console.error("Unexpected error refunding draft pick:", error);
-    return { success: false, error: String(error) };
+    return await processRefund(
+        supabase, 
+        teamId, 
+        draftPickId, 
+        draftPick.card_pool_id, 
+        cardId, 
+        cardName, 
+        refundAmount, 
+        authCheck.userId!
+    );
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[Cut/Refund] Unexpected error:", message);
+    return { success: false, error: message };
   }
 }
 
 // Helper function to process the refund
 async function processRefund(
-  supabase: Awaited<ReturnType<typeof createServerClient>>,
+  supabase: SupabaseClient,
   teamId: string,
   draftPickId: string,
+  cardPoolId: string | null,
   cardId: string,
   cardName: string,
   refundAmount: number,
   userId: string
 ): Promise<{ success: boolean; refundAmount?: number; error?: string }> {
-  
-  // 1. FETCH DRAFT PICK TO GET CARD POOL ID
-  const { data: pickData, error: pickError } = await supabase
-    .from("team_draft_picks")
-    .select("card_pool_id")
-    .eq("id", draftPickId)
-    .single();
+  console.log("[Cut/Refund] Updating team balance...");
 
-  if (pickError || !pickData) {
-    console.error("Could not find draft pick to refund:", pickError);
-    return { success: false, error: "Failed to find draft pick details" };
-  }
-
-  const poolId = pickData.card_pool_id;
-
-  // 2. GET CURRENT TEAM BALANCE
+  // Get current team balance
   const { data: team, error: teamError } = await supabase
     .from("teams")
     .select("cubucks_balance, cubucks_total_spent")
@@ -770,82 +769,67 @@ async function processRefund(
   const newBalance = team.cubucks_balance + refundAmount;
   const newTotalSpent = Math.max(0, team.cubucks_total_spent - refundAmount);
 
-  // 3. UPDATE TEAM BALANCE
+  // Update team balance
   const { error: updateError } = await supabase
     .from("teams")
-    .update({
-      cubucks_balance: newBalance,
-      cubucks_total_spent: newTotalSpent,
-    })
+    .update({ cubucks_balance: newBalance, cubucks_total_spent: newTotalSpent })
     .eq("id", teamId);
 
   if (updateError) {
-    console.error("Error updating team balance:", updateError);
+    console.error("[Cut/Refund] Error updating team balance:", updateError);
     return { success: false, error: "Failed to update team balance" };
   }
 
-  const { data: activeSeason } = await supabase
-    .from("seasons")
-    .select("id")
-    .eq("is_active", true)
-    .single();
+  // Get active season
+  const { data: activeSeason } = await supabase.from("seasons").select("id").eq("is_active", true).single();
+  const seasonId = activeSeason?.id || null;
 
-  // 4. CREATE REFUND TRANSACTION RECORD
-  await supabase
-    .from("cubucks_transactions")
-    .insert({
+  // Create refund transaction record
+  await supabase.from("cubucks_transactions").insert({
       team_id: teamId,
-      season_id: activeSeason?.id || null,
+      season_id: seasonId,
       transaction_type: "refund",
-      amount: refundAmount,
+      amount: refundAmount, 
       balance_after: newBalance,
       card_id: cardId,
       card_name: cardName,
       draft_pick_id: draftPickId,
       description: `Refund for undrafting ${cardName}`,
       created_by: userId,
-    });
+  });
 
-  // 5. DELETE THE DRAFT PICK
-  const { error: deleteError } = await supabase
-    .from("team_draft_picks")
-    .delete()
-    .eq("id", draftPickId);
+  // Track ownership history so they cannot claim it again
+  if (seasonId) {
+      console.log(`[Cut/Refund] Logging cut into card_ownership_history...`);
+      await supabase.from("card_ownership_history").upsert({
+          card_id: cardId,
+          team_id: teamId,
+          season_id: seasonId
+      }, { onConflict: "card_id,team_id,season_id" });
+  }
 
+  // Delete the draft pick
+  console.log(`[Cut/Refund] Removing from team_draft_picks...`);
+  const { error: deleteError } = await supabase.from("team_draft_picks").delete().eq("id", draftPickId);
   if (deleteError) {
-    console.error("Error deleting draft pick:", deleteError);
+    console.error("[Cut/Refund] Error deleting draft pick:", deleteError);
     return { success: false, error: "Failed to remove draft pick" };
   }
 
-  // 6. RETURN CARD TO THE WIRE
-  if (poolId) {
-    const { error: poolUpdateError } = await supabase
-      .from("card_pools")
-      .update({
-        pool_name: "wire",
-        on_wire_since: new Date().toISOString()
-      })
-      .eq("id", poolId);
+  // Update the card pool to push it to the Wire
+  if (cardPoolId) {
+      console.log(`[Cut/Refund] Pushing card_pool_id ${cardPoolId} to The Wire...`);
+      const { error: poolError } = await supabase.from("card_pools").update({
+          pool_name: "wire",
+          on_wire_since: new Date().toISOString()
+      }).eq("id", cardPoolId);
 
-    if (poolUpdateError) {
-      console.error("Error returning card to wire:", poolUpdateError);
-    }
-  }
-  //  Insert into card_ownership_history to track that the team cut it
-  if (activeSeason?.id) {
-    const { error: historyError } = await supabase
-      .from("card_ownership_history")
-      .upsert({
-        card_id: cardId,
-        team_id: teamId,
-        season_id: activeSeason.id
-      }, { onConflict: 'card_id,team_id,season_id' });
-      
-    if (historyError) {
-      console.error("Error updating ownership history:", historyError);
-    }
+      if (poolError) {
+          console.error("[Cut/Refund] Failed to update card pool:", poolError);
+      }
   }
 
+  console.log(`[Cut/Refund] Complete! Successfully refunded ${refundAmount} Cubucks.`);
   return { success: true, refundAmount };
 }
 /**
