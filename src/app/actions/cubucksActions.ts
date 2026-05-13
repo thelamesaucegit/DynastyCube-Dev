@@ -2,6 +2,8 @@
 "use server";
 
 import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
+import type { SupabaseClient } from "@supabase/supabase-js"; // Add this if you haven't yet
+
 import { createScheduleWeek } from "./scheduleActions"; // You will need to import this
 
 
