@@ -1,4 +1,5 @@
 // src/app/actions/wireActions.ts
+
 "use server";
 
 import { createServerClient, createAdminClient } from "@/lib/supabase";
@@ -154,7 +155,7 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
     let processedBids = 0;
     let movedToFreeAgency = 0;
 
-  try {
+    try {
         const { data: activeSeason, error: seasonError } = await supabase
             .from('seasons')
             .select('id')
@@ -167,36 +168,19 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
 
         const seasonId = activeSeason.id;
 
-        // Fetch the draft session for the current season (so we can log the picks)
-        const { data: draftSession } = await supabase
-            .from('draft_sessions')
-            .select('id')
-            .eq('season_id', seasonId)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single();
-
-        const draftSessionId = draftSession?.id;
-        if (!draftSessionId) {
-            return { success: false, processedBids: 0, movedToFreeAgency: 0, error: "No draft session found for the active season. Required for pick logging." };
-        }
-
-
-
-        // 1. Get all cards on the wire for more than 48 hours 
         const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
         const { data: processableCards, error: cardError } = await supabase
             .from('card_pools')
             .select('id, on_wire_since, card_name')
             .eq('pool_name', 'wire')
             .lte('on_wire_since', twoDaysAgo);
-        
+
         if (cardError) throw new Error(`Failed to fetch processable cards: ${cardError.message}`);
         if (!processableCards || processableCards.length === 0) {
             console.log("No cards on The Wire are ready for processing.");
             return { success: true, processedBids: 0, movedToFreeAgency: 0 };
         }
-        
+
         console.log(`Found ${processableCards.length} cards to process.`);
         const cardIds = processableCards.map(c => c.id);
 
@@ -258,9 +242,7 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
                 p_team_id: winner.team_id,
                 p_card_pool_id: card.id,
                 p_winning_bid: winner.bid_amount,
-                p_season_id: seasonId, 
-                 p_draft_session_id: draftSessionId 
-
+                p_season_id: seasonId 
             });
             
             if (rpcError) {
