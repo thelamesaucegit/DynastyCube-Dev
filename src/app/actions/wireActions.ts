@@ -193,19 +193,21 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
             .select('id, on_wire_since, card_name')
             .eq('pool_name', 'wire')
             .lte('on_wire_since', twoDaysAgo);
-        
+
         if (cardError) throw new Error(`Failed to fetch processable cards: ${cardError.message}`);
         if (!processableCards || processableCards.length === 0) {
             console.log("No cards on The Wire are ready for processing.");
             return { success: true, processedBids: 0, movedToFreeAgency: 0 };
         }
-        
+
         console.log(`Found ${processableCards.length} cards to process.`);
         const cardIds = processableCards.map(c => c.id);
 
         // 2. Fetch required context for processing and notifications
-        const { data: allBids, error: bidsError } = await supabase.from('wire_bids').select('*').in('card_pool_id', cardIds);
+        // STRICT TYPING APPLIED HERE to prevent "Unexpected any"
+        const { data: allBidsData, error: bidsError } = await supabase.from('wire_bids').select('*').in('card_pool_id', cardIds);
         if (bidsError) throw new Error(`Failed to fetch bids: ${bidsError.message}`);
+        const allBids = (allBidsData as WireBid[]) || [];
 
         const { data: draftOrder, error: orderError } = await supabase.from('draft_order').select('team_id, lottery_number').eq('season_id', seasonId);
         if (orderError) throw new Error(`Failed to fetch draft order for tie-breakers: ${orderError.message}`);
@@ -221,13 +223,13 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
             if (!teamMembersMap.has(tm.team_id)) teamMembersMap.set(tm.team_id, []);
             teamMembersMap.get(tm.team_id)!.push(tm.user_id);
         });
-        
+
         // Array to collect all notifications for bulk insertion
-        const notificationsToInsert: any[] = [];
+        const notificationsToInsert: { user_id: string; notification_type: string; message: string; }[] = [];
 
         // 3. Loop through each card and process its bids
         for (const card of processableCards) {
-            const bidsForCard = allBids?.filter(b => b.card_pool_id === card.id) || [];
+            const bidsForCard: WireBid[] = allBids.filter(b => b.card_pool_id === card.id);
 
             // Case A: No bids on the card
             if (bidsForCard.length === 0) {
@@ -240,21 +242,22 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
             // Case B: Bids exist, find the winner
             let highestBid = 0;
             bidsForCard.forEach(b => { if (b.bid_amount > highestBid) highestBid = b.bid_amount; });
-            
-            const topBidders = bidsForCard.filter(b => b.bid_amount === highestBid);
-            
+
+            const topBidders: WireBid[] = bidsForCard.filter(b => b.bid_amount === highestBid);
+
             let winner: WireBid;
             if (topBidders.length === 1) {
                 winner = topBidders[0];
             } else {
-                winner = topBidders.reduce((best, current) => {
+                // STRICT TYPING APPLIED TO REDUCE ARGUMENTS
+                winner = topBidders.reduce((best: WireBid, current: WireBid): WireBid => {
                     const bestRank = tieBreakerMap.get(best.team_id) ?? 999;
                     const currentRank = tieBreakerMap.get(current.team_id) ?? 999;
                     return currentRank < bestRank ? current : best;
                 });
             }
             console.log(`Card ${card.id}: Team ${winner.team_id} won with a bid of ${winner.bid_amount}.`);
-            
+
             // 4. Process the winning transaction
             const { error: rpcError } = await supabase.rpc('process_wire_win', {
                 p_team_id: winner.team_id,
@@ -262,7 +265,7 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
                 p_winning_bid: winner.bid_amount,
                 p_season_id: seasonId 
             });
-            
+
             if (rpcError) {
                 console.error(`Error processing wire win for card ${card.id} and team ${winner.team_id}:`, rpcError);
             } else {
@@ -296,7 +299,7 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
                 });
             }
         }
-        
+
         // 5. Clean up processed bids and dispatch notifications
         if (cardIds.length > 0) {
             await supabase.from('wire_bids').delete().in('card_pool_id', cardIds);
@@ -315,4 +318,3 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
         return { success: false, processedBids, movedToFreeAgency, error: message };
     }
 }
-
