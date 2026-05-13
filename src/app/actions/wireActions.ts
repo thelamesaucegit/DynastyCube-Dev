@@ -154,7 +154,7 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
     let processedBids = 0;
     let movedToFreeAgency = 0;
 
-    try {
+  try {
         const { data: activeSeason, error: seasonError } = await supabase
             .from('seasons')
             .select('id')
@@ -166,6 +166,22 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
         }
 
         const seasonId = activeSeason.id;
+
+        // Fetch the draft session for the current season (so we can log the picks)
+        const { data: draftSession } = await supabase
+            .from('draft_sessions')
+            .select('id')
+            .eq('season_id', seasonId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        const draftSessionId = draftSession?.id;
+        if (!draftSessionId) {
+            return { success: false, processedBids: 0, movedToFreeAgency: 0, error: "No draft session found for the active season. Required for pick logging." };
+        }
+
+
 
         // 1. Get all cards on the wire for more than 48 hours 
         const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
