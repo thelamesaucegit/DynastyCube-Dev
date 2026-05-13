@@ -1,5 +1,4 @@
 // src/app/components/DraftInterface.tsx
-
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -33,21 +32,24 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
   const [availableCards, setAvailableCards] = useState<CardData[]>([]);
   const [draftedCards, setDraftedCards] = useState<DraftPick[]>([]);
   const [loading, setLoading] = useState(true);
+  
   const [searchQuery, setSearchQuery] = useState("");
   const [colorFilters, setColorFilters] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [cmcFilter, setCmcFilter] = useState<string>("all");
   const [cubucksFilter, setCubucksFilter] = useState<string>("all");
+  
   const [drafting, setDrafting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [cubucksBalance, setCubucksBalance] = useState<number>(0);
   const [_draftOrderEntries, setDraftOrderEntries] = useState<DraftOrderEntry[]>([]);
+  
   const [sortBy, setSortBy] = useState<string>("card_name");
   const [sortOrder, setSortOrder] = useState<string>("asc");
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  
   const [currentPage, setCurrentPage] = useState(1);
-
   const CARDS_PER_PAGE = 20;
 
   useEffect(() => {
@@ -63,25 +65,27 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
   const loadDraftData = async () => {
     setLoading(true);
     setError(null);
+
     try {
       const { session } = await getActiveDraftSession();
       const sessionId = session?.id || null;
       setActiveSessionId(sessionId);
 
-          // If free agency is active, we get cards from the 'free' pool. Otherwise, the 'draft' pool.
+      // If free agency is active, we get cards from the 'free' pool. Otherwise, the 'draft' pool.
       const poolToFetch = isFreeAgencyEnabled ? 'free' : 'draft';
 
       const [{ cards }, { picks }, { team }, { order }] = await Promise.all([
-        getAvailableCardsForDraft(poolToFetch), // Pass the correct pool name
+        getAvailableCardsForDraft(poolToFetch), 
         getTeamDraftPicks(teamId, sessionId || undefined),
         getTeamBalance(teamId),
         getActiveDraftOrder(),
       ]);
- 
+
       setAvailableCards(cards);
       setDraftedCards(picks);
       if (team) setCubucksBalance(team.cubucks_balance);
       setDraftOrderEntries(order);
+
     } catch (err) {
       console.error("Error loading draft data:", err);
       const message = err instanceof Error ? err.message : String(err);
@@ -96,36 +100,43 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
   };
 
   const handleDraftCard = async (card: CardData) => {
-    if (drafting || !activeSessionId) {
-      if (!activeSessionId) {
-        setError("Cannot draft card: No active draft session.");
-      }
+    // FIX: Only require an activeSessionId if we are in the Draft Pool (Free agency doesn't need one)
+    if (drafting) return;
+    
+    if (!isFreeAgencyEnabled && !activeSessionId) {
+      setError("Cannot draft card: No active draft session.");
       return;
     }
+
     if (draftedCards.some((pick) => pick.card_pool_id === card.id)) {
       setError("This specific card has already been drafted by your team.");
       setTimeout(() => setError(null), 3000);
       return;
     }
+
     const cardCost = card.cubucks_cost || 1;
     if (cubucksBalance < cardCost) {
       setError(`Insufficient Çubucks! Need ${cardCost}, you have ${cubucksBalance}`);
       setTimeout(() => setError(null), 5000);
       return;
     }
+
     setDrafting(card.id!);
     setError(null);
     setSuccess(null);
+
     try {
       const cubucksResult = await spendCubucksOnDraft(teamId, card.card_id, card.card_name, cardCost, card.id);
+
       if (!cubucksResult.success) {
         setError(cubucksResult.error || "Failed to spend Çubucks");
         return;
       }
+
       const pick: DraftPick = {
         team_id: teamId,
         card_pool_id: card.id,
-        draft_session_id: activeSessionId,
+        draft_session_id: activeSessionId || undefined, // FIX: Pass undefined if there is no session
         card_id: card.card_id,
         card_name: card.card_name,
         card_set: card.card_set,
@@ -137,16 +148,21 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
         mana_cost: card.mana_cost ?? undefined,
         cmc: card.cmc ?? undefined,
         pick_number: draftedCards.length + 1,
-         acquisition_method: isFreeAgencyEnabled ? 'free_agent' : 'draft', // Set method
-        acquired_at: new Date().toISOString(), // Set time
+        acquisition_method: isFreeAgencyEnabled ? 'free_agent' : 'draft', 
+        acquired_at: new Date().toISOString(), 
       };
-
     
       const result = await addDraftPick(pick);
+
       if (result.success) {
         setSuccess(`Acquired ${card.card_name} for ${cardCost} Cubucks!`);
         await conditionallyCleanupDraftQueues(card.card_id);
-        await advanceDraft();
+        
+        // FIX: Only attempt to advance the draft if this is actually a draft pick
+        if (!isFreeAgencyEnabled) {
+           await advanceDraft();
+        }
+
         await loadDraftData();
         onDraftComplete?.();
         setTimeout(() => setSuccess(null), 3000);
@@ -220,7 +236,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
         valA = a.card_name.toLowerCase();
         valB = b.card_name.toLowerCase();
     }
-
     if (typeof valA === 'string' && typeof valB === 'string') {
       return sortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
     } else {
@@ -302,11 +317,13 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
           ✓ {success}
         </div>
       )}
+
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg p-4 text-red-800 dark:text-red-200">
           ✗ {error}
         </div>
       )}
+
       {!isUserTeamMember && (
         <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg p-4">
           <p className="text-yellow-800 dark:text-yellow-200 text-sm">
@@ -314,6 +331,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
           </p>
         </div>
       )}
+
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -327,6 +345,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
             className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
+
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -337,6 +356,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
                 const isActive = color.value === "all"
                   ? colorFilters.length === 0
                   : colorFilters.includes(color.value);
+                
                 return (
                 <button
                   key={color.value}
@@ -363,6 +383,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
               })}
             </div>
           </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -407,6 +428,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
               </select>
             </div>
           </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -436,6 +458,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
                 <option value="desc">Descending</option>
               </select>
             </div>
+            
             {isUserTeamMember && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -449,6 +472,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
             )}
           </div>
         </div>
+
         <div className="text-sm text-gray-600 dark:text-gray-400">
           {sortedAndFilteredCards.length === 0
             ? `0 of ${availableCards.length} cards`
@@ -456,10 +480,12 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
           }
         </div>
       </div>
+
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
         <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
           Card Pool
         </h3>
+        
         {sortedAndFilteredCards.length === 0 ? (
           <div className="text-center py-12 text-gray-500 dark:text-gray-500">
             <p className="text-lg mb-2">No cards found</p>
@@ -476,8 +502,9 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
               >
                 ← Prev
               </button>
+              
               <div className="flex items-center gap-1 flex-wrap justify-center">
-                {getPageNumbers().map((page, idx) =>
+                {getPageNumbers().map((page, idx) => 
                   page === "ellipsis" ? (
                     <span key={`el-${idx}`} className="px-2 text-gray-400 select-none">…</span>
                   ) : (
@@ -495,6 +522,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
                   )
                 )}
               </div>
+
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
@@ -504,31 +532,34 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
               </button>
             </div>
           )}
+
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {paginatedCards.map((card) => {
               const isThisInstanceDrafted = draftedCards.some(p => p.card_pool_id === card.id);
               const isDrafting = drafting === card.id;
               const notEnoughCubucks = cubucksBalance < (card.cubucks_cost || 1);
               const imageUrl = getCardImageUrl(card, useOldestArt);
+
               return (
-                <div
+                <div 
                   key={card.id}
                   className={`group relative bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden border-2 transition-all ${
-                    isThisInstanceDrafted
-                      ? "border-green-500 opacity-60"
+                    isThisInstanceDrafted 
+                      ? "border-green-500 opacity-60" 
                       : "border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:shadow-lg"
                   }`}
                 >
                   {imageUrl && (
                     <div className="relative h-64">
-                      <Image
-                        src={imageUrl}
+                      <Image 
+                        src={imageUrl} 
                         alt={card.card_name}
                         fill
                         className="object-cover"
                       />
                     </div>
                   )}
+                  
                   <div className="p-2">
                     <h4 className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
                       {card.card_name}
@@ -542,10 +573,12 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
                       </p>
                     )}
                   </div>
+
                   <div className="absolute top-2 left-2 bg-yellow-500 text-gray-900 text-xs font-bold px-2 py-1 rounded shadow-lg flex items-center gap-1">
                     <span className="font-bold">Ç</span>
                     <span>{card.cubucks_cost || 1}</span>
                   </div>
+
                   {!isThisInstanceDrafted && isUserTeamMember && (
                     <button
                       onClick={() => handleDraftCard(card)}
@@ -562,8 +595,8 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
                       <span className={`px-4 py-2 rounded-lg font-semibold shadow-lg text-white ${
                         notEnoughCubucks ? "bg-red-600" : "bg-blue-600 hover:bg-blue-700"
                       } ${!isFreeAgencyEnabled ? "!bg-gray-600" : ""}`}>
-                        {isDrafting
-                          ? "Acquiring..."
+                        {isDrafting 
+                          ? "Acquiring..." 
                           : notEnoughCubucks
                           ? "Not Enough Çubucks"
                           : !isFreeAgencyEnabled
@@ -573,6 +606,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
                       </span>
                     </button>
                   )}
+
                   {isThisInstanceDrafted && (
                     <div className="absolute top-2 right-2 bg-green-600 text-white text-xs font-bold px-2 py-1 rounded shadow-lg">
                       ✓ DRAFTED
@@ -582,6 +616,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
               );
             })}
           </div>
+
           {totalPages > 1 && (
             <div className="flex items-center justify-between gap-2 mt-6 flex-wrap">
               <button
@@ -591,9 +626,11 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
               >
                 ← Prev
               </button>
+              
               <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">
                 Page {currentPage} of {totalPages}
               </span>
+
               <button
                 onClick={() => { setCurrentPage(p => Math.min(totalPages, p + 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                 disabled={currentPage === totalPages}
