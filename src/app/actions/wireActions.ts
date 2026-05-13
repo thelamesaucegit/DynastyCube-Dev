@@ -258,7 +258,9 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
                 p_team_id: winner.team_id,
                 p_card_pool_id: card.id,
                 p_winning_bid: winner.bid_amount,
-                p_season_id: seasonId 
+                p_season_id: seasonId, 
+                 p_draft_session_id: draftSessionId 
+
             });
             
             if (rpcError) {
