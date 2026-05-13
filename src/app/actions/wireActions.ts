@@ -32,82 +32,64 @@ export interface WireCard extends CardData {
 // ============================================
 
 /**
- * Fetches all cards on The Wire and includes the current user's team's bid amount.
+ * Fetches all non-hidden cards on The Wire and includes the current user's team's bid amount.
  */
-export async function getWireCards(
-    page: number = 1, 
-    pageSize: number = 50,
-    searchTerm: string = ""
-): Promise<{ cards: WireCard[]; totalCount: number; error?: string }> {
+export async function getWireCards(): Promise<{ cards: WireCard[]; error?: string }> {
     const supabase = await createServerClient();
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
 
     try {
         const { data: { user } } = await supabase.auth.getUser();
         let userTeamId: string | null = null;
         let seasonId: string | null = null;
 
-        // Get the active season and the user's team (if they have one)
-   const { data: activeSeason } = await supabase.from('seasons').select('id').eq('is_active', true).single();
+        const { data: activeSeason } = await supabase.from('seasons').select('id').eq('is_active', true).single();
         if (activeSeason) seasonId = activeSeason.id;
+
         if (user && seasonId) {
             const { data: teamMember } = await supabase.from('team_members').select('team_id').eq('user_id', user.id).single();
             if (teamMember) userTeamId = teamMember.team_id;
         }
         
-        // --- NEW: Build query conditionally with search ---
-        let query = supabase
+        // Fetch ALL non-hidden cards currently on the wire
+        const { data: wireCardsData, error: cardsError } = await supabase
             .from('card_pools')
-            .select('*', { count: 'exact' })
-            .eq('pool_name', 'wire');
-
-        if (searchTerm && searchTerm.trim() !== "") {
-            query = query.ilike('card_name', `%${searchTerm.trim()}%`);
-        }
-
-        const { data: wireCardsData, error: cardsError, count } = await query
-            .order('on_wire_since', { ascending: true })
-            .range(from, to);
+            .select('*')
+            .eq('pool_name', 'wire')
+            .not('hidden', 'eq', true)
+            .order('on_wire_since', { ascending: true });
 
         if (cardsError) {
-            return { cards: [], totalCount: 0, error: "Failed to fetch cards from The Wire." };
+            return { cards: [], error: "Failed to fetch cards from The Wire." };
         }
-
-        const totalCount = count || 0;
 
         if (!userTeamId || !seasonId || !wireCardsData || wireCardsData.length === 0) {
-            // If no user, no season, or no cards on this page, return without bid info
-            return { cards: wireCardsData || [], totalCount };
+            return { cards: wireCardsData || [] };
         }
 
-        // We only need to fetch bids for the cards that are ACTUALLY on this page.
-        // This is a massive performance boost over fetching all bids for all cards.
-        const cardIdsOnThisPage = wireCardsData.map(c => c.id);
-
-        // Fetch the current team's bids for this season, strictly for cards on this page
+        // Fetch the current team's bids for this season
+        const cardIds = wireCardsData.map(c => c.id);
         const { data: teamBids } = await supabase
             .from('wire_bids')
             .select('card_pool_id, bid_amount')
             .eq('team_id', userTeamId)
             .eq('season_id', seasonId)
-            .in('card_pool_id', cardIdsOnThisPage);
+            .in('card_pool_id', cardIds);
         
         const bidMap = new Map(teamBids?.map(b => [b.card_pool_id, b.bid_amount]) || []);
 
-        // Combine card data with the team's bid
         const cardsWithBids: WireCard[] = wireCardsData.map(card => ({
             ...card,
             currentUserTeamBid: bidMap.get(card.id),
         }));
 
-        return { cards: cardsWithBids, totalCount };
-    } catch (error) {
-        const message = error instanceof Error ? error.message : "An unexpected error occurred.";
+        return { cards: cardsWithBids };
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
         console.error("Error in getWireCards:", message);
-        return { cards: [], totalCount: 0, error: message };
+        return { cards: [], error: message };
     }
 }
+
 /**
  * Places or updates a team's bid on a card on The Wire.
  */
@@ -185,6 +167,9 @@ export async function placeWireBid(cardPoolId: string, bidAmount: number): Promi
 /**
  * Processes all outstanding wire bids. Intended to be called by a scheduled cron job.
  */
+/**
+ * Processes all outstanding wire bids. Intended to be called by a scheduled cron job.
+ */
 export async function processWireBids(): Promise<{ success: boolean; processedBids: number; movedToFreeAgency: number; error?: string }> {
     console.log("Starting Wire bid processing...");
     const supabase = createAdminClient(); 
@@ -192,15 +177,23 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
     let movedToFreeAgency = 0;
 
     try {
-        const { session: activeSession } = await getActiveDraftSession();
-        if (!activeSession) return { success: true, processedBids: 0, movedToFreeAgency: 0, error: "No active season found." };
-        const seasonId = activeSession.season_id;
+        const { data: activeSeason, error: seasonError } = await supabase
+            .from('seasons')
+            .select('id')
+            .eq('is_active', true)
+            .single();
 
-        // 1. Get all cards on the wire for more than 48 hours 
+        if (seasonError || !activeSeason) {
+            return { success: true, processedBids: 0, movedToFreeAgency: 0, error: "No active season found." };
+        }
+
+        const seasonId = activeSeason.id;
+
+        // 1. Get all cards on the wire for more than 48 hours (Added card_name for notifications)
         const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
         const { data: processableCards, error: cardError } = await supabase
             .from('card_pools')
-            .select('id, on_wire_since')
+            .select('id, on_wire_since, card_name')
             .eq('pool_name', 'wire')
             .lte('on_wire_since', twoDaysAgo);
         
@@ -211,24 +204,36 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
         }
         
         console.log(`Found ${processableCards.length} cards to process.`);
-
         const cardIds = processableCards.map(c => c.id);
 
-        // 2. Get all bids for these cards and all team tie-breaker ranks
+        // 2. Fetch required context for processing and notifications
         const { data: allBids, error: bidsError } = await supabase.from('wire_bids').select('*').in('card_pool_id', cardIds);
         if (bidsError) throw new Error(`Failed to fetch bids: ${bidsError.message}`);
 
         const { data: draftOrder, error: orderError } = await supabase.from('draft_order').select('team_id, lottery_number').eq('season_id', seasonId);
         if (orderError) throw new Error(`Failed to fetch draft order for tie-breakers: ${orderError.message}`);
         const tieBreakerMap = new Map(draftOrder?.map(o => [o.team_id, o.lottery_number]) || []);
+
+        // Pre-fetch teams and members for notifications
+        const { data: teamsData } = await supabase.from('teams').select('id, name, emoji');
+        const teamMap = new Map(teamsData?.map(t => [t.id, t]) || []);
+
+        const { data: teamMembers } = await supabase.from('team_members').select('team_id, user_id');
+        const teamMembersMap = new Map<string, string[]>();
+        teamMembers?.forEach(tm => {
+            if (!teamMembersMap.has(tm.team_id)) teamMembersMap.set(tm.team_id, []);
+            teamMembersMap.get(tm.team_id)!.push(tm.user_id);
+        });
         
+        // Array to collect all notifications for bulk insertion
+        const notificationsToInsert: any[] = [];
 
         // 3. Loop through each card and process its bids
         for (const card of processableCards) {
             const bidsForCard = allBids?.filter(b => b.card_pool_id === card.id) || [];
 
             // Case A: No bids on the card
-     if (bidsForCard.length === 0) {
+            if (bidsForCard.length === 0) {
                 await supabase.from('card_pools').update({ pool_name: 'free', on_wire_since: null }).eq('id', card.id);
                 movedToFreeAgency++;
                 console.log(`Card ${card.id} moved to Free Agency.`);
@@ -245,14 +250,12 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
             if (topBidders.length === 1) {
                 winner = topBidders[0];
             } else {
-                // Tie-breaker logic
                 winner = topBidders.reduce((best, current) => {
                     const bestRank = tieBreakerMap.get(best.team_id) ?? 999;
                     const currentRank = tieBreakerMap.get(current.team_id) ?? 999;
                     return currentRank < bestRank ? current : best;
                 });
             }
-
             console.log(`Card ${card.id}: Team ${winner.team_id} won with a bid of ${winner.bid_amount}.`);
             
             // 4. Process the winning transaction
@@ -260,28 +263,59 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
                 p_team_id: winner.team_id,
                 p_card_pool_id: card.id,
                 p_winning_bid: winner.bid_amount,
-                p_draft_session_id: activeSession.id
+                p_season_id: seasonId 
             });
             
             if (rpcError) {
                 console.error(`Error processing wire win for card ${card.id} and team ${winner.team_id}:`, rpcError);
-                // Continue to the next card
             } else {
                 processedBids++;
+
+                // Queue Winner Notifications
+                const winnerUsers = teamMembersMap.get(winner.team_id) || [];
+                winnerUsers.forEach(userId => {
+                    notificationsToInsert.push({
+                        user_id: userId,
+                        notification_type: 'wire_bid_won',
+                        message: `You won ${card.card_name} off The Wire for ${winner.bid_amount} Cubucks!`
+                    });
+                });
+
+                // Queue Loser Notifications
+                const losingBids = bidsForCard.filter(b => b.team_id !== winner.team_id);
+                const losingTeams = [...new Set(losingBids.map(b => b.team_id))];
+                const winnerTeamInfo = teamMap.get(winner.team_id);
+                const winnerName = winnerTeamInfo ? `${winnerTeamInfo.emoji} ${winnerTeamInfo.name}` : 'Another team';
+
+                losingTeams.forEach(teamId => {
+                    const loserUsers = teamMembersMap.get(teamId) || [];
+                    loserUsers.forEach(userId => {
+                        notificationsToInsert.push({
+                            user_id: userId,
+                            notification_type: 'wire_bid_lost',
+                            message: `You were outbid on ${card.card_name}. ${winnerName} won it for ${winner.bid_amount} Cubucks.`
+                        });
+                    });
+                });
             }
         }
         
-        // 5. Clean up all processed bids
+        // 5. Clean up processed bids and dispatch notifications
         if (cardIds.length > 0) {
             await supabase.from('wire_bids').delete().in('card_pool_id', cardIds);
+        }
+
+        if (notificationsToInsert.length > 0) {
+            await supabase.from('notifications').insert(notificationsToInsert);
         }
 
         console.log(`Wire processing complete. Processed Bids: ${processedBids}, Moved to Free Agency: ${movedToFreeAgency}.`);
         return { success: true, processedBids, movedToFreeAgency };
 
-    } catch (error) {
-        const message = error instanceof Error ? error.message : "An unexpected error occurred.";
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
         console.error("Fatal error in processWireBids:", message);
         return { success: false, processedBids, movedToFreeAgency, error: message };
     }
 }
+

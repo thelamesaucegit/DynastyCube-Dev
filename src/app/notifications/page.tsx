@@ -30,6 +30,8 @@ import {
   AlertCircle,
   UserPlus,
   Hand,
+  Award,
+  TrendingDown,
 } from "lucide-react";
 
 interface Notification {
@@ -134,6 +136,10 @@ export default function NotificationsPage() {
         return <UserPlus className="h-6 w-6 text-purple-500" />;
       case "admin_task_ownership_request":
         return <Hand className="h-6 w-6 text-orange-500" />;
+        case "wire_bid_won":
+        return <Award className="h-6 w-6 text-emerald-500" />;
+      case "wire_bid_lost":
+        return <TrendingDown className="h-6 w-6 text-destructive" />;
       default:
         return <Bell className="h-6 w-6 text-muted-foreground" />;
     }
@@ -175,6 +181,10 @@ export default function NotificationsPage() {
         return "Task Assigned";
       case "admin_task_ownership_request":
         return "Ownership Request";
+        case "wire_bid_won":
+        return "Wire Bid Won";
+      case "wire_bid_lost":
+        return "Wire Bid Lost";
       default:
         return "Notification";
     }
@@ -320,14 +330,15 @@ export default function NotificationsPage() {
                           href="/admin/tasks"
                           className="text-primary hover:underline font-medium flex items-center gap-1"
                         >
-                          View Task Board
+                          View Task Board 
                           <ExternalLink className="h-3 w-3" />
-                        </Link>
-                      ) : (
-                        <Link
-                          href={`/trades/${notification.trade_id}`}
-                          className="text-primary hover:underline font-medium flex items-center gap-1"
-                        >
+      </Link>
+    ) : notification.notification_type.startsWith('wire_bid') ? (
+      <Link href="/pools/wire" className="text-primary hover:underline font-medium flex items-center gap-1">
+        View The Wire <ExternalLink className="h-3 w-3" />
+      </Link>
+    ) : (
+      <Link href={`/trades/${notification.trade_id}`} className="text-primary hover:underline font-medium flex items-center gap-1">
                           View Trade
                           <ExternalLink className="h-3 w-3" />
                         </Link>

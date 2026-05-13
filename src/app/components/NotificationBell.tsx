@@ -183,6 +183,10 @@ export const NotificationBell: React.FC = () => {
         return "👤";
       case "admin_task_ownership_request":
         return "✋";
+         case "wire_bid_won":
+        return "🎉";
+      case "wire_bid_lost":
+        return "💸";
       default:
         return "🔔";
     }
