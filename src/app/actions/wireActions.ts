@@ -192,10 +192,18 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
     let movedToFreeAgency = 0;
 
     try {
-        const { session: activeSession } = await getActiveDraftSession();
-        if (!activeSession) return { success: true, processedBids: 0, movedToFreeAgency: 0, error: "No active season found." };
-        const seasonId = activeSession.season_id;
+        const { data: activeSeason, error: seasonError } = await supabase
+            .from('seasons')
+            .select('id')
+            .eq('is_active', true)
+            .single();
 
+        if (seasonError || !activeSeason) {
+            return { success: true, processedBids: 0, movedToFreeAgency: 0, error: "No active season found." };
+        }
+
+        const seasonId = activeSeason.id;
+        
         // 1. Get all cards on the wire for more than 48 hours 
         const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
         const { data: processableCards, error: cardError } = await supabase
