@@ -831,6 +831,20 @@ async function processRefund(
       console.error("Error returning card to wire:", poolUpdateError);
     }
   }
+  //  Insert into card_ownership_history to track that the team cut it
+  if (activeSeason?.id) {
+    const { error: historyError } = await supabase
+      .from("card_ownership_history")
+      .upsert({
+        card_id: cardId,
+        team_id: teamId,
+        season_id: activeSeason.id
+      }, { onConflict: 'card_id,team_id,season_id' });
+      
+    if (historyError) {
+      console.error("Error updating ownership history:", historyError);
+    }
+  }
 
   return { success: true, refundAmount };
 }
