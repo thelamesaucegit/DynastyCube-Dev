@@ -237,33 +237,70 @@ const previewPromise = sessionId
     }
   };
 
-  const handleUndraftCard = async (pick: DraftPick) => {
-    if (!pick.id || undrafting || !activeDraftSessionId || !team) return;
+ const handleUndraftCard = async (pick: DraftPick) => {
+    // 1. New Logic: Prevent cutting cards during an active draft session
+    if (activeDraftSessionId) {
+      alert("You cannot cut cards from your pool while a draft is actively running.");
+      return;
+    }
+
+    // 2. Safety checks (Removed the requirement for activeDraftSessionId)
+    if (!pick.id || undrafting || !team) {
+      console.log("Undraft aborted. Missing pick.id, currently undrafting, or missing team data.", { 
+        pickId: pick.id, 
+        isUndrafting: !!undrafting, 
+        hasTeam: !!team 
+      });
+      return;
+    }
+
+    console.log(`Starting undraft process for: ${pick.card_name}`);
+
     const confirmed = window.confirm(
       `Are you sure you want to undraft "${pick.card_name}"? The Çubucks spent will be refunded to the team.`
     );
-    if (!confirmed) return;
+    
+    if (!confirmed) {
+      console.log("Undraft cancelled by user.");
+      return;
+    }
+
     setUndrafting(pick.id);
     setUndraftMessage(null);
-    const result = await refundDraftPick(team.id, pick.id, pick.card_id, pick.card_name); // Use team.id (UUID)
-    if (result.success) {
-      setUndraftMessage({
-        type: "success",
-        text: `Undrafted ${pick.card_name}! Refunded ${result.refundAmount} Çubucks.`,
-      });
-      const { picks } = await getTeamDraftPicks(team.id, activeDraftSessionId);
-      setDraftPicks(picks);
-      setCubucksRefreshKey((prev) => prev + 1);
-    } else {
+
+    try {
+      console.log(`Calling refundDraftPick for team: ${team.id}, pick: ${pick.id}`);
+      const result = await refundDraftPick(team.id, pick.id, pick.card_id, pick.card_name);
+      
+      console.log("Refund result:", result);
+
+      if (result.success) {
+        setUndraftMessage({
+          type: "success",
+          text: `Undrafted ${pick.card_name}! Refunded ${result.refundAmount} Çubucks.`,
+        });
+        
+        // Refresh picks (passing undefined because there is no active draft session)
+        const { picks } = await getTeamDraftPicks(team.id, undefined);
+        setDraftPicks(picks);
+        setCubucksRefreshKey((prev) => prev + 1);
+      } else {
+        setUndraftMessage({
+          type: "error",
+          text: result.error || "Failed to undraft card",
+        });
+      }
+    } catch (err) {
+      console.error("Unexpected error during undraft process:", err);
       setUndraftMessage({
         type: "error",
-        text: result.error || "Failed to undraft card",
+        text: "An unexpected error occurred while undrafting.",
       });
+    } finally {
+      setUndrafting(null);
+      setTimeout(() => setUndraftMessage(null), 5000);
     }
-    setUndrafting(null);
-    setTimeout(() => setUndraftMessage(null), 5000);
   };
-
   const tabs: { id: TabType; label: string; icon: React.ReactNode; count?: number, disabled?: boolean }[] = [
     ...(isUserTeamMember ? [{
       id: "draft" as TabType,
