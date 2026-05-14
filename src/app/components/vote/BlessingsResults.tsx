@@ -2,9 +2,9 @@
 "use client";
 
 import React from "react";
-import { Sparkles, Dices, Trophy, XCircle } from "lucide-react";
+import { Sparkles, Dices, Trophy, XCircle, CheckCircle2 } from "lucide-react";
 
-interface BlessingResultRaw {
+export interface BlessingResultRaw {
   roll_value: number;
   team_odds: Record<string, number>;
   poll_options: { id: string; option_text: string };
@@ -12,7 +12,7 @@ interface BlessingResultRaw {
 }
 
 interface BlessingsResultsProps {
-  rawData: any; // We receive this from the TypedPollResults
+  rawData: BlessingResultRaw[] | unknown; // Typed properly to avoid the 'any' error
 }
 
 export function BlessingsResults({ rawData }: BlessingsResultsProps) {
@@ -33,7 +33,7 @@ export function BlessingsResults({ rawData }: BlessingsResultsProps) {
           <Dices className="size-4" /> Official Lottery Results
         </h4>
         <p className="text-sm text-purple-800 dark:text-purple-200">
-          Blessings were rolled in order of total league popularity. If a team won a blessing, they were removed from all subsequent rolls. The random roll (0-100) must land within a team's odds bracket to win.
+          Blessings were rolled in order of total league popularity. If a team won a blessing, they were removed from all subsequent rolls. The random roll (0-100) must land within a team&apos;s odds bracket to win.
         </p>
       </div>
 
@@ -43,7 +43,7 @@ export function BlessingsResults({ rawData }: BlessingsResultsProps) {
           
           return (
             <div 
-              key={result.poll_options.id || index} 
+              key={result.poll_options?.id || index} 
               className={`border-2 rounded-xl overflow-hidden transition-all ${
                 hasWinner 
                   ? "border-purple-200 dark:border-purple-800 bg-gradient-to-r from-purple-50/50 to-transparent dark:from-purple-900/10" 
@@ -54,12 +54,12 @@ export function BlessingsResults({ rawData }: BlessingsResultsProps) {
               <div className="flex flex-col md:flex-row md:items-center justify-between p-4 border-b border-border/50 gap-4">
                 <h3 className="font-bold text-lg flex items-center gap-2">
                   <Sparkles className={`size-5 ${hasWinner ? "text-purple-500" : "text-muted-foreground"}`} /> 
-                  {result.poll_options.option_text}
+                  {result.poll_options?.option_text}
                 </h3>
                 
                 <div className="flex items-center gap-3 bg-background border border-border px-3 py-1.5 rounded-md text-sm font-medium shadow-sm">
                   <Dices className="size-4 text-muted-foreground" />
-                  <span>Roll: <span className="font-mono font-bold text-primary">{result.roll_value.toFixed(2)}</span></span>
+                  <span>Roll: <span className="font-mono font-bold text-primary">{result.roll_value?.toFixed(2)}</span></span>
                 </div>
               </div>
 
@@ -71,8 +71,8 @@ export function BlessingsResults({ rawData }: BlessingsResultsProps) {
                     <div>
                       <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-0.5">Winner</div>
                       <div className="font-bold text-lg leading-none">
-                        <span className="mr-2 text-2xl">{result.teams.emoji}</span>
-                        {result.teams.name}
+                        <span className="mr-2 text-2xl">{result.teams?.emoji}</span>
+                        {result.teams?.name}
                       </div>
                     </div>
                   </div>
@@ -81,7 +81,7 @@ export function BlessingsResults({ rawData }: BlessingsResultsProps) {
                     <XCircle className="size-6 text-muted-foreground flex-shrink-0" />
                     <div>
                       <div className="font-bold text-muted-foreground">The Fates Denied</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">The roll did not land in any eligible team's bracket.</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">The roll did not land in any eligible team&apos;s bracket.</div>
                     </div>
                   </div>
                 )}
@@ -104,7 +104,7 @@ export function BlessingsResults({ rawData }: BlessingsResultsProps) {
                                 : "bg-background border-border text-muted-foreground"
                             }`}
                           >
-                            <span>{odds}%</span>
+                            <span>{odds as number}%</span>
                             {isWinner && <CheckCircle2 className="size-3 text-purple-600 dark:text-purple-400" />}
                           </div>
                         );
