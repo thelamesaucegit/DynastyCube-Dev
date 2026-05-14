@@ -94,23 +94,34 @@ export async function updateDeckDetails(
     return { success: false, error: "An unexpected error occurred" };
   }
 }
+
 async function verifyTeamMembership(
   teamId: string,
   client: AnySupabaseClient
 ): Promise<{ authorized: boolean; userId?: string; error?: string }> {
+  console.log("=== verifyTeamMembership LOGGING ===");
+  console.log("teamId passed:", teamId, "length:", teamId?.length);
+  
   const { data: { user }, error: authError } = await client.auth.getUser();
   if (authError || !user) {
     return { authorized: false, error: "You must be logged in to perform this action" };
   }
+
   const { data: membership, error: membershipError } = await client
     .from("team_members")
     .select("id")
     .eq("team_id", teamId)
     .eq("user_id", user.id)
     .single();
+
+  if (membershipError) {
+      console.error("Membership check error:", membershipError);
+  }
+
   if (membershipError || !membership) {
     return { authorized: false, userId: user.id, error: "You must be a member of this team to perform this action" };
   }
+
   return { authorized: true, userId: user.id };
 }
 
@@ -162,12 +173,16 @@ export async function addSkippedPick(
 }
 
 export async function addDraftPick(pick: DraftPick): Promise<{ success: boolean; error?: string }> {
+  console.log("=== addDraftPick LOGGING ===");
+  console.log("Pick Payload:", JSON.stringify(pick, null, 2));
+  
   const supabase = await createServerClient();
   try {
     const authCheck = await verifyTeamMembership(pick.team_id, supabase);
     if (!authCheck.authorized) return { success: false, error: authCheck.error };
 
     if (pick.card_pool_id) {
+        console.log("Checking for existing pick with card_pool_id:", pick.card_pool_id);
         const { data: existingPick, error: checkError } = await supabase.from("team_draft_picks").select("id").eq("card_pool_id", pick.card_pool_id).single();
         if (checkError && checkError.code !== "PGRST116") {
             console.error("Error checking for existing draft pick:", checkError);
@@ -178,10 +193,11 @@ export async function addDraftPick(pick: DraftPick): Promise<{ success: boolean;
         }
     }
     
-    const { error } = await supabase.from("team_draft_picks").insert({
+    console.log("Inserting new draft pick...");
+    const insertPayload = {
       team_id: pick.team_id,
       card_pool_id: pick.card_pool_id, 
-      draft_session_id: pick.draft_session_id, 
+      draft_session_id: pick.draft_session_id || null, // Force undefined/empty to true null
       card_id: pick.card_id,
       card_name: pick.card_name,
       card_set: pick.card_set,
@@ -194,20 +210,24 @@ export async function addDraftPick(pick: DraftPick): Promise<{ success: boolean;
       cmc: pick.cmc,
       pick_number: pick.pick_number,
       drafted_by: authCheck.userId,
-         // Pass through the acquisition method from the component
-      // Default to 'draft' if not provided, for backward compatibility.
       acquisition_method: pick.acquisition_method || 'draft',
-      
-      // Set the acquisition time to now. The old 'drafted_at' becomes redundant.
       acquired_at: new Date().toISOString(), 
-    });
+    };
+    
+    console.log("Insert Payload:", JSON.stringify(insertPayload, null, 2));
+
+    const { error } = await supabase.from("team_draft_picks").insert(insertPayload);
+    
     if (error) {
       console.error("Error adding draft pick:", error);
       return { success: false, error: error.message };
     }
+    
+    console.log("addDraftPick SUCCESS");
     return { success: true };
-  } catch (error) {
-    console.error("Unexpected error adding draft pick:", error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Unexpected error adding draft pick:", message);
     return { success: false, error: "An unexpected error occurred" };
   }
 }
