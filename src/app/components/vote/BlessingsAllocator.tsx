@@ -114,7 +114,7 @@ export function BlessingsAllocator({ poll, userId, onVoteSubmit }: BlessingsAllo
         ) : (
           <div className="space-y-6">
             <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-3 text-sm text-purple-800 dark:text-purple-200 mb-4">
-              <strong>How it works:</strong> Vote "Yes" for the blessings your team wants. Your team's odds for each blessing increase based on the proportion of Yes votes your team pools together!
+              <strong>How it works:</strong> Vote &quot;Yes&quot; for the blessings your team wants. Your team&apos;s odds for each blessing increase based on the proportion of Yes votes your team pools together!
             </div>
             
             <div className="space-y-3">
