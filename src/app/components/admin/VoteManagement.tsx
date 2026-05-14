@@ -9,6 +9,7 @@ import {
   deletePoll,
   togglePollActive,
   getPollResultsByType,
+  resolveBlessingEvent,
   type Poll,
   type VoteType,
   type TypedPollResults,
@@ -172,9 +173,16 @@ export function VoteManagement() {
   };
 
   // WILL BE IMPLEMENTED IN NEXT STEP
-  const handleResolveBlessings = async (pollId: string) => {
+   const handleResolveBlessings = async (pollId: string) => {
     if (!confirm("Resolve this blessing event now? This will roll the random lottery for all blessings in this poll.")) return;
-    alert("Backend link coming in next step!");
+    
+    const result = await resolveBlessingEvent(pollId);
+    if (result.success) {
+      alert("✅ " + result.message);
+      loadPolls(); // Refresh to show it as ended
+    } else {
+      alert("❌ " + result.error);
+    }
   };
 
   const addOption = () => setFormData((prev) => ({ ...prev, options: [...prev.options, ""] }));
