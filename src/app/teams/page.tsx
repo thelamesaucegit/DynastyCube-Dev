@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
-import { use } from "react";
+import { useParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { getTeamsWithMembers, getTeamByShortName } from "@/app/actions/teamActions";
 import { getTeamDraftPicks, getTeamDecks } from "@/app/actions/draftActions";
@@ -66,14 +66,12 @@ interface Team {
   members?: TeamMember[];
 }
 
-interface TeamPageProps {
-  params: Promise<{ teamId: string }>;
-}
-
 type TabType = "picks" | "decks" | "members" | "draft" | "stats" | "roles" | "trades" | "matches" | "votes";
 
-export default function TeamPage({ params }: TeamPageProps) {
-  const { teamId: teamShortName } = use(params); 
+export default function TeamPage() {
+  const params = useParams();
+  const teamShortName = params?.teamId as string;
+  
   const { user } = useAuth();
   const { useOldestArt } = useSettings();
   
@@ -93,12 +91,14 @@ export default function TeamPage({ params }: TeamPageProps) {
   const [draftPreview, setDraftPreview] = useState<AutoDraftPreviewResult | null>(null);
   const [activeDraftSessionId, setActiveDraftSessionId] = useState<string | null>(null);
   const [isVoting, setIsVoting] = useState(false);
-
+  
   const isUserTeamMember = team?.members?.some(
     (member) => member.user_id === user?.id
   ) || userRoles.length > 0;
 
   useEffect(() => {
+    // Safety guard: Wait until Next.js router successfully hydrates the URL parameter
+    if (!teamShortName) return; 
     loadTeamData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamShortName, user?.id]);
@@ -156,7 +156,6 @@ export default function TeamPage({ params }: TeamPageProps) {
       const isMember = foundTeam.members?.some((m) => m.user_id === user?.id) || rolesResult.roles.length > 0;
       let defaultTab: TabType = "picks";
       const currentPhase = seasonResult.season?.phase;
-
       if (currentPhase === "preseason" || currentPhase === "draft") {
         defaultTab = isMember ? "draft" : "picks";
       } else if (currentPhase === "season" || currentPhase === "playoffs") {
@@ -237,7 +236,7 @@ export default function TeamPage({ params }: TeamPageProps) {
 
   const handleUndraftCard = async (pick: DraftPick) => {
     console.log(`[Undraft Action] Initiated for card: ${pick.card_name} (ID: ${pick.id})`);
-
+    
     // 1. Prevent cutting cards during an active draft session
     if (activeDraftSessionId) {
       console.warn("[Undraft Action] Blocked: Cannot cut cards while a draft session is active.");
@@ -258,13 +257,14 @@ export default function TeamPage({ params }: TeamPageProps) {
     const confirmed = window.confirm(
       `Are you sure you want to undraft "${pick.card_name}"? The Çubucks spent will be refunded to the team.`
     );
-
+    
     if (!confirmed) {
       console.log("[Undraft Action] Cancelled by user.");
       return;
     }
 
     console.log(`[Undraft Action] Proceeding with refund for team ${team.id}`);
+    
     setUndrafting(pick.id);
     setUndraftMessage(null);
 
@@ -349,10 +349,13 @@ export default function TeamPage({ params }: TeamPageProps) {
           </div>
         </CardContent>
       </Card>
+
       <DraftStatusWidget variant="team" teamId={team.id} />
+      
       <div className="mb-6">
         <TeamCubucksDisplay teamId={team.id} showTransactions={true} refreshKey={cubucksRefreshKey} isUserTeamMember={isUserTeamMember} />
       </div>
+
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabType)}>
         <TabsList className="flex-wrap h-auto gap-1 mb-6">
           {tabs.map((tab) => (
@@ -367,6 +370,7 @@ export default function TeamPage({ params }: TeamPageProps) {
             </TabsTrigger>
           ))}
         </TabsList>
+
         <Card>
           <CardContent className="pt-6">
             <TabsContent value="draft">
@@ -400,6 +404,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                               const currentVotes = draftPreview.votes?.length || 0;
                               const threshold = draftPreview.voteThreshold || 1;
                               const isVoted = user?.id ? draftPreview.votes?.includes(user.id) : false;
+
                               return (
                                 <Button 
                                   onClick={handleToggleVote} 
@@ -423,6 +428,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                       </CardContent>
                     </Card>
                   )}
+                  
                   <div>
                     <div className="mb-4">
                       <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">Draft Priority Queue</h2>
@@ -430,6 +436,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                     </div>
                     <DraftQueueManager teamId={team.id} isUserTeamMember={isUserTeamMember} />
                   </div>
+
                   <div>
                     <div className="mb-4">
                       <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">Draft Progress & Pick Order</h2>
@@ -437,6 +444,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                     </div>
                     <DraftStatusWidget variant="team" teamId={team.id} />
                   </div>
+
                   <div>
                     <div className="mb-4">
                       <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">Free Agent Pool</h2>
@@ -453,6 +461,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                 </div>
               )}
             </TabsContent>
+
             <TabsContent value="picks">
               {activeTab === "picks" && (
                 <div>
@@ -462,6 +471,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                       Team Pool
                     </h2>
                   </div>
+
                   {undraftMessage && (
                     <div
                       className={`mb-4 p-4 rounded-lg border flex items-center gap-2 ${
@@ -474,6 +484,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                       {undraftMessage.text}
                     </div>
                   )}
+
                   {draftPicks.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground">
                       <Layers className="size-10 mx-auto mb-3 opacity-50" />
@@ -506,6 +517,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                                   </p>
                                 )}
                               </div>
+                              
                               {isUserTeamMember && (
                                 <button
                                   onClick={() => handleUndraftCard(pick)}
@@ -530,6 +542,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                 </div>
               )}
             </TabsContent>
+
             <TabsContent value="decks">
               {activeTab === "decks" && (
                 <div>
@@ -548,6 +561,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                 </div>
               )}
             </TabsContent>
+
             <TabsContent value="trades">
               {activeTab === "trades" && (
                 <div>
@@ -574,6 +588,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                 </div>
               )}
             </TabsContent>
+
             <TabsContent value="matches">
               {activeTab === "matches" && (
                 <div className="space-y-6">
@@ -585,6 +600,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                     <p className="text-sm text-muted-foreground">Schedule match times and record results</p>
                   </div>
                   <MatchSchedulingWidget teamId={team.id} userRoles={userRoles} />
+                  
                   <div>
                     <h3 className="text-lg font-semibold mb-4">Record Match Results</h3>
                     <MatchRecording teamId={team.id} />
@@ -592,6 +608,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                 </div>
               )}
             </TabsContent>
+
             <TabsContent value="votes">
               {activeTab === "votes" && isUserTeamMember && (
                 <div>
@@ -606,6 +623,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                 </div>
               )}
             </TabsContent>
+
             <TabsContent value="stats">
               {activeTab === "stats" && (
                 <div>
@@ -620,6 +638,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                 </div>
               )}
             </TabsContent>
+
             <TabsContent value="roles">
               {activeTab === "roles" && isUserTeamMember && (
                 <div>
@@ -634,6 +653,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                 </div>
               )}
             </TabsContent>
+
             <TabsContent value="members">
               {activeTab === "members" && (
                 <div>
@@ -641,6 +661,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                     <Users className="size-5" />
                     Team Members
                   </h2>
+                  
                   {!team.members || team.members.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground">
                       <Users className="size-10 mx-auto mb-3 opacity-50" />
@@ -652,6 +673,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                       {team.members.map((member) => {
                         const memberRoleData = membersWithRoles.find((m) => m.user_id === member.user_id);
                         const memberRoles = memberRoleData?.roles || [];
+                        
                         return (
                           <div key={member.id} className="flex items-center justify-between bg-muted rounded-lg p-4 border">
                             <div className="flex-1">
@@ -680,6 +702,7 @@ export default function TeamPage({ params }: TeamPageProps) {
                 </div>
               )}
             </TabsContent>
+
           </CardContent>
         </Card>
       </Tabs>
