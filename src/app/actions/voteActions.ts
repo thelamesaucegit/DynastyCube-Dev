@@ -676,7 +676,15 @@ export async function getPollResultsByType(pollId: string) {
           .eq("poll_id", pollId);
 
        if (error) throw error;
-       return { results: { type: "blessing_event" as VoteType, rawData: blessingResults as BlessingResultRaw[] }, success: true };
+       
+       // FIX: Cast the Supabase relation response explicitly through 'unknown' to avoid overlapping type errors
+       return { 
+         results: { 
+           type: "blessing_event" as VoteType, 
+           rawData: blessingResults as unknown as BlessingResultRaw[] 
+         }, 
+         success: true 
+       };
     }
 
     return { results: null, success: false, error: "Unsupported poll type" };
