@@ -74,10 +74,20 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       // If free agency is active, we get cards from the 'free' pool. Otherwise, the 'draft' pool.
       const poolToFetch = isFreeAgencyEnabled ? 'free' : 'draft';
 
+      // FIX: Only run team-specific database queries if teamId is a valid string (not empty).
+      // Passing an empty string "" to Supabase UUID columns causes the "operator does not exist: uuid = text" error.
+      const picksPromise = teamId 
+        ? getTeamDraftPicks(teamId, sessionId || undefined) 
+        : Promise.resolve({ picks: [] });
+        
+      const balancePromise = teamId 
+        ? getTeamBalance(teamId) 
+        : Promise.resolve({ team: null });
+
       const [{ cards }, { picks }, { team }, { order }] = await Promise.all([
         getAvailableCardsForDraft(poolToFetch), 
-        getTeamDraftPicks(teamId, sessionId || undefined),
-        getTeamBalance(teamId),
+        picksPromise,
+        balancePromise,
         getActiveDraftOrder(),
       ]);
 
