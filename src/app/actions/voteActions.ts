@@ -948,4 +948,26 @@ export async function toggleTeamPollActive(pollId: string, teamId: string, isAct
     });
 
     if (!isCaptain) {
-      return { succ
+      return { success: false, error: "Only team captains can manage polls" };
+    }
+
+    const { data: poll, error: pollError } = await supabase
+      .from("polls")
+      .select("team_id")
+      .eq("id", pollId)
+      .single();
+
+    if (pollError) throw pollError;
+    if (!poll || poll.team_id !== teamId) {
+      return { success: false, error: "Poll not found for this team" };
+    }
+
+    const { error } = await supabase.from("polls").update({ is_active: isActive }).eq("id", pollId);
+    if (error) throw error;
+
+    return { success: true, message: isActive ? "Poll activated!" : "Poll deactivated!" };
+  } catch (error) {
+    console.error("Error toggling team poll:", error);
+    return { success: false, error: "Failed to toggle poll status" };
+  }
+}
