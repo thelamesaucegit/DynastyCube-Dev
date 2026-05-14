@@ -599,6 +599,27 @@ export async function deletePollOption(optionId: string) {
   }
 }
 
+/**
+ * Resolve a Team Blessings lottery event (Admin only)
+ * This triggers the backend RPC to securely calculate odds and roll for winners.
+ */
+export async function resolveBlessingEvent(pollId: string) {
+  try {
+    const supabase = await createServerClient();
+    const { error } = await supabase.rpc("resolve_blessings_event", {
+      p_poll_id: pollId,
+    });
+    
+    if (error) throw error;
+    
+    return { success: true, message: "Blessing lottery resolved successfully!" };
+  } catch (error) {
+    console.error("Error resolving blessing event:", error);
+    return { success: false, error: "Failed to resolve blessing event. Check server logs." };
+  }
+}
+
+
 // =================================================================================================
 // MULTI-TYPE VOTING FUNCTIONS
 // =================================================================================================
