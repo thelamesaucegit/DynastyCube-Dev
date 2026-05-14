@@ -203,7 +203,7 @@ export default function TeamPage() {
       <div className="container max-w-7xl mx-auto px-4 py-8">
         <div className="flex flex-col items-center justify-center py-16">
           <Loader2 className="size-10 animate-spin text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">Loading Teams...</p>
+          <p className="text-muted-foreground">Loading Team...</p>
         </div>
       </div>
     );
