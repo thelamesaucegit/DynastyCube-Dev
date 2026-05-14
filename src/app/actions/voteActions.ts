@@ -7,7 +7,8 @@ import { createServerClient } from "@/lib/supabase";
 // TYPES
 // =================================================================================================
 
-export type VoteType = "individual" | "team" | "league";
+// UPDATED: Added republic and blessing_event
+export type VoteType = "individual" | "team" | "republic" | "blessing_event";
 
 export interface Poll {
   id: string;
@@ -84,8 +85,8 @@ export interface PollWithOptions extends Poll {
   options: PollOption[];
   userVotes?: string[]; // option IDs user has voted for
   hasVoted?: boolean;
-  userVoteWeight?: number; // For league polls
-  userTeamId?: string; // For team/league polls
+  userVoteWeight?: number; // For republic polls
+  userTeamId?: string; // For team/republic/blessing polls
   team_id?: string | null; // For team-scoped polls
 }
 
@@ -106,31 +107,41 @@ export async function getActivePolls(userId?: string) {
       .order("created_at", { ascending: false });
 
     if (error) throw error;
-
     const polls = data || [];
 
     // If userId provided, get user's votes for each poll
     if (userId) {
       const pollsWithVotes = await Promise.all(
         polls.map(async (poll) => {
-          const supabase = await createServerClient();
-          const { data: userVotes } = await supabase
-            .from("poll_votes")
-            .select("option_id")
-            .eq("poll_id", poll.id)
-            .eq("user_id", userId);
+          const client = await createServerClient();
+          let userVotesData = [];
+          
+          if (poll.vote_type === 'blessing_event') {
+            const { data } = await client
+              .from("blessing_allocations")
+              .select("option_id")
+              .eq("poll_id", poll.id)
+              .eq("user_id", userId)
+              .eq("voted_yes", true);
+            userVotesData = data || [];
+          } else {
+            const { data } = await client
+              .from("poll_votes")
+              .select("option_id")
+              .eq("poll_id", poll.id)
+              .eq("user_id", userId);
+            userVotesData = data || [];
+          }
 
           return {
             ...poll,
-            userVotes: userVotes?.map((v) => v.option_id) || [],
-            hasVoted: (userVotes?.length || 0) > 0,
+            userVotes: userVotesData.map((v) => v.option_id),
+            hasVoted: userVotesData.length > 0,
           };
         })
       );
-
       return { polls: pollsWithVotes, success: true };
     }
-
     return { polls, success: true };
   } catch (error) {
     console.error("Error fetching active polls:", error);
@@ -144,6 +155,7 @@ export async function getActivePolls(userId?: string) {
 export async function getPollWithOptions(pollId: string, userId?: string) {
   try {
     const supabase = await createServerClient();
+
     // Get poll
     const { data: poll, error: pollError } = await supabase
       .from("polls")
@@ -169,22 +181,29 @@ export async function getPollWithOptions(pollId: string, userId?: string) {
     let userTeamId: string | undefined;
 
     if (userId) {
-      const { data: votes } = await supabase
-        .from("poll_votes")
-        .select("option_id")
-        .eq("poll_id", pollId)
-        .eq("user_id", userId);
+      if (poll.vote_type === 'blessing_event') {
+        const { data: votes } = await supabase
+          .from("blessing_allocations")
+          .select("option_id")
+          .eq("poll_id", pollId)
+          .eq("user_id", userId)
+          .eq("voted_yes", true);
+        userVotes = votes?.map((v) => v.option_id) || [];
+      } else {
+        const { data: votes } = await supabase
+          .from("poll_votes")
+          .select("option_id")
+          .eq("poll_id", pollId)
+          .eq("user_id", userId);
+        userVotes = votes?.map((v) => v.option_id) || [];
+      }
 
-      userVotes = votes?.map((v) => v.option_id) || [];
-
-      // For team/league polls, get user's team and vote weight
-      if (poll.vote_type === "team" || poll.vote_type === "league") {
-        const { data: teamData } = await supabase.rpc("get_user_team_for_voting", {
-          p_user_id: userId,
-        });
+      // For team/republic/blessing polls, get user's team and vote weight
+      if (poll.vote_type === "team" || poll.vote_type === "republic" || poll.vote_type === "blessing_event") {
+        const { data: teamData } = await supabase.rpc("get_user_team_for_voting", { p_user_id: userId });
         userTeamId = teamData || undefined;
 
-        if (poll.vote_type === "league" && userTeamId) {
+        if (poll.vote_type === "republic" && userTeamId) {
           const { data: weightData } = await supabase.rpc("get_user_vote_weight", {
             p_user_id: userId,
             p_team_id: userTeamId,
@@ -225,12 +244,8 @@ export async function getPollWithOptions(pollId: string, userId?: string) {
 export async function getPollResults(pollId: string) {
   try {
     const supabase = await createServerClient();
-    const { data, error } = await supabase.rpc("get_poll_results", {
-      p_poll_id: pollId,
-    });
-
+    const { data, error } = await supabase.rpc("get_poll_results", { p_poll_id: pollId });
     if (error) throw error;
-
     return { results: data as PollResult[], success: true };
   } catch (error) {
     console.error("Error fetching poll results:", error);
@@ -248,6 +263,7 @@ export async function castVote(
 ) {
   try {
     const supabase = await createServerClient();
+
     // Get poll to check settings and vote type
     const { data: poll, error: pollError } = await supabase
       .from("polls")
@@ -265,33 +281,21 @@ export async function castVote(
 
     // Validate option count
     if (!poll.allow_multiple_votes && optionIds.length > 1) {
-      return {
-        success: false,
-        error: "This poll only allows one selection",
-      };
+      return { success: false, error: "This poll only allows one selection" };
     }
 
-    // For team/league polls, get user's team
+    // Get user's team
     let teamId: string | null = null;
     let voteWeight = 1;
 
-    if (poll.vote_type === "team" || poll.vote_type === "league") {
-      // Get user's team
-      const { data: userTeamId } = await supabase.rpc("get_user_team_for_voting", {
-        p_user_id: userId,
-      });
-
+    if (poll.vote_type === "team" || poll.vote_type === "republic" || poll.vote_type === "blessing_event") {
+      const { data: userTeamId } = await supabase.rpc("get_user_team_for_voting", { p_user_id: userId });
       if (!userTeamId) {
-        return {
-          success: false,
-          error: "You must be on a team to vote in this poll",
-        };
+        return { success: false, error: "You must be on a team to vote in this poll" };
       }
-
       teamId = userTeamId;
 
-      // For league polls, get vote weight based on roles
-      if (poll.vote_type === "league") {
+      if (poll.vote_type === "republic") {
         const { data: weight } = await supabase.rpc("get_user_vote_weight", {
           p_user_id: userId,
           p_team_id: teamId,
@@ -300,7 +304,36 @@ export async function castVote(
       }
     }
 
-    // Delete existing votes for this user on this poll
+    // -----------------------------------------------------
+    // Handle Blessing Event Allocations
+    // -----------------------------------------------------
+    if (poll.vote_type === "blessing_event") {
+      // 1. Delete previous allocations
+      await supabase
+        .from("blessing_allocations")
+        .delete()
+        .eq("poll_id", pollId)
+        .eq("user_id", userId);
+
+      // 2. Insert new allocations
+      if (optionIds.length > 0) {
+        const allocations = optionIds.map((opt) => ({
+          poll_id: pollId,
+          option_id: opt,
+          team_id: teamId,
+          user_id: userId,
+          voted_yes: true
+        }));
+        const { error: insertError } = await supabase.from("blessing_allocations").insert(allocations);
+        if (insertError) throw insertError;
+      }
+      return { success: true, message: "Allocations saved successfully!" };
+    } 
+
+    // -----------------------------------------------------
+    // Handle Standard, Team, and Republic polls
+    // -----------------------------------------------------
+    // Delete existing votes
     const { error: deleteError } = await supabase
       .from("poll_votes")
       .delete()
@@ -310,22 +343,21 @@ export async function castVote(
     if (deleteError) throw deleteError;
 
     // Insert new votes
-    const votes = optionIds.map((optionId) => ({
-      poll_id: pollId,
-      option_id: optionId,
-      user_id: userId,
-      team_id: teamId,
-      vote_weight: voteWeight,
-    }));
+    if (optionIds.length > 0) {
+      const votes = optionIds.map((optionId) => ({
+        poll_id: pollId,
+        option_id: optionId,
+        user_id: userId,
+        team_id: teamId,
+        vote_weight: voteWeight,
+      }));
 
-    const { error: insertError } = await supabase
-      .from("poll_votes")
-      .insert(votes);
+      const { error: insertError } = await supabase.from("poll_votes").insert(votes);
+      if (insertError) throw insertError;
+    }
 
-    if (insertError) throw insertError;
-
-    // Recalculate team/league results if applicable
-    if (poll.vote_type === "team" || poll.vote_type === "league") {
+    // Recalculate results for team/republic polls
+    if (poll.vote_type === "team" || poll.vote_type === "republic") {
       await supabase.rpc("recalculate_poll_results", {
         p_poll_id: pollId,
         p_team_id: teamId,
@@ -345,13 +377,25 @@ export async function castVote(
 export async function removeVote(pollId: string, userId: string) {
   try {
     const supabase = await createServerClient();
-    const { error } = await supabase
-      .from("poll_votes")
-      .delete()
-      .eq("poll_id", pollId)
-      .eq("user_id", userId);
+    
+    // Check poll type to know which table to clear from
+    const { data: poll } = await supabase.from("polls").select("vote_type").eq("id", pollId).single();
+    
+    if (poll?.vote_type === 'blessing_event') {
+        const { error } = await supabase.from("blessing_allocations").delete().eq("poll_id", pollId).eq("user_id", userId);
+        if (error) throw error;
+    } else {
+        const { error } = await supabase.from("poll_votes").delete().eq("poll_id", pollId).eq("user_id", userId);
+        if (error) throw error;
+    }
 
-    if (error) throw error;
+    // Recalculate results if necessary
+    if (poll?.vote_type === "team" || poll?.vote_type === "republic") {
+      const { data: userTeamId } = await supabase.rpc("get_user_team_for_voting", { p_user_id: userId });
+      if (userTeamId) {
+         await supabase.rpc("recalculate_poll_results", { p_poll_id: pollId, p_team_id: userTeamId });
+      }
+    }
 
     return { success: true, message: "Vote removed successfully" };
   } catch (error) {
@@ -372,16 +416,10 @@ export async function getAllPolls() {
     const supabase = await createServerClient();
     const { data, error } = await supabase
       .from("polls")
-      .select(
-        `
-        *,
-        poll_options(count)
-      `
-      )
+      .select(` *, poll_options(count) `)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
-
     return { polls: data || [], success: true };
   } catch (error) {
     console.error("Error fetching all polls:", error);
@@ -401,8 +439,7 @@ export async function createPoll(
   options: string[],
   createdBy: string,
   voteType: VoteType = "individual",
-  // CORRECTED: Added a comma after the 'voteType' parameter
-  triggerEvent?: 'championship_match_start' | null 
+  triggerEvent?: 'championship_match_start' | null
 ) {
   try {
     const supabase = await createServerClient();
@@ -411,17 +448,14 @@ export async function createPoll(
     if (!title || title.trim().length === 0) {
       return { success: false, error: "Title is required" };
     }
-
     if (!options || options.length < 2) {
       return { success: false, error: "At least 2 options are required" };
     }
-
     if (new Date(endsAt) <= new Date()) {
       return { success: false, error: "End date must be in the future" };
     }
 
-    // Create poll
-     const isActive = !triggerEvent;
+    const isActive = !triggerEvent;
 
     // Create poll
     const { data: poll, error: pollError } = await supabase
@@ -434,8 +468,8 @@ export async function createPoll(
         show_results_before_end: showResultsBeforeEnd,
         vote_type: voteType,
         created_by: createdBy,
-        is_active: isActive, // Use the new isActive logic
-        trigger_event: triggerEvent, // Save the trigger event
+        is_active: isActive,
+        trigger_event: triggerEvent, 
       })
       .select()
       .single();
@@ -455,16 +489,11 @@ export async function createPoll(
       .insert(pollOptions);
 
     if (optionsError) {
-      // Rollback poll creation
       await supabase.from("polls").delete().eq("id", poll.id);
       throw optionsError;
     }
 
-    return {
-      success: true,
-      message: "Poll created successfully!",
-      pollId: poll.id,
-    };
+    return { success: true, message: "Poll created successfully!", pollId: poll.id };
   } catch (error) {
     console.error("Error creating poll:", error);
     return { success: false, error: "Failed to create poll" };
@@ -487,13 +516,8 @@ export async function updatePoll(
 ) {
   try {
     const supabase = await createServerClient();
-    const { error } = await supabase
-      .from("polls")
-      .update(updates)
-      .eq("id", pollId);
-
+    const { error } = await supabase.from("polls").update(updates).eq("id", pollId);
     if (error) throw error;
-
     return { success: true, message: "Poll updated successfully!" };
   } catch (error) {
     console.error("Error updating poll:", error);
@@ -508,9 +532,7 @@ export async function deletePoll(pollId: string) {
   try {
     const supabase = await createServerClient();
     const { error } = await supabase.from("polls").delete().eq("id", pollId);
-
     if (error) throw error;
-
     return { success: true, message: "Poll deleted successfully!" };
   } catch (error) {
     console.error("Error deleting poll:", error);
@@ -524,17 +546,9 @@ export async function deletePoll(pollId: string) {
 export async function togglePollActive(pollId: string, isActive: boolean) {
   try {
     const supabase = await createServerClient();
-    const { error } = await supabase
-      .from("polls")
-      .update({ is_active: isActive })
-      .eq("id", pollId);
-
+    const { error } = await supabase.from("polls").update({ is_active: isActive }).eq("id", pollId);
     if (error) throw error;
-
-    return {
-      success: true,
-      message: isActive ? "Poll activated!" : "Poll deactivated!",
-    };
+    return { success: true, message: isActive ? "Poll activated!" : "Poll deactivated!" };
   } catch (error) {
     console.error("Error toggling poll:", error);
     return { success: false, error: "Failed to toggle poll status" };
@@ -547,7 +561,6 @@ export async function togglePollActive(pollId: string, isActive: boolean) {
 export async function addPollOption(pollId: string, optionText: string) {
   try {
     const supabase = await createServerClient();
-    // Get current max option_order
     const { data: existingOptions } = await supabase
       .from("poll_options")
       .select("option_order")
@@ -564,7 +577,6 @@ export async function addPollOption(pollId: string, optionText: string) {
     });
 
     if (error) throw error;
-
     return { success: true, message: "Option added successfully!" };
   } catch (error) {
     console.error("Error adding option:", error);
@@ -578,13 +590,8 @@ export async function addPollOption(pollId: string, optionText: string) {
 export async function deletePollOption(optionId: string) {
   try {
     const supabase = await createServerClient();
-    const { error } = await supabase
-      .from("poll_options")
-      .delete()
-      .eq("id", optionId);
-
+    const { error } = await supabase.from("poll_options").delete().eq("id", optionId);
     if (error) throw error;
-
     return { success: true, message: "Option deleted successfully!" };
   } catch (error) {
     console.error("Error deleting option:", error);
@@ -592,12 +599,33 @@ export async function deletePollOption(optionId: string) {
   }
 }
 
+/**
+ * Resolve a Team Blessings lottery event (Admin only)
+ * This triggers the backend RPC to securely calculate odds and roll for winners.
+ */
+export async function resolveBlessingEvent(pollId: string) {
+  try {
+    const supabase = await createServerClient();
+    const { error } = await supabase.rpc("resolve_blessings_event", {
+      p_poll_id: pollId,
+    });
+    
+    if (error) throw error;
+    
+    return { success: true, message: "Blessing lottery resolved successfully!" };
+  } catch (error) {
+    console.error("Error resolving blessing event:", error);
+    return { success: false, error: "Failed to resolve blessing event. Check server logs." };
+  }
+}
+
+
 // =================================================================================================
 // MULTI-TYPE VOTING FUNCTIONS
 // =================================================================================================
 
 /**
- * Get poll results by type (individual, team, or league)
+ * Get poll results by type (individual, team, republic, or blessing_event)
  */
 export async function getPollResultsByType(pollId: string) {
   try {
@@ -613,30 +641,43 @@ export async function getPollResultsByType(pollId: string) {
     if (pollError) throw pollError;
     if (!poll) return { results: null, success: false, error: "Poll not found" };
 
-    // For individual polls, use the existing function
     if (poll.vote_type === "individual") {
-      const { data, error } = await supabase.rpc("get_poll_results", {
-        p_poll_id: pollId,
-      });
-
+      const { data, error } = await supabase.rpc("get_poll_results", { p_poll_id: pollId });
       if (error) throw error;
+      return { results: { type: "individual", results: data as PollResult[] }, success: true };
+    }
 
-      const typedResults: TypedPollResults = {
-        type: "individual",
-        results: data as PollResult[],
-      };
-
+    if (poll.vote_type === "team" || poll.vote_type === "republic") {
+      const { data, error } = await supabase.rpc("get_poll_results_by_type", { p_poll_id: pollId });
+      if (error) throw error;
+      
+      // Override the type back to republic if it's a republic poll 
+      // (assuming the RPC might default it to league based on legacy)
+      const typedResults = data as TypedPollResults;
+      if (poll.vote_type === "republic") typedResults.type = "republic";
+      
       return { results: typedResults, success: true };
     }
 
-    // For team/league polls, use the typed results function
-    const { data, error } = await supabase.rpc("get_poll_results_by_type", {
-      p_poll_id: pollId,
-    });
+    // For blessing_event, we fetch from the blessing_results table directly!
+    if (poll.vote_type === "blessing_event") {
+       const { data: blessingResults, error } = await supabase
+          .from("blessing_results")
+          .select(`
+            roll_value,
+            team_odds,
+            poll_options(id, option_text),
+            teams(id, name, emoji)
+          `)
+          .eq("poll_id", pollId);
 
-    if (error) throw error;
+       if (error) throw error;
+       // Transform this into a usable format for the frontend (to be created)
+       // This will be handled in the upcoming BlessingsResults component
+       return { results: { type: "blessing_event", rawData: blessingResults }, success: true };
+    }
 
-    return { results: data as TypedPollResults, success: true };
+    return { results: null, success: false, error: "Unsupported poll type" };
   } catch (error) {
     console.error("Error fetching typed poll results:", error);
     return { results: null, success: false, error: "Failed to fetch results" };
@@ -649,14 +690,11 @@ export async function getPollResultsByType(pollId: string) {
 export async function getUserVoteWeight(userId: string, teamId: string) {
   try {
     const supabase = await createServerClient();
-
     const { data, error } = await supabase.rpc("get_user_vote_weight", {
       p_user_id: userId,
       p_team_id: teamId,
     });
-
     if (error) throw error;
-
     return { weight: data || 1, success: true };
   } catch (error) {
     console.error("Error fetching vote weight:", error);
@@ -670,13 +708,8 @@ export async function getUserVoteWeight(userId: string, teamId: string) {
 export async function getUserTeamForVoting(userId: string) {
   try {
     const supabase = await createServerClient();
-
-    const { data, error } = await supabase.rpc("get_user_team_for_voting", {
-      p_user_id: userId,
-    });
-
+    const { data, error } = await supabase.rpc("get_user_team_for_voting", { p_user_id: userId });
     if (error) throw error;
-
     return { teamId: data || null, success: true };
   } catch (error) {
     console.error("Error fetching user team:", error);
@@ -690,14 +723,11 @@ export async function getUserTeamForVoting(userId: string) {
 export async function recalculatePollResults(pollId: string, teamId?: string) {
   try {
     const supabase = await createServerClient();
-
     const { error } = await supabase.rpc("recalculate_poll_results", {
       p_poll_id: pollId,
       p_team_id: teamId || null,
     });
-
     if (error) throw error;
-
     return { success: true, message: "Results recalculated successfully!" };
   } catch (error) {
     console.error("Error recalculating results:", error);
@@ -717,7 +747,6 @@ export async function getTeamPolls(teamId: string, userId?: string) {
   try {
     const supabase = await createServerClient();
 
-    // Get team polls that are active or ended within the last 7 days
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
@@ -731,7 +760,6 @@ export async function getTeamPolls(teamId: string, userId?: string) {
 
     if (error) throw error;
 
-    // Get options for each poll
     const pollIds = (polls || []).map((p) => p.id);
     let allOptions: PollOption[] = [];
 
@@ -746,7 +774,6 @@ export async function getTeamPolls(teamId: string, userId?: string) {
       allOptions = options || [];
     }
 
-    // Build polls with options
     let pollsWithOptions: PollWithOptions[] = (polls || []).map((poll) => {
       const now = new Date();
       const startsAt = new Date(poll.starts_at);
@@ -763,7 +790,6 @@ export async function getTeamPolls(teamId: string, userId?: string) {
       };
     });
 
-    // If userId provided, get user's votes for each poll
     if (userId && pollIds.length > 0) {
       const { data: userVotes } = await supabase
         .from("poll_votes")
@@ -775,7 +801,6 @@ export async function getTeamPolls(teamId: string, userId?: string) {
         const votes = (userVotes || [])
           .filter((v) => v.poll_id === poll.id)
           .map((v) => v.option_id);
-
         return {
           ...poll,
           userVotes: votes,
@@ -793,7 +818,6 @@ export async function getTeamPolls(teamId: string, userId?: string) {
 
 /**
  * Create a new team-scoped poll (captain only)
- * Team polls always use vote_type = 'individual'
  */
 export async function createTeamPoll(
   teamId: string,
@@ -808,21 +832,16 @@ export async function createTeamPoll(
   try {
     const supabase = await createServerClient();
 
-    // Validate inputs
     if (!title || title.trim().length === 0) {
       return { success: false, error: "Title is required" };
     }
-
     if (!options || options.length < 2) {
       return { success: false, error: "At least 2 options are required" };
     }
-
     if (new Date(endsAt) <= new Date()) {
       return { success: false, error: "End date must be in the future" };
     }
 
-    // Verify user is a captain of the team (server-side authorization)
-    // Use user_has_team_role with explicit userId (proven pattern, doesn't rely on auth.uid() in RPC)
     const { data: isCaptain } = await supabase.rpc("user_has_team_role", {
       p_user_id: userId,
       p_team_id: teamId,
@@ -833,7 +852,6 @@ export async function createTeamPoll(
       return { success: false, error: "Only team captains can create polls" };
     }
 
-    // Create the poll with team_id and vote_type = 'individual'
     const { data: poll, error: pollError } = await supabase
       .from("polls")
       .insert({
@@ -842,7 +860,7 @@ export async function createTeamPoll(
         ends_at: endsAt,
         allow_multiple_votes: allowMultipleVotes,
         show_results_before_end: showResultsBeforeEnd,
-        vote_type: "individual" as VoteType,
+        vote_type: "team" as VoteType, // Hardcoded to team
         created_by: userId,
         is_active: true,
         team_id: teamId,
@@ -853,28 +871,20 @@ export async function createTeamPoll(
     if (pollError) throw pollError;
     if (!poll) return { success: false, error: "Failed to create poll" };
 
-    // Create options
     const pollOptions = options.map((text, index) => ({
       poll_id: poll.id,
       option_text: text,
       option_order: index + 1,
     }));
 
-    const { error: optionsError } = await supabase
-      .from("poll_options")
-      .insert(pollOptions);
+    const { error: optionsError } = await supabase.from("poll_options").insert(pollOptions);
 
     if (optionsError) {
-      // Rollback poll creation
       await supabase.from("polls").delete().eq("id", poll.id);
       throw optionsError;
     }
 
-    return {
-      success: true,
-      message: "Team poll created successfully!",
-      pollId: poll.id,
-    };
+    return { success: true, message: "Team poll created successfully!", pollId: poll.id };
   } catch (error) {
     console.error("Error creating team poll:", error);
     return { success: false, error: "Failed to create team poll" };
@@ -884,15 +894,10 @@ export async function createTeamPoll(
 /**
  * Delete a team-scoped poll (captain only)
  */
-export async function deleteTeamPoll(
-  pollId: string,
-  teamId: string,
-  userId: string
-) {
+export async function deleteTeamPoll(pollId: string, teamId: string, userId: string) {
   try {
     const supabase = await createServerClient();
 
-    // Verify user is a captain
     const { data: isCaptain } = await supabase.rpc("user_has_team_role", {
       p_user_id: userId,
       p_team_id: teamId,
@@ -903,7 +908,6 @@ export async function deleteTeamPoll(
       return { success: false, error: "Only team captains can delete polls" };
     }
 
-    // Verify the poll belongs to this team
     const { data: poll, error: pollError } = await supabase
       .from("polls")
       .select("team_id")
@@ -915,9 +919,7 @@ export async function deleteTeamPoll(
       return { success: false, error: "Poll not found for this team" };
     }
 
-    // Delete the poll (cascades to options and votes)
     const { error } = await supabase.from("polls").delete().eq("id", pollId);
-
     if (error) throw error;
 
     return { success: true, message: "Poll deleted successfully!" };
@@ -930,21 +932,15 @@ export async function deleteTeamPoll(
 /**
  * Toggle a team poll's active status (captain only)
  */
-export async function toggleTeamPollActive(
-  pollId: string,
-  teamId: string,
-  isActive: boolean
-) {
+export async function toggleTeamPollActive(pollId: string, teamId: string, isActive: boolean) {
   try {
     const supabase = await createServerClient();
-
-    // Get current user for captain check
     const { data: { user } } = await supabase.auth.getUser();
+    
     if (!user) {
       return { success: false, error: "Not authenticated" };
     }
 
-    // Verify user is a captain
     const { data: isCaptain } = await supabase.rpc("user_has_team_role", {
       p_user_id: user.id,
       p_team_id: teamId,
@@ -955,7 +951,6 @@ export async function toggleTeamPollActive(
       return { success: false, error: "Only team captains can manage polls" };
     }
 
-    // Verify the poll belongs to this team
     const { data: poll, error: pollError } = await supabase
       .from("polls")
       .select("team_id")
@@ -967,17 +962,10 @@ export async function toggleTeamPollActive(
       return { success: false, error: "Poll not found for this team" };
     }
 
-    const { error } = await supabase
-      .from("polls")
-      .update({ is_active: isActive })
-      .eq("id", pollId);
-
+    const { error } = await supabase.from("polls").update({ is_active: isActive }).eq("id", pollId);
     if (error) throw error;
 
-    return {
-      success: true,
-      message: isActive ? "Poll activated!" : "Poll deactivated!",
-    };
+    return { success: true, message: isActive ? "Poll activated!" : "Poll deactivated!" };
   } catch (error) {
     console.error("Error toggling team poll:", error);
     return { success: false, error: "Failed to toggle poll status" };
