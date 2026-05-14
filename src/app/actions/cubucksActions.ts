@@ -846,37 +846,49 @@ export async function spendCubucksOnDraft(
   draftPickId?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const supabase = await createServerClient();
+    console.log("=== spendCubucksOnDraft LOGGING ===");
+    console.log("teamId:", teamId, "type:", typeof teamId);
+    console.log("cardId:", cardId, "type:", typeof cardId);
+    console.log("cardName:", cardName);
+    console.log("cardPoolId:", cardPoolId, "type:", typeof cardPoolId);
+    console.log("draftPickId:", draftPickId, "type:", typeof draftPickId);
 
-    // Verify user is authenticated and is a member of the team
+    const supabase = await createServerClient();
+    
+    console.log("Verifying team membership...");
     const authCheck = await verifyTeamMembership(teamId);
+    console.log("Auth check result:", authCheck);
+    
     if (!authCheck.authorized) {
       return { success: false, error: authCheck.error };
     }
 
-    // Call the stored procedure
-    const { error } = await supabase.rpc("spend_cubucks_on_draft", {
+    const rpcPayload = {
       p_team_id: teamId,
       p_amount: cost,
       p_card_id: cardId,
       p_card_name: cardName,
       p_draft_pick_id: draftPickId || null,
-      p_season_id: null, // Uses active season
-      p_card_pool_id: cardPoolId || null, // For tracking drafted cards
-    });
+      p_season_id: null, 
+      p_card_pool_id: cardPoolId || null, 
+    };
+    console.log("RPC Payload for spend_cubucks_on_draft:", JSON.stringify(rpcPayload, null, 2));
+
+    const { error } = await supabase.rpc("spend_cubucks_on_draft", rpcPayload);
 
     if (error) {
-      console.error("Error spending Cubucks:", error);
+      console.error("RPC Error spend_cubucks_on_draft:", error);
       return { success: false, error: error.message };
     }
 
+    console.log("spendCubucksOnDraft SUCCESS");
     return { success: true };
-  } catch (error) {
-    console.error("Unexpected error spending Cubucks:", error);
-    return { success: false, error: String(error) };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Unexpected error spending Cubucks:", message);
+    return { success: false, error: message };
   }
 }
-
 /**
  * Internal: Spend Cubucks on an auto-draft pick without user session check.
  * Only for use by server-side auto-draft logic.
