@@ -97,31 +97,50 @@ export default function TeamPage() {
   ) || userRoles.length > 0;
 
   useEffect(() => {
+    console.log("[TeamPage] useEffect triggered. teamShortName:", teamShortName, "user:", user?.id);
+    
     // Safety guard: Wait until Next.js router successfully hydrates the URL parameter
-    if (!teamShortName) return; 
+    if (!teamShortName) {
+      console.log("[TeamPage] Waiting for teamShortName to hydrate from URL...");
+      return; 
+    }
+    
+    console.log("[TeamPage] Calling loadTeamData()...");
     loadTeamData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamShortName, user?.id]);
 
   const loadTeamData = async () => {
     setLoading(true);
+    console.log("[TeamPage] loadTeamData Phase 1 Started");
+    
     try {
       // --- Phase 1: Fetch data that has no dependencies ---
       const { team: foundTeam, error: teamError } = await getTeamByShortName(teamShortName);
+      
+      if (teamError) {
+        console.error("[TeamPage] API Error fetching team:", teamError);
+      }
+      
       if (teamError || !foundTeam) {
+        console.log("[TeamPage] Team not found or error occurred. Setting team to null.");
         setTeam(null);
         setLoading(false);
         return;
       }
       
+      console.log("[TeamPage] Team successfully fetched:", foundTeam.name);
       const teamUUID = foundTeam.id;
 
       // --- Phase 2: Fetch data that is needed for the next phase ---
+      console.log("[TeamPage] loadTeamData Phase 2 Started");
       const { session: activeSession } = await getActiveDraftSession();
       const sessionId = activeSession?.id || null;
-      setActiveDraftSessionId(sessionId); // Set the session ID state
+      console.log("[TeamPage] Active Draft Session ID:", sessionId);
+      setActiveDraftSessionId(sessionId); 
 
-      // --- Phase 3: Fetch all remaining data in parallel now that we have all necessary IDs ---
+      // --- Phase 3: Fetch all remaining data in parallel ---
+      console.log("[TeamPage] loadTeamData Phase 3 Started (Promise.all)");
       const previewPromise = sessionId
         ? getAutoDraftPreview(teamUUID, sessionId)
         : Promise.resolve(null as AutoDraftPreviewResult | null);
@@ -134,6 +153,8 @@ export default function TeamPage() {
         getTeamMembersWithRoles(teamUUID),
         previewPromise,
       ]);
+      
+      console.log("[TeamPage] Phase 3 Completed. Processing results...");
       
       foundTeam.members = membersResult.members.map(m => ({ 
         id: m.member_id, 
@@ -156,6 +177,7 @@ export default function TeamPage() {
       const isMember = foundTeam.members?.some((m) => m.user_id === user?.id) || rolesResult.roles.length > 0;
       let defaultTab: TabType = "picks";
       const currentPhase = seasonResult.season?.phase;
+      
       if (currentPhase === "preseason" || currentPhase === "draft") {
         defaultTab = isMember ? "draft" : "picks";
       } else if (currentPhase === "season" || currentPhase === "playoffs") {
@@ -163,11 +185,15 @@ export default function TeamPage() {
       } else if (currentPhase === "postseason") {
         defaultTab = isMember ? "votes" : "picks";
       }
+      
+      console.log("[TeamPage] Setting active tab to:", defaultTab);
       setActiveTab(defaultTab);
+      
     } catch (error) {
-      console.error("Error loading team data:", error);
+      console.error("[TeamPage] Critical Try/Catch Error loading team data:", error);
       setTeam(null);
     } finally {
+      console.log("[TeamPage] loadTeamData Finally Block - turning off loading spinner");
       setLoading(false);
     }
   };
@@ -177,7 +203,7 @@ export default function TeamPage() {
       <div className="container max-w-7xl mx-auto px-4 py-8">
         <div className="flex flex-col items-center justify-center py-16">
           <Loader2 className="size-10 animate-spin text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">Loading team...</p>
+          <p className="text-muted-foreground">Loading Teams...</p>
         </div>
       </div>
     );
