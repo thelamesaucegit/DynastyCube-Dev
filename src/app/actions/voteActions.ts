@@ -7,8 +7,8 @@ import { createServerClient } from "@/lib/supabase";
 // TYPES
 // =================================================================================================
 
-// UPDATED: Added republic and blessing_event
-export type VoteType = "individual" | "team" | "republic" | "blessing_event";
+// Added 'league' back in to support legacy polls in the database
+export type VoteType = "individual" | "team" | "league" | "republic" | "blessing_event";
 
 export interface Poll {
   id: string;
@@ -79,6 +79,8 @@ export interface TypedPollResults {
     option_text: string;
     teams_voting: { team_id: string; team_name: string; team_emoji: string }[] | null;
   }[];
+  // FIX: Added rawData to satisfy TypeScript for blessing events
+  rawData?: any; 
 }
 
 export interface PollWithOptions extends Poll {
@@ -644,22 +646,21 @@ export async function getPollResultsByType(pollId: string) {
     if (poll.vote_type === "individual") {
       const { data, error } = await supabase.rpc("get_poll_results", { p_poll_id: pollId });
       if (error) throw error;
-      return { results: { type: "individual", results: data as PollResult[] }, success: true };
+      // FIX: Cast as VoteType
+      return { results: { type: "individual" as VoteType, results: data as PollResult[] }, success: true };
     }
 
-    if (poll.vote_type === "team" || poll.vote_type === "republic") {
+    if (poll.vote_type === "team" || poll.vote_type === "republic" || poll.vote_type === "league") {
       const { data, error } = await supabase.rpc("get_poll_results_by_type", { p_poll_id: pollId });
       if (error) throw error;
       
-      // Override the type back to republic if it's a republic poll 
-      // (assuming the RPC might default it to league based on legacy)
       const typedResults = data as TypedPollResults;
-      if (poll.vote_type === "republic") typedResults.type = "republic";
+      // Force it to match exactly the string needed
+      if (poll.vote_type === "republic") typedResults.type = "republic" as VoteType;
       
       return { results: typedResults, success: true };
     }
 
-    // For blessing_event, we fetch from the blessing_results table directly!
     if (poll.vote_type === "blessing_event") {
        const { data: blessingResults, error } = await supabase
           .from("blessing_results")
@@ -672,9 +673,8 @@ export async function getPollResultsByType(pollId: string) {
           .eq("poll_id", pollId);
 
        if (error) throw error;
-       // Transform this into a usable format for the frontend (to be created)
-       // This will be handled in the upcoming BlessingsResults component
-       return { results: { type: "blessing_event", rawData: blessingResults }, success: true };
+       // FIX: Cast as VoteType and provide rawData directly to the property added in TypedPollResults
+       return { results: { type: "blessing_event" as VoteType, rawData: blessingResults }, success: true };
     }
 
     return { results: null, success: false, error: "Unsupported poll type" };
@@ -948,26 +948,4 @@ export async function toggleTeamPollActive(pollId: string, teamId: string, isAct
     });
 
     if (!isCaptain) {
-      return { success: false, error: "Only team captains can manage polls" };
-    }
-
-    const { data: poll, error: pollError } = await supabase
-      .from("polls")
-      .select("team_id")
-      .eq("id", pollId)
-      .single();
-
-    if (pollError) throw pollError;
-    if (!poll || poll.team_id !== teamId) {
-      return { success: false, error: "Poll not found for this team" };
-    }
-
-    const { error } = await supabase.from("polls").update({ is_active: isActive }).eq("id", pollId);
-    if (error) throw error;
-
-    return { success: true, message: isActive ? "Poll activated!" : "Poll deactivated!" };
-  } catch (error) {
-    console.error("Error toggling team poll:", error);
-    return { success: false, error: "Failed to toggle poll status" };
-  }
-}
+      return { succ
