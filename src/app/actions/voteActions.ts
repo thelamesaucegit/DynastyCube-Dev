@@ -7,7 +7,6 @@ import { createServerClient } from "@/lib/supabase";
 // TYPES
 // =================================================================================================
 
-// Added 'league' back in to support legacy polls in the database
 export type VoteType = "individual" | "team" | "league" | "republic" | "blessing_event";
 
 export interface Poll {
@@ -69,6 +68,13 @@ export interface LeaguePollResult {
   teams_for_option: Record<string, string[]>;
 }
 
+export interface BlessingResultRaw {
+  roll_value: number;
+  team_odds: Record<string, number>;
+  poll_options: { id: string; option_text: string } | null;
+  teams?: { id: string; name: string; emoji: string } | null;
+}
+
 export interface TypedPollResults {
   type: VoteType;
   results?: PollResult[];
@@ -79,8 +85,7 @@ export interface TypedPollResults {
     option_text: string;
     teams_voting: { team_id: string; team_name: string; team_emoji: string }[] | null;
   }[];
-  // FIX: Added rawData to satisfy TypeScript for blessing events
-  rawData?: any; 
+  rawData?: BlessingResultRaw[]; 
 }
 
 export interface PollWithOptions extends Poll {
@@ -646,7 +651,6 @@ export async function getPollResultsByType(pollId: string) {
     if (poll.vote_type === "individual") {
       const { data, error } = await supabase.rpc("get_poll_results", { p_poll_id: pollId });
       if (error) throw error;
-      // FIX: Cast as VoteType
       return { results: { type: "individual" as VoteType, results: data as PollResult[] }, success: true };
     }
 
@@ -655,7 +659,6 @@ export async function getPollResultsByType(pollId: string) {
       if (error) throw error;
       
       const typedResults = data as TypedPollResults;
-      // Force it to match exactly the string needed
       if (poll.vote_type === "republic") typedResults.type = "republic" as VoteType;
       
       return { results: typedResults, success: true };
@@ -673,8 +676,7 @@ export async function getPollResultsByType(pollId: string) {
           .eq("poll_id", pollId);
 
        if (error) throw error;
-       // FIX: Cast as VoteType and provide rawData directly to the property added in TypedPollResults
-       return { results: { type: "blessing_event" as VoteType, rawData: blessingResults }, success: true };
+       return { results: { type: "blessing_event" as VoteType, rawData: blessingResults as BlessingResultRaw[] }, success: true };
     }
 
     return { results: null, success: false, error: "Unsupported poll type" };
