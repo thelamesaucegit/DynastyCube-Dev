@@ -102,18 +102,22 @@ export interface PollWithOptions extends Poll {
 // =================================================================================================
 
 /**
- * Get all active polls
+ * Get all active polls (Replaced view with direct table query)
  */
 export async function getActivePolls(userId?: string) {
   try {
     const supabase = await createServerClient();
+
+    // Query the 'polls' table directly instead of relying on a view
     const { data, error } = await supabase
-      .from("active_polls_view")
+      .from("polls")
       .select("*")
-      .is("team_id", null)
+      .eq("is_active", true)
+      .is("team_id", null) // Ensures we don't accidentally grab team-scoped polls here
       .order("created_at", { ascending: false });
 
     if (error) throw error;
+
     const polls = data || [];
 
     // If userId provided, get user's votes for each poll
@@ -147,14 +151,17 @@ export async function getActivePolls(userId?: string) {
           };
         })
       );
+
       return { polls: pollsWithVotes, success: true };
     }
+
     return { polls, success: true };
   } catch (error) {
     console.error("Error fetching active polls:", error);
     return { polls: [], success: false, error: "Failed to fetch polls" };
   }
 }
+
 
 /**
  * Get a single poll with its options
