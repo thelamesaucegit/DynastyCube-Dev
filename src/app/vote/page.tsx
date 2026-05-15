@@ -11,6 +11,8 @@ import { Loader2, Lock, Check } from "lucide-react";
 import { RepublicVoteCard } from "@/app/components/vote/RepublicVoteCard";
 import { BlessingsAllocator } from "@/app/components/vote/BlessingsAllocator";
 import { TeamPollCard } from "@/app/components/team/TeamPollCard";
+import { IndividualVoteCard } from "@/app/components/vote/IndividualVoteCard";
+
 
 export default function VotePage() {
   const { user, loading: authLoading } = useAuth();
@@ -120,10 +122,7 @@ const defaultTab = republicPolls.length > 0 ? "republic" :
     </Card>
   ) : (
     individualPolls.map((poll) => (
-      {/* Ensure you use a generic vote card here. 
-          If RepublicVoteCard works for standard votes, you can reuse it, 
-          or create an <IndividualVoteCard /> */}
-      <RepublicVoteCard key={poll.id} poll={poll} userId={user.id} onVoteSubmit={loadPolls} />
+      <IndividualVoteCard key={poll.id} poll={poll} userId={user.id} onVoteSubmit={loadPolls} />
     ))
   )}
 </TabsContent>
