@@ -11,6 +11,8 @@ import { Loader2, Lock, Check } from "lucide-react";
 import { RepublicVoteCard } from "@/app/components/vote/RepublicVoteCard";
 import { BlessingsAllocator } from "@/app/components/vote/BlessingsAllocator";
 import { TeamPollCard } from "@/app/components/team/TeamPollCard";
+import { IndividualVoteCard } from "@/app/components/vote/IndividualVoteCard";
+
 
 export default function VotePage() {
   const { user, loading: authLoading } = useAuth();
@@ -71,12 +73,15 @@ export default function VotePage() {
   }
 
   // Filter polls by vote type
-  const republicPolls = polls.filter((p) => p.vote_type === "republic" || p.vote_type === "league");
-  const blessingPolls = polls.filter((p) => p.vote_type === "blessing_event");
-  const teamPolls = polls.filter((p) => p.vote_type === "team" || p.vote_type === "individual");
+ const republicPolls = polls.filter((p) => p.vote_type === "republic" || p.vote_type === "league");
+const blessingPolls = polls.filter((p) => p.vote_type === "blessing_event");
+const teamPolls = polls.filter((p) => p.vote_type === "team");
+const individualPolls = polls.filter((p) => p.vote_type === "individual"); // Separate them here
 
-  // Determine the best default tab to open based on what has active polls
-  const defaultTab = republicPolls.length > 0 ? "republic" : blessingPolls.length > 0 ? "blessings" : "team";
+// Update default tab logic to include the new group
+const defaultTab = republicPolls.length > 0 ? "republic" : 
+                   individualPolls.length > 0 ? "individual" : 
+                   blessingPolls.length > 0 ? "blessings" : "team";
 
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8">
@@ -95,6 +100,9 @@ export default function VotePage() {
       ) : (
         <Tabs defaultValue={defaultTab} className="w-full">
           <TabsList className="mb-6 flex-wrap h-auto">
+             <TabsTrigger value="individual" className="gap-2">
+    General Votes <Badge variant="secondary" className="ml-1 rounded-full">{individualPolls.length}</Badge>
+  </TabsTrigger>
             <TabsTrigger value="republic" className="gap-2">
               League Rules <Badge variant="secondary" className="ml-1 rounded-full">{republicPolls.length}</Badge>
             </TabsTrigger>
@@ -105,7 +113,19 @@ export default function VotePage() {
               Team Internal <Badge variant="secondary" className="ml-1 rounded-full">{teamPolls.length}</Badge>
             </TabsTrigger>
           </TabsList>
-
+<TabsContent value="individual" className="space-y-6">
+  {individualPolls.length === 0 ? (
+    <Card>
+      <CardContent className="py-12 text-center text-muted-foreground">
+        <p>No active general votes at this time.</p>
+      </CardContent>
+    </Card>
+  ) : (
+    individualPolls.map((poll) => (
+      <IndividualVoteCard key={poll.id} poll={poll} userId={user.id} onVoteSubmit={loadPolls} />
+    ))
+  )}
+</TabsContent>
           <TabsContent value="republic" className="space-y-6">
             {republicPolls.length === 0 ? (
               <Card>
