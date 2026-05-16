@@ -102,24 +102,41 @@ export interface PollWithOptions extends Poll {
 // =================================================================================================
 
 /**
- * Get all active polls
+ * Get all active polls (Direct table query with options joined)
  */
 export async function getActivePolls(userId?: string) {
   try {
     const supabase = await createServerClient();
+
+    // Fetch polls AND their options in one query using Supabase relations
     const { data, error } = await supabase
-      .from("active_polls_view")
-      .select("*")
+      .from("polls")
+      .select("*, poll_options(*)")
+      .eq("is_active", true)
       .is("team_id", null)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
+
     const polls = data || [];
+
+    // Map the Supabase relation 'poll_options' to the 'options' property expected by the frontend
+    const pollsWithOptions = polls.map((poll) => {
+      // Sort options by their intended order
+      const sortedOptions = (poll.poll_options || []).sort(
+        (a, b) => a.option_order - b.option_order
+      );
+      
+      return {
+        ...poll,
+        options: sortedOptions,
+      };
+    });
 
     // If userId provided, get user's votes for each poll
     if (userId) {
       const pollsWithVotes = await Promise.all(
-        polls.map(async (poll) => {
+        pollsWithOptions.map(async (poll) => {
           const client = await createServerClient();
           let userVotesData = [];
           
@@ -147,9 +164,11 @@ export async function getActivePolls(userId?: string) {
           };
         })
       );
+
       return { polls: pollsWithVotes, success: true };
     }
-    return { polls, success: true };
+
+    return { polls: pollsWithOptions, success: true };
   } catch (error) {
     console.error("Error fetching active polls:", error);
     return { polls: [], success: false, error: "Failed to fetch polls" };
