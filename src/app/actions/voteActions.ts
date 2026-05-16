@@ -175,6 +175,7 @@ export async function getActivePolls(userId?: string) {
   }
 }
 
+
 /**
  * Get a single poll with its options
  */
