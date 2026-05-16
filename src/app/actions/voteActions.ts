@@ -122,9 +122,10 @@ export async function getActivePolls(userId?: string) {
 
     // Map the Supabase relation 'poll_options' to the 'options' property expected by the frontend
     const pollsWithOptions = polls.map((poll) => {
-      // Sort options by their intended order
-      const sortedOptions = (poll.poll_options || []).sort(
-        (a, b) => a.option_order - b.option_order
+      // Safely cast the joined options to our PollOption type and sort them
+      const rawOptions = (poll.poll_options as PollOption[]) || [];
+      const sortedOptions = rawOptions.sort(
+        (a: PollOption, b: PollOption) => a.option_order - b.option_order
       );
       
       return {
