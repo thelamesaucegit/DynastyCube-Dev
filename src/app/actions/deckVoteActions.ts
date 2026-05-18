@@ -4,6 +4,8 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { submitDeckForWeek } from "./deckGenerationActions";
+import { logSystemEvent } from "@/lib/systemLogger";
+
 
 function createServiceClient() {
     return createClient(
@@ -216,24 +218,24 @@ export async function resolveDeckVotePoll(
     weekId: string
 ): Promise<{ success: boolean; winningDeckId?: string; submissionId?: string; error?: string }> {
     const supabase = createServiceClient();
-
     try {
         // 1. Fetch poll with options and vote counts
-       const { data: rawPoll, error: pollError } = await supabase
-    .from('polls')
-    .select(`
-        id,
-        team_id,
-        poll_options (
-            id,
-            deck_id,
-            option_text,
-            vote_count,
-            option_order
-        )
-    `)
-    .eq('id', pollId)
-    .single();
+        const { data: rawPoll, error: pollError } = await supabase
+            .from('polls')
+            .select(`
+                id,
+                team_id,
+                poll_options (
+                    id,
+                    deck_id,
+                    option_text,
+                    vote_count,
+                    option_order
+                )
+            `)
+            .eq('id', pollId)
+            .single();
+
         const poll = rawPoll as unknown as PollWithOptions;
 
         if (pollError || !poll) {
@@ -244,14 +246,12 @@ export async function resolveDeckVotePoll(
             return { success: false, error: 'Poll is not associated with a team' };
         }
 
-       const options: PollOptionRow[] = poll.poll_options;
-
+        const options: PollOptionRow[] = poll.poll_options;
         if (!options || options.length === 0) {
             return { success: false, error: 'Poll has no options' };
         }
 
         // 2. Find winner — highest vote count
-        //    Tiebreaker: auto-generated deck (option_order 0) wins, then alphabetical
         const sorted = [...options].sort((a, b) => {
             if (b.vote_count !== a.vote_count) return b.vote_count - a.vote_count;
             if (a.option_order !== b.option_order) return a.option_order - b.option_order;
@@ -259,16 +259,12 @@ export async function resolveDeckVotePoll(
         });
 
         const winner = sorted[0];
-
         if (!winner.deck_id) {
             return { success: false, error: 'Winning option has no associated deck' };
         }
 
         // 3. Mark poll as inactive
-        await supabase
-            .from('polls')
-            .update({ is_active: false })
-            .eq('id', pollId);
+        await supabase.from('polls').update({ is_active: false }).eq('id', pollId);
 
         // 4. Record result in poll_team_results
         await supabase
@@ -288,54 +284,50 @@ export async function resolveDeckVotePoll(
         );
 
         if (!success) {
+            await logSystemEvent('resolveDeckVotePoll', 'error', 'Poll resolved but deck submission failed', { error, pollId });
             return { success: false, error: `Poll resolved but deck submission failed: ${error}` };
         }
-        // 6. Auto-generate next week's poll
-          const { data: currentWeekData, error: weekError } = await supabase
-        .from('schedule_weeks')
-        .select('season_id, week_number, end_date')
-        .eq('id', weekId)
-        .single();
 
-    if (weekError || !currentWeekData) {
-        console.error(`[resolveDeckVotePoll] Could not find week data for weekId: ${weekId} to chain the next vote.`, weekError);
-    } else {
-        // Find the next chronological week in the SAME season
-        const { data: nextWeek, error: nextWeekError } = await supabase
+        // 6. Auto-generate next week's poll (FIXED: Now properly awaited)
+        const { data: currentWeekData, error: weekError } = await supabase
             .from('schedule_weeks')
-            .select('id, deck_submission_deadline, is_playoff_week, is_championship_week')
-            .eq('season_id', currentWeekData.season_id)
-            .eq('week_number', currentWeekData.week_number + 1)
+            .select('season_id, week_number, end_date')
+            .eq('id', weekId)
             .single();
 
-        if (nextWeekError || !nextWeek) {
-            console.log(`[resolveDeckVotePoll] No upcoming week found after week ${currentWeekData.week_number}. End of season.`);
+        if (weekError || !currentWeekData) {
+            await logSystemEvent('resolveDeckVotePoll', 'error', 'Could not find current week data to chain next vote', { weekId, error: weekError });
         } else {
-            // We want the poll to end exactly when the deck submission deadline happens for the upcoming week
-            const nextPollEndsAt = nextWeek.deck_submission_deadline; 
-            
-            console.log(`[resolveDeckVotePoll] Auto-creating next deck vote for team ${poll.team_id} for week ${nextWeek.id}, ending at ${nextPollEndsAt}`);
-            
-            // Fire-and-forget the creation of the next poll.
-            createDeckVotePoll(poll.team_id, nextWeek.id, nextPollEndsAt).then(result => {
+            // Find the next chronological week
+            const { data: nextWeek, error: nextWeekError } = await supabase
+                .from('schedule_weeks')
+                .select('id, deck_submission_deadline, is_playoff_week, is_championship_week')
+                .eq('season_id', currentWeekData.season_id)
+                .eq('week_number', currentWeekData.week_number + 1)
+                .single();
+
+            if (nextWeekError || !nextWeek) {
+                await logSystemEvent('resolveDeckVotePoll', 'info', 'No upcoming week found. End of season.', { currentWeek: currentWeekData.week_number });
+            } else {
+                const nextPollEndsAt = nextWeek.deck_submission_deadline; 
+                
+                // FIXED: AWAIT the creation so the serverless function doesn't kill it!
+                const result = await createDeckVotePoll(poll.team_id, nextWeek.id, nextPollEndsAt);
+                
                 if (!result.success) {
-                    console.error(`[resolveDeckVotePoll] Failed to auto-create next poll: ${result.error}`);
+                    await logSystemEvent('resolveDeckVotePoll', 'error', 'Failed to auto-create next poll', { teamId: poll.team_id, nextWeekId: nextWeek.id, error: result.error });
                 } else {
-                    console.log(`[resolveDeckVotePoll] Successfully queued next poll for team ${poll.team_id}`);
+                    await logSystemEvent('resolveDeckVotePoll', 'info', 'Successfully queued next poll', { teamId: poll.team_id, nextWeekId: nextWeek.id, newPollId: result.pollId });
                 }
-            });
+            }
         }
-    }
 
-    return { 
-        success: true, 
-        winningDeckId: winner.deck_id, 
-        submissionId 
-    };
-
+        return { success: true, winningDeckId: winner.deck_id, submissionId };
 
     } catch (e) {
-        return { success: false, error: e instanceof Error ? e.message : 'Unexpected error' };
+        const errorMsg = e instanceof Error ? e.message : 'Unexpected error';
+        await logSystemEvent('resolveDeckVotePoll', 'error', 'Fatal error during poll resolution', { error: errorMsg, pollId });
+        return { success: false, error: errorMsg };
     }
 }
 
