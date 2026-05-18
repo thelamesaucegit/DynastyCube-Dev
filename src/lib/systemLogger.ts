@@ -15,7 +15,7 @@ export async function logSystemEvent(
   processName: string, 
   level: LogLevel, 
   message: string, 
-  details?: Record<string, any>
+  details?: Record<string, unknown> // <-- Changed from 'any' to 'unknown'
 ) {
   const supabase = createLogClient();
   
