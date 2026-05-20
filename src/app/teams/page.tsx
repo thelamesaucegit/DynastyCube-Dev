@@ -150,7 +150,7 @@ export default function TeamsPage() {
                         title={`Tiebreaker: ${team.game_wins} Individual Game Wins - ${team.game_losses} Losses`}
                     >
                         <p className="text-xs font-semibold text-muted-foreground tracking-wider mb-1 cursor-help">RECORD</p>
-                        <p className="text-xl font-bold cursor-help">{team.wins} - {team.losses}</p>
+<p className="text-xl font-bold cursor-help">{Math.floor(team.wins)} - {Math.floor(team.losses)}</p>
                         
                         {/* Styled tooltip overlay */}
                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover text-popover-foreground text-xs rounded shadow-xl border opacity-0 group-hover/record:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">

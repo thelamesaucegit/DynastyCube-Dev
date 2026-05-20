@@ -451,6 +451,7 @@ export async function reportMatchGame(gameData: {
       .rpc("update_match_game_stats", {
         p_match_id: gameData.match_id,
         p_winner_team_id: gameData.winner_team_id,
+         p_is_pvp: true,
       });
 
     if (rpcError) {
