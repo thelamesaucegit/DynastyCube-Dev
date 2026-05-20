@@ -11,7 +11,7 @@ import { updateAllCubecobraElo } from "./cardRatingActions";
 
 
 
-export type PoolTableName = "card_pools" | "the_chamber" | "resort_pool"; 
+export type PoolTableName = "card_pools" | "the_chamber" | "resort_pool" | "card_pools_next"; 
 
 
 async function createClient() {
