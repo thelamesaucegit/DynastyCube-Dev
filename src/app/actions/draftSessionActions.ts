@@ -4,6 +4,9 @@
 
 import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 import { getDraftStatus, type DraftStatus } from "@/app/actions/draftOrderActions";
+import { generateFullSeasonSchedule } from "@/app/actions/seasonSchedulerActions";
+import { getScheduleWeeks, getActiveSeasonDetails } from "@/app/actions/scheduleActions";
+import { updateSeasonPhase } from "@/app/actions/seasonPhaseActions";
 import { executeAutoDraft } from "@/app/actions/autoDraftActions";
 import { addSkippedPick } from "@/app/actions/draftActions"; 
 import { generatePlaceholderDeck, submitDeckForWeek } from "@/app/actions/deckGenerationActions";
@@ -654,9 +657,35 @@ export async function completeDraft(
           }
       }
     }
+     // --- NEW: AUTOMATED SCHEDULE GENERATION & PHASE TRANSITION ---
+    console.log(`[Draft Complete] Generating regular season schedule...`);
+    const [weeksResult, seasonResult] = await Promise.all([
+      getScheduleWeeks(sessionData?.season_id),
+      getActiveSeasonDetails(),
+    ]);
+
+    if (weeksResult.weeks && seasonResult.season) {
+      const regularWeeksCount = weeksResult.weeks.filter(w => !w.is_playoff_week && !w.is_championship_week).length;
+      const schedResult = await generateFullSeasonSchedule(
+        sessionData.season_id, 
+        regularWeeksCount, 
+        seasonResult.season.has_rivals_week
+      );
+      if (schedResult.success) {
+        console.log(`[Draft Complete] Successfully generated ${schedResult.scheduledGamesCount} games.`);
+      } else {
+        console.error(`[Draft Complete] Schedule generation failed:`, schedResult.error);
+      }
+    }
+
+    // Transition to Preseason
+    await updateSeasonPhase(sessionData?.season_id, "preseason");
+    console.log(`[Draft Complete] Season moved to Preseason phase.`);
+    // -------------------------------------------------------------
+
     await supabase.rpc("notify_all_users_draft", {
       p_notification_type: "draft_completed",
-      p_message: "The draft has been completed by an admin.",
+      p_message: "The draft has concluded. The league is now in the Preseason phase!",
     });
 
     return { success: true };
@@ -665,7 +694,6 @@ export async function completeDraft(
     return { success: false, error: String(error) };
   }
 }
-
 // ============================================================================
 // AUTO-DRAFT TIMER CHECK
 // ============================================================================

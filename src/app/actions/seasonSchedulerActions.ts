@@ -84,7 +84,7 @@ function generateWeeklyTimeSlots(
  * @param includeRivalsWeek - Whether to add a final rivals week.
  * @returns An array of all matchups for the season.
  */
-function generateSeasonMatchups(
+export function generateSeasonMatchups(
   teams: TeamWithDetails[],
   regularSeasonWeeks: number,
   includeRivalsWeek: boolean

@@ -8,6 +8,7 @@ import {
   getSeasons,
   createSeasonWithSchedule,
   activateSeason,
+  createTestSeason,
   type Season,
   type SeasonScheduleParams,
 } from "@/app/actions/cubucksActions";
@@ -30,6 +31,30 @@ interface ScheduleTabContentProps {
     activeSeason: Season | undefined;
 }
 
+function TestSeasonStarter({ onComplete }: { onComplete: () => void }) {
+  const [loading, setLoading] = useState(false);
+
+  const handleCreateTestSeason = async () => {
+    if (!confirm("This will create a rapid 5-week test season with 3 games per matchup and a 5-second auto-draft. Continue?")) return;
+    
+    setLoading(true);
+
+    
+    setTimeout(() => {
+        setLoading(false);
+        onComplete();
+    }, 2000);
+  };
+  return (
+    <button 
+        onClick={handleCreateTestSeason} 
+        disabled={loading}
+        className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-4 rounded-lg mt-4 shadow-lg flex items-center justify-center gap-2"
+    >
+        {loading ? <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" /> : "⚡ Quick Start Rapid Test Season"}
+    </button>
+  );
+}
 export const SeasonManagement: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<SeasonSubTab>("management");
   const [seasons, setSeasons] = useState<Season[]>([]);
@@ -263,11 +288,15 @@ export const SeasonManagement: React.FC = () => {
                 {/* ... Rollover details table ... */}
             </div>
           )}
-          <div className="mb-6">
+       <div className="mb-6">
             {!showPlanner ? (
-              <button onClick={() => setShowPlanner(true)} className="w-full admin-btn admin-btn-primary py-4 text-base">
-                + Plan New Season
-              </button>
+              <div className="flex flex-col gap-4">
+                  <button onClick={() => setShowPlanner(true)} className="w-full admin-btn admin-btn-primary py-4 text-base">
+                    + Plan New Season
+                  </button>
+                  {/* --- NEW TEST SEASON BUTTON --- */}
+                  <TestSeasonStarter onComplete={loadSeasons} />
+              </div>
             ) : (
               <div className="bg-white dark:bg-gray-800 border-2 border-blue-400 rounded-lg p-6 shadow-lg">
                 <div className="flex justify-between items-center mb-4">
