@@ -3,7 +3,6 @@
 
 import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 import type { SupabaseClient } from "@supabase/supabase-js"; 
-import { type TeamWithDetails } from "./teamActions";
 
 import { createScheduleWeek } from "./scheduleActions"; 
 import { generateSeasonMatchups } from "./seasonSchedulerActions"; 
