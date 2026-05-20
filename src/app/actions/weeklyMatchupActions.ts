@@ -715,9 +715,15 @@ async function advancePlayoffBracket(seasonId: string, isTestSeason: boolean) {
  * If standard Playoff Round: Schedules backwards from Friday 8PM CT.
  */
 async function buildSequentialAlternatingSchedule(
-    supabase: any, seasonId: string, weekId: string, weekNum: number, 
-    matchups: any[], isTestSeason: boolean, isChampionship: boolean
+    seasonId: string, 
+    weekId: string, 
+    weekNum: number, 
+    matchups: { id: string; team1_id: string; team2_id: string }[], 
+    isTestSeason: boolean, 
+    isChampionship: boolean
 ) {
+    const supabase = createServiceClient(); // Initialize the client directly here!
+    
     const requiredGames = isTestSeason ? 3 : 9;
     const totalGames = matchups.length * requiredGames;
     const timeSlots: Date[] = [];
@@ -732,26 +738,22 @@ async function buildSequentialAlternatingSchedule(
         // Normal Season Time Math
         const now = new Date();
         if (isChampionship) {
-            // Start at 10 AM CT on Saturday (roughly 10 days out from Wednesday end)
-            // For simplicity in a live environment without exact historical Wednesday anchoring, 
-            // we calculate 10 days from today and snap to 10:00 AM CT.
+            // Start at 10 AM CT on Saturday
             const baseStart = getTargetDateCT(now, 10, 10); 
             for (let i = 0; i < totalGames; i++) {
-                timeSlots.push(new Date(baseStart.getTime() + (i * 60 * 60 * 1000))); // 1 hr apart
+                timeSlots.push(new Date(baseStart.getTime() + (i * 60 * 60 * 1000))); 
             }
         } else {
             // Regular Playoff Round: End at Friday 8 PM CT (20:00). 
-            // Count backwards so the final game hits the deadline perfectly.
             const baseEnd = getTargetDateCT(now, 9, 20); 
             for (let i = 0; i < totalGames; i++) {
-                timeSlots.push(new Date(baseEnd.getTime() - (i * 60 * 60 * 1000))); // 1 hr backwards
+                timeSlots.push(new Date(baseEnd.getTime() - (i * 60 * 60 * 1000))); 
             }
             timeSlots.reverse(); // Flip chronological
         }
     }
 
     // Interleave/Alternate the games for the 1-thread sim
-    // M1-G1, M2-G1, M1-G2, M2-G2
     let slotIndex = 0;
     for (let gameIndex = 0; gameIndex < requiredGames; gameIndex++) {
         for (const matchup of matchups) {
@@ -769,4 +771,3 @@ async function buildSequentialAlternatingSchedule(
         }
     }
 }
-
