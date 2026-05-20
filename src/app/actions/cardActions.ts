@@ -547,4 +547,18 @@ export async function backfillImportedCards(
         return { success: false, updated: 0, error: errorMessage };
     }
 }
+export async function promoteSeasonData(): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  try {
+    const { error } = await supabase.rpc('promote_season_data');
+    if (error) throw error;
+    
+    // Clear the cache so the frontend updates immediately
+    invalidateDraftCache(); 
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { success: false, error: message };
+  }
+}
 
