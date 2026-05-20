@@ -1103,7 +1103,7 @@ export async function createTestSeason(): Promise<{ success: boolean; seasonId?:
         // Make sure generateSeasonMatchups is exported in seasonSchedulerActions.ts!
 const { teams } = await getTeamsWithDetails(false);
 const activeTeams = (teams?.filter(t => t.is_hidden !== true) || []) as TeamWithDetails[];
-const allMatchups = generateSeasonMatchups(activeTeams, 5, false);
+const allMatchups = await generateSeasonMatchups(activeTeams as any, 5, false);
         const week1Matchups = allMatchups.filter(m => m.week === 1);
         const now = new Date();
         let matchOffsetMinutes = 20;
