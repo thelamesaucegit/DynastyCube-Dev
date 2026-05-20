@@ -698,13 +698,14 @@ async function advancePlayoffBracket(seasonId: string, isTestSeason: boolean) {
 
     const matchupsToSchedule = [];
     let left = 0; let right = advancingTeams.length - 1;
-    while (left < right) {
+       while (left < right) {
         const { data: matchup } = await supabase.from('weekly_matchups').insert({
             season_id: seasonId, week_number: nextRoundNum, team1_id: advancingTeams[left], team2_id: advancingTeams[right], is_playoff: true
-        }).select('id').single();
+        }).select('id, team1_id, team2_id').single(); // <-- Updated here
         if (matchup) matchupsToSchedule.push(matchup);
         left++; right--;
     }
+
 
     await buildSequentialAlternatingSchedule(seasonId, playoffWeek.id, nextRoundNum, matchupsToSchedule, isTestSeason, isChampionship);
 }
