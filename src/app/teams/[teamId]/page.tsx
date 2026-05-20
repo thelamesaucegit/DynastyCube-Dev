@@ -332,10 +332,14 @@ export default function TeamPage() {
   const currentKeepersCount = draftPicks.filter(p => p.is_keeper).length;
 
   const handleToggleKeeper = async (pick: DraftPick) => {
+    // 1. Add this safety check so TypeScript knows pick.id is definitely a string
+    if (!pick.id) return; 
+
     if (!pick.is_keeper && currentKeepersCount >= 8) {
       alert("You can only designate up to 8 Keepers.");
       return;
     }
+    
     setTogglingKeeper(pick.id);
     try {
       const result = await toggleKeeperStatus(pick.id, !pick.is_keeper);
@@ -352,6 +356,7 @@ export default function TeamPage() {
       setTogglingKeeper(null);
     }
   };
+
   const tabs: { id: TabType; label: string; icon: React.ReactNode; count?: number, disabled?: boolean }[] = [
     ...(isUserTeamMember ? [{
       id: "draft" as TabType,
