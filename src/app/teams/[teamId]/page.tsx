@@ -6,7 +6,7 @@ import Image from "next/image";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { getTeamsWithMembers, getTeamByShortName } from "@/app/actions/teamActions";
-import { getTeamDraftPicks, getTeamDecks } from "@/app/actions/draftActions";
+import { getTeamDraftPicks, getTeamDecks, toggleKeeperStatus } from "@/app/actions/draftActions";
 import { refundDraftPick } from "@/app/actions/cubucksActions";
 import { DraftInterface } from "@/app/components/DraftInterface";
 import { DeckBuilder } from "@/app/components/DeckBuilder";
@@ -86,7 +86,8 @@ export default function TeamPage() {
   const [undraftMessage, setUndraftMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [cubucksRefreshKey, setCubucksRefreshKey] = useState(0);
   const [seasonPhase, setSeasonPhase] = useState<string | null>(null);
-  
+    const [togglingKeeper, setTogglingKeeper] = useState<string | null>(null); // <-- NEW STATE
+
   const isFreeAgencyActive = seasonPhase === "season";
   const [draftPreview, setDraftPreview] = useState<AutoDraftPreviewResult | null>(null);
   const [activeDraftSessionId, setActiveDraftSessionId] = useState<string | null>(null);
@@ -262,7 +263,8 @@ export default function TeamPage() {
 
   const handleUndraftCard = async (pick: DraftPick) => {
     console.log(`[Undraft Action] Initiated for card: ${pick.card_name} (ID: ${pick.id})`);
-    
+        if (pick.is_keeper) return; // Guard clause
+
     // 1. Prevent cutting cards during an active draft session
     if (activeDraftSessionId) {
       console.warn("[Undraft Action] Blocked: Cannot cut cards while a draft session is active.");
@@ -326,7 +328,30 @@ export default function TeamPage() {
       setTimeout(() => setUndraftMessage(null), 5000);
     }
   };
+// --- NEW HANDLER FOR KEEPERS ---
+  const currentKeepersCount = draftPicks.filter(p => p.is_keeper).length;
 
+  const handleToggleKeeper = async (pick: DraftPick) => {
+    if (!pick.is_keeper && currentKeepersCount >= 8) {
+      alert("You can only designate up to 8 Keepers.");
+      return;
+    }
+    setTogglingKeeper(pick.id);
+    try {
+      const result = await toggleKeeperStatus(pick.id, !pick.is_keeper);
+      if (result.success) {
+        // Optimistically update the UI
+        setDraftPicks(prev => prev.map(p => p.id === pick.id ? { ...p, is_keeper: !p.is_keeper } : p));
+      } else {
+        alert(result.error || "Failed to update keeper status.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("An unexpected error occurred.");
+    } finally {
+      setTogglingKeeper(null);
+    }
+  };
   const tabs: { id: TabType; label: string; icon: React.ReactNode; count?: number, disabled?: boolean }[] = [
     ...(isUserTeamMember ? [{
       id: "draft" as TabType,
@@ -496,6 +521,11 @@ export default function TeamPage() {
                       <Layers className="size-5" />
                       Team Pool
                     </h2>
+                    {isUserTeamMember && seasonPhase === "playoffs" && (
+                      <Badge variant="outline" className="bg-primary/5">
+                        Keepers: {currentKeepersCount} / 8
+                      </Badge>
+                    )}
                   </div>
 
                   {undraftMessage && (
@@ -517,47 +547,78 @@ export default function TeamPage() {
                       <p className="text-lg mb-1">No cards drafted yet</p>
                       <p className="text-sm">
                         {isUserTeamMember
-                          ? "Your team hasn&apos;t selected any cards from the pool"
-                          : `${team.name} hasn&apos;t selected any cards from the pool`}
+                          ? "Your team hasn't selected any cards from the pool"
+                          : `${team.name} hasn't selected any cards from the pool`}
                       </p>
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                       {draftPicks.map((pick) => {
                         const isUndrafting = undrafting === pick.id;
+                        const isToggling = togglingKeeper === pick.id;
+                        const isKeeper = pick.is_keeper;
                         const imageUrl = getCardImageUrl(pick, useOldestArt);
+                        
                         return (
                           <CardPreview key={pick.id} card={pick}>
-                            <div className="group relative bg-muted rounded-lg overflow-hidden border hover:border-primary/50 transition-all hover:shadow-md">
+                            <div className={`group relative bg-muted rounded-lg overflow-hidden border transition-all hover:shadow-md ${isKeeper && isUserTeamMember ? 'ring-2 ring-green-500 shadow-[0_0_15px_rgba(34,197,94,0.3)] border-green-500' : 'hover:border-primary/50'}`}>
+                              
                               {imageUrl && (
                                 <div className="relative h-64">
                                   <Image src={imageUrl} alt={pick.card_name} fill className="object-cover" />
                                 </div>
                               )}
+                              
                               <div className="p-2">
-                                <h4 className="font-semibold text-sm truncate">{pick.card_name}</h4>
-                                <p className="text-xs text-muted-foreground truncate">{pick.card_set}</p>
+                                <div className="flex justify-between items-start">
+                                  <div className="min-w-0 flex-1">
+                                    <h4 className="font-semibold text-sm truncate">{pick.card_name}</h4>
+                                    <p className="text-xs text-muted-foreground truncate">{pick.card_set}</p>
+                                  </div>
+                                </div>
+                                
                                 {pick.cubecobra_elo != null && (
                                   <p className="text-xs text-purple-600 dark:text-purple-400 font-medium mt-0.5">
                                     ELO: {pick.cubecobra_elo.toLocaleString()}
                                   </p>
                                 )}
+                                
+                                {isKeeper && isUserTeamMember && (
+                                  <Badge className="mt-1.5 bg-green-600 hover:bg-green-600 text-[10px] uppercase font-bold tracking-wider">
+                                    KEEPER
+                                  </Badge>
+                                )}
                               </div>
-                              
+
+                              {/* OVERLAY CONTROLS */}
                               {isUserTeamMember && (
-                                <button
-                                  onClick={() => handleUndraftCard(pick)}
-                                  disabled={isUndrafting || !!undrafting}
-                                  className={`
-                                    absolute inset-0 bg-black/60 flex items-center justify-center
-                                    opacity-0 group-hover:opacity-100 transition-opacity
-                                    disabled:opacity-50 disabled:cursor-not-allowed
-                                  `}
-                                >
-                                  <span className="px-4 py-2 rounded-lg font-semibold shadow-lg bg-destructive hover:bg-destructive/90 text-white">
-                                    {isUndrafting ? "Removing..." : "Cut & Refund"}
-                                  </span>
-                                </button>
+                                <>
+                                  {/* Darken image on hover to make buttons pop */}
+                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
+
+                                  {/* Cut Button - Only if NOT a keeper */}
+                                  {!isKeeper && (
+                                    <button
+                                      onClick={(e) => { e.preventDefault(); handleUndraftCard(pick); }}
+                                      disabled={isUndrafting || !!undrafting || !!togglingKeeper}
+                                      className="absolute top-2 right-2 bg-destructive hover:bg-destructive/90 text-white text-xs font-bold px-2.5 py-1.5 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 z-10"
+                                      title="Cut and Refund"
+                                    >
+                                      {isUndrafting ? "..." : "Cut"}
+                                    </button>
+                                  )}
+
+                                  {/* Keeper Toggle Button - Only during Playoffs */}
+                                  {seasonPhase === "playoffs" && (
+                                    <button
+                                      onClick={(e) => { e.preventDefault(); handleToggleKeeper(pick); }}
+                                      disabled={isToggling || !!undrafting}
+                                      className={`absolute bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-xs font-bold shadow-lg opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 z-10 whitespace-nowrap ${isKeeper ? 'bg-gray-700 hover:bg-gray-800 text-white' : 'bg-green-600 hover:bg-green-500 text-white'}`}
+                                    >
+                                      {isToggling ? "Saving..." : isKeeper ? "Remove Keeper" : "Designate Keeper"}
+                                    </button>
+                                  )}
+                                </>
                               )}
                             </div>
                           </CardPreview>

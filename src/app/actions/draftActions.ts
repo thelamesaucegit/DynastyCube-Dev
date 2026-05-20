@@ -27,6 +27,7 @@ export interface DraftPick {
   rating_updated_at?: string;
   acquisition_method?: 'draft' | 'wire' | 'free_agent' | 'trade' | 'skipped';
   acquired_at?: string;
+  is_keeper?: boolean;
 }
 
 export interface Deck {
@@ -474,3 +475,20 @@ export async function removeCardFromDeck(cardId: string): Promise<{ success: boo
     return { success: true };
   } catch (error) { return { success: false, error: "An unexpected error occurred" }; }
 }
+
+export async function toggleKeeperStatus(pickId: string, isKeeper: boolean): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  try {
+    const { error } = await supabase
+      .from('team_draft_picks')
+      .update({ is_keeper: isKeeper })
+      .eq('id', pickId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return { success: false, error: errorMessage };
+  }
+}
+
