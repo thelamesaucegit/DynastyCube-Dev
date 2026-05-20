@@ -653,7 +653,7 @@ async function generateInitialPlayoffBracket(seasonId: string, isTestSeason: boo
         left++; right--;
     }
 
-    await buildSequentialAlternatingSchedule(supabase, seasonId, playoffWeek.id, roundNumber, matchupsToSchedule, isTestSeason, false);
+    await buildSequentialAlternatingSchedule( seasonId, playoffWeek.id, roundNumber, matchupsToSchedule, isTestSeason, false);
 }
 
 /**
@@ -706,7 +706,7 @@ async function advancePlayoffBracket(seasonId: string, isTestSeason: boolean) {
         left++; right--;
     }
 
-    await buildSequentialAlternatingSchedule(supabase, seasonId, playoffWeek.id, nextRoundNum, matchupsToSchedule, isTestSeason, isChampionship);
+    await buildSequentialAlternatingSchedule(seasonId, playoffWeek.id, nextRoundNum, matchupsToSchedule, isTestSeason, isChampionship);
 }
 
 /**
