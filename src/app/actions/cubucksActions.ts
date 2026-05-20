@@ -1058,3 +1058,151 @@ export async function resetTeamBalancesToCap(
     return { success: false, error: String(error) };
   }
 }
+
+export async function createTestSeason(): Promise<{ success: boolean; seasonId?: string; error?: string }> {
+    const supabase = await createServerClient();
+
+    try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { success: false, error: "Not authenticated" };
+
+        const testSeasonNumber = Math.floor(Math.random() * 1000) + 100; // Random high number to avoid conflicts
+        const seasonName = `TEST SEASON ${testSeasonNumber}`;
+
+        // 1. Create Season (starts in draft phase immediately)
+        const { data: seasonData, error: seasonError } = await supabase
+            .from("seasons")
+            .insert({
+                season_number: testSeasonNumber,
+                season_name: seasonName,
+                start_date: new Date().toISOString(),
+                end_date: new Date(new Date().getTime() + 14 * 86400000).toISOString(),
+                cubucks_allocation: 100,
+                is_active: true, // Auto-activate
+                phase: 'draft',
+                has_rivals_week: false,
+            })
+            .select('id')
+            .single();
+
+        if (seasonError) throw new Error(`Failed to create season: ${seasonError.message}`);
+        const seasonId = seasonData.id;
+
+        // Deactivate old seasons
+        await supabase.from("seasons").update({ is_active: false }).neq("id", seasonId);
+
+        // 2. Create Draft Session (5 SECOND TIMER!)
+        const { error: draftSessionError } = await supabase
+            .from("draft_sessions")
+            .insert({
+                season_id: seasonId,
+                status: "scheduled", // Your backend usually flips this to active when phase=draft
+                name: `${seasonName} Rapid Draft`,
+                total_rounds: 40,
+                hours_per_pick: 0.00138, // Roughly 5 seconds
+                start_time: new Date().toISOString(),
+                started_by: user.id,
+            });
+
+        if (draftSessionError) throw new Error(`Draft session error: ${draftSessionError.message}`);
+
+        // 3. Create 5 Weeks
+        const weekCreationPromises = [];
+        const weekIds: string[] = [];
+        for (let i = 1; i <= 5; i++) {
+            const { data: weekData, error: weekError } = await supabase
+                .from("schedule_weeks")
+                .insert({
+                    season_id: seasonId,
+                    season_number: testSeasonNumber,
+                    week_number: i,
+                    start_date: new Date().toISOString(), // Start dummy dates, JIT scheduler fixes this later
+                    end_date: new Date(new Date().getTime() + 7 * 86400000).toISOString(),
+                    deck_submission_deadline: new Date(new Date().getTime() + 1 * 86400000).toISOString(),
+                    match_completion_deadline: new Date(new Date().getTime() + 7 * 86400000).toISOString(),
+                    is_playoff_week: false,
+                    is_championship_week: false,
+                    notes: `Test Week ${i}`,
+                })
+                .select('id')
+                .single();
+
+            if (weekError) throw new Error(`Week error: ${weekError.message}`);
+            weekIds.push(weekData.id);
+        }
+
+        // 4. Generate Matchups
+        const { teams } = await getTeamsWithDetails(false);
+        const activeTeams = teams?.filter(t => t.is_hidden !== true) || [];
+        // NOTE: You must export generateSeasonMatchups from seasonSchedulerActions.ts to use it here!
+        const allMatchups = generateSeasonMatchups(activeTeams, 5, false);
+
+        // 5. Insert ONLY Week 1's Schedule (20 mins apart). JIT handles the rest later.
+        const week1Matchups = allMatchups.filter(m => m.week === 1);
+        const now = new Date();
+        let matchOffsetMinutes = 20;
+
+        for (const matchup of week1Matchups) {
+            const { data: matchupRecord } = await supabase.from('weekly_matchups').insert({
+                season_id: seasonId,
+                week_number: 1,
+                team1_id: matchup.teamAId,
+                team2_id: matchup.teamBId,
+                is_playoff: false
+            }).select('id').single();
+
+            if (matchupRecord) {
+                for (let i = 0; i < 3; i++) { // EXACTLY 3 GAMES
+                    const matchDate = new Date(now.getTime() + (matchOffsetMinutes * 60000));
+                    await supabase.from('schedule').insert({
+                        season_id: seasonId,
+                        season_number: testSeasonNumber,
+                        week_id: weekIds[0],
+                        week_number: 1,
+                        team1_id: matchup.teamAId,
+                        team2_id: matchup.teamBId,
+                        weekly_matchup_id: matchupRecord.id,
+                        match_date: matchDate.toISOString(),
+                        status: 'scheduled'
+                    });
+                    matchOffsetMinutes += 20;
+                }
+            }
+        }
+
+        // 6. Pre-generate empty matchups for weeks 2-5 so the JIT scheduler has data to work with
+        for (let week = 2; week <= 5; week++) {
+             const weekMatchups = allMatchups.filter(m => m.week === week);
+             for (const matchup of weekMatchups) {
+                 const { data: matchupRecord } = await supabase.from('weekly_matchups').insert({
+                    season_id: seasonId,
+                    week_number: week,
+                    team1_id: matchup.teamAId,
+                    team2_id: matchup.teamBId,
+                    is_playoff: false
+                }).select('id').single();
+
+                if (matchupRecord) {
+                    for (let i = 0; i < 3; i++) {
+                        await supabase.from('schedule').insert({
+                            season_id: seasonId,
+                            season_number: testSeasonNumber,
+                            week_id: weekIds[week - 1],
+                            week_number: week,
+                            team1_id: matchup.teamAId,
+                            team2_id: matchup.teamBId,
+                            weekly_matchup_id: matchupRecord.id,
+                            match_date: new Date().toISOString(), // Dummy date, JIT will fix it
+                            status: 'scheduled'
+                        });
+                    }
+                }
+             }
+        }
+
+        return { success: true, seasonId };
+
+    } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+}
