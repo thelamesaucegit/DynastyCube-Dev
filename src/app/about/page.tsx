@@ -91,7 +91,7 @@ export default async function AboutPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="text-muted-foreground">
-              Instead of passing hidden packs, players make draft picks publicly, one at a time, from a massive known pool. Every pick is visible and influences the direction every other team takes.
+              Instead of passing hidden packs, players make draft picks publicly, one at a time, from a massive known pool. Every pick is visible and influences the direction every other Team takes.
             </CardContent>
           </Card>
           <Card className="h-full">
@@ -102,7 +102,7 @@ export default async function AboutPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="text-muted-foreground">
-              Teams have one matchup per week, culminating in a playoff elimination tournament. Just like a dynasty league, teams can trade cards and future draft picks to improve their roster now or rebuild for the future.
+              Teams have one matchup per week, culminating in a playoff elimination tournament. Similarly to a fantasy sports league, Teams can trade cards and future draft picks to improve their &quot;roster&quot; now, or rebuild for the future.
             </CardContent>
           </Card>
           <Card className="h-full">
@@ -113,7 +113,7 @@ export default async function AboutPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="text-muted-foreground">
-              Inspired by <a href="https://en.wikipedia.org/wiki/Blaseball" target="_blank" rel="noreferrer" className="underline underline-offset-4 hover:text-foreground">Blaseball</a>, your decisions echo beyond the draft. Between seasons, Teams vote on new rules. Cards heavily drafted become harder to retain. The game Evolves.
+              Inspired by <a href="https://en.wikipedia.org/wiki/Blaseball" target="_blank" rel="noreferrer" className="underline underline-offset-4 hover:text-foreground">Blaseball</a>, your decisions echo beyond the draft. Between Seasons, Teams vote on new mechanics, and gain new powersE. The game Evolves.
             </CardContent>
           </Card>
         </div>
@@ -132,13 +132,15 @@ export default async function AboutPage() {
             In the <strong>BEGINNING</strong>, <strong>The Cube</strong> was a Celestial - a sentient, cosmological being. For millennia it consumed, silently, slowly but purposefully, until nothing remained of its home plane.
           </p>
           <p>
-            Further eons passed without consequence, The Cube lying dormant until, quite suddenly - something changed. <em>The Dynasty Cube&apos;s Spark had ignited.</em> <strong>THE DYNASTY CUBE AWAKENS.</strong>
+            Further eons passed without consequence, The Cube lying dormant until, quite suddenly - something changed. <em>The Dynasty Cube&apos;s Spark had ignited.</em> 
           </p>
+          <p><strong>THE DYNASTY CUBE AWAKENS.</strong></p>
           <p>
             With this new power, The Cube was no longer confined to its own barren plane - it could reach its tendrils to neighboring planes and pull in all it could ever desire. Something else had changed however - all that it consumed, it could still <em>sense</em>. What it pulled in from these neighboring planes still gave The Cube power, but now they were <em>within</em> The Cube. Part of it.
           </p>
+          <p><strong>THE LEAGUE IS FORMED.</strong></p>
           <p>
-            <strong>THE LEAGUE IS FORMED.</strong> At first, there was only <em>chaos</em>. The displaced inhabitants of these disparate planes were lost, aimless, hopeless - trapped within a Celestial with unfathomable, seemingly infinite power. In time, like found like, and factions were formed, representatives of their home planes desperate for an escape.
+             At first, there was only <em>chaos</em>. The displaced inhabitants of these disparate planes were lost, aimless, hopeless - trapped within a Celestial with unfathomable, seemingly infinite power. In time, like found like, and factions were formed, representatives of their home planes desperate for an escape.
           </p>
           <p className="font-bold text-lg pt-4 tracking-widest text-white">
             THE BLIND ETERNITIES SHIFT.
