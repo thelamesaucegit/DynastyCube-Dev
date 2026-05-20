@@ -40,7 +40,7 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap }: Argentu
             } else {
                 setIsPlaying(false);
             }
-        }, 1500);
+        }, currentDelay);
         return () => clearInterval(interval);
     }, [isPlaying, totalStates, currentIndex, playbackSpeed]); // Added playbackSpeed to dependencies
 
