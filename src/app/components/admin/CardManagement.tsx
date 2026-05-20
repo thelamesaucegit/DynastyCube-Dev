@@ -1,5 +1,4 @@
-//src/app/components/admin/CardManagement.tsx
-
+// src/app/components/admin/CardManagement.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -7,10 +6,12 @@ import {
   getCardPool,
   addCardToPool,
   removeCardFromPool,
-bulkImportAndSync,
+  bulkImportAndSync,
   removeFilteredCards,
   undraftAllCards,
   clearCardPool,
+  backfillImportedCards,
+  promoteSeasonData, // <--- NEW IMPORT
 } from "@/app/actions/cardActions";
 
 import type { CardData, PoolTableName } from "@/app/actions/cardActions";
@@ -50,11 +51,11 @@ interface CardManagementProps {
   onUpdate?: () => void;
 }
 
-// NEW LOGIC: A centralized configuration for all pools. This is the key change.
 const poolConfigs: { label: string; table: PoolTableName }[] = [
     { label: "Main Card Pool", table: "card_pools" },
     { label: "The Chamber", table: "the_chamber" },
     { label: "The Resort Pool", table: "resort_pool" },
+    { label: "Season 2 Test Pool", table: "card_pools_next" },
 ];
 
 export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
@@ -70,16 +71,16 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
   const [bulkText, setBulkText] = useState("");
   const [bulkCost, setBulkCost] = useState("1");
   const [bulkImporting, setBulkImporting] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
+  const [promoting, setPromoting] = useState(false); // <--- NEW STATE
   const [bulkResult, setBulkResult] = useState<{
       added: number;
     failed: { name: string; reason: string }[];
     eloSyncMessage?: string;
   } | null>(null);
-  const [showBulkImport, setShowBulkImport] = useState(false);
   const [poolCards, setPoolCards] = useState<PoolCard[]>([]);
   const [clearFilter, setClearFilter] = useState<"all" | "undrafted" | "drafted" | null>(null);
   const [clearing, setClearing] = useState(false);
-  // The 'clearStep' and 'confirmText' states are no longer needed with the simplified dialog.
 
   useEffect(() => {
     loadCards();
@@ -110,17 +111,14 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
     }
   };
 
-const handleSearchCard = async () => {
+  const handleSearchCard = async () => {
     if (!searchQuery.trim()) return;
-
     setSearchLoading(true);
     setError(null);
     try {
-      // Using Scryfall API to search for cards
       const response = await fetch(
         `https://api.scryfall.com/cards/search?q=${encodeURIComponent(searchQuery)}&unique=cards`
       );
-
       if (response.ok) {
         const data = await response.json();
         const formattedResults: MTGCard[] = data.data.slice(0, 10).map((card: unknown) => {
@@ -205,13 +203,8 @@ const handleSearchCard = async () => {
     return "all DRAFTED cards";
   };
 
-  const openClearDialog = (filter: "all" | "undrafted" | "drafted") => {
-    setClearFilter(filter);
-  };
-
-  const closeClearDialog = () => {
-    setClearFilter(null);
-  };
+  const openClearDialog = (filter: "all" | "undrafted" | "drafted") => setClearFilter(filter);
+  const closeClearDialog = () => setClearFilter(null);
 
   const handleClearPool = async () => {
     if (!clearFilter) return;
@@ -220,18 +213,16 @@ const handleSearchCard = async () => {
     setClearing(true);
     try {
       let result: { success: boolean; error?: string; removedCount?: number; updatedCount?: number };
-
       if (clearFilter === 'drafted') {
         result = await undraftAllCards();
         if (result.success) toast.success(`Successfully undrafted ${result.updatedCount || 0} card(s).`);
       } else if (clearFilter === 'undrafted') {
         result = await removeFilteredCards('undrafted', 'draft');
         if (result.success) toast.success(`Removed ${result.removedCount || 0} undrafted card(s).`);
-      } else { // 'all'
+      } else { 
         result = await clearCardPool(activePool);
         if (result.success) toast.success(`Removed ${result.removedCount || 0} card(s) from the pool.`);
       }
-
       if (result.success) {
         await loadCards();
         onUpdate?.();
@@ -258,30 +249,24 @@ const handleSearchCard = async () => {
       toast.error("Please enter a valid default Cubucks cost (0 or higher).");
       return;
     }
-
     if (!confirm(`This will import ${lines.length} card(s) and then trigger a CubeCobra ELO sync. Duplicates are allowed. Continue?`)) {
       return;
     }
-
     setBulkImporting(true);
     setBulkResult(null);
     setError(null);
-
     try {
       const result = await bulkImportAndSync(lines, cost, activePool);
-
       if (result.success) {
         setBulkResult({
           added: result.added,
           failed: result.failed,
           eloSyncMessage: result.eloSyncMessage,
         });
-
         toast.success(`Import complete! Added: ${result.added}, Failed: ${result.failed.length}.`);
         if (result.eloSyncMessage) {
             toast.info(result.eloSyncMessage);
         }
-
         await loadCards();
         onUpdate?.();
         setBulkText("");
@@ -295,6 +280,44 @@ const handleSearchCard = async () => {
       toast.error(`A critical error occurred: ${message}`);
     } finally {
       setBulkImporting(false);
+    }
+  };
+
+  const handleBackfillImported = async () => {
+      if (!confirm(`This will scan the ${poolConfigs.find(p => p.table === activePool)?.label} for any imported cards missing Scryfall data and attempt to backfill them. Continue?`)) return;
+      setBackfilling(true);
+      try {
+          const result = await backfillImportedCards(activePool);
+          if (result.success) {
+              toast.success(`Successfully backfilled ${result.updated} card(s) from Scryfall!`);
+              await loadCards(); 
+          } else {
+              toast.error(result.error || "Failed to run backfill.");
+          }
+      } catch (err) {
+          toast.error("An unexpected error occurred during backfill.");
+      } finally {
+          setBackfilling(false);
+      }
+  };
+
+  // --- NEW HANDLER FOR PROMOTE SEASON ---
+  const handlePromoteSeason = async () => {
+    if (!confirm("WARNING: This will DESTROY all current cards and draft picks in the active pool, replacing them with the card_pools_next table. Are you absolutely sure?")) return;
+    setPromoting(true);
+    try {
+      const result = await promoteSeasonData();
+      if (result.success) {
+        toast.success("Season data promoted successfully!");
+        await loadCards();
+        onUpdate?.();
+      } else {
+        toast.error(result.error || "Failed to promote season data.");
+      }
+    } catch (err) {
+      toast.error("An unexpected error occurred during promotion.");
+    } finally {
+      setPromoting(false);
     }
   };
 
@@ -335,6 +358,7 @@ const handleSearchCard = async () => {
           ✓ {success}
         </div>
       )}
+
       {error && (
         <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg text-red-800 dark:text-red-200">
           ✗ {error}
@@ -347,6 +371,7 @@ const handleSearchCard = async () => {
           <input type="text" placeholder="Search for cards..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSearchCard()} className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
           <button onClick={handleSearchCard} disabled={searchLoading || !searchQuery.trim()} className="admin-btn admin-btn-primary">{searchLoading ? "Searching..." : "Search"}</button>
         </div>
+
         {searchResults.length > 0 && (
           <div className="space-y-2 max-h-96 overflow-y-auto">
             {searchResults.map((card) => (
@@ -364,10 +389,33 @@ const handleSearchCard = async () => {
       </div>
 
       <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-300 dark:border-amber-700 rounded-lg p-6 mb-6">
-        <h3 className="font-semibold text-lg">Bulk Import & Sync</h3>
-        <p className="text-sm text-muted-foreground mb-4">
-          Paste card names (one per line) to import full card data and sync ELO ratings. Duplicates are allowed and will be added as separate entries.
-        </p>
+        <div className="flex justify-between items-center mb-4">
+            <div>
+                <h3 className="font-semibold text-lg">Bulk Import & Sync</h3>
+                <p className="text-sm text-muted-foreground">
+                Paste card names (one per line) to import full card data and sync ELO ratings.
+                </p>
+            </div>
+            {/* BUTTON GROUP FOR BACKFILL & PROMOTE */}
+            <div className="flex gap-2">
+                <button 
+                    onClick={handleBackfillImported} 
+                    disabled={backfilling || promoting} 
+                    className="admin-btn bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50"
+                >
+                    {backfilling ? "Scanning..." : "Fix Missing Scryfall Data"}
+                </button>
+                <button 
+                    onClick={handlePromoteSeason} 
+                    disabled={backfilling || promoting} 
+                    className="admin-btn bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
+                    title="Warning: Overwrites Live Card Pool!"
+                >
+                    {promoting ? "Promoting..." : "Promote Season Data"}
+                </button>
+            </div>
+        </div>
+
         <textarea
           value={bulkText}
           onChange={(e) => setBulkText(e.target.value)}
@@ -375,6 +423,7 @@ const handleSearchCard = async () => {
           rows={8}
           className="w-full p-3 border rounded-lg font-mono text-sm mb-3 bg-white dark:bg-gray-800"
         />
+
         <div className="flex flex-wrap gap-4 items-end">
           <div>
             <label className="block text-sm font-medium mb-1">Default Cubucks Cost</label>
@@ -390,6 +439,7 @@ const handleSearchCard = async () => {
             {bulkImporting ? "Processing..." : "Run Import & Sync"}
           </button>
         </div>
+
         {bulkResult && (
           <div className="mt-4 p-4 bg-background border rounded-lg text-sm space-y-2">
             <h4 className="font-semibold">Import Result:</h4>
@@ -428,6 +478,7 @@ const handleSearchCard = async () => {
 
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
         <h3 className="font-semibold text-lg mb-4">Current {poolConfigs.find(p => p.table === activePool)?.label} ({cards.length})</h3>
+        
         {loading ? <div className="text-center py-8"><p>Loading...</p></div> : cards.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground"><p>No cards in this pool yet.</p></div>
         ) : (
