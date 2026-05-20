@@ -3,6 +3,7 @@
 
 import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 import type { SupabaseClient } from "@supabase/supabase-js"; 
+import { type TeamWithDetails } from "./teamActions";
 
 import { createScheduleWeek } from "./scheduleActions"; 
 import { generateSeasonMatchups } from "./seasonSchedulerActions"; 
@@ -1100,9 +1101,9 @@ export async function createTestSeason(): Promise<{ success: boolean; seasonId?:
 
         // GENERATE ROUND ROBIN AND JIT SCHEDULE WEEK 1
         // Make sure generateSeasonMatchups is exported in seasonSchedulerActions.ts!
-        const { data: activeTeams } = await supabase.from('teams').select('*').eq('is_hidden', false);
-        const allMatchups = generateSeasonMatchups(activeTeams as any, 5, false);
-
+const { teams } = await getTeamsWithDetails(false);
+const activeTeams = (teams?.filter(t => t.is_hidden !== true) || []) as TeamWithDetails[];
+const allMatchups = generateSeasonMatchups(activeTeams, 5, false);
         const week1Matchups = allMatchups.filter(m => m.week === 1);
         const now = new Date();
         let matchOffsetMinutes = 20;
