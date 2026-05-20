@@ -114,7 +114,7 @@ export async function recordSimGameResult(
 ): Promise<{ success: boolean; matchupFinalized: boolean; error?: string }> {
     const supabase = createServiceClient();
 
-    // Fetch current matchup state and the schedule week info to see if this is a test season
+    // Fetch current matchup state and the season name
     const { data: matchup, error: fetchError } = await supabase
         .from('weekly_matchups')
         .select(`
@@ -127,6 +127,13 @@ export async function recordSimGameResult(
     if (fetchError || !matchup) {
         return { success: false, matchupFinalized: false, error: 'Matchup not found' };
     }
+
+    // CHECK IF TEST SEASON
+    // If the name includes "TEST", we require 3 games. Otherwise, 5.
+    // (TypeScript safety check because Supabase joins return arrays or objects depending on cardinality)
+    const seasonName = Array.isArray(matchup.season) ? matchup.season[0].season_name : matchup.season?.season_name;
+    const isTestSeason = seasonName?.toUpperCase().includes("TEST");
+    const requiredGames = isTestSeason ? 3 : 5;
 
     let sim_team1_wins = matchup.sim_team1_wins;
     let sim_team2_wins = matchup.sim_team2_wins;
@@ -150,11 +157,7 @@ export async function recordSimGameResult(
         return { success: false, matchupFinalized: false, error: updateError.message };
     }
 
-    // Is this a Test Season? If the name includes "TEST", we require 3 games. Otherwise, 5.
-    const isTestSeason = matchup.season.season_name.toUpperCase().includes("TEST");
-    const requiredGames = isTestSeason ? 3 : 5;
-
-    // Check if all sim games are done and no PvP match is pending
+    // Check if all required sim games are done and no PvP match is pending
     let finalized = false;
     if (sim_completed_games >= requiredGames && !matchup.pvp_match_id) {
         finalized = await finalizeWeeklyOutcome(weeklyMatchupId);
@@ -162,7 +165,7 @@ export async function recordSimGameResult(
 
     // --- NEW AUTOMATION TRIGGER BLOCK ---
     if (finalized) {
-        // 1. Are there any other unfinished weekly matchups in this specific week?
+        // Are there any other unfinished weekly matchups in this specific week?
         const { data: unfinishedThisWeek } = await supabase
             .from('weekly_matchups')
             .select('id')
@@ -174,7 +177,7 @@ export async function recordSimGameResult(
         if (!unfinishedThisWeek || unfinishedThisWeek.length === 0) {
             console.log(`[AUTOMATION] Week ${matchup.week_number} is completely finished!`);
 
-            // 2. Are there any MORE weeks scheduled after this?
+            // Check if there is a next week scheduled
             const { data: nextWeek } = await supabase
                 .from('schedule_weeks')
                 .select('id, week_number')
@@ -183,22 +186,22 @@ export async function recordSimGameResult(
                 .single();
 
             if (nextWeek) {
-                // There is a next week! Trigger the 20-minute rolling schedule if it's a test season
+                // If it's a test season, trigger the JIT rolling schedule
                 if (isTestSeason) {
                     console.log(`[AUTOMATION] Test Season detected. Advancing to Week ${nextWeek.week_number} in 20 minutes.`);
-                    // We call a background JIT scheduling function here
-                    await scheduleNextWeekJIT(matchup.season_id, nextWeek.week_number, nextWeek.id, 3);
+                    await scheduleNextWeekJIT(matchup.season_id, nextWeek.week_number);
                 }
-            } else {
+            } else if (matchup.week_number < 99) { // Avoid looping infinitely if playoffs finish
                 // This was the absolute final week of the regular season!
                 console.log(`[AUTOMATION] Regular season complete! Advancing to Playoffs.`);
-                await advanceToPlayoffs(matchup.season_id);
+                await advanceToPlayoffs(matchup.season_id, isTestSeason ? 3 : 5);
             }
         }
     }
 
     return { success: true, matchupFinalized: finalized };
 }
+
 
 /**
  * Record a PvP match result for a weekly matchup.
@@ -575,13 +578,11 @@ export async function getWeeklyMatchup(params: {
 }
 
 /**
- * Just-In-Time Scheduler for Test Seasons.
- * Shifts all match dates for the new week to start exactly 20 minutes from right now.
+ * Helper: Shifts all match dates for the new week to start exactly 20 minutes from right now.
  */
-async function scheduleNextWeekJIT(seasonId: string, weekNumber: number, weekId: string, gamesPerMatchup: number) {
+async function scheduleNextWeekJIT(seasonId: string, weekNumber: number) {
     const supabase = createServiceClient();
     
-    // Get all scheduled but pending matches for the new week
     const { data: pendingMatches } = await supabase
         .from('schedule')
         .select('*')
@@ -592,84 +593,62 @@ async function scheduleNextWeekJIT(seasonId: string, weekNumber: number, weekId:
 
     if (!pendingMatches || pendingMatches.length === 0) return;
 
-    // Group the matches by their teams so we can stagger them
-    const matchesByMatchup: Record<string, any[]> = {};
-    for (const match of pendingMatches) {
-        const key = `${match.team1_id}-${match.team2_id}`;
-        if (!matchesByMatchup[key]) matchesByMatchup[key] = [];
-        matchesByMatchup[key].push(match);
-    }
-
     const now = new Date();
-    
-    for (const matchupKey in matchesByMatchup) {
-        const matches = matchesByMatchup[matchupKey];
-        // Give a 20-minute buffer for the first game, then stagger by 20 mins
-        for (let i = 0; i < matches.length; i++) {
-            const matchDate = new Date(now.getTime() + (20 * 60000) + (i * 20 * 60000));
-            await supabase.from('schedule').update({ match_date: matchDate.toISOString() }).eq('id', matches[i].id);
-        }
+    let offsetMinutes = 20;
+
+    for (const match of pendingMatches) {
+        const matchDate = new Date(now.getTime() + (offsetMinutes * 60000));
+        await supabase.from('schedule').update({ match_date: matchDate.toISOString() }).eq('id', match.id);
+        offsetMinutes += 20;
     }
 }
 
 /**
- * Automates the transition from Regular Season to Playoffs.
- * Grabs the top half of teams and builds a 1 vs Worst bracket.
+ * Helper: Automates the transition to Playoffs. Grabs top half of teams and builds bracket.
  */
-async function advanceToPlayoffs(seasonId: string) {
+async function advanceToPlayoffs(seasonId: string, gamesPerMatchup: number) {
     const supabase = createServiceClient();
 
-    // 1. Change Phase to Playoffs
     await supabase.from('seasons').update({ phase: 'playoffs' }).eq('id', seasonId);
 
-    // 2. Fetch Standings using the existing view
     const { data: standings } = await supabase
         .from('team_records_view')
         .select('*')
         .order('wins', { ascending: false })
-        .order('game_wins', { ascending: false }); // Fallback sorting
+        .order('game_wins', { ascending: false });
 
     if (!standings || standings.length < 2) return;
 
-    // 3. Determine top half
-    const totalTeams = standings.length;
-    const playoffSpots = Math.floor(totalTeams / 2.0);
+    const playoffSpots = Math.floor(standings.length / 2.0);
     const playoffTeams = standings.slice(0, playoffSpots);
 
-    // 4. Create a Playoff Week (Use a high number like 99 so it doesn't conflict with regular season)
-    const { data: playoffWeek } = await supabase
-        .from('schedule_weeks')
-        .insert({
-            season_id: seasonId,
-            week_number: 99,
-            start_date: new Date().toISOString(),
-            end_date: new Date(new Date().getTime() + 7 * 86400000).toISOString(),
-            deck_submission_deadline: new Date(new Date().getTime() + 1 * 86400000).toISOString(),
-            match_completion_deadline: new Date(new Date().getTime() + 7 * 86400000).toISOString(),
-            is_playoff_week: true
-        })
-        .select('id')
-        .single();
+    // Create a Playoff Week (Week 99)
+    const { data: season } = await supabase.from('seasons').select('season_number').eq('id', seasonId).single();
+    const { data: playoffWeek } = await supabase.from('schedule_weeks').insert({
+        season_id: seasonId,
+        season_number: season?.season_number,
+        week_number: 99,
+        start_date: new Date().toISOString(),
+        end_date: new Date(new Date().getTime() + 7 * 86400000).toISOString(),
+        deck_submission_deadline: new Date(new Date().getTime() + 1 * 86400000).toISOString(),
+        match_completion_deadline: new Date(new Date().getTime() + 7 * 86400000).toISOString(),
+        is_playoff_week: true,
+        notes: "Playoffs"
+    }).select('id').single();
 
     if (!playoffWeek) return;
 
-    // 5. Generate Matchups: 1st vs Worst, 2nd vs 2nd-Worst, etc.
     let left = 0;
     let right = playoffTeams.length - 1;
-
-    // If odd number, 1st place gets a BYE
-    if (playoffTeams.length % 2 !== 0) {
-        console.log(`[PLAYOFFS] ${playoffTeams[0].team_id} gets a BYE`);
-        left++; 
-    }
+    if (playoffTeams.length % 2 !== 0) left++; // 1st place gets a BYE
 
     const now = new Date();
+    let offsetMinutes = 20;
 
     while (left < right) {
         const team1 = playoffTeams[left].team_id;
         const team2 = playoffTeams[right].team_id;
 
-        // Create the matchup entry
         const { data: matchup } = await supabase.from('weekly_matchups').insert({
             season_id: seasonId,
             week_number: 99,
@@ -678,12 +657,12 @@ async function advanceToPlayoffs(seasonId: string) {
             is_playoff: true
         }).select('id').single();
 
-        // Schedule the games 20 mins out
         if (matchup) {
-            for (let i = 0; i < 3; i++) {
-                const matchDate = new Date(now.getTime() + (20 * 60000) + (i * 20 * 60000));
+            for (let i = 0; i < gamesPerMatchup; i++) {
+                const matchDate = new Date(now.getTime() + (offsetMinutes * 60000));
                 await supabase.from('schedule').insert({
                     season_id: seasonId,
+                    season_number: season?.season_number,
                     week_id: playoffWeek.id,
                     week_number: 99,
                     team1_id: team1,
@@ -692,6 +671,7 @@ async function advanceToPlayoffs(seasonId: string) {
                     match_date: matchDate.toISOString(),
                     status: 'scheduled'
                 });
+                offsetMinutes += 20;
             }
         }
         left++;
