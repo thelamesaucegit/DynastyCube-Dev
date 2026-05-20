@@ -7,7 +7,7 @@ import { type TeamWithDetails } from "./teamActions";
 
 import { createScheduleWeek } from "./scheduleActions"; 
 import { generateSeasonMatchups } from "./seasonSchedulerActions"; 
-import { getTeamsWithDetails } from "./teamActions";
+import { getTeamsWithDetails, type TeamWithDetails } from "./teamActions";
 
 // ============================================
 // TYPES
@@ -238,7 +238,6 @@ export async function createSeasonWithSchedule(
     }
 
     // STEP C: Create all the 'schedule_weeks' entries
-    const totalWeeks = scheduleParams.regular_season_weeks + (scheduleParams.include_rivals_week ? 1 : 0);
     const weekCreationPromises = [];
 
     for (let i = 0; i < scheduleParams.regular_season_weeks; i++) {
@@ -1103,7 +1102,7 @@ export async function createTestSeason(): Promise<{ success: boolean; seasonId?:
         // Make sure generateSeasonMatchups is exported in seasonSchedulerActions.ts!
 const { teams } = await getTeamsWithDetails(false);
 const activeTeams = (teams?.filter(t => t.is_hidden !== true) || []) as TeamWithDetails[];
-const allMatchups = await generateSeasonMatchups(activeTeams as any, 5, false);
+const allMatchups = await generateSeasonMatchups(activeTeams as TeamWithDetails[], 5, false);
         const week1Matchups = allMatchups.filter(m => m.week === 1);
         const now = new Date();
         let matchOffsetMinutes = 20;
