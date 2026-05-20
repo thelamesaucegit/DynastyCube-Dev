@@ -30,6 +30,30 @@ interface ScheduleTabContentProps {
     activeSeason: Season | undefined;
 }
 
+function TestSeasonStarter({ onComplete }: { onComplete: () => void }) {
+  const [loading, setLoading] = useState(false);
+
+  const handleCreateTestSeason = async () => {
+    if (!confirm("This will create a rapid 5-week test season with 3 games per matchup and a 5-second auto-draft. Continue?")) return;
+    
+    setLoading(true);
+
+    
+    setTimeout(() => {
+        setLoading(false);
+        onComplete();
+    }, 2000);
+  };
+  return (
+    <button 
+        onClick={handleCreateTestSeason} 
+        disabled={loading}
+        className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-4 rounded-lg mt-4 shadow-lg flex items-center justify-center gap-2"
+    >
+        {loading ? <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" /> : "⚡ Quick Start Rapid Test Season"}
+    </button>
+  );
+}
 export const SeasonManagement: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<SeasonSubTab>("management");
   const [seasons, setSeasons] = useState<Season[]>([]);
