@@ -186,7 +186,7 @@ export async function generateFullSeasonSchedule(
             const matchupsForThisWeek = allMatchups.filter(m => m.week === weekNum);
             if (!weekInfo || matchupsForThisWeek.length === 0) continue;
 
-            const gamesPerMatchup = 5;
+            const gamesPerMatchup = 9;
             const totalGamesInWeek = matchupsForThisWeek.length * gamesPerMatchup;
 
             // *** NEW LOGIC: Use the prioritized time slot generator ***
