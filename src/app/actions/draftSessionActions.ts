@@ -657,30 +657,37 @@ export async function completeDraft(
           }
       }
     }
-     // --- NEW: AUTOMATED SCHEDULE GENERATION & PHASE TRANSITION ---
+    // --- NEW: AUTOMATED SCHEDULE GENERATION & PHASE TRANSITION ---
     console.log(`[Draft Complete] Generating regular season schedule...`);
-    const [weeksResult, seasonResult] = await Promise.all([
-      getScheduleWeeks(sessionData?.season_id),
-      getActiveSeasonDetails(),
-    ]);
+    
+    if (sessionData?.season_id) {
+        const [weeksResult, seasonResult] = await Promise.all([
+          getScheduleWeeks(sessionData.season_id),
+          getActiveSeasonDetails(),
+        ]);
 
-    if (weeksResult.weeks && seasonResult.season) {
-      const regularWeeksCount = weeksResult.weeks.filter(w => !w.is_playoff_week && !w.is_championship_week).length;
-      const schedResult = await generateFullSeasonSchedule(
-        sessionData.season_id, 
-        regularWeeksCount, 
-        seasonResult.season.has_rivals_week
-      );
-      if (schedResult.success) {
-        console.log(`[Draft Complete] Successfully generated ${schedResult.scheduledGamesCount} games.`);
-      } else {
-        console.error(`[Draft Complete] Schedule generation failed:`, schedResult.error);
-      }
+        if (weeksResult.weeks && seasonResult.season) {
+          const regularWeeksCount = weeksResult.weeks.filter(w => !w.is_playoff_week && !w.is_championship_week).length;
+          
+          const schedResult = await generateFullSeasonSchedule(
+            sessionData.season_id, 
+            regularWeeksCount, 
+            seasonResult.season.has_rivals_week
+          );
+          
+          if (schedResult.success) {
+            console.log(`[Draft Complete] Successfully generated ${schedResult.scheduledGamesCount} games.`);
+          } else {
+            console.error(`[Draft Complete] Schedule generation failed:`, schedResult.error);
+          }
+        }
+
+        // Transition to Preseason
+        await updateSeasonPhase(sessionData.season_id, "preseason");
+        console.log(`[Draft Complete] Season moved to Preseason phase.`);
+    } else {
+        console.error("[Draft Complete] No season_id found for this draft session. Skipping automation.");
     }
-
-    // Transition to Preseason
-    await updateSeasonPhase(sessionData?.season_id, "preseason");
-    console.log(`[Draft Complete] Season moved to Preseason phase.`);
     // -------------------------------------------------------------
 
     await supabase.rpc("notify_all_users_draft", {
