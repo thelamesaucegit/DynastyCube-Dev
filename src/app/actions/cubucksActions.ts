@@ -238,7 +238,6 @@ export async function createSeasonWithSchedule(
     }
 
     // STEP C: Create all the 'schedule_weeks' entries
-    const totalWeeks = scheduleParams.regular_season_weeks + (scheduleParams.include_rivals_week ? 1 : 0);
     const weekCreationPromises = [];
 
     for (let i = 0; i < scheduleParams.regular_season_weeks; i++) {
