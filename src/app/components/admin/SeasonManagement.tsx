@@ -8,6 +8,7 @@ import {
   getSeasons,
   createSeasonWithSchedule,
   activateSeason,
+  createTestSeason,
   type Season,
   type SeasonScheduleParams,
 } from "@/app/actions/cubucksActions";
@@ -287,11 +288,15 @@ export const SeasonManagement: React.FC = () => {
                 {/* ... Rollover details table ... */}
             </div>
           )}
-          <div className="mb-6">
+       <div className="mb-6">
             {!showPlanner ? (
-              <button onClick={() => setShowPlanner(true)} className="w-full admin-btn admin-btn-primary py-4 text-base">
-                + Plan New Season
-              </button>
+              <div className="flex flex-col gap-4">
+                  <button onClick={() => setShowPlanner(true)} className="w-full admin-btn admin-btn-primary py-4 text-base">
+                    + Plan New Season
+                  </button>
+                  {/* --- NEW TEST SEASON BUTTON --- */}
+                  <TestSeasonStarter onComplete={loadSeasons} />
+              </div>
             ) : (
               <div className="bg-white dark:bg-gray-800 border-2 border-blue-400 rounded-lg p-6 shadow-lg">
                 <div className="flex justify-between items-center mb-4">
