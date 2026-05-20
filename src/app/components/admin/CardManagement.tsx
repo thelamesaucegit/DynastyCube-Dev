@@ -10,7 +10,8 @@ import {
   removeFilteredCards,
   undraftAllCards,
   clearCardPool,
-  backfillImportedCards, // <--- NEW IMPORT
+  backfillImportedCards,
+  promoteSeasonData, // <--- NEW IMPORT
 } from "@/app/actions/cardActions";
 
 import type { CardData, PoolTableName } from "@/app/actions/cardActions";
@@ -50,12 +51,11 @@ interface CardManagementProps {
   onUpdate?: () => void;
 }
 
-// NEW LOGIC: A centralized configuration for all pools. This is the key change.
 const poolConfigs: { label: string; table: PoolTableName }[] = [
     { label: "Main Card Pool", table: "card_pools" },
     { label: "The Chamber", table: "the_chamber" },
     { label: "The Resort Pool", table: "resort_pool" },
-    { label: "Season 2 Test Pool", table: "card_pools_next" }, // <--- ADDED THE NEW TABLE TO DROPDOWN
+    { label: "Season 2 Test Pool", table: "card_pools_next" },
 ];
 
 export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
@@ -71,13 +71,13 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
   const [bulkText, setBulkText] = useState("");
   const [bulkCost, setBulkCost] = useState("1");
   const [bulkImporting, setBulkImporting] = useState(false);
-  const [backfilling, setBackfilling] = useState(false); // <--- NEW STATE FOR BACKFILL SPINNER
+  const [backfilling, setBackfilling] = useState(false);
+  const [promoting, setPromoting] = useState(false); // <--- NEW STATE
   const [bulkResult, setBulkResult] = useState<{
       added: number;
     failed: { name: string; reason: string }[];
     eloSyncMessage?: string;
   } | null>(null);
-  const [showBulkImport, setShowBulkImport] = useState(false);
   const [poolCards, setPoolCards] = useState<PoolCard[]>([]);
   const [clearFilter, setClearFilter] = useState<"all" | "undrafted" | "drafted" | null>(null);
   const [clearing, setClearing] = useState(false);
@@ -283,17 +283,14 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
     }
   };
 
-  // --- NEW HANDLER FOR BACKFILL SCRIPT ---
   const handleBackfillImported = async () => {
-      if (!confirm(`This will scan the ${poolConfigs.find(p => p.table === activePool)?.label} for any imported cards missing Scryfall data and attempt to backfill them. Continue?`)) {
-          return;
-      }
+      if (!confirm(`This will scan the ${poolConfigs.find(p => p.table === activePool)?.label} for any imported cards missing Scryfall data and attempt to backfill them. Continue?`)) return;
       setBackfilling(true);
       try {
           const result = await backfillImportedCards(activePool);
           if (result.success) {
               toast.success(`Successfully backfilled ${result.updated} card(s) from Scryfall!`);
-              await loadCards(); // Refresh the list
+              await loadCards(); 
           } else {
               toast.error(result.error || "Failed to run backfill.");
           }
@@ -302,6 +299,26 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
       } finally {
           setBackfilling(false);
       }
+  };
+
+  // --- NEW HANDLER FOR PROMOTE SEASON ---
+  const handlePromoteSeason = async () => {
+    if (!confirm("WARNING: This will DESTROY all current cards and draft picks in the active pool, replacing them with the card_pools_next table. Are you absolutely sure?")) return;
+    setPromoting(true);
+    try {
+      const result = await promoteSeasonData();
+      if (result.success) {
+        toast.success("Season data promoted successfully!");
+        await loadCards();
+        onUpdate?.();
+      } else {
+        toast.error(result.error || "Failed to promote season data.");
+      }
+    } catch (err) {
+      toast.error("An unexpected error occurred during promotion.");
+    } finally {
+      setPromoting(false);
+    }
   };
 
   if (loading) {
@@ -379,14 +396,24 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
                 Paste card names (one per line) to import full card data and sync ELO ratings.
                 </p>
             </div>
-            {/* --- NEW BACKFILL BUTTON --- */}
-            <button 
-                onClick={handleBackfillImported} 
-                disabled={backfilling} 
-                className="admin-btn bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50"
-            >
-                {backfilling ? "Scanning..." : "Fix Missing Scryfall Data"}
-            </button>
+            {/* BUTTON GROUP FOR BACKFILL & PROMOTE */}
+            <div className="flex gap-2">
+                <button 
+                    onClick={handleBackfillImported} 
+                    disabled={backfilling || promoting} 
+                    className="admin-btn bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50"
+                >
+                    {backfilling ? "Scanning..." : "Fix Missing Scryfall Data"}
+                </button>
+                <button 
+                    onClick={handlePromoteSeason} 
+                    disabled={backfilling || promoting} 
+                    className="admin-btn bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
+                    title="Warning: Overwrites Live Card Pool!"
+                >
+                    {promoting ? "Promoting..." : "Promote Season Data"}
+                </button>
+            </div>
         </div>
 
         <textarea
