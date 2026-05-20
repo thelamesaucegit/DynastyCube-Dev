@@ -2,7 +2,7 @@
 
 "use server";
 
-import { createClient, createServerClient, type AnySupabaseClient } from "@/lib/supabase";
+import {  createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 
 // Note: The old 'createClient' helper function is now removed to use the consistent 'createServerClient'
 
@@ -477,7 +477,7 @@ export async function removeCardFromDeck(cardId: string): Promise<{ success: boo
 }
 
 export async function toggleKeeperStatus(pickId: string, isKeeper: boolean): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
+  const supabase = await createServerClient();
   try {
     const { error } = await supabase
       .from('team_draft_picks')
