@@ -645,10 +645,10 @@ async function generateInitialPlayoffBracket(seasonId: string, isTestSeason: boo
     if (playoffTeams.length % 2 !== 0) left++; // 1st place gets a BYE
 
     const matchupsToSchedule = [];
-    while (left < right) {
+     while (left < right) {
         const { data: matchup } = await supabase.from('weekly_matchups').insert({
             season_id: seasonId, week_number: roundNumber, team1_id: playoffTeams[left].team_id, team2_id: playoffTeams[right].team_id, is_playoff: true
-        }).select('id').single();
+        }).select('id, team1_id, team2_id').single(); // <-- Updated here
         if (matchup) matchupsToSchedule.push(matchup);
         left++; right--;
     }
