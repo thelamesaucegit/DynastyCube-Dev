@@ -88,7 +88,7 @@ export async function generateSeasonMatchups(
   teams: TeamWithDetails[],
   regularSeasonWeeks: number,
   includeRivalsWeek: boolean
-): Matchup[] {
+): Promise<Matchup[]> {
     const allMatchups: Matchup[] = [];
     const schedulableTeams = [...teams];
     
@@ -176,7 +176,7 @@ export async function generateFullSeasonSchedule(
         if (weeks.length < totalWeeksToSchedule) return { success: false, error: `Requires ${totalWeeksToSchedule} weeks to be created, but only ${weeks.length} were found.` };
         
         const weeksByNumber = new Map(weeks.map(w => [w.week_number, w]));
-        const allMatchups = generateSeasonMatchups(activeTeams, regularSeasonWeeks, includeRivalsWeek);
+const allMatchups = await generateSeasonMatchups(activeTeams, regularSeasonWeeks, includeRivalsWeek);
         if (allMatchups.length === 0) return { success: false, error: "Failed to generate any matchups." };
 
         let totalScheduledGames = 0;
