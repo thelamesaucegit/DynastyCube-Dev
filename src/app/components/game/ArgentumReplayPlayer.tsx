@@ -19,7 +19,7 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap }: Argentu
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
     const totalStates = initialGameStates.length;
-      // 1 = Normal (1500ms),  2 = Fast (750ms), 4 = Fastest (375ms)
+      // 1 = Normal (750ms),  2 = Fast (375ms), 4 = Fastest (187ms)
     const [playbackSpeed, setPlaybackSpeed] = useState<1 | 2 | 4 >(1);
 
 
@@ -31,7 +31,7 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap }: Argentu
 
     useEffect(() => {
         if (!isPlaying) return;
-                const baseDelay = 1500;
+                const baseDelay = 750;
         const currentDelay = baseDelay / playbackSpeed;
 
         const interval = setInterval(() => {
