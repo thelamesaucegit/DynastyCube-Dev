@@ -182,10 +182,10 @@ export default async function AboutPage() {
           <div>
             <h2 className="text-3xl font-bold flex items-center gap-3 mb-2">
               <Users className="size-6 text-emerald-500" />
-              The Factions
+              The Teams
             </h2>
             <p className="text-muted-foreground">
-              Participants are separated into distinct factions. Together, team members collaborate on draft strategies, evaluate trades, build their decks, and vote on the future rules of the league.
+              Participants are separated into distinct factions. Together, Team members collaborate on draft strategies, evaluate trades, build their decks, and vote on the future rules of the league.
             </p>
           </div>
         </div>
