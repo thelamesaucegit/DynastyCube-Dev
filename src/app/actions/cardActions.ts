@@ -473,3 +473,78 @@ export async function getPoolNames(): Promise<{ pools: string[]; error?: string;
     return { pools: [], error: "An unexpected error occurred" };
   }
 }
+
+/**
+ * NEW HELPER FUNCTION
+ * Scans an imported card pool for rows missing Scryfall enrichment (missing oracle_id)
+ * Fetches the missing images, IDs, and color identities, then updates the rows.
+ */
+export async function backfillImportedCards(
+  tableName: PoolTableName = "card_pools_next"
+): Promise<{ success: boolean; updated: number; error?: string }> {
+    const supabase = await createClient();
+
+    try {
+        // 1. Get cards that are missing Scryfall data (oracle_id is null)
+        const { data: cardsToFix, error: fetchError } = await supabase
+            .from(tableName)
+            .select("id, card_name")
+            .is("oracle_id", null); 
+
+        if (fetchError) throw fetchError;
+        if (!cardsToFix || cardsToFix.length === 0) {
+            return { success: true, updated: 0 };
+        }
+
+        console.log(`[BACKFILL] Found ${cardsToFix.length} cards missing Scryfall data. Fetching...`);
+
+        // 2. Fetch missing data from Scryfall
+        const uniqueNames = [...new Set(cardsToFix.map(c => c.card_name))];
+        const { cards: scryfallResults, notFound, errors: fetchErrors } = await fetchAllCards(uniqueNames);
+        
+        if (fetchErrors.length > 0) console.error("[BACKFILL] Scryfall fetch errors:", fetchErrors);
+        if (notFound.length > 0) console.warn("[BACKFILL] Cards not found on Scryfall:", notFound);
+
+        const scryfallCardMap = new Map<string, ScryfallCard>();
+        scryfallResults.forEach(card => scryfallCardMap.set(card.name.toLowerCase(), card));
+
+        // 3. Fetch oldest printings to guarantee retro frames if available
+        const oracleIds = scryfallResults.map(c => c.oracle_id).filter(Boolean);
+        const oldestImageMap = await fetchOldestPrintings(oracleIds);
+
+        let updatedCount = 0;
+
+        // 4. Update the database rows one by one
+        for (const dbCard of cardsToFix) {
+            const scryData = scryfallCardMap.get(dbCard.card_name.toLowerCase());
+            if (scryData) {
+                const { error: updateError } = await supabase
+                    .from(tableName)
+                    .update({
+                        card_id: scryData.id,
+                        oracle_id: scryData.oracle_id,
+                        image_url: scryData.image_uris?.normal || scryData.image_uris?.small,
+                        oldest_image_url: oldestImageMap.get(scryData.oracle_id) || scryData.image_uris?.normal,
+                        color_identity: scryData.color_identity || [],
+                        cmc: scryData.cmc || 0,
+                        hidden: scryData.type_line.toLowerCase().includes('basic land')
+                    })
+                    .eq("id", dbCard.id);
+
+                if (!updateError) {
+                    updatedCount++;
+                } else {
+                    console.error(`[BACKFILL] Failed to update ${dbCard.card_name}:`, updateError.message);
+                }
+            }
+        }
+
+        console.log(`[BACKFILL] Complete! Successfully updated ${updatedCount} cards.`);
+        return { success: true, updated: updatedCount };
+
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return { success: false, updated: 0, error: errorMessage };
+    }
+}
+
