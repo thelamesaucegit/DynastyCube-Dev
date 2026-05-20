@@ -2,7 +2,7 @@
 
 "use server";
 
-import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
+import { createClient, createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 
 // Note: The old 'createClient' helper function is now removed to use the consistent 'createServerClient'
 
