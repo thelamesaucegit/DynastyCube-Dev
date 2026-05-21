@@ -17,6 +17,13 @@ export async function logSystemEvent(
   message: string, 
   details?: Record<string, unknown> // <-- Changed from 'any' to 'unknown'
 ) {
+  if (level !== 'error') {
+    if (process.env.NODE_ENV === 'development') {
+      const icon = level === 'warn' ? '⚠️' : 'ℹ️';
+      console[level === 'warn' ? 'warn' : 'info'](`${icon} [${processName}] ${message}`, details || '');
+    }
+    return; // Exit early!
+  }
   const supabase = createLogClient();
   
   try {
