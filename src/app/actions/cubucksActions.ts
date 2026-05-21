@@ -348,7 +348,7 @@ export async function getTeamBalances(): Promise<{
   error?: string;
 }> {
   try {
-    const supabase = adminClient ?? createServiceClient(); 
+    const supabase = await createServerClient(); 
 
     const { data, error } = await supabase
       .from("teams")
