@@ -3,6 +3,8 @@
 
 import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 import type { SupabaseClient } from "@supabase/supabase-js"; 
+import { logSystemEvent } from "@/lib/systemLogger";
+
 
 import { createScheduleWeek } from "./scheduleActions"; 
 import { generateSeasonMatchups } from "./seasonSchedulerActions"; 
@@ -1062,54 +1064,76 @@ export async function createTestSeason(): Promise<{ success: boolean; seasonId?:
     const supabase = await createServerClient();
 
     try {
+        await logSystemEvent("TestSeasonCreation", "info", "Starting automated test season creation process.");
+
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return { success: false, error: "Not authenticated" };
+        if (!user) {
+            await logSystemEvent("TestSeasonCreation", "warn", "Failed: User not authenticated.");
+            return { success: false, error: "Not authenticated" };
+        }
 
         const testSeasonNumber = Math.floor(Math.random() * 1000) + 100; 
         const seasonName = `TEST SEASON ${testSeasonNumber}`;
 
+        await logSystemEvent("TestSeasonCreation", "info", `Step 1: Creating season record for ${seasonName}`);
+
+        // 1. Create Season (starts in draft phase immediately)
         const { data: seasonData, error: seasonError } = await supabase.from("seasons").insert({
             season_number: testSeasonNumber, season_name: seasonName,
             start_date: new Date().toISOString(), end_date: new Date(new Date().getTime() + 14 * 86400000).toISOString(),
             cubucks_allocation: 100, is_active: true, phase: 'draft', has_rivals_week: false,
         }).select('id').single();
 
-        if (seasonError) throw seasonError;
+        if (seasonError) throw new Error(`Failed to create season: ${seasonError.message}`);
         const seasonId = seasonData.id;
 
+        await logSystemEvent("TestSeasonCreation", "info", `Step 1 Complete. Season ID: ${seasonId}. Deactivating old seasons.`);
         await supabase.from("seasons").update({ is_active: false }).neq("id", seasonId);
 
-        // FAST 5-SECOND DRAFT
-        await supabase.from("draft_sessions").insert({
+        // 2. Create Draft Session (5 SECOND TIMER)
+        await logSystemEvent("TestSeasonCreation", "info", `Step 2: Creating rapid draft session.`);
+        const { error: draftSessionError } = await supabase.from("draft_sessions").insert({
             season_id: seasonId, status: "scheduled", name: `${seasonName} Rapid Draft`,
             total_rounds: 40, hours_per_pick: 0.00138, start_time: new Date().toISOString(), started_by: user.id,
         });
 
-        // CREATE WEEKS
+        if (draftSessionError) throw new Error(`Draft session error: ${draftSessionError.message}`);
+
+        // 3. Create Weeks
+        await logSystemEvent("TestSeasonCreation", "info", `Step 3: Creating 5 schedule weeks.`);
         const weekIds: string[] = [];
         for (let i = 1; i <= 5; i++) {
-            const { data: weekData } = await supabase.from("schedule_weeks").insert({
+            const { data: weekData, error: weekError } = await supabase.from("schedule_weeks").insert({
                 season_id: seasonId, season_number: testSeasonNumber, week_number: i,
                 start_date: new Date().toISOString(), end_date: new Date(new Date().getTime() + 7 * 86400000).toISOString(),
                 deck_submission_deadline: new Date().toISOString(), match_completion_deadline: new Date(new Date().getTime() + 7 * 86400000).toISOString(),
                 is_playoff_week: false, is_championship_week: false, notes: `Test Week ${i}`,
             }).select('id').single();
-            weekIds.push(weekData!.id);
+            if (weekError) throw new Error(`Week ${i} error: ${weekError.message}`);
+            weekIds.push(weekData.id);
         }
 
-        // GENERATE ROUND ROBIN AND JIT SCHEDULE WEEK 1
-        // Make sure generateSeasonMatchups is exported in seasonSchedulerActions.ts!
-const { teams } = await getTeamsWithDetails(false);
-const activeTeams = (teams?.filter(t => t.is_hidden !== true) || []) as TeamWithDetails[];
-const allMatchups = await generateSeasonMatchups(activeTeams as TeamWithDetails[], 5, false);
+        // 4. Generate Matchups
+        await logSystemEvent("TestSeasonCreation", "info", `Step 4: Fetching teams and generating matchups.`);
+        const { teams } = await getTeamsWithDetails(false);
+        const activeTeams = (teams?.filter(t => t.is_hidden !== true) || []) as TeamWithDetails[];
+        
+        if (activeTeams.length < 2) throw new Error("Not enough active teams to generate matchups.");
+        
+        const allMatchups = await generateSeasonMatchups(activeTeams, 5, false);
+
+        await logSystemEvent("TestSeasonCreation", "info", `Step 5: Scheduling Week 1 matchups 20 minutes apart.`);
+        // 5. Insert ONLY Week 1's Schedule (20 mins apart)
         const week1Matchups = allMatchups.filter(m => m.week === 1);
         const now = new Date();
         let matchOffsetMinutes = 20;
 
         for (const matchup of week1Matchups) {
-            const { data: matchupRecord } = await supabase.from('weekly_matchups').insert({
+            const { data: matchupRecord, error: matchError } = await supabase.from('weekly_matchups').insert({
                 season_id: seasonId, week_number: 1, team1_id: matchup.teamAId, team2_id: matchup.teamBId, is_playoff: false
             }).select('id').single();
+
+            if (matchError) throw new Error(`Week 1 Matchup Error: ${matchError.message}`);
 
             if (matchupRecord) {
                 for (let i = 0; i < 3; i++) {
@@ -1124,7 +1148,8 @@ const allMatchups = await generateSeasonMatchups(activeTeams as TeamWithDetails[
             }
         }
 
-        // Pre-stage empty matchups for Weeks 2-5 for JIT
+        await logSystemEvent("TestSeasonCreation", "info", `Step 6: Pre-staging empty matchups for Weeks 2-5.`);
+        // 6. Pre-stage empty matchups for weeks 2-5 for JIT
         for (let week = 2; week <= 5; week++) {
              const weekMatchups = allMatchups.filter(m => m.week === week);
              for (const matchup of weekMatchups) {
@@ -1143,8 +1168,13 @@ const allMatchups = await generateSeasonMatchups(activeTeams as TeamWithDetails[
                 }
              }
         }
+
+        await logSystemEvent("TestSeasonCreation", "info", "Test Season successfully created!");
         return { success: true, seasonId };
+
     } catch (error) {
-        return { success: false, error: String(error) };
+        const errStr = error instanceof Error ? error.message : String(error);
+        await logSystemEvent("TestSeasonCreation", "error", "Fatal error creating test season.", { error: errStr });
+        return { success: false, error: errStr };
     }
 }
