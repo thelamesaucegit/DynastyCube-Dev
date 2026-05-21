@@ -51,24 +51,34 @@ Group,
    CheckSquare ,
 } from "lucide-react";
 import { getDraftSessions, type DraftSession } from "@/app/actions/draftSessionActions";
+import { getUserTeam } from "@/app/actions/teamActions";
+
 
 export default function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [draftSessions, setDraftSessions] = useState<DraftSession[]>([]);
   const pathname = usePathname();
+    const [userTeam, setUserTeam] = useState<{ short_name: string; emoji: string; name: string } | null>(null);
   const { user, loading, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { isAdmin } = useIsAdmin();
 
-  useEffect(() => {
+   useEffect(() => {
     setMounted(true);
-    async function loadDrafts() {
+    async function loadData() {
       const { sessions } = await getDraftSessions();
       setDraftSessions(sessions);
+      
+      if (user?.email) {
+          const { team } = await getUserTeam(user.email);
+          if (team) {
+              setUserTeam({ short_name: team.short_name, emoji: team.emoji, name: team.name });
+          }
+      }
     }
-    loadDrafts();
-  }, []);
+    loadData();
+  }, [user]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -114,6 +124,12 @@ export default function Navigation() {
               Dynasty Cube
             </span>
           </Link>
+           {/* --- NEW: FLOATING MOBILE EMOJI --- */}
+          {userTeam && (
+             <Link href={`/teams/${userTeam.short_name}`} className="md:hidden text-2xl hover:scale-110 transition-transform">
+                {userTeam.emoji}
+             </Link>
+          )}
           {/* Desktop Nav */}
           <nav className="hidden md:flex items-center gap-1">
             <NavigationMenu>
@@ -195,6 +211,20 @@ export default function Navigation() {
                     </NavigationMenuLink>
                   </Link>
                 </NavigationMenuItem>
+               {/* --- NEW: USER'S TEAM EMOJI LINK --- */}
+                {userTeam && (
+                  <NavigationMenuItem>
+                    <Link href={`/teams/${userTeam.short_name}`} legacyBehavior passHref>
+                      <NavigationMenuLink
+                        title={userTeam.name}
+                        className={`${navigationMenuTriggerStyle()} bg-transparent px-2 text-xl hover:scale-110 transition-transform ${isActive(`/teams/${userTeam.short_name}`) ? "bg-accent/50 rounded-md" : ""}`}
+                      >
+                        {userTeam.emoji}
+                      </NavigationMenuLink>
+                    </Link>
+                  </NavigationMenuItem>
+                )}
+                
                 {/* Matches Link */}
                 <NavigationMenuItem>
                   <Link href="/schedule" legacyBehavior passHref>
@@ -318,6 +348,7 @@ export default function Navigation() {
                 <Link href="/" onClick={() => setMobileMenuOpen(false)} className={`px-4 py-2.5 rounded-md text-left transition-colors ${isActive("/") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
                   Home
                 </Link>
+                
                 <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                   Draft
                 </div>
