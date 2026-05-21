@@ -2,6 +2,7 @@
 
 "use server";
 
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { invalidateDraftCache } from '@/lib/draftCache';
@@ -9,7 +10,9 @@ import { type AnySupabaseClient } from "@/lib/supabase";
 import { fetchAllCards, ScryfallCard , fetchOldestPrintings } from "@/lib/scryfall-client";
 import { updateAllCubecobraElo } from "./cardRatingActions";
 
-
+function createServiceClient() {
+    return createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+}
 
 export type PoolTableName = "card_pools" | "the_chamber" | "resort_pool" | "card_pools_next"; 
 
@@ -146,7 +149,8 @@ export async function getCardPool(
 }
 
 export async function getAvailableCardsForDraft(poolName: string = "draft", adminClient?: AnySupabaseClient): Promise<{ cards: CardData[]; error?: string }> {
-  const supabase = adminClient ?? await createClient();
+  // Use service client if no adminClient is provided, rather than the cookie-based client
+  const supabase = adminClient ?? createServiceClient(); 
   console.log(`[Draft Availability] Checking for pool: "${poolName}"`);
   try {
     // This first query to get all IDs is no longer needed, we can do it in one step.

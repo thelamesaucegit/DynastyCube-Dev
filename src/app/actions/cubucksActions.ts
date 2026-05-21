@@ -1,5 +1,6 @@
 // src/app/actions/cubucksActions.ts
 "use server";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 import type { SupabaseClient } from "@supabase/supabase-js"; 
@@ -10,6 +11,11 @@ import { generateDraftOrder } from "./draftOrderActions";
 import { createScheduleWeek } from "./scheduleActions"; 
 import { generateSeasonMatchups } from "./seasonSchedulerActions"; 
 import { getTeamsWithDetails, type TeamWithDetails } from "./teamActions";
+
+
+function createServiceClient() {
+    return createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+}
 
 // ============================================
 // TYPES
@@ -342,7 +348,7 @@ export async function getTeamBalances(): Promise<{
   error?: string;
 }> {
   try {
-    const supabase = await createServerClient();
+    const supabase = adminClient ?? createServiceClient(); 
 
     const { data, error } = await supabase
       .from("teams")
