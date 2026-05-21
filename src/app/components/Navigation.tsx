@@ -51,24 +51,34 @@ Group,
    CheckSquare ,
 } from "lucide-react";
 import { getDraftSessions, type DraftSession } from "@/app/actions/draftSessionActions";
+import { getUserTeam } from "@/app/actions/teamActions";
+
 
 export default function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [draftSessions, setDraftSessions] = useState<DraftSession[]>([]);
   const pathname = usePathname();
+    const [userTeam, setUserTeam] = useState<{ short_name: string; emoji: string; name: string } | null>(null);
   const { user, loading, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { isAdmin } = useIsAdmin();
 
-  useEffect(() => {
+   useEffect(() => {
     setMounted(true);
-    async function loadDrafts() {
+    async function loadData() {
       const { sessions } = await getDraftSessions();
       setDraftSessions(sessions);
+      
+      if (user?.email) {
+          const { team } = await getUserTeam(user.email);
+          if (team) {
+              setUserTeam({ short_name: team.short_name, emoji: team.emoji, name: team.name });
+          }
+      }
     }
-    loadDrafts();
-  }, []);
+    loadData();
+  }, [user]);
 
   const handleSignOut = async () => {
     await signOut();
