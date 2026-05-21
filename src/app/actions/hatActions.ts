@@ -3,12 +3,13 @@
 
 import { cookies } from "next/headers";
 import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
-
+import { createClient as createSupabaseClient } from "@supabase/supabase-js"; // <-- Add this import
 
 const REALLY_COOL_HAT_ID = 1;
 const CURSED_WITCH_SKIN_HAT_ID = 2;
 const OVERAGE_THRESHOLD = 10;
 
+// The standard client (requires a user session / request scope)
 async function createClient() {
   const cookieStore = await cookies();
   return createServerClient(
@@ -28,6 +29,16 @@ async function createClient() {
     }
   );
 }
+
+// --- NEW: The service client (bypasses cookies & RLS for background jobs) ---
+function createServiceClient() {
+    return createSupabaseClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_KEY!
+    );
+}
+// ----------------------------------------------------------------------------
+
 
 /**
  * Evaluates team spending at the end of a draft to award or remove hats.
@@ -56,7 +67,6 @@ export async function evaluateDraftHats(seasonId: string, theCap: number) {
 
   let furthestUnderCapTeam = null;
   let maxUnderCap = 0;
-
   let furthestOverCapTeam = null;
   let maxOverCap = 0;
 
@@ -156,12 +166,14 @@ export async function evaluateDraftHats(seasonId: string, theCap: number) {
   return { success: true };
 }
 
+
 /**
  * Calculates the adjusted cost of a team's FIRST draft pick based on the hats they wear.
  * Call this function during the draft when processing a team's first pick of the season.
  */
 export async function applyHatModifier(teamId: string, originalCost: number, adminClient?: AnySupabaseClient): Promise<number> {
-    const supabase = adminClient ?? createServiceClient();
+  // Use the service client fallback here so cron jobs don't crash!
+  const supabase = adminClient ?? createServiceClient();
 
   const { data: teamHats, error } = await supabase
     .from('team_hats')
@@ -195,11 +207,13 @@ export async function applyHatModifier(teamId: string, originalCost: number, adm
   return Math.max(1, finalCost);
 }
 
+
 /**
  * Helper to fetch a team's current hats to display on their profile or draft page.
  */
 export async function getTeamHats(teamId: string) {
   const supabase = await createClient();
+
   const { data, error } = await supabase
     .from('team_hats')
     .select(`
