@@ -205,6 +205,20 @@ export default function Navigation() {
                     </NavigationMenuLink>
                   </Link>
                 </NavigationMenuItem>
+               {/* --- NEW: USER'S TEAM EMOJI LINK --- */}
+                {userTeam && (
+                  <NavigationMenuItem>
+                    <Link href={`/teams/${userTeam.short_name}`} legacyBehavior passHref>
+                      <NavigationMenuLink
+                        title={userTeam.name}
+                        className={`${navigationMenuTriggerStyle()} bg-transparent px-2 text-xl hover:scale-110 transition-transform ${isActive(`/teams/${userTeam.short_name}`) ? "bg-accent/50 rounded-md" : ""}`}
+                      >
+                        {userTeam.emoji}
+                      </NavigationMenuLink>
+                    </Link>
+                  </NavigationMenuItem>
+                )}
+                
                 {/* Matches Link */}
                 <NavigationMenuItem>
                   <Link href="/schedule" legacyBehavior passHref>
@@ -328,6 +342,12 @@ export default function Navigation() {
                 <Link href="/" onClick={() => setMobileMenuOpen(false)} className={`px-4 py-2.5 rounded-md text-left transition-colors ${isActive("/") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
                   Home
                 </Link>
+                {/* --- NEW: MOBILE USER TEAM LINK --- */}
+                {userTeam && (
+                  <Link href={`/teams/${userTeam.short_name}`} onClick={() => setMobileMenuOpen(false)} className={`px-4 py-2.5 rounded-md text-left flex items-center gap-2 transition-colors ${isActive(`/teams/${userTeam.short_name}`) ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
+                    <span className="text-xl">{userTeam.emoji}</span> My Team
+                  </Link>
+                )}
                 <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                   Draft
                 </div>
