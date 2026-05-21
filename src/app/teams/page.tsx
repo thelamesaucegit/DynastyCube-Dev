@@ -107,7 +107,7 @@ export default function TeamsPage() {
       
       <DraftStatusWidget variant="compact" />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
         {teams.map((team) => {
           const badge = getTeamDraftBadge(draftStatus, team.id);
           const primaryColor = team.primary_color || "#71717a";
@@ -144,16 +144,18 @@ export default function TeamsPage() {
                 <CardContent className="flex-grow flex flex-col w-full">
                   <div className="flex-grow flex flex-col items-center justify-center gap-4 mb-4 p-4 rounded-lg bg-muted/30 w-full border border-border/50">
                     
-                    {/* Record Display with Hover Detail */}
-                    <div 
-                        className="text-center w-full group/record relative" 
-                        title={`Tiebreaker: ${team.game_wins} Individual Game Wins - ${team.game_losses} Losses`}
-                    >
-                        <p className="text-xs font-semibold text-muted-foreground tracking-wider mb-1 cursor-help">RECORD</p>
-<p className="text-xl font-bold cursor-help">{Math.floor(team.wins)} - {Math.floor(team.losses)}</p>
+                      {/* Record Display with Hover Detail */}
+                    <div className="text-center w-full group/record relative">
+                        <p className="text-xs font-semibold text-muted-foreground tracking-wider mb-1 sm:cursor-help">RECORD</p>
+                        <p className="text-xl font-bold sm:cursor-help">{Math.floor(team.wins)} - {Math.floor(team.losses)}</p>
                         
-                        {/* Styled tooltip overlay */}
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover text-popover-foreground text-xs rounded shadow-xl border opacity-0 group-hover/record:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                        {/* MOBILE ONLY: Inline game record */}
+                        <p className="text-[10px] text-muted-foreground mt-1 sm:hidden">
+                          ({team.game_wins}W - {team.game_losses}L games)
+                        </p>
+
+                        {/* DESKTOP ONLY: Styled tooltip overlay */}
+                        <div className="hidden sm:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover text-popover-foreground text-xs rounded shadow-xl border opacity-0 group-hover/record:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
                             <p className="font-bold border-b border-border mb-1">Tiebreaker Detail</p>
                             <p>{team.game_wins}W - {team.game_losses}L in Individual Games</p>
                         </div>

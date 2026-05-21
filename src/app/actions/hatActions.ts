@@ -1,8 +1,9 @@
 // src/app/actions/hatActions.ts
 "use server";
 
-import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
+
 
 const REALLY_COOL_HAT_ID = 1;
 const CURSED_WITCH_SKIN_HAT_ID = 2;
