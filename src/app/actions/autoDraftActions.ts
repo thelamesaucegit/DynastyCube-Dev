@@ -326,7 +326,7 @@ export async function executeAutoDraft(
     // --- HAT LOGIC INCORPORATED ---
     let baseCost = cardToAttempt.cubucks_cost || 1;
     if (pickNumber === 1) {
-        baseCost = await applyHatModifier(teamId, baseCost);
+        baseCost = await applyHatModifier(teamId, baseCost, supabase);
     }
     const effectiveCost = (preview.source === "manual_queue" && balance <= 0) ? 0 : baseCost;
     // ------------------------------
