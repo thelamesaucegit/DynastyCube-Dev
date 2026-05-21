@@ -302,12 +302,12 @@ export async function executeAutoDraft(
 }> {
   try {
     const supabase = adminClient ?? createServiceClient(); 
-    const { status: draftStatus, error: statusError } = await getDraftStatus(draftSessionId, supabase);
+    const { status: draftStatus, error: statusError } = await getDraftStatus(draftSessionId, supabase); 
     if (statusError || !draftStatus || draftStatus.onTheClock.teamId !== teamId) {
       return { success: false, error: statusError || "Team not on the clock." };
     }
 
-    const preview = await getAutoDraftPreview(teamId, draftSessionId, supabase, excludedCardPoolIds);
+    const preview = await getAutoDraftPreview(teamId, draftSessionId, supabase, excludedCardPoolIds); 
     const cardToAttempt = preview.nextPick;
 
     if (!cardToAttempt) {
@@ -326,7 +326,7 @@ export async function executeAutoDraft(
     // --- HAT LOGIC INCORPORATED ---
     let baseCost = cardToAttempt.cubucks_cost || 1;
     if (pickNumber === 1) {
-        baseCost = await applyHatModifier(teamId, baseCost);
+        baseCost = await applyHatModifier(teamId, baseCost, supabase);
     }
     const effectiveCost = (preview.source === "manual_queue" && balance <= 0) ? 0 : baseCost;
     // ------------------------------
