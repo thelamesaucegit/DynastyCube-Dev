@@ -1,5 +1,4 @@
 // src/app/components/admin/SeasonManagement.tsx
-
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -31,6 +30,7 @@ interface ScheduleTabContentProps {
     activeSeason: Season | undefined;
 }
 
+// 1. Declare the component exactly ONCE outside the main component.
 function TestSeasonStarter({ onComplete }: { onComplete: () => void }) {
   const [loading, setLoading] = useState(false);
 
@@ -39,12 +39,10 @@ function TestSeasonStarter({ onComplete }: { onComplete: () => void }) {
     
     setLoading(true);
     try {
-        // ACTUALLY CALL THE BACKEND FUNCTION HERE
         const result = await createTestSeason();
-        
         if (result.success) {
             alert(`Test Season Created! Season ID: ${result.seasonId}`);
-            onComplete(); // Refreshes the season list
+            onComplete(); 
         } else {
             alert(`Error creating test season: ${result.error}`);
         }
@@ -67,31 +65,18 @@ function TestSeasonStarter({ onComplete }: { onComplete: () => void }) {
   );
 }
 
-  return (
-    <button 
-        onClick={handleCreateTestSeason} 
-        disabled={loading}
-        className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-4 rounded-lg mt-4 shadow-lg flex items-center justify-center gap-2"
-    >
-        {loading ? <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" /> : "⚡ Quick Start Rapid Test Season"}
-    </button>
-  );
-}
+// 2. Main Component
 export const SeasonManagement: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<SeasonSubTab>("management");
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [draftStartTime, setDraftStartTime] = useState("12:00"); 
-
   const [showPlanner, setShowPlanner] = useState(false);
   const [newSeasonNumber, setNewSeasonNumber] = useState("");
   const [newSeasonName, setNewSeasonName] = useState("");
   const [cubucksAllocation, setCubucksAllocation] = useState("100");
 
-
-
-  // Updated state to remove pre_season_duration_days
   const [scheduleParams, setScheduleParams] = useState<Omit<SeasonScheduleParams, 'draft_start_time'>>({
       draft_start_date: '',
       draft_duration_days: 7,
@@ -134,25 +119,26 @@ export const SeasonManagement: React.FC = () => {
   const handleCreateSeason = async () => {
     const seasonNum = parseInt(newSeasonNumber);
     const allocation = parseInt(cubucksAllocation);
+
     if (isNaN(seasonNum) || !newSeasonName || isNaN(allocation) || !scheduleParams.draft_start_date || !draftStartTime) {
       setMessage({ type: "error", text: "Please fill in all Season Planner fields correctly." });
       return;
     }
+
     setCreating(true);
     try {
-      // Correctly combine the date/time params before sending
       const fullScheduleParams: SeasonScheduleParams = {
           ...scheduleParams,
           draft_start_time: draftStartTime,
       };
-
+      
       const result = await createSeasonWithSchedule(seasonNum, newSeasonName, allocation, fullScheduleParams);
+      
       if (result.success) {
         setMessage({ type: "success", text: `Season ${seasonNum} and its schedule have been created successfully!` });
         setShowPlanner(false);
         setNewSeasonNumber(""); setNewSeasonName(""); setCubucksAllocation("100");
-        setDraftStartTime("12:00"); // Reset time state
-        // Correctly reset the main params state
+        setDraftStartTime("12:00"); 
         setScheduleParams({ 
             draft_start_date: '', 
             draft_duration_days: 7, 
@@ -188,19 +174,21 @@ export const SeasonManagement: React.FC = () => {
     }
   };
 
-  // ... (handleRolloverCosts and handleInitializeCosts are unchanged)
   const handleRolloverCosts = async () => {
     const activeSeason = seasons.find((s) => s.is_active);
     if (!activeSeason) {
       setMessage({ type: "error", text: "No active season found" });
       return;
     }
+
     const previousSeason = seasons.filter((s) => s.season_number < activeSeason.season_number).sort((a, b) => b.season_number - a.season_number)[0];
     if (!previousSeason) {
       setMessage({ type: "error", text: "No previous season found. Use Initialize instead for Season 1." });
       return;
     }
+
     if (!confirm(`Roll over card costs from ${previousSeason.season_name} to ${activeSeason.season_name}?\n\n- Drafted cards: cost +1\n- Undrafted cards: cost -1 (min 1)\n\nThis cannot be undone!`)) return;
+
     setRollingOver(true);
     try {
       const result = await rolloverSeasonCosts(activeSeason.id, previousSeason.id);
@@ -235,7 +223,6 @@ export const SeasonManagement: React.FC = () => {
     }
   };
 
-
   if (loading) {
     return (
       <div className="admin-section text-center py-8">
@@ -247,12 +234,13 @@ export const SeasonManagement: React.FC = () => {
 
   const activeSeason = seasons.find((s) => s.is_active);
 
-   return (
+  return (
     <div className="admin-section">
       <div className="admin-section-header">
         <h2 className="admin-section-title">🏆 Season Management</h2>
         <p className="admin-section-description">Manage seasons, scheduling, and dynamic card pricing</p>
       </div>
+
       <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
         <div className="flex gap-4">
           <button onClick={() => setActiveSubTab("management")} className={`px-4 py-3 font-medium text-sm transition-colors border-b-2 ${activeSubTab === "management" ? "border-blue-600 text-blue-600 dark:text-blue-400" : "border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"}`}>
@@ -263,12 +251,14 @@ export const SeasonManagement: React.FC = () => {
           </button>
         </div>
       </div>
+
       {activeSubTab === "management" && (
         <>
           <div className="mb-8">
             <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Season Phase Control</h3>
             <SeasonPhaseManager />
           </div>
+
           {message && (
             <div className={`mb-6 p-4 rounded-lg border ${message.type === "success" ? "bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 text-green-800 dark:text-green-200" : "bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 text-red-800 dark:text-red-200"}`}>
                 <div className="flex justify-between items-start">
@@ -277,17 +267,18 @@ export const SeasonManagement: React.FC = () => {
                 </div>
             </div>
           )}
+
           <div className="mb-6 p-6 bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 border-2 border-purple-300 dark:border-purple-700 rounded-xl">
             <h3 className="text-lg font-bold text-purple-900 dark:text-purple-100 mb-3">💡 Dynamic Pricing System</h3>
             <div className="space-y-2 text-sm text-purple-800 dark:text-purple-200">
                 <div className="flex items-start gap-2"><span className="font-semibold min-w-[120px]">Starting Cost:</span><span> (Nearly) All cards begin at 1 Cubuck</span></div>
                 <div className="flex items-start gap-2"><span className="font-semibold min-w-[120px]">If Drafted:</span><span>Cost increases by +1 Cubuck next Season</span></div>
                 <div className="flex items-start gap-2"><span className="font-semibold min-w-[120px]">If Undrafted:</span><span>Cost decreases by half or -1 Cubuck, whichever is greater</span></div>
-                              <div className="flex items-start gap-2"><span className="font-semibold min-w-[120px]">If Cubuck cost = 0:</span><span>Cards reduced to 0 are removed from the Draft Pool and can instead be claimed as &quot;Free Agents&quot;</span></div>
-
+                <div className="flex items-start gap-2"><span className="font-semibold min-w-[120px]">If Cubuck cost = 0:</span><span>Cards reduced to 0 are removed from the Draft Pool and can instead be claimed as &quot;Free Agents&quot;</span></div>
                 <div className="flex items-start gap-2"><span className="font-semibold min-w-[120px]">Result:</span><span>Popular cards become expensive, unpopular cards stay cheap!</span></div>
             </div>
           </div>
+
           {activeSeason && (
             <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-300 dark:border-blue-700 rounded-lg">
                 <div className="flex items-center justify-between">
@@ -299,6 +290,7 @@ export const SeasonManagement: React.FC = () => {
                 </div>
             </div>
           )}
+
           <div className="grid md:grid-cols-2 gap-4 mb-6">
             <button onClick={handleRolloverCosts} disabled={rollingOver || !activeSeason} className="admin-btn admin-btn-primary flex flex-col items-center gap-2 py-6">
                 <span className="text-3xl">🔄</span><span className="font-semibold">Rollover Card Costs</span><span className="text-sm opacity-90">Calculate new costs for active season</span>
@@ -307,18 +299,14 @@ export const SeasonManagement: React.FC = () => {
                 <span className="text-3xl">🎯</span><span className="font-semibold">Initialize All Cards</span><span className="text-sm opacity-90">Set all cards to 1 Cubuck (Season 1 only)</span>
             </button>
           </div>
-          {showRolloverDetails && rolloverChanges.length > 0 && (
-            <div className="mb-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                {/* ... Rollover details table ... */}
-            </div>
-          )}
-       <div className="mb-6">
+
+          <div className="mb-6">
             {!showPlanner ? (
               <div className="flex flex-col gap-4">
                   <button onClick={() => setShowPlanner(true)} className="w-full admin-btn admin-btn-primary py-4 text-base">
                     + Plan New Season
                   </button>
-                  {/* --- NEW TEST SEASON BUTTON --- */}
+                  {/* --- CORRECTLY PLACED TEST SEASON BUTTON --- */}
                   <TestSeasonStarter onComplete={loadSeasons} />
               </div>
             ) : (
@@ -327,6 +315,7 @@ export const SeasonManagement: React.FC = () => {
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">New Season Planner</h3>
                   <button onClick={() => setShowPlanner(false)} className="text-gray-500 hover:text-gray-700">&times;</button>
                 </div>
+
                 <div className="grid md:grid-cols-3 gap-4 mb-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Season Number</label>
@@ -341,6 +330,7 @@ export const SeasonManagement: React.FC = () => {
                     <input type="number" value={cubucksAllocation} onChange={(e) => setCubucksAllocation(e.target.value)} placeholder="100" className="w-full px-4 py-2 border rounded-lg" />
                   </div>
                 </div>
+
                 <div className="border-t pt-6">
                   <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-4">Scheduling</h4>
                   <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
@@ -348,15 +338,10 @@ export const SeasonManagement: React.FC = () => {
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Draft Start Date</label>
                       <input type="date" value={scheduleParams.draft_start_date} onChange={(e) => setScheduleParams(p => ({ ...p, draft_start_date: e.target.value }))} className="w-full px-4 py-2 border rounded-lg" />
                     </div>
-                    {/* Time input is now here */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Draft Start Time</label>
                         <input type="time" value={draftStartTime} onChange={(e) => setDraftStartTime(e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
                     </div>
-                    <div>
-    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Draft Start Time</label>
-    <input type="time" value={draftStartTime} onChange={(e) => setDraftStartTime(e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
-</div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Draft Duration (Days)</label>
                       <input type="number" value={scheduleParams.draft_duration_days} onChange={(e) => setScheduleParams(p => ({ ...p, draft_duration_days: parseInt(e.target.value) || 0 }))} className="w-full px-4 py-2 border rounded-lg" />
@@ -378,6 +363,7 @@ export const SeasonManagement: React.FC = () => {
                       <input type="checkbox" checked={scheduleParams.include_rivals_week} onChange={(e) => setScheduleParams(p => ({ ...p, include_rivals_week: e.target.checked }))} className="w-full px-4 py-2 border rounded-lg" />
                     </div>
                   </div>
+
                   <button onClick={handleCreateSeason} disabled={creating} className="admin-btn admin-btn-primary w-full mt-4">
                     {creating ? "Creating Season..." : "Create & Schedule Season"}
                   </button>
@@ -385,6 +371,7 @@ export const SeasonManagement: React.FC = () => {
               </div>
             )}
           </div>
+
           <div>
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">All Seasons</h3>
             <div className="space-y-3">
@@ -410,6 +397,7 @@ export const SeasonManagement: React.FC = () => {
           </div>
         </>
       )}
+
       {activeSubTab === "schedule" && activeSeason && (
         <div className="space-y-8">
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
@@ -417,6 +405,7 @@ export const SeasonManagement: React.FC = () => {
           </div>
         </div>
       )}
+
       {activeSubTab === "schedule" && !activeSeason && (
         <div className="text-center py-12">
           <div className="mb-4 text-6xl">📅</div>
