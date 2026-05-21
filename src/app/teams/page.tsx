@@ -107,7 +107,7 @@ export default function TeamsPage() {
       
       <DraftStatusWidget variant="compact" />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
         {teams.map((team) => {
           const badge = getTeamDraftBadge(draftStatus, team.id);
           const primaryColor = team.primary_color || "#71717a";
