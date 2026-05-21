@@ -2,9 +2,13 @@
 
 "use server";
 
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+
 import {  createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 
-// Note: The old 'createClient' helper function is now removed to use the consistent 'createServerClient'
+function createServiceClient() {
+    return createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+}
 
 export interface DraftPick {
   id?: string;
@@ -151,7 +155,7 @@ export async function addSkippedPick(
   draftSessionId: string,
   adminClient?: AnySupabaseClient
 ): Promise<{ success: boolean; pick?: DraftPick; error?: string }> {
-  const supabase = adminClient ?? await createServerClient();
+    const supabase = adminClient ?? createServiceClient();
   try {
     const { data: newPick, error } = await supabase
       .from("team_draft_picks")
@@ -238,7 +242,7 @@ export async function getTeamDraftPicks(
   draftSessionId?: string,
   adminClient?: AnySupabaseClient
 ): Promise<{ picks: DraftPick[]; error?: string }> {
-  const supabase = adminClient ?? await createServerClient();
+    const supabase = adminClient ?? createServiceClient();
   try {
     let query = supabase.from("team_draft_picks").select("*").eq("team_id", teamId);
     if (draftSessionId) {
