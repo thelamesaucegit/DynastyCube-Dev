@@ -5,6 +5,7 @@ import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 import type { SupabaseClient } from "@supabase/supabase-js"; 
 import { logSystemEvent } from "@/lib/systemLogger";
 
+import { generateDraftOrder } from "./draftOrderActions";
 
 import { createScheduleWeek } from "./scheduleActions"; 
 import { generateSeasonMatchups } from "./seasonSchedulerActions"; 
@@ -1089,6 +1090,13 @@ export async function createTestSeason(): Promise<{ success: boolean; seasonId?:
 
         await logSystemEvent("TestSeasonCreation", "info", `Step 1 Complete. Season ID: ${seasonId}. Deactivating old seasons.`);
         await supabase.from("seasons").update({ is_active: false }).neq("id", seasonId);
+
+        // --- NEW STEP: GENERATE DRAFT ORDER ---
+        await logSystemEvent("TestSeasonCreation", "info", `Step 1.5: Generating randomized draft order.`);
+        const draftOrderResult = await generateDraftOrder(seasonId, { orderType: 'random' });
+        if (!draftOrderResult.success) {
+            throw new Error(`Failed to generate draft order: ${draftOrderResult.error}`);
+        }
 
         // 2. Create Draft Session (5 SECOND TIMER)
         await logSystemEvent("TestSeasonCreation", "info", `Step 2: Creating rapid draft session.`);
