@@ -159,8 +159,8 @@ export async function evaluateDraftHats(seasonId: string, theCap: number) {
  * Calculates the adjusted cost of a team's FIRST draft pick based on the hats they wear.
  * Call this function during the draft when processing a team's first pick of the season.
  */
-export async function applyHatModifier(teamId: string, originalCost: number): Promise<number> {
-  const supabase = await createClient();
+export async function applyHatModifier(teamId: string, originalCost: number, adminClient?: AnySupabaseClient): Promise<number> {
+    const supabase = adminClient ?? createServiceClient();
 
   const { data: teamHats, error } = await supabase
     .from('team_hats')
