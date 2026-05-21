@@ -258,9 +258,11 @@ export const SeasonManagement: React.FC = () => {
           <div className="mb-6 p-6 bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 border-2 border-purple-300 dark:border-purple-700 rounded-xl">
             <h3 className="text-lg font-bold text-purple-900 dark:text-purple-100 mb-3">💡 Dynamic Pricing System</h3>
             <div className="space-y-2 text-sm text-purple-800 dark:text-purple-200">
-                <div className="flex items-start gap-2"><span className="font-semibold min-w-[120px]">Starting Cost:</span><span>All cards begin at 1 Cubuck</span></div>
-                <div className="flex items-start gap-2"><span className="font-semibold min-w-[120px]">If Drafted:</span><span>Cost increases by +1 Cubuck next season</span></div>
-                <div className="flex items-start gap-2"><span className="font-semibold min-w-[120px]">If Undrafted:</span><span>Cost decreases by -1 Cubuck next season (minimum 1)</span></div>
+                <div className="flex items-start gap-2"><span className="font-semibold min-w-[120px]">Starting Cost:</span><span> (Nearly) All cards begin at 1 Cubuck</span></div>
+                <div className="flex items-start gap-2"><span className="font-semibold min-w-[120px]">If Drafted:</span><span>Cost increases by +1 Cubuck next Season</span></div>
+                <div className="flex items-start gap-2"><span className="font-semibold min-w-[120px]">If Undrafted:</span><span>Cost decreases by half or -1 Cubuck, whichever is greater</span></div>
+                              <div className="flex items-start gap-2"><span className="font-semibold min-w-[120px]">If Cubuck cost = 0:</span><span>Cards reduced to 0 are removed from the Draft Pool and can instead be claimed as &quot;Free Agents&quot;</span></div>
+
                 <div className="flex items-start gap-2"><span className="font-semibold min-w-[120px]">Result:</span><span>Popular cards become expensive, unpopular cards stay cheap!</span></div>
             </div>
           </div>
