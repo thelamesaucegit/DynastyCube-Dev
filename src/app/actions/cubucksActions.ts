@@ -482,11 +482,9 @@ export async function allocateCubucksToAllTeams(
 ): Promise<{ success: boolean; allocatedCount?: number; skippedCount?: number; error?: string }> {
   try {
     const supabase = await createServerClient();
-
+    
     // Check authentication
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return { success: false, error: "Not authenticated" };
     }
@@ -494,13 +492,25 @@ export async function allocateCubucksToAllTeams(
     // Get active season cap
     const { data: activeSeason } = await supabase
       .from("seasons")
-      .select("cubucks_allocation")
+      .select("id, cubucks_allocation")
       .eq("is_active", true)
       .single();
-
+      
     const cap = activeSeason?.cubucks_allocation ?? null;
 
-    // Get all teams with current balance
+    // --- NEW: RESET ALL TEAM BALANCES TO 0 FIRST ---
+    // We update all teams to 0 so the allocation gives them a fresh budget.
+    const { error: resetError } = await supabase
+      .from("teams")
+      .update({ cubucks_balance: 0 }); // Optionally reset cubucks_total_spent to 0 here if desired
+      
+    if (resetError) {
+       console.error("Failed to reset team balances before allocation:", resetError);
+       return { success: false, error: "Failed to reset previous balances." };
+    }
+    // -----------------------------------------------
+
+    // Get all teams (now with a balance of 0)
     const { data: teams, error: teamsError } = await supabase
       .from("teams")
       .select("id, name, cubucks_balance");
@@ -512,14 +522,15 @@ export async function allocateCubucksToAllTeams(
     // Allocate to each team (clamped to cap)
     let allocatedCount = 0;
     let skippedCount = 0;
+
     for (const team of teams || []) {
       // Calculate how much we can actually give this team
       let effectiveAmount = amount;
       if (cap !== null) {
-        const headroom = cap - team.cubucks_balance;
+        const headroom = cap - team.cubucks_balance; // Since balance is 0, headroom = cap
         if (headroom <= 0) {
           skippedCount++;
-          continue; // Already at or above cap
+          continue; 
         }
         effectiveAmount = Math.min(amount, headroom);
       }
@@ -527,7 +538,7 @@ export async function allocateCubucksToAllTeams(
       const { error } = await supabase.rpc("allocate_cubucks_to_team", {
         p_team_id: team.id,
         p_amount: effectiveAmount,
-        p_season_id: null,
+        p_season_id: activeSeason?.id || null, // Best practice to pass the active season ID if available
         p_description: "Season allocation",
         p_created_by: user.id,
       });
@@ -545,7 +556,6 @@ export async function allocateCubucksToAllTeams(
     return { success: false, error: String(error) };
   }
 }
-
 // ============================================
 // CARD COSTS
 // ============================================
