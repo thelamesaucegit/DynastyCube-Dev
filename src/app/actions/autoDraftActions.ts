@@ -11,6 +11,14 @@ import { getDraftStatus } from "@/app/actions/draftOrderActions";
 import { getDuplicateCardIdSet } from "@/lib/draftCache";
 import { applyHatModifier } from "@/app/actions/hatActions"; // <-- Added Hat import
 
+
+function createServiceClient() {
+    return createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_KEY!
+    );
+}
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -248,7 +256,7 @@ export async function getAutoDraftPreview(
   excludedCardPoolIds: string[] = []
 ): Promise<AutoDraftPreviewResult> {
   try {
-    const supabase = adminClient ?? await createServerClient();
+    const supabase = adminClient ?? createServiceClient(); 
     const { data: queueEntries } = await supabase.from("team_draft_queue").select("*").eq("team_id", teamId).order("position", { ascending: true });
     
     if (queueEntries && queueEntries.length > 0) {
@@ -292,7 +300,7 @@ export async function executeAutoDraft(
   error?: string;
 }> {
   try {
-    const supabase = adminClient ?? await createServerClient();
+    const supabase = adminClient ?? createServiceClient(); 
     const { status: draftStatus, error: statusError } = await getDraftStatus(draftSessionId, supabase);
     if (statusError || !draftStatus || draftStatus.onTheClock.teamId !== teamId) {
       return { success: false, error: statusError || "Team not on the clock." };
