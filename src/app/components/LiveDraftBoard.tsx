@@ -47,15 +47,16 @@ const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small
   // Small card for team view - CORRECTED LOGIC
   return (
     <div className={`rounded-md ${isNewest ? "ring-2 ring-green-400" : ""}`}>
-        <ColorIdentityGlow colors={pick.color_identity} className="!p-1.5 !rounded-md">
-            <div className={`bg-gray-800/80 rounded-sm`}>
-                <p className="text-xs text-center text-gray-200 truncate font-semibold">{pick.card_name}</p>
-                <p className="text-[10px] text-center text-gray-400">P: {pick.pick_number}</p>
+        <ColorIdentityGlow colors={pick.color_identity} className="!p-1 !rounded-md">
+            <div className={`bg-gray-800/80 rounded-sm p-1 flex flex-col justify-center min-h-[3rem]`}>
+                <p className="text-[11px] xl:text-xs text-center text-gray-200 font-semibold leading-tight line-clamp-2" title={pick.card_name}>
+                    {pick.card_name}
+                </p>
+                <p className="text-[9px] xl:text-[10px] text-center text-gray-400 mt-0.5">P: {pick.pick_number}</p>
             </div>
         </ColorIdentityGlow>
     </div>
   );
-};
 
 
 // MODIFIED: ListView now has corrected responsive grid classes
@@ -99,23 +100,26 @@ const TeamView: FC<{ picks: DraftPick[], draftOrder: DraftOrderTeam[], newestPic
   }, [picks, draftOrder]);
 
   return (
-    <div className="flex gap-2 overflow-x-auto pb-4">
+    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 pb-4">
       {draftOrder.map(teamEntry => {
         const team = teamEntry.team;
         if (!team) return null;
         const primaryColor = team.primary_color || "#71717a";
         const secondaryColor = team.secondary_color || "#e4e4e7";
+
         return (
-          <div key={team.id} className="w-40 sm:w-48 flex-shrink-0 bg-gray-900/50 rounded-lg p-2">
+          <div key={team.id} className="bg-gray-900/50 rounded-lg p-1.5 xl:p-2 flex flex-col">
             <div className="text-center pb-2 mb-2 border-b border-gray-700 flex flex-col items-center">
-              <div className="relative size-12 flex-shrink-0 flex items-center justify-center mb-1">
-                <div className="absolute size-12 rounded-full" style={{ backgroundColor: secondaryColor }} />
-                <div className="absolute size-10 rounded-full" style={{ backgroundColor: primaryColor }} />
-                <span className="relative text-2xl drop-shadow-md">{team.emoji}</span>
+              <div className="relative size-10 xl:size-12 flex-shrink-0 flex items-center justify-center mb-1">
+                <div className="absolute size-10 xl:size-12 rounded-full" style={{ backgroundColor: secondaryColor }} />
+                <div className="absolute size-8 xl:size-10 rounded-full" style={{ backgroundColor: primaryColor }} />
+                <span className="relative text-lg xl:text-2xl drop-shadow-md">{team.emoji}</span>
               </div>
-              <p className="text-xs font-bold truncate w-full">{team.name}</p>
+              <p className="text-[11px] xl:text-xs font-bold leading-tight text-center break-words w-full">
+                {team.name}
+              </p>
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 flex-grow">
               {(picksByTeam[team.id] || []).map(pick => (
                 <DraftCard key={pick.id} pick={pick} isNewest={pick.id === newestPickId} size="small" />
               ))}
