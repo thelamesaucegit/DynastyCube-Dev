@@ -2,6 +2,8 @@
 
 "use server";
 
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+
 import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 import { getDraftStatus, type DraftStatus } from "@/app/actions/draftOrderActions";
 import { generateFullSeasonSchedule } from "@/app/actions/seasonSchedulerActions";
@@ -45,6 +47,12 @@ export interface DraftSessionWithStatus extends DraftSession {
 // HELPERS
 // ============================================================================
 
+function createServiceClient() {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_KEY!
+  );
+}
 /**
  * Resets the consecutive skip counter for a draft session.
  * This should be called after a successful, non-skipped pick is made.
@@ -716,8 +724,7 @@ export async function handleDraftTimerCron(): Promise<{
   details?: string;
   error?: string;
 }> {
-  const supabase = await createServerClient();
-  
+  const supabase = createServiceClient();   
   try {
     // 1. Perform a highly efficient check for any active draft sessions.
     // We only select 'id' and limit to 1 for maximum performance.

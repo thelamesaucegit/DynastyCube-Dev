@@ -502,7 +502,9 @@ export async function allocateCubucksToAllTeams(
     // We update all teams to 0 so the allocation gives them a fresh budget.
     const { error: resetError } = await supabase
       .from("teams")
-      .update({ cubucks_balance: 0, cubucks_total_spent: 0 }); // Optionally reset cubucks_total_spent to 0 here if desired
+      .update({ cubucks_balance: 0, cubucks_total_spent: 0 }) // Optionally reset cubucks_total_spent to 0 here if desired
+            .not("id", "is", null); 
+
       
     if (resetError) {
        console.error("Failed to reset team balances before allocation:", resetError);
