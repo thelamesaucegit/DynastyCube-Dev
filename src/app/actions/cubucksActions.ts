@@ -1125,22 +1125,8 @@ export async function createTestSeason(): Promise<{ success: boolean; seasonId?:
 
         if (draftSessionError) throw new Error(`Draft session error: ${draftSessionError.message}`);
 
-        // 3. Create Weeks
-        await logSystemEvent("TestSeasonCreation", "info", `Step 3: Creating 5 schedule weeks.`);
-        const weekIds: string[] = [];
-        for (let i = 1; i <= 5; i++) {
-            const { data: weekData, error: weekError } = await supabase.from("schedule_weeks").insert({
-                season_id: seasonId, season_number: testSeasonNumber, week_number: i,
-                start_date: new Date().toISOString(), end_date: new Date(new Date().getTime() + 7 * 86400000).toISOString(),
-                deck_submission_deadline: new Date().toISOString(), match_completion_deadline: new Date(new Date().getTime() + 7 * 86400000).toISOString(),
-                is_playoff_week: false, is_championship_week: false, notes: `Test Week ${i}`,
-            }).select('id').single();
-            if (weekError) throw new Error(`Week ${i} error: ${weekError.message}`);
-            weekIds.push(weekData.id);
-        }
-
-        // 4. Generate Matchups
-        await logSystemEvent("TestSeasonCreation", "info", `Step 4: Fetching teams and generating matchups.`);
+         // 3. Create Weeks
+         await logSystemEvent("TestSeasonCreation", "info", `Step 3: Fetching teams and generating matchups.`);
         const { teams } = await getTeamsWithDetails(false);
         const activeTeams = (teams?.filter(t => t.is_hidden !== true) || []) as TeamWithDetails[];
         
@@ -1148,7 +1134,31 @@ export async function createTestSeason(): Promise<{ success: boolean; seasonId?:
         
         const allMatchups = await generateSeasonMatchups(activeTeams, 5, false);
 
-        await logSystemEvent("TestSeasonCreation", "info", `Step 5: Scheduling Week 1 matchups 20 minutes apart.`);
+        // --- NEW STEP 4: Create Weeks based on exact runtime math ---
+        await logSystemEvent("TestSeasonCreation", "info", `Step 4: Creating 5 dynamic schedule weeks.`);
+        const weekIds: string[] = [];
+        const baseNow = new Date();
+        
+        // Math: (teams / 2) matchups * 3 games * 20 minutes
+        const matchupsPerWeek = Math.floor(activeTeams.length / 2);
+        const weekDurationMs = matchupsPerWeek * 3 * 20 * 60000; // e.g., 4 hours for 8 teams
+        const weekSpacingMs = weekDurationMs + (20 * 60000); // add 20 min gap before next week starts
+
+        for (let i = 1; i <= 5; i++) {
+            // Space each week out by the exact duration it takes to run its games + buffer
+            const weekStart = new Date(baseNow.getTime() + ((i - 1) * weekSpacingMs));
+            const weekEnd = new Date(weekStart.getTime() + weekDurationMs); 
+            
+            const { data: weekData, error: weekError } = await supabase.from("schedule_weeks").insert({
+                season_id: seasonId, season_number: testSeasonNumber, week_number: i,
+                start_date: weekStart.toISOString(), end_date: weekEnd.toISOString(),
+                deck_submission_deadline: weekStart.toISOString(), match_completion_deadline: weekEnd.toISOString(),
+                is_playoff_week: false, is_championship_week: false, notes: `Test Week ${i} (Rapid)`,
+            }).select('id').single();
+            
+            if (weekError) throw new Error(`Week ${i} error: ${weekError.message}`);
+            weekIds.push(weekData.id);
+        }
         // 5. Insert ONLY Week 1's Schedule (20 mins apart)
         const week1Matchups = allMatchups.filter(m => m.week === 1);
         const now = new Date();
