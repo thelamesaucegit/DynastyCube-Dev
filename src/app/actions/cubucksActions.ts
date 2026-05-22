@@ -306,27 +306,50 @@ export async function activateSeason(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = await createServerClient();
-
+    
     // Check authentication
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return { success: false, error: "Not authenticated" };
     }
 
-    // Deactivate all seasons
+    // Deactivate all other seasons
     await supabase.from("seasons").update({ is_active: false }).neq("id", seasonId);
 
-    // Activate the selected season
-    const { error } = await supabase
+    // Activate the selected season AND fetch its specific Cubucks cap
+    const { data: activatedSeason, error } = await supabase
       .from("seasons")
       .update({ is_active: true })
-      .eq("id", seasonId);
+      .eq("id", seasonId)
+      .select("id, cubucks_allocation")
+      .single();
 
-    if (error) {
+    if (error || !activatedSeason) {
       console.error("Error activating season:", error);
-      return { success: false, error: error.message };
+      return { success: false, error: error?.message || "Failed to activate season" };
+    }
+
+    // --- NEW LOGIC: SAFE INITIALIZATION ---
+    // Check if this season has already had funds allocated.
+    // This prevents wiping out balances if an admin accidentally toggles an active season on and off!
+    const { count: txCount } = await supabase
+      .from("cubucks_transactions")
+      .select("id", { count: "exact", head: true })
+      .eq("season_id", seasonId);
+
+    if (txCount === 0 && activatedSeason.cubucks_allocation !== null) {
+        console.log(`First time activating season ${seasonId}. Initializing economy with a cap of ${activatedSeason.cubucks_allocation}.`);
+        
+        // Because we just made this season active, this function will automatically 
+        // wipe the old balances to 0 and distribute the exact amount from the new season's cap!
+        const allocResult = await allocateCubucksToAllTeams(activatedSeason.cubucks_allocation);
+        
+        if (!allocResult.success) {
+            console.error("Failed to allocate initial season funds:", allocResult.error);
+            return { success: false, error: `Season activated, but failed to allocate initial funds: ${allocResult.error}` };
+        }
+    } else {
+        console.log(`Season ${seasonId} already has existing transactions. Skipping economy reset to protect balances.`);
     }
 
     return { success: true };
@@ -1108,6 +1131,13 @@ export async function createTestSeason(): Promise<{ success: boolean; seasonId?:
 
         await logSystemEvent("TestSeasonCreation", "info", `Step 1 Complete. Season ID: ${seasonId}. Deactivating old seasons.`);
         await supabase.from("seasons").update({ is_active: false }).neq("id", seasonId);
+
+         // RESET AND ALLOCATE CUBUCKS ---
+        const allocationAmount = 100; // The test season hardcodes 100 allocation
+        const allocResult = await allocateCubucksToAllTeams(allocationAmount);
+        if (!allocResult.success) {
+            throw new Error(`Failed to allocate Cubucks: ${allocResult.error}`);
+        }
 
         // --- NEW STEP: GENERATE DRAFT ORDER ---
         await logSystemEvent("TestSeasonCreation", "info", `Step 1.5: Generating randomized draft order.`);
