@@ -609,9 +609,9 @@ export async function completeDraft(
 
     // Generate placeholder decks for all teams in the draft.
     const { data: firstWeek, error: weekError } = await supabase
-        .from('schedule_weeks') // CORRECTED FROM 'weeks' to 'schedule_weeks'
-        .select('id, end_date') // CORRECTED FROM 'ends_at' to 'end_date'
-        .order('start_date', { ascending: true }) // CORRECTED FROM 'starts_at' to 'start_date'
+        .from('schedule_weeks') 
+        .select('id, end_date') 
+        .order('start_date', { ascending: true }) 
         .limit(1)
         .single();
 
@@ -627,6 +627,7 @@ export async function completeDraft(
       `)
       .eq('id', sessionId)
       .single();
+
     const { data: teams, error: teamsError } = await supabase.from('draft_order').select('team_id').eq('season_id', sessionData?.season_id);
 
     if (teamsError) {
@@ -642,8 +643,9 @@ export async function completeDraft(
               console.error(`Failed to generate placeholder deck for team ${team.team_id}: ${deckError}`);
               continue; 
           }
+          
           console.log(`Successfully generated placeholder deck for team ${team.team_id}.`);
-
+          
           if (firstWeek && deckId) {
               console.log(`Setting placeholder deck as official active deck for Week 1...`);
               const submitResult = await submitDeckForWeek(deckId, team.team_id, firstWeek.id);
@@ -657,6 +659,7 @@ export async function completeDraft(
                   firstWeek.id,
                   firstWeek.end_date 
               );
+              
               if (!pollSuccess) {
                   console.error(`Failed to create first deck vote poll for team ${team.team_id}: ${pollError}`);
               }
@@ -673,7 +676,7 @@ export async function completeDraft(
           getActiveSeasonDetails(),
         ]);
 
-                if (weeksResult.weeks && seasonResult.season) {
+        if (weeksResult.weeks && seasonResult.season) {
           const seasonObj = Array.isArray(sessionData.seasons) ? sessionData.seasons[0] : sessionData.seasons;
           const seasonName = seasonObj?.season_name || "";
           
@@ -773,6 +776,21 @@ export async function completeDraft(
              }
           } else {
              console.log(`[Draft Complete] Generating regular season schedule...`);
+             const regularWeeksCount = weeksResult.weeks.filter(w => !w.is_playoff_week && !w.is_championship_week).length;
+            
+             const schedResult = await generateFullSeasonSchedule(
+               sessionData.season_id, 
+               regularWeeksCount, 
+               seasonResult.season.has_rivals_week
+             );
+            
+             if (schedResult.success) {
+               console.log(`[Draft Complete] Successfully generated ${schedResult.scheduledGamesCount} games.`);
+             } else {
+               console.error(`[Draft Complete] Schedule generation failed:`, schedResult.error);
+             }
+          }
+        }
 
         // --- TRANSITION PHASE UNCONDITIONALLY ---
         const { error: phaseError } = await supabase
@@ -801,7 +819,6 @@ export async function completeDraft(
     return { success: false, error: String(error) };
   }
 }
-
 // ============================================================================
 // AUTO-DRAFT TIMER CHECK
 // ============================================================================
