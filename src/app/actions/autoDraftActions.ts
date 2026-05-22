@@ -10,7 +10,7 @@ import { getTeamDraftPicks, addSkippedPick, type DraftPick } from "@/app/actions
 import { getTeamBalance } from "@/app/actions/cubucksActions";
 import { getDraftStatus } from "@/app/actions/draftOrderActions";
 import { getDuplicateCardIdSet } from "@/lib/draftCache";
-import { applyHatModifier } from "@/app/actions/hatActions"; // <-- Added Hat import
+import { applyHatModifier } from "@/app/actions/hatActions"; 
 
 
 function createServiceClient() {
@@ -527,24 +527,43 @@ export async function setTeamDraftQueue(teamId: string, entries: Array<{ cardPoo
     } catch (error) { console.error("Error setting team draft queue:", error); return { success: false, error: "Failed to update draft queue" }; }
 }
 
-export async function pinCardToQueue(teamId: string, cardPoolId: string, cardId: string, cardName: string, position: number = 1): Promise<{ success: boolean; error?: string }> {
+export async function pinCardToQueue(teamId: string, cardPoolId: string, cardId: string, cardName: string, _position?: number): Promise<{ success: boolean; error?: string }> {
     try {
         const auth = await verifyTeamMembership(teamId);
         if (!auth.authorized || !auth.userId) return { success: false, error: auth.error };
 
         const supabase = await createServerClient();
+
+        // 1. Remove it if it's already in the queue to avoid duplicates
         await supabase.from("team_draft_queue").delete().eq("team_id", teamId).eq("card_pool_id", cardPoolId);
 
-        const { data: existingEntries } = await supabase.from("team_draft_queue").select("id, position").eq("team_id", teamId).gte("position", position).order("position", { ascending: false });
-        for (const entry of existingEntries || []) { await supabase.from("team_draft_queue").update({ position: entry.position + 1 }).eq("id", entry.id); }
+        // 2. Find the current highest position in the queue
+        const { data: maxEntry } = await supabase
+            .from("team_draft_queue")
+            .select("position")
+            .eq("team_id", teamId)
+            .order("position", { ascending: false })
+            .limit(1)
+            .single();
 
-        const { error: insertError } = await supabase.from("team_draft_queue").insert({ team_id: teamId, card_pool_id: cardPoolId, card_id: cardId, card_name: cardName, position, pinned: true, added_by: auth.userId, });
+        // 3. Set the new position to be the highest existing position + 1 (or 1 if queue is empty)
+        const newPosition = maxEntry && typeof maxEntry.position === 'number' ? maxEntry.position + 1 : 1;
+
+        // 4. Insert at the bottom of the list
+        const { error: insertError } = await supabase.from("team_draft_queue").insert({ 
+            team_id: teamId, 
+            card_pool_id: cardPoolId, 
+            card_id: cardId, 
+            card_name: cardName, 
+            position: newPosition, 
+            pinned: true, 
+            added_by: auth.userId, 
+        });
+
         if (insertError) { console.error("Error pinning card to queue:", insertError); return { success: false, error: insertError.message }; }
-
         return { success: true };
     } catch (error) { console.error("Error pinning card to queue:", error); return { success: false, error: "Failed to pin card to queue" }; }
 }
-
 export async function removeFromQueue(teamId: string, cardPoolId: string): Promise<{ success: boolean; error?: string }> {
     try {
         const auth = await verifyTeamMembership(teamId);
