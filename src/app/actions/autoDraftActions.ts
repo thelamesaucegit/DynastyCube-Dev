@@ -217,10 +217,13 @@ export async function computeAutoDraftPick(
         return { recommendation: null, algorithmDetails: null, error: "No valid or affordable cards available." };
     }
 
-    const LAND_ELO_MODIFIER = 0.8;
+     const pickNumber = teamPicks.length + 1;
+    let LAND_ELO_MODIFIER = 0.85; // Slight penalty early
+    if (pickNumber >= 15) LAND_ELO_MODIFIER = 1.1; // Bonus starts around round 15
+    if (pickNumber >= 25) LAND_ELO_MODIFIER = 1.3; // Heavy bonus late draft
+
     const AFFINITY_BONUS_PER_PICK = 0.1;
     const ANTI_AFFINITY_PENALTY_PER_PICK = 0.05;
-
     const colorModifiers: Record<string, number> = { W: 1, U: 1, B: 1, R: 1, G: 1 };
     const allColors = ["W", "U", "B", "R", "G"];
 
@@ -228,17 +231,47 @@ export async function computeAutoDraftPick(
       const pickColors = new Set(pick.colors || []);
       if (pickColors.size === 0) continue;
       for (const color of allColors) {
-        if (pickColors.has(color)) { colorModifiers[color] += AFFINITY_BONUS_PER_PICK; } else { colorModifiers[color] -= ANTI_AFFINITY_PENALTY_PER_PICK; }
+        if (pickColors.has(color)) { 
+            colorModifiers[color] += AFFINITY_BONUS_PER_PICK; 
+        } else { 
+            colorModifiers[color] -= ANTI_AFFINITY_PENALTY_PER_PICK; 
+        }
       }
     }
 
-    for (const color of allColors) { colorModifiers[color] = Math.max(0.5, colorModifiers[color]); }
+    for (const color of allColors) { 
+        colorModifiers[color] = Math.max(0.5, colorModifiers[color]); 
+    }
+
+    // Find the team's strongest color affinity to help colorless/lands keep up
+    const maxTeamAffinity = Math.max(...Object.values(colorModifiers), 1);
 
     const sortedCandidates = candidatePool
         .map(card => {
             let elo = card.cubecobra_elo || 1200;
-            if (card.card_type?.toLowerCase().includes('land')) elo *= LAND_ELO_MODIFIER;
-            const affinity = card.colors && card.colors.length > 0 ? Math.max(...card.colors.map(c => colorModifiers[c] || 1)) : 1;
+            const isLand = card.card_type?.toLowerCase().includes('land');
+            
+            if (isLand) {
+                elo *= LAND_ELO_MODIFIER;
+            }
+
+            // Affinity Math
+            let affinity = 1;
+            if (card.colors && card.colors.length > 0) {
+                // Colored card: use its highest matching color modifier
+                affinity = Math.max(...card.colors.map(c => colorModifiers[c] || 1));
+            } else {
+                // Colorless card / Land: Give it 85% of the team's highest affinity 
+                // so it scales alongside colored spells instead of getting buried.
+                affinity = maxTeamAffinity * 0.85; 
+            }
+
+            // If it's a land AND we are in the fixing rounds (15+), bump its affinity 
+            // so it competes directly with top colored spells.
+            if (isLand && pickNumber >= 15) {
+                 affinity = Math.max(affinity, maxTeamAffinity * 0.95);
+            }
+
             return { ...card, effective_elo: elo * affinity };
         })
         .sort((a, b) => b.effective_elo - a.effective_elo);
