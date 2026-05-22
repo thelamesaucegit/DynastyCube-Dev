@@ -15,15 +15,23 @@ export async function logSystemEvent(
   processName: string, 
   level: LogLevel, 
   message: string, 
-  details?: Record<string, unknown> // <-- Changed from 'any' to 'unknown'
+  details?: Record<string, unknown>
 ) {
+  
+  // --- If it's NOT an error, just log to console locally and exit ---
   if (level !== 'error') {
     if (process.env.NODE_ENV === 'development') {
       const icon = level === 'warn' ? '⚠️' : 'ℹ️';
       console[level === 'warn' ? 'warn' : 'info'](`${icon} [${processName}] ${message}`, details || '');
     }
-    return; // Exit early!
+    return; 
   }
+
+  // --- If it IS an error, log to console AND save to database ---
+  if (process.env.NODE_ENV === 'development') {
+    console.error(`❌ [${processName}] ${message}`, details || '');
+  }
+
   const supabase = createLogClient();
   
   try {
@@ -35,12 +43,6 @@ export async function logSystemEvent(
       message: message,
       details: details || {}
     });
-    
-    // Fallback to console for local development
-    if (process.env.NODE_ENV === 'development') {
-      const icon = level === 'error' ? '❌' : level === 'warn' ? '⚠️' : 'ℹ️';
-      console[level === 'warn' ? 'warn' : level](`${icon} [${processName}] ${message}`, details || '');
-    }
   } catch (e) {
     console.error("Failed to write to system_logs table:", e);
   }
