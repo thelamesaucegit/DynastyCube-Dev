@@ -22,6 +22,7 @@ export interface DraftPick {
   rarity?: string;
   draft_session_id?: string;
   colors?: string[];
+    color_identity?: string[] | null; 
   image_url?: string;
   oldest_image_url?: string;
   mana_cost?: string;
