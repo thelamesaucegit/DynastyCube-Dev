@@ -11,6 +11,8 @@ import { getTeamBalance } from "@/app/actions/cubucksActions";
 import { getDraftStatus } from "@/app/actions/draftOrderActions";
 import { getDuplicateCardIdSet } from "@/lib/draftCache";
 import { applyHatModifier } from "@/app/actions/hatActions"; 
+import { logSystemEvent } from "@/lib/systemLogger";
+
 
 
 function createServiceClient() {
@@ -301,19 +303,23 @@ export async function executeAutoDraft(
   error?: string;
 }> {
   try {
-    const supabase = adminClient ?? createServiceClient(); 
-    const { status: draftStatus, error: statusError } = await getDraftStatus(draftSessionId, supabase); 
+    const supabase = adminClient ?? createServiceClient();
+
+    const { status: draftStatus, error: statusError } = await getDraftStatus(draftSessionId, supabase);
     if (statusError || !draftStatus || draftStatus.onTheClock.teamId !== teamId) {
+      await logSystemEvent("ExecuteAutoDraft", "error", `Failed: Team ${teamId} is not on the clock or draft status invalid.`, { draftSessionId, statusError });
       return { success: false, error: statusError || "Team not on the clock." };
     }
 
-    const preview = await getAutoDraftPreview(teamId, draftSessionId, supabase, excludedCardPoolIds); 
+    const preview = await getAutoDraftPreview(teamId, draftSessionId, supabase, excludedCardPoolIds);
     const cardToAttempt = preview.nextPick;
 
     if (!cardToAttempt) {
-      console.error(`[AutoDraft] No valid card found for team ${teamId} after excluding ${excludedCardPoolIds.length} cards. Skipping pick.`);
+      await logSystemEvent("ExecuteAutoDraft", "warn", `No valid affordable card found for team ${teamId}. Pick will be skipped.`, { excludedCount: excludedCardPoolIds.length });
+      
       const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId, supabase);
       const pickNumber = existingPicks.length + 1;
+      
       await addSkippedPick(teamId, pickNumber, draftSessionId, supabase);
       return { success: true, source: "skipped", pick: { cardId: "skipped-pick", cardName: "SKIPPED", cost: 0 }};
     }
@@ -323,15 +329,14 @@ export async function executeAutoDraft(
     const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId, supabase);
     const pickNumber = existingPicks.length + 1;
 
-    // --- HAT LOGIC INCORPORATED ---
     let baseCost = cardToAttempt.cubucks_cost || 1;
     if (pickNumber === 1) {
         baseCost = await applyHatModifier(teamId, baseCost, supabase);
     }
+    
     const effectiveCost = (preview.source === "manual_queue" && balance <= 0) ? 0 : baseCost;
-    // ------------------------------
 
-     const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
+    const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
         p_team_id: teamId, p_draft_session_id: draftSessionId, p_card_pool_id: cardToAttempt.id,
         p_card_id: cardToAttempt.card_id, p_card_name: cardToAttempt.card_name,
         p_card_set: cardToAttempt.card_set, p_card_type: cardToAttempt.card_type,
@@ -342,44 +347,47 @@ export async function executeAutoDraft(
     }).single();
     
     if (rpcError) {
-      // Check for both the unique constraint error AND the custom P0001 exception
       const isAlreadyDrafted = 
         (rpcError.code === '23505' && rpcError.message.includes('unique_drafted_card_instance')) ||
         (rpcError.code === 'P0001' && rpcError.message.toLowerCase().includes('already been drafted'));
 
       if (isAlreadyDrafted) {
-        console.warn(`[AutoDraft] Card taken: "${cardToAttempt.card_name}". Adding to exclusion list and retrying...`);
-        // Feed the taken card's ID into the exclusion list and recurse!
-        return executeAutoDraft(teamId, draftSessionId, adminClient, [...excludedCardPoolIds, cardToAttempt.id!]);
+        await logSystemEvent("ExecuteAutoDraft", "warn", `Card taken: "${cardToAttempt.card_name}". Adding to exclusion list and retrying.`, { cardId: cardToAttempt.id });
+        return executeAutoDraft(teamId, draftSessionId, supabase, [...excludedCardPoolIds, cardToAttempt.id!]);
       } else {
-        console.error("Atomic auto-draft failed with non-retryable error:", rpcError);
+        await logSystemEvent("ExecuteAutoDraft", "error", `Atomic auto-draft failed with non-retryable error for team ${teamId}`, { error: rpcError });
         return { success: false, error: `Draft failed: ${rpcError.message}` };
       }
     }
 
     const newPick = data as DraftPick;
-    if (!newPick) return { success: false, error: "Draft pick could not be confirmed in the database." };
-
-    console.log(`[AutoDraft] Successfully drafted "${cardToAttempt.card_name}" for team ${teamId}.`);
+    if (!newPick) {
+        await logSystemEvent("ExecuteAutoDraft", "error", "Database returned null after successful RPC draft execution.");
+        return { success: false, error: "Draft pick could not be confirmed in the database." };
+    }
 
     const pickSource = preview.source === "manual_queue" ? "manual_queue" : "algorithm";
-     if (newPick.id) {
+    
+    if (newPick.id) {
         await supabase.from("team_draft_picks").update({ pick_source: pickSource }).eq("id", newPick.id);
     }
+    
     await conditionallyCleanupDraftQueues(cardToAttempt.card_id, supabase);
     
-    // --- NEW: BROADCAST THE AUTODRAFT PICK TO THE UI ---
+    // --- BROADCAST THE AUTODRAFT PICK TO THE UI ---
     const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
     await supabase.channel(`draft-updates-${draftSessionId}`).send({ 
         type: 'broadcast', 
         event: 'new_pick', 
         payload: { 
             ...newPick, 
-            team_id: teamId,       // Explicitly ensure team_id is attached
+            team_id: teamId,       
             team_name: teamData?.name || 'Unknown' 
         }
     });
-    
+
+    await logSystemEvent("ExecuteAutoDraft", "info", `Successfully auto-drafted ${cardToAttempt.card_name} for team ${teamId} via ${pickSource}.`);
+
     return {
       success: true,
       pick: { cardId: cardToAttempt.card_id, cardName: cardToAttempt.card_name, cost: effectiveCost },
@@ -387,11 +395,10 @@ export async function executeAutoDraft(
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred.";
-    console.error("Unhandled error in executeAutoDraft:", errorMessage);
+    await logSystemEvent("ExecuteAutoDraft", "error", `Unhandled exception in executeAutoDraft for team ${teamId}.`, { error: errorMessage });
     return { success: false, error: errorMessage };
   }
 }
-
 export async function captainForcePick(teamId: string, cardPoolId: string, draftSessionId: string): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = await createServerClient();
