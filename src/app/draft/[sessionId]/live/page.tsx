@@ -1,7 +1,6 @@
 // src/app/draft/[sessionId]/live/page.tsx
-
 import { createServerClient } from '@/lib/supabase';
-import LiveDraftBoard from '@/components/LiveDraftBoard';
+import LiveDraftBoard from '@/app/components/LiveDraftBoard';
 import { notFound } from 'next/navigation';
 
 export interface DraftPick {
@@ -18,6 +17,7 @@ export interface DraftPick {
   color_identity: string[] | null; 
 }
 
+// Ensure this exactly matches the shape returned by the .select() query
 interface SupabasePick {
   id: number;
   pick_number: number;
@@ -31,7 +31,8 @@ interface SupabasePick {
   teams: {
     name: string;
   } | null;
-  card_pools: { color_identity: string[] | null; } | null; 
+  // Supabase might return an object or an array of objects depending on the foreign key setup
+  card_pools: { color_identity: string[] | null; } | Array<{ color_identity: string[] | null; }> | null; 
 }
 
 async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
@@ -53,18 +54,24 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
       card_pools:card_pool_id ( color_identity )
     `)
     .eq('draft_session_id', sessionId)
-    .order('pick_number', { ascending: false }); // Ensure newest picks are on top!
+    .order('pick_number', { ascending: false })
+    .returns<SupabasePick[]>(); // <-- Safely cast the raw return data to our interface
 
   if (error || !data) {
     console.error('Error fetching initial draft picks:', error?.message || 'Data was null.');
     return [];
   }
   
-  return data.map((pick: any) => {
-    // Supabase returns nested objects as arrays or single objects depending on the schema
-    const colorId = Array.isArray(pick.card_pools) 
-        ? pick.card_pools[0]?.color_identity 
-        : pick.card_pools?.color_identity;
+  // Use the interface instead of 'any'
+  return data.map((pick: SupabasePick) => {
+    
+    // Safely extract the color identity regardless of whether Supabase returned an array or object
+    let colorId: string[] | null = null;
+    if (Array.isArray(pick.card_pools)) {
+        colorId = pick.card_pools[0]?.color_identity || null;
+    } else if (pick.card_pools) {
+        colorId = pick.card_pools.color_identity || null;
+    }
 
     return {
       id: pick.id,
@@ -86,6 +93,7 @@ export default async function LiveDraftPage({ params }: { params: Promise<{ sess
   const { sessionId } = await params;
   
   const initialPicks = await getInitialDraftPicks(sessionId);
+
   if (!initialPicks) {
     notFound();
   }
