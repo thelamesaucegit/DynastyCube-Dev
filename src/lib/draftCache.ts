@@ -2,7 +2,13 @@
 "use server";
 
 import { cache } from 'react';
-import { createServerClient } from '@/lib/supabase'; // Make sure this path is correct for your project
+import { createServerClient, type AnySupabaseClient } from '@/lib/supabase';
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { logSystemEvent } from "@/lib/systemLogger";
+
+function createServiceClient() {
+    return createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+}
 
 /**
  * A simple module-level cache that will persist for the lifetime of the server process.
@@ -15,21 +21,20 @@ let duplicateCardIdSet: Set<string> | null = null;
  * It uses React's `cache` to prevent re-running the same DB query multiple times within a single request.
  * It also uses the module-level variable for a longer-lived cache.
  */
-export const getDuplicateCardIdSet = cache(async (): Promise<Set<string>> => {
+export const getDuplicateCardIdSet = cache(async (adminClient?: AnySupabaseClient): Promise<Set<string>> => {
   if (duplicateCardIdSet) {
-    console.log("Returning duplicate card ID set from module cache.");
     return duplicateCardIdSet;
   }
 
-  console.log("No cache found. Querying database for duplicate cards.");
-  const supabase = await createServerClient();
+  // Use the provided admin client, or fallback to the service client to avoid cookie errors in background jobs.
+  const supabase = adminClient ?? createServiceClient();
   
   const { data, error } = await supabase
     .from('card_pools')
     .select('card_id');
 
   if (error) {
-    console.error("Failed to query for duplicate cards:", error);
+    await logSystemEvent("DraftCache", "error", "Failed to query for duplicate cards.", { error: error.message });
     return new Set<string>(); // Return an empty set on error
   }
 
@@ -45,7 +50,6 @@ export const getDuplicateCardIdSet = cache(async (): Promise<Set<string>> => {
   const newSet = new Set(duplicates);
   duplicateCardIdSet = newSet;
   
-  console.log(`Cached ${newSet.size} card IDs that have duplicates.`);
   return newSet;
 });
 
@@ -54,6 +58,5 @@ export const getDuplicateCardIdSet = cache(async (): Promise<Set<string>> => {
  * to ensure the cache is cleared and re-fetched on the next request.
  */
 export async function invalidateDraftCache(): Promise<void> {
-  console.log("Draft cache has been invalidated.");
   duplicateCardIdSet = null;
 }
