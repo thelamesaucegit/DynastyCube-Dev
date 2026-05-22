@@ -693,11 +693,55 @@ export async function completeDraft(
 
         // Transition to Preseason
         await updateSeasonPhase(sessionData.season_id, "preseason");
-        console.log(`[Draft Complete] Season moved to Preseason phase.`);
-    } else {
-        console.error("[Draft Complete] No season_id found for this draft session. Skipping automation.");
+        console.log(`[Draft Complete] Checking schedule generation...`);
+    
+    if (sessionData?.season_id) {
+        const [weeksResult, seasonResult] = await Promise.all([
+          getScheduleWeeks(sessionData.season_id),
+          getActiveSeasonDetails(), // Assumes you imported this from scheduleActions
+        ]);
+
+        if (weeksResult.weeks && seasonResult.season) {
+          // Check if it's a test season!
+          const seasonName = seasonResult.season.season_name || seasonResult.season.name || "";
+          const isTestSeason = seasonName.toUpperCase().includes("TEST");
+
+          if (isTestSeason) {
+             console.log("[Draft Complete] Test season detected. Skipping normal 9-game schedule generation.");
+          } else {
+             console.log(`[Draft Complete] Generating regular season schedule...`);
+             const regularWeeksCount = weeksResult.weeks.filter(w => !w.is_playoff_week && !w.is_championship_week).length;
+            
+             const schedResult = await generateFullSeasonSchedule(
+               sessionData.season_id, 
+               regularWeeksCount, 
+               seasonResult.season.has_rivals_week
+             );
+            
+             if (schedResult.success) {
+               console.log(`[Draft Complete] Successfully generated ${schedResult.scheduledGamesCount} games.`);
+             } else {
+               console.error(`[Draft Complete] Schedule generation failed:`, schedResult.error);
+             }
+          }
+        }
+
+        // --- TRANSITION PHASE UNCONDITIONALLY ---
+        // Ensure this happens AFTER the if/else block above, but inside the season_id check!
+        const { error: phaseError } = await supabase
+            .from("seasons")
+            .update({ 
+                phase: "preseason", 
+                phase_changed_at: new Date().toISOString() 
+            })
+            .eq("id", sessionData.season_id);
+            
+        if (phaseError) {
+             console.error("[Draft Complete] Critical error updating season phase:", phaseError);
+        } else {
+             console.log(`[Draft Complete] Season moved to Preseason phase.`);
+        }
     }
-    // -------------------------------------------------------------
 
     await supabase.rpc("notify_all_users_draft", {
       p_notification_type: "draft_completed",
