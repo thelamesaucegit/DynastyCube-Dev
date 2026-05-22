@@ -5,6 +5,7 @@
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 import {  createServerClient, type AnySupabaseClient } from "@/lib/supabase";
+import { logSystemEvent } from "@/lib/systemLogger";
 
 function createServiceClient() {
     return createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
@@ -170,7 +171,14 @@ export async function addSkippedPick(
       })
       .select()
       .single();
-    if (error) return { success: false, error: error.message };
+    if (error) {
+        // Log database insertion failures
+        await logSystemEvent("AddSkippedPick", "error", `Failed to insert skipped pick for team ${teamId}`, { error: error.message });
+        return { success: false, error: error.message };
+    }
+
+    // Log the successful skip action
+
     return { success: true, pick: newPick };
   } catch {
     return { success: false, error: "An unexpected error occurred" };
