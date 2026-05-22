@@ -218,7 +218,7 @@ export async function computeAutoDraftPick(
     }
 
      const pickNumber = teamPicks.length + 1;
-    const LAND_ELO_MODIFIER = 0.85; 
+    const LAND_ELO_MODIFIER = 0.70; 
 
      const AFFINITY_BONUS_PER_PICK = 0.1;
     const ANTI_AFFINITY_PENALTY_PER_PICK = 0.05;
