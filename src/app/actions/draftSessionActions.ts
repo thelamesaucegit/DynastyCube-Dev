@@ -3,6 +3,7 @@
 "use server";
 
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { logSystemEvent } from "@/lib/systemLogger";
 
 import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 import { getDraftStatus, type DraftStatus } from "@/app/actions/draftOrderActions";
@@ -816,53 +817,84 @@ export async function checkDraftTimer(adminClient?: AnySupabaseClient): Promise<
       const teamId = draftStatus.onTheClock.teamId;
       const autoDraftResult = await executeAutoDraft(teamId, session.id, supabase);
 
-      // Sub-case A: Auto-draft was successful.
-      if (autoDraftResult.success) {
-        await resetSkipCounter(session.id, supabase);
-        await advanceDraft(supabase);
-        return {
-          action: "auto_drafted",
-          message: `Auto-drafted ${autoDraftResult.pick?.cardName || "a card"} for team ${teamId}.`
-        };
+      // SCENARIO 1: System Error (Database failure, RPC crash, etc.)
+      if (!autoDraftResult.success) {
+        console.error(`Auto-draft system error for ${teamId}: ${autoDraftResult.error}`);
+        
+        // Pause the draft to prevent runaway failures
+        await supabase.from("draft_sessions").update({ status: "paused" }).eq("id", session.id);
+        
+        // Log to database
+        await logSystemEvent(
+          "AutoDraft", 
+          "error", 
+          `System error during auto-draft for team ${teamId}. Draft automatically paused.`, 
+          { error: autoDraftResult.error }
+        );
+        
+        // Alert users
+        await supabase.rpc("notify_all_users_draft", {
+          p_notification_type: "draft_paused",
+          p_message: `The draft has been paused due to a system error on team ${draftStatus.onTheClock.teamName}'s pick.`
+        });
+
+        return { action: "error", error: `Auto-draft failed: ${autoDraftResult.error}` };
       }
 
-      // Sub-case B: Auto-draft failed (no funds, no cards), so we skip the pick.
-      else {
-        console.error(`Auto-draft failed for ${teamId}: ${autoDraftResult.error}. The pick will be skipped.`);
+      // SCENARIO 2 & 3: Skipped Pick (Usually due to lack of funds or available cards)
+      if (autoDraftResult.source === 'skipped') {
         const newSkipCount = (session.consecutive_skipped_picks || 0) + 1;
 
-        // Stall Condition: If every team has skipped consecutively, end the draft.
         if (newSkipCount >= draftStatus.totalTeams) {
-            console.log(`Stall condition met: ${newSkipCount} consecutive skips. Ending draft.`);
-            await completeDraft(session.id, supabase);
-            return {
-                action: "completed",
-                message: `The draft has ended automatically after ${newSkipCount} consecutive skipped picks.`
-            };
+          // SCENARIO 3: ALL teams have skipped consecutively (Everyone is out of funds)
+          console.log(`Stall condition met: ${newSkipCount} consecutive skips. Pausing draft.`);
+          
+          await supabase.from("draft_sessions").update({ 
+              status: "paused", 
+              consecutive_skipped_picks: newSkipCount 
+          }).eq("id", session.id);
+          
+          // Log as an error so it persists in the database
+          await logSystemEvent(
+            "AutoDraftStall", 
+            "error", 
+            `Draft paused: All teams have run out of funds or valid cards (${newSkipCount} consecutive skips).`
+          );
+          
+          await supabase.rpc("notify_all_users_draft", {
+            p_notification_type: "draft_paused",
+            p_message: "The draft has been automatically PAUSED because all teams have run out of funds."
+          });
+          
+          return { action: "completed", message: `Draft paused due to all teams running out of funds.` };
+        } else {
+          // SCENARIO 2: Just this team skipped (out of funds), but others are still going
+          console.log(`Team ${teamId} skipped. Consecutive skips: ${newSkipCount}.`);
+          
+          await supabase.from("draft_sessions").update({ consecutive_skipped_picks: newSkipCount }).eq("id", session.id);
+          
+          const advanceResult = await advanceDraft(supabase);
+          if (!advanceResult.success) {
+              return { action: "error", error: `Draft could not be advanced after skip: ${advanceResult.error}` };
+          }
+          return { action: "auto_drafted", message: `Team ${teamId}'s pick was skipped. Consecutive skips: ${newSkipCount}.` };
         }
-
-        await supabase.from("draft_sessions").update({ consecutive_skipped_picks: newSkipCount }).eq("id", session.id);
-        const skippedResult = await addSkippedPick(teamId, draftStatus.totalPicks + 1, session.id, supabase);
-
-        if (!skippedResult.success) {
-            return { action: "error", error: `Auto-draft failed and could not log skipped pick: ${skippedResult.error}` };
-        }
-
-        const advanceResult = await advanceDraft(supabase);
-        if (!advanceResult.success) {
-            return { action: "error", error: `Auto-draft failed and draft could not be advanced: ${advanceResult.error}` };
-        }
-
-        return {
-          action: "auto_drafted",
-          message: `Team ${teamId}'s pick was skipped. Consecutive skips: ${newSkipCount}.`,
-        };
       }
+
+      // SCENARIO 4: Successful Card Draft
+      await resetSkipCounter(session.id, supabase); // Resets consecutive skips to 0!
+      await advanceDraft(supabase);
+      
+      return {
+        action: "auto_drafted",
+        message: `Auto-drafted ${autoDraftResult.pick?.cardName || "a card"} for team ${teamId}.`
+      };
     }
 
     // If neither of the above conditions are met, do nothing.
     return { action: "none", message: "Active session found, but no action required at this time." };
 
+    
   } catch (error) {
     console.error("Unexpected error checking draft timer:", error);
     return { action: "error", error: String(error) };
