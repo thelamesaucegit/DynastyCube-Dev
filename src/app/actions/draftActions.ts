@@ -5,6 +5,7 @@
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 import {  createServerClient, type AnySupabaseClient } from "@/lib/supabase";
+import { logSystemEvent } from "@/lib/systemLogger";
 
 function createServiceClient() {
     return createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
@@ -21,6 +22,7 @@ export interface DraftPick {
   rarity?: string;
   draft_session_id?: string;
   colors?: string[];
+    color_identity?: string[] | null; 
   image_url?: string;
   oldest_image_url?: string;
   mana_cost?: string;
@@ -164,13 +166,21 @@ export async function addSkippedPick(
         draft_session_id: draftSessionId,
         card_id: "skipped-pick",
         card_name: "SKIPPED",
+          color_identity: [],
         pick_number: pickNumber,
         drafted_by: null,
-        pick_source: "skipped",    // ← added
+        pick_source: "skipped",    
       })
       .select()
       .single();
-    if (error) return { success: false, error: error.message };
+    if (error) {
+        // Log database insertion failures
+        await logSystemEvent("AddSkippedPick", "error", `Failed to insert skipped pick for team ${teamId}`, { error: error.message });
+        return { success: false, error: error.message };
+    }
+
+    // Log the successful skip action
+
     return { success: true, pick: newPick };
   } catch {
     return { success: false, error: "An unexpected error occurred" };
@@ -209,6 +219,7 @@ export async function addDraftPick(pick: DraftPick): Promise<{ success: boolean;
       card_type: pick.card_type,
       rarity: pick.rarity,
       colors: pick.colors || [],
+             color_identity: pick.color_identity || [],
       image_url: pick.image_url,
       oldest_image_url: pick.oldest_image_url,
       mana_cost: pick.mana_cost,
@@ -273,10 +284,10 @@ export async function addDraftPickInternal(pick: DraftPick, _isAutoDraft?: boole
             return { success: false, error: "This specific card has already been drafted by another process." };
         }
     }
-    const { data: newPick, error } = await supabase.from("team_draft_picks").insert({
+     const { data: newPick, error } = await supabase.from("team_draft_picks").insert({
         team_id: pick.team_id, draft_session_id: pick.draft_session_id, card_pool_id: pick.card_pool_id, card_id: pick.card_id,
         card_name: pick.card_name, card_set: pick.card_set, card_type: pick.card_type, rarity: pick.rarity,
-        colors: pick.colors || [], image_url: pick.image_url, oldest_image_url: pick.oldest_image_url, mana_cost: pick.mana_cost,
+        colors: pick.colors || [], color_identity: pick.color_identity || [], image_url: pick.image_url, oldest_image_url: pick.oldest_image_url, mana_cost: pick.mana_cost, // <-- ADDED color_identity HERE
         cmc: pick.cmc, pick_number: pick.pick_number, drafted_by: null,
       }).select().single();
     if (error) {

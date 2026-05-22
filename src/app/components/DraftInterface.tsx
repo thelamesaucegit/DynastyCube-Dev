@@ -146,13 +146,14 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       const pick: DraftPick = {
         team_id: teamId,
         card_pool_id: card.id,
-        draft_session_id: activeSessionId || undefined, // FIX: Pass undefined if there is no session
+        draft_session_id: activeSessionId || undefined, 
         card_id: card.card_id,
         card_name: card.card_name,
         card_set: card.card_set,
         card_type: card.card_type,
         rarity: card.rarity,
         colors: card.colors,
+         color_identity: card.color_identity || [],
         image_url: card.image_url ?? undefined,
         oldest_image_url: card.oldest_image_url ?? undefined,
         mana_cost: card.mana_cost ?? undefined,
