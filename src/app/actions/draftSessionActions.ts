@@ -570,6 +570,7 @@ export async function completeDraft(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = adminClient ?? await createServerClient();
+    
     // Skip auth check when called via service-role admin client (e.g. background timer)
     if (!adminClient) {
       const admin = await verifyAdmin(supabase as Awaited<ReturnType<typeof createServerClient>>);
@@ -592,7 +593,8 @@ export async function completeDraft(
       console.error("Error completing draft:", error);
       return { success: false, error: error.message };
     }
- console.log(`Draft ${sessionId} completed. Moving undrafted cards to The Wire.`);
+
+    console.log(`Draft ${sessionId} completed. Moving undrafted cards to The Wire.`);
     const { error: wireError } = await supabase
       .from('card_pools')
       .update({ 
@@ -600,28 +602,24 @@ export async function completeDraft(
         on_wire_since: new Date().toISOString() 
       })
       .eq('pool_name', 'draft')
-    .eq('was_drafted', false);
+      .eq('was_drafted', false);
     
-    // Move all cards remaining in the 'draft' pool
-
     if (wireError) {
       console.error("Critical error: Failed to move undrafted cards to The Wire:", wireError);
-      // The draft is complete, but this part failed. Log it for admin review.
     }
- // Generate placeholder decks for all teams in the draft.
-   const { data: firstWeek, error: weekError } = await supabase
-        .from('weeks')
-        .select('id, ends_at')
-        .order('starts_at', { ascending: true })
+
+    // Generate placeholder decks for all teams in the draft.
+    const { data: firstWeek, error: weekError } = await supabase
+        .from('schedule_weeks') // CORRECTED FROM 'weeks' to 'schedule_weeks'
+        .select('id, end_date') // CORRECTED FROM 'ends_at' to 'end_date'
+        .order('start_date', { ascending: true }) // CORRECTED FROM 'starts_at' to 'start_date'
         .limit(1)
         .single();
 
     if (weekError || !firstWeek) {
         console.error("CRITICAL: Could not find the first week of the season. No deck votes will be created.", weekError);
-        // We can continue to generate decks but cannot create polls.
     }
 
-    // Get all teams from the draft order for this season
     const { data: sessionData } = await supabase.from('draft_sessions').select('season_id').eq('id', sessionId).single();
     const { data: teams, error: teamsError } = await supabase.from('draft_order').select('team_id').eq('season_id', sessionData?.season_id);
 
@@ -632,33 +630,26 @@ export async function completeDraft(
     if (teams) {
       console.log(`Starting post-draft actions for ${teams.length} teams in session ${sessionId}...`);
       for (const team of teams) {
-          // Step 1: Generate the placeholder deck (existing logic)
-           const { success, deckId, error: deckError } = await generatePlaceholderDeck(team.team_id, sessionId);
+          const { success, deckId, error: deckError } = await generatePlaceholderDeck(team.team_id, sessionId);
           
           if (!success) {
               console.error(`Failed to generate placeholder deck for team ${team.team_id}: ${deckError}`);
-              continue; // Skip to next team
+              continue; 
           }
           console.log(`Successfully generated placeholder deck for team ${team.team_id}.`);
 
-          if (firstWeek) {
-              // ==========================================================
-              // NEW STEP 1.5: Immediately submit it as the active deck
-              // ==========================================================
-              if (deckId) {
-                  console.log(`Setting placeholder deck as official active deck for Week 1...`);
-                  const submitResult = await submitDeckForWeek(deckId, team.team_id, firstWeek.id);
-                  if (!submitResult.success) {
-                      console.error(`Failed to submit placeholder deck for team ${team.team_id}:`, submitResult.error);
-                  }
+          if (firstWeek && deckId) {
+              console.log(`Setting placeholder deck as official active deck for Week 1...`);
+              const submitResult = await submitDeckForWeek(deckId, team.team_id, firstWeek.id);
+              if (!submitResult.success) {
+                  console.error(`Failed to submit placeholder deck for team ${team.team_id}:`, submitResult.error);
               }
 
-              // Step 2: Trigger the first deck vote poll (Existing logic)
               console.log(`Triggering first deck vote for team ${team.team_id} for week ${firstWeek.id}`);
               const { success: pollSuccess, error: pollError } = await createDeckVotePoll(
                   team.team_id,
                   firstWeek.id,
-                  firstWeek.ends_at 
+                  firstWeek.end_date 
               );
               if (!pollSuccess) {
                   console.error(`Failed to create first deck vote poll for team ${team.team_id}: ${pollError}`);
@@ -666,8 +657,9 @@ export async function completeDraft(
           }
       }
     }
+
     // --- NEW: AUTOMATED SCHEDULE GENERATION & PHASE TRANSITION ---
-    console.log(`[Draft Complete] Generating regular season schedule...`);
+    console.log(`[Draft Complete] Checking schedule generation...`);
     
     if (sessionData?.season_id) {
         const [weeksResult, seasonResult] = await Promise.all([
@@ -676,33 +668,6 @@ export async function completeDraft(
         ]);
 
         if (weeksResult.weeks && seasonResult.season) {
-          const regularWeeksCount = weeksResult.weeks.filter(w => !w.is_playoff_week && !w.is_championship_week).length;
-          
-          const schedResult = await generateFullSeasonSchedule(
-            sessionData.season_id, 
-            regularWeeksCount, 
-            seasonResult.season.has_rivals_week
-          );
-          
-          if (schedResult.success) {
-            console.log(`[Draft Complete] Successfully generated ${schedResult.scheduledGamesCount} games.`);
-          } else {
-            console.error(`[Draft Complete] Schedule generation failed:`, schedResult.error);
-          }
-        }
-
-        // Transition to Preseason
-        await updateSeasonPhase(sessionData.season_id, "preseason");
-        console.log(`[Draft Complete] Checking schedule generation...`);
-    
-    if (sessionData?.season_id) {
-        const [weeksResult, seasonResult] = await Promise.all([
-          getScheduleWeeks(sessionData.season_id),
-          getActiveSeasonDetails(), // Assumes you imported this from scheduleActions
-        ]);
-
-        if (weeksResult.weeks && seasonResult.season) {
-          // Check if it's a test season!
           const seasonName = seasonResult.season.season_name || seasonResult.season.name || "";
           const isTestSeason = seasonName.toUpperCase().includes("TEST");
 
@@ -727,7 +692,6 @@ export async function completeDraft(
         }
 
         // --- TRANSITION PHASE UNCONDITIONALLY ---
-        // Ensure this happens AFTER the if/else block above, but inside the season_id check!
         const { error: phaseError } = await supabase
             .from("seasons")
             .update({ 
@@ -754,6 +718,7 @@ export async function completeDraft(
     return { success: false, error: String(error) };
   }
 }
+
 // ============================================================================
 // AUTO-DRAFT TIMER CHECK
 // ============================================================================
