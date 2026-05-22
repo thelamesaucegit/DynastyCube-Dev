@@ -331,7 +331,7 @@ export async function executeAutoDraft(
     const effectiveCost = (preview.source === "manual_queue" && balance <= 0) ? 0 : baseCost;
     // ------------------------------
 
-    const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
+     const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
         p_team_id: teamId, p_draft_session_id: draftSessionId, p_card_pool_id: cardToAttempt.id,
         p_card_id: cardToAttempt.card_id, p_card_name: cardToAttempt.card_name,
         p_card_set: cardToAttempt.card_set, p_card_type: cardToAttempt.card_type,
@@ -342,9 +342,15 @@ export async function executeAutoDraft(
     }).single();
     
     if (rpcError) {
-      if (rpcError.code === '23505' && rpcError.message.includes('unique_drafted_card_instance')) {
-        console.warn(`[AutoDraft] Attempted to draft an already taken card instance: "${cardToAttempt.card_name}" (ID: ${cardToAttempt.id}). Retrying with next best option.`);
-        return executeAutoDraft(teamId, draftSessionId, supabase, [...excludedCardPoolIds, cardToAttempt.id!]);
+      // Check for both the unique constraint error AND the custom P0001 exception
+      const isAlreadyDrafted = 
+        (rpcError.code === '23505' && rpcError.message.includes('unique_drafted_card_instance')) ||
+        (rpcError.code === 'P0001' && rpcError.message.toLowerCase().includes('already been drafted'));
+
+      if (isAlreadyDrafted) {
+        console.warn(`[AutoDraft] Card taken: "${cardToAttempt.card_name}". Adding to exclusion list and retrying...`);
+        // Feed the taken card's ID into the exclusion list and recurse!
+        return executeAutoDraft(teamId, draftSessionId, adminClient, [...excludedCardPoolIds, cardToAttempt.id!]);
       } else {
         console.error("Atomic auto-draft failed with non-retryable error:", rpcError);
         return { success: false, error: `Draft failed: ${rpcError.message}` };
