@@ -1109,6 +1109,13 @@ export async function createTestSeason(): Promise<{ success: boolean; seasonId?:
         await logSystemEvent("TestSeasonCreation", "info", `Step 1 Complete. Season ID: ${seasonId}. Deactivating old seasons.`);
         await supabase.from("seasons").update({ is_active: false }).neq("id", seasonId);
 
+         // RESET AND ALLOCATE CUBUCKS ---
+        const allocationAmount = 100; // The test season hardcodes 100 allocation
+        const allocResult = await allocateCubucksToAllTeams(allocationAmount);
+        if (!allocResult.success) {
+            throw new Error(`Failed to allocate Cubucks: ${allocResult.error}`);
+        }
+
         // --- NEW STEP: GENERATE DRAFT ORDER ---
         await logSystemEvent("TestSeasonCreation", "info", `Step 1.5: Generating randomized draft order.`);
         const draftOrderResult = await generateDraftOrder(seasonId, { orderType: 'random' });
