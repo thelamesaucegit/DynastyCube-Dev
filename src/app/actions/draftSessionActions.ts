@@ -7,11 +7,12 @@ import { logSystemEvent } from "@/lib/systemLogger";
 
 import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 import { getDraftStatus, type DraftStatus } from "@/app/actions/draftOrderActions";
-import { generateFullSeasonSchedule } from "@/app/actions/seasonSchedulerActions";
+import { generateFullSeasonSchedule, generateSeasonMatchups } from "@/app/actions/seasonSchedulerActions"; 
 import { getScheduleWeeks, getActiveSeasonDetails } from "@/app/actions/scheduleActions";
 import { executeAutoDraft } from "@/app/actions/autoDraftActions";
 import { generatePlaceholderDeck, submitDeckForWeek } from "@/app/actions/deckGenerationActions";
 import { createDeckVotePoll } from "@/app/actions/deckVoteActions";
+import { getTeamsWithDetails, type TeamWithDetails } from "@/app/actions/teamActions"; 
 
 
 
@@ -672,32 +673,106 @@ export async function completeDraft(
           getActiveSeasonDetails(),
         ]);
 
-         if (weeksResult.weeks && seasonResult.season) {
-          // Extract the season name from the joined data
+                if (weeksResult.weeks && seasonResult.season) {
           const seasonObj = Array.isArray(sessionData.seasons) ? sessionData.seasons[0] : sessionData.seasons;
           const seasonName = seasonObj?.season_name || "";
           
           const isTestSeason = seasonName.toUpperCase().includes("TEST");
 
           if (isTestSeason) {
-             console.log("[Draft Complete] Test season detected. Skipping normal 9-game schedule generation.");
+             console.log("[Draft Complete] Test season detected. Generating Rapid Test Schedule...");
+             
+             try {
+                 // 1. Fetch Teams
+                 const { teams } = await getTeamsWithDetails(false);
+                 const activeTeams = (teams?.filter(t => t.is_hidden !== true) || []) as TeamWithDetails[];
+                 
+                 if (activeTeams.length < 2) {
+                     await logSystemEvent("TestScheduleGen", "error", `Not enough teams to generate test schedule for ${sessionData.season_id}`);
+                 } else {
+                     // 2. Generate Matchups
+                     const allMatchups = await generateSeasonMatchups(activeTeams, 5, false);
+                     const weekIds: string[] = [];
+                     
+                     // --- THE 20 MINUTE PRESEASON BUFFER ---
+                     // The first game starts exactly 20 minutes from RIGHT NOW.
+                     const baseNow = new Date(Date.now() + 20 * 60000); 
+                     
+                     const matchupsPerWeek = Math.floor(activeTeams.length / 2);
+                     const weekDurationMs = matchupsPerWeek * 3 * 20 * 60000;
+                     const weekSpacingMs = weekDurationMs + (20 * 60000); 
+                     const testSeasonNumber = parseInt(seasonName.replace(/[^0-9]/g, '')) || 999;
+
+                     // 3. Create Weeks dynamically
+                     for (let i = 1; i <= 5; i++) {
+                         const weekStart = new Date(baseNow.getTime() + ((i - 1) * weekSpacingMs));
+                         const weekEnd = new Date(weekStart.getTime() + weekDurationMs); 
+                         
+                         const { data: weekData, error: weekError } = await supabase.from("schedule_weeks").insert({
+                             season_id: sessionData.season_id, season_number: testSeasonNumber, week_number: i,
+                             start_date: weekStart.toISOString(), end_date: weekEnd.toISOString(),
+                             deck_submission_deadline: weekStart.toISOString(), match_completion_deadline: weekEnd.toISOString(),
+                             is_playoff_week: false, is_championship_week: false, notes: `Test Week ${i} (Rapid)`,
+                         }).select('id').single();
+                         
+                         if (weekError) {
+                             await logSystemEvent("TestScheduleGen", "error", `Failed to insert week ${i}`, { error: weekError.message });
+                         } else if (weekData) {
+                             weekIds.push(weekData.id);
+                         }
+                     }
+
+                     // 4. Pre-stage Week 1 games
+                     if (weekIds.length > 0) {
+                         const week1Matchups = allMatchups.filter(m => m.week === 1);
+                         let matchOffsetMinutes = 0;
+                         
+                         for (const matchup of week1Matchups) {
+                             const { data: matchupRecord, error: matchError } = await supabase.from('weekly_matchups').insert({
+                                 season_id: sessionData.season_id, week_number: 1, team1_id: matchup.teamAId, team2_id: matchup.teamBId, is_playoff: false
+                             }).select('id').single();
+                             
+                             if (matchError) {
+                                 await logSystemEvent("TestScheduleGen", "error", `Failed to insert Week 1 matchup`, { error: matchError.message });
+                             } else if (matchupRecord) {
+                                 for (let i = 0; i < 3; i++) {
+                                     const matchDate = new Date(baseNow.getTime() + (matchOffsetMinutes * 60000));
+                                     await supabase.from('schedule').insert({
+                                         season_id: sessionData.season_id, season_number: testSeasonNumber, week_id: weekIds[0], week_number: 1,
+                                         team1_id: matchup.teamAId, team2_id: matchup.teamBId, weekly_matchup_id: matchupRecord.id,
+                                         match_date: matchDate.toISOString(), status: 'scheduled'
+                                     });
+                                     matchOffsetMinutes += 20;
+                                 }
+                             }
+                         }
+
+                         // 5. Pre-stage Week 2-5 empty matchups
+                         for (let week = 2; week <= 5; week++) {
+                              const weekMatchups = allMatchups.filter(m => m.week === week);
+                              for (const matchup of weekMatchups) {
+                                  const { data: matchupRecord } = await supabase.from('weekly_matchups').insert({
+                                     season_id: sessionData.season_id, week_number: week, team1_id: matchup.teamAId, team2_id: matchup.teamBId, is_playoff: false
+                                 }).select('id').single();
+                                 
+                                 if (matchupRecord && weekIds[week - 1]) {
+                                     for (let i = 0; i < 3; i++) {
+                                         await supabase.from('schedule').insert({
+                                             season_id: sessionData.season_id, season_number: testSeasonNumber, week_id: weekIds[week - 1], week_number: week,
+                                             team1_id: matchup.teamAId, team2_id: matchup.teamBId, weekly_matchup_id: matchupRecord.id,
+                                             match_date: new Date().toISOString(), status: 'scheduled'
+                                         });
+                                     }
+                                 }
+                              }
+                         }
+                     }
+                 }
+             } catch (testError) {
+                 await logSystemEvent("TestScheduleGen", "error", "Fatal error generating test schedule", { error: String(testError) });
+             }
           } else {
              console.log(`[Draft Complete] Generating regular season schedule...`);
-             const regularWeeksCount = weeksResult.weeks.filter(w => !w.is_playoff_week && !w.is_championship_week).length;
-            
-             const schedResult = await generateFullSeasonSchedule(
-               sessionData.season_id, 
-               regularWeeksCount, 
-               seasonResult.season.has_rivals_week
-             );
-            
-             if (schedResult.success) {
-               console.log(`[Draft Complete] Successfully generated ${schedResult.scheduledGamesCount} games.`);
-             } else {
-               console.error(`[Draft Complete] Schedule generation failed:`, schedResult.error);
-             }
-          }
-        }
 
         // --- TRANSITION PHASE UNCONDITIONALLY ---
         const { error: phaseError } = await supabase
