@@ -302,12 +302,12 @@ export async function executeAutoDraft(
 }> {
   try {
     const supabase = adminClient ?? createServiceClient(); 
-    const { status: draftStatus, error: statusError } = await getDraftStatus(draftSessionId, supabase);
+    const { status: draftStatus, error: statusError } = await getDraftStatus(draftSessionId, supabase); 
     if (statusError || !draftStatus || draftStatus.onTheClock.teamId !== teamId) {
       return { success: false, error: statusError || "Team not on the clock." };
     }
 
-    const preview = await getAutoDraftPreview(teamId, draftSessionId, supabase, excludedCardPoolIds);
+    const preview = await getAutoDraftPreview(teamId, draftSessionId, supabase, excludedCardPoolIds); 
     const cardToAttempt = preview.nextPick;
 
     if (!cardToAttempt) {
