@@ -357,10 +357,22 @@ export async function executeAutoDraft(
     console.log(`[AutoDraft] Successfully drafted "${cardToAttempt.card_name}" for team ${teamId}.`);
 
     const pickSource = preview.source === "manual_queue" ? "manual_queue" : "algorithm";
-    if (newPick.id) {
+     if (newPick.id) {
         await supabase.from("team_draft_picks").update({ pick_source: pickSource }).eq("id", newPick.id);
     }
     await conditionallyCleanupDraftQueues(cardToAttempt.card_id, supabase);
+    
+    // --- NEW: BROADCAST THE AUTODRAFT PICK TO THE UI ---
+    const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
+    await supabase.channel(`draft-updates-${draftSessionId}`).send({ 
+        type: 'broadcast', 
+        event: 'new_pick', 
+        payload: { 
+            ...newPick, 
+            team_id: teamId,       // Explicitly ensure team_id is attached
+            team_name: teamData?.name || 'Unknown' 
+        }
+    });
     
     return {
       success: true,
