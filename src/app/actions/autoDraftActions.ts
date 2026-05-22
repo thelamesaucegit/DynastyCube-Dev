@@ -632,24 +632,32 @@ export async function clearTeamDraftQueue(teamId: string): Promise<{ success: bo
     } catch (error) { console.error("Error clearing draft queue:", error); return { success: false, error: "Failed to clear draft queue" }; }
 }
 
-export async function conditionallyCleanupDraftQueues(draftedCardId: string, adminClient?: AnySupabaseClient): Promise<{ success: boolean; cleaned: boolean; error?: string }> {
+export async function conditionallyCleanupDraftQueues(
+  draftedCardId: string, 
+  adminClient?: AnySupabaseClient
+): Promise<{ success: boolean; cleaned: boolean; error?: string }> {
   try {
-    const supabase = adminClient ?? await createServerClient();
-    const duplicateSet = await getDuplicateCardIdSet();
-
+    // FIX 1: Use the safe createServiceClient fallback instead of createServerClient
+    const supabase = adminClient ?? createServiceClient();
+    
+    // FIX 2: Pass adminClient to the cache function
+    const duplicateSet = await getDuplicateCardIdSet(adminClient);
+    
     if (!duplicateSet.has(draftedCardId)) {
       const { error } = await supabase.from("team_draft_queue").delete().eq("card_id", draftedCardId);
       if (error) return { success: false, cleaned: false, error: error.message };
       return { success: true, cleaned: true };
     }
-
-    const { cards: availableCards } = await getAvailableCardsForDraft("draft");
+    
+    // FIX 3: Pass adminClient to the available cards fetcher
+    const { cards: availableCards } = await getAvailableCardsForDraft("draft", adminClient);
+    
     if (!availableCards.some(card => card.card_id === draftedCardId)) {
       const { error } = await supabase.from("team_draft_queue").delete().eq("card_id", draftedCardId);
       if (error) return { success: false, cleaned: false, error: error.message };
       return { success: true, cleaned: true };
     }
-
+    
     return { success: true, cleaned: false };
   } catch (error) {
     console.error("Unexpected error in conditional queue cleanup:", error);
