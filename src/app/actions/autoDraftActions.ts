@@ -218,7 +218,7 @@ export async function computeAutoDraftPick(
     }
 
      const pickNumber = teamPicks.length + 1;
-    const LAND_ELO_MODIFIER = 0.70; 
+    const LAND_ELO_MODIFIER = 0.75; 
 
      const AFFINITY_BONUS_PER_PICK = 0.1;
     const ANTI_AFFINITY_PENALTY_PER_PICK = 0.05;
@@ -247,25 +247,44 @@ export async function computeAutoDraftPick(
     const maxTeamAffinity = Math.max(...Object.values(colorModifiers), 1);
 
     // 2. Evaluate Candidates
-    const sortedCandidates = candidatePool
+  const sortedCandidates = candidatePool
         .map(card => {
             let elo = card.cubecobra_elo || 1200;
             
-            // We can leave a very slight, flat penalty on lands so teams prioritize 
-            // massive spells over fixing in round 1, but let affinity do the rest of the work.
+            // Slight, flat penalty on lands so teams prioritize 
+            // spells over fixing in round 1, but let affinity do the rest of the work.
             const isLand = card.card_type?.toLowerCase().includes('land');
-            if (isLand) elo *= 0.95; 
+            if (isLand) elo *= 0.98; 
 
-            // Use COLOR IDENTITY!
-            const cardColors = card.color_identity || card.colors || [];
+            const castColors = card.colors || [];
+            const identityColors = card.color_identity || castColors;
 
             let affinity = 1;
-            if (cardColors.length > 0) {
-                // Colored card or Dual Land: use its highest matching color modifier
-                affinity = Math.max(...cardColors.map(c => colorModifiers[c] || 1));
+
+            if (isLand) {
+                // LANDS: They *provide* mana. They are as valuable as your HIGHEST affinity 
+                // for the colors they produce.
+                if (identityColors.length > 0) {
+                    affinity = Math.max(...identityColors.map(c => colorModifiers[c] || 1));
+                } else {
+                    affinity = maxTeamAffinity;
+                }
             } else {
-                // TRUE Colorless (e.g., generic artifacts with no colored mana symbols)
-                affinity = maxTeamAffinity ; 
+                // NON-LAND SPELLS: They *require* mana.
+                if (castColors.length > 1) {
+                    // Multi-colored cast: Constrained by your WEAKEST affinity among its casting colors
+                    affinity = Math.min(...castColors.map(c => colorModifiers[c] || 1));
+                } else if (castColors.length === 1) {
+                    // Mono-colored cast
+                    affinity = colorModifiers[castColors[0]] || 1;
+                } else if (identityColors.length > 0) {
+                    // Colorless to cast, but has a colored identity (e.g. colored activated ability)
+                    affinity = Math.max(...identityColors.map(c => colorModifiers[c] || 1));
+                } else {
+                    // True Colorless (e.g. generic artifacts, Eldrazi)
+                    // They fit perfectly into any deck, so they scale with your best color
+                    affinity = maxTeamAffinity; 
+                }
             }
 
             return { ...card, effective_elo: elo * affinity };
