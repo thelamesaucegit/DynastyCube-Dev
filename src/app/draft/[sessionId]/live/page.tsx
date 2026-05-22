@@ -49,30 +49,37 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
       oldest_image_url,
       drafted_at,
       team_id, 
-      teams ( name )
-      card_pools ( color_identity )
+      teams ( name ),
+      card_pools:card_pool_id ( color_identity )
     `)
     .eq('draft_session_id', sessionId)
-    .returns<SupabasePick[]>();
+    .order('pick_number', { ascending: false }); // Ensure newest picks are on top!
 
   if (error || !data) {
     console.error('Error fetching initial draft picks:', error?.message || 'Data was null.');
     return [];
   }
   
-  return data.map(pick => ({
-    id: pick.id,
-    pick_number: pick.pick_number,
-    card_name: pick.card_name,
-    card_set: pick.card_set,
-    rarity: pick.rarity,
-    image_url: pick.image_url,
-    oldest_image_url: pick.oldest_image_url,
-    drafted_at: pick.drafted_at,
-    team_id: pick.team_id,
-    team_name: pick.teams?.name || 'Unknown Team',
-        color_identity: pick.card_pools?.color_identity || [], 
-  }));
+  return data.map((pick: any) => {
+    // Supabase returns nested objects as arrays or single objects depending on the schema
+    const colorId = Array.isArray(pick.card_pools) 
+        ? pick.card_pools[0]?.color_identity 
+        : pick.card_pools?.color_identity;
+
+    return {
+      id: pick.id,
+      pick_number: pick.pick_number,
+      card_name: pick.card_name,
+      card_set: pick.card_set,
+      rarity: pick.rarity,
+      image_url: pick.image_url,
+      oldest_image_url: pick.oldest_image_url,
+      drafted_at: pick.drafted_at,
+      team_id: pick.team_id,
+      team_name: pick.teams?.name || 'Unknown Team',
+      color_identity: colorId || [], 
+    };
+  });
 }
 
 export default async function LiveDraftPage({ params }: { params: Promise<{ sessionId: string }> }) {
