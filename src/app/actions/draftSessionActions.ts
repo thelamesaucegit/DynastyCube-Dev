@@ -618,7 +618,14 @@ export async function completeDraft(
         console.error("CRITICAL: Could not find the first week of the season. No deck votes will be created.", weekError);
     }
 
-    const { data: sessionData } = await supabase.from('draft_sessions').select('season_id').eq('id', sessionId).single();
+    const { data: sessionData } = await supabase
+      .from('draft_sessions')
+      .select(`
+        season_id,
+        seasons ( season_name )
+      `)
+      .eq('id', sessionId)
+      .single();
     const { data: teams, error: teamsError } = await supabase.from('draft_order').select('team_id').eq('season_id', sessionData?.season_id);
 
     if (teamsError) {
@@ -665,8 +672,11 @@ export async function completeDraft(
           getActiveSeasonDetails(),
         ]);
 
-        if (weeksResult.weeks && seasonResult.season) {
-          const seasonName = seasonResult.season.season_name || seasonResult.season.name || "";
+         if (weeksResult.weeks && seasonResult.season) {
+          // Extract the season name from the joined data
+          const seasonObj = Array.isArray(sessionData.seasons) ? sessionData.seasons[0] : sessionData.seasons;
+          const seasonName = seasonObj?.season_name || "";
+          
           const isTestSeason = seasonName.toUpperCase().includes("TEST");
 
           if (isTestSeason) {
