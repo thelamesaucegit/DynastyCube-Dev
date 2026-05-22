@@ -9,9 +9,7 @@ import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 import { getDraftStatus, type DraftStatus } from "@/app/actions/draftOrderActions";
 import { generateFullSeasonSchedule } from "@/app/actions/seasonSchedulerActions";
 import { getScheduleWeeks, getActiveSeasonDetails } from "@/app/actions/scheduleActions";
-import { updateSeasonPhase } from "@/app/actions/seasonPhaseActions";
 import { executeAutoDraft } from "@/app/actions/autoDraftActions";
-import { addSkippedPick } from "@/app/actions/draftActions"; 
 import { generatePlaceholderDeck, submitDeckForWeek } from "@/app/actions/deckGenerationActions";
 import { createDeckVotePoll } from "@/app/actions/deckVoteActions";
 
@@ -855,7 +853,11 @@ export async function checkDraftTimer(
       }
       // --------------------
 
-      let actionResult: any = { action: "error", error: "Unknown execution state." };
+      let actionResult: {
+        action: "none" | "auto_drafted" | "completed" | "error";
+        message?: string;
+        error?: string;
+      } = { action: "error", error: "Unknown execution state." };
 
       try {
           const autoDraftResult = await executeAutoDraft(teamId, session.id, supabase);
