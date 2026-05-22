@@ -180,6 +180,7 @@ async function executeConfirmedTeamPick(teamId: string, cardPoolId: string, draf
 }
 
 // Updated to accept the exclusion list
+// Updated to accept the exclusion list
 export async function computeAutoDraftPick(
   teamId: string,
   draftSessionId: string,
@@ -201,10 +202,7 @@ export async function computeAutoDraftPick(
 
     const alreadyDraftedCardConcepts = new Set(teamPicks.map(p => p.card_id));
 
-    // Wait to apply hat modifier here since we are just checking affordability, we can safely 
-    // estimate using base affordability unless we want the algorithm to know the exact cost.
-    // For simplicity, the algorithm filters based on base affordability.
-
+    // 1. Filter out un-affordable, drafted, or excluded cards
     const candidatePool = availableCards
       .filter(card => 
         card.id && 
@@ -217,44 +215,61 @@ export async function computeAutoDraftPick(
         return { recommendation: null, algorithmDetails: null, error: "No valid or affordable cards available." };
     }
 
-     const pickNumber = teamPicks.length + 1;
+    // --- RAW ELO TOP N SLICE ---
+    const DEFAULT_ELO = 1000;
+    const TOP_N_POOL_SIZE = 30; 
+
+    // Sort the entire valid pool strictly by RAW ELO (no multipliers yet)
+    const rawSortedPool = [...candidatePool].sort((a, b) => 
+        (b.cubecobra_elo || DEFAULT_ELO) - (a.cubecobra_elo || DEFAULT_ELO)
+    );
+
+    // Slice the top N cards to be our actual evaluation pool
+    const evaluationPool = rawSortedPool.slice(0, TOP_N_POOL_SIZE);
+    // ---------------------------
+
     const LAND_ELO_MODIFIER = 0.75; 
 
-     const AFFINITY_BONUS_PER_PICK = 0.1;
-    const ANTI_AFFINITY_PENALTY_PER_PICK = 0.05;
+    // --- EXPONENTIAL DECAY CONSTANTS ---
+    const BASE_BONUS = 0.05; 
+    const BONUS_DECAY = 0.99; 
+
     const colorModifiers: Record<string, number> = { W: 1, U: 1, B: 1, R: 1, G: 1 };
     const allColors = ["W", "U", "B", "R", "G"];
-
-    // 1. Calculate Team Affinity based on COLOR IDENTITY
+    
+    // Tally the raw count of how many times a color was picked
+    const colorCounts: Record<string, number> = { W: 0, U: 0, B: 0, R: 0, G: 0 };
+    
     for (const pick of teamPicks) {
-      // Use color_identity if available, fallback to colors just in case
       const pickColors = new Set(pick.color_identity || pick.colors || []);
-      if (pickColors.size === 0) continue;
-      
       for (const color of allColors) {
         if (pickColors.has(color)) { 
-            colorModifiers[color] += AFFINITY_BONUS_PER_PICK; 
-        } else { 
-            colorModifiers[color] -= ANTI_AFFINITY_PENALTY_PER_PICK; 
+            colorCounts[color]++;
         }
       }
     }
 
+    // Calculate Team Affinity using geometric series
     for (const color of allColors) { 
-        colorModifiers[color] = Math.max(0.5, colorModifiers[color]); 
+        let bonus = 0;
+        for (let i = 0; i < colorCounts[color]; i++) {
+            // e.g. 1st: +0.05, 2nd: +0.0495, 3rd: +0.0490...
+            bonus += BASE_BONUS * Math.pow(BONUS_DECAY, i);
+        }
+        colorModifiers[color] = 1 + bonus; 
     }
 
     const maxTeamAffinity = Math.max(...Object.values(colorModifiers), 1);
 
-    // 2. Evaluate Candidates
-  const sortedCandidates = candidatePool
+    // 2. Evaluate Candidates (ONLY the Top N from the raw pool!)
+    const sortedCandidates = evaluationPool
         .map(card => {
-            let elo = card.cubecobra_elo || 1200;
+            let elo = card.cubecobra_elo || DEFAULT_ELO;
             
             // Slight, flat penalty on lands so teams prioritize 
             // spells over fixing in round 1, but let affinity do the rest of the work.
             const isLand = card.card_type?.toLowerCase().includes('land');
-            if (isLand) elo *= 0.98; 
+            if (isLand) elo *= LAND_ELO_MODIFIER; 
 
             const castColors = card.colors || [];
             const identityColors = card.color_identity || castColors;
@@ -299,6 +314,7 @@ export async function computeAutoDraftPick(
     return { recommendation: null, algorithmDetails: null, error: "Failed to compute auto-draft pick" };
   }
 }
+
 
 export async function getAutoDraftPreview(
   teamId: string,

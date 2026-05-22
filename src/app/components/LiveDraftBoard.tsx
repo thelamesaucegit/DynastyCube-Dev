@@ -57,7 +57,7 @@ const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small
         </ColorIdentityGlow>
     </div>
   );
-
+}; 
 
 // MODIFIED: ListView now has corrected responsive grid classes
 const ListView: FC<{ picks: DraftPick[], newestPickId: number | null }> = ({ picks, newestPickId }) => {
