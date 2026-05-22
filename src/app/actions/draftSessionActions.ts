@@ -563,6 +563,7 @@ export async function resumeDraft(
   }
 }
 
+
 export async function completeDraft(
   sessionId: string,
   adminClient?: AnySupabaseClient
@@ -589,7 +590,7 @@ export async function completeDraft(
       .eq("id", sessionId);
 
     if (error) {
-      console.error("Error completing draft:", error);
+      await logSystemEvent("CompleteDraft", "error", `Failed to update draft session status for ${sessionId}`, { error: error.message });
       return { success: false, error: error.message };
     }
 
@@ -604,19 +605,19 @@ export async function completeDraft(
       .eq('was_drafted', false);
     
     if (wireError) {
-      console.error("Critical error: Failed to move undrafted cards to The Wire:", wireError);
+      await logSystemEvent("CompleteDraft", "error", "Failed to move undrafted cards to The Wire", { error: wireError.message });
     }
 
     // Generate placeholder decks for all teams in the draft.
     const { data: firstWeek, error: weekError } = await supabase
-        .from('schedule_weeks') // CORRECTED FROM 'weeks' to 'schedule_weeks'
-        .select('id, end_date') // CORRECTED FROM 'ends_at' to 'end_date'
-        .order('start_date', { ascending: true }) // CORRECTED FROM 'starts_at' to 'start_date'
+        .from('schedule_weeks') 
+        .select('id, end_date') 
+        .order('start_date', { ascending: true }) 
         .limit(1)
         .single();
 
     if (weekError || !firstWeek) {
-        console.error("CRITICAL: Could not find the first week of the season. No deck votes will be created.", weekError);
+        await logSystemEvent("CompleteDraft", "error", "Could not find the first week of the season. No deck votes will be created.", { error: weekError?.message });
     }
 
     const { data: sessionData } = await supabase
@@ -627,10 +628,11 @@ export async function completeDraft(
       `)
       .eq('id', sessionId)
       .single();
+
     const { data: teams, error: teamsError } = await supabase.from('draft_order').select('team_id').eq('season_id', sessionData?.season_id);
 
     if (teamsError) {
-        console.error("Error fetching teams for post-draft actions:", teamsError);
+        await logSystemEvent("CompleteDraft", "error", "Error fetching teams for post-draft actions", { error: teamsError.message });
     }
 
     if (teams) {
@@ -639,16 +641,17 @@ export async function completeDraft(
           const { success, deckId, error: deckError } = await generatePlaceholderDeck(team.team_id, sessionId);
           
           if (!success) {
-              console.error(`Failed to generate placeholder deck for team ${team.team_id}: ${deckError}`);
+              await logSystemEvent("CompleteDraft", "error", `Failed to generate placeholder deck for team ${team.team_id}`, { error: deckError });
               continue; 
           }
+          
           console.log(`Successfully generated placeholder deck for team ${team.team_id}.`);
-
+          
           if (firstWeek && deckId) {
               console.log(`Setting placeholder deck as official active deck for Week 1...`);
               const submitResult = await submitDeckForWeek(deckId, team.team_id, firstWeek.id);
               if (!submitResult.success) {
-                  console.error(`Failed to submit placeholder deck for team ${team.team_id}:`, submitResult.error);
+                  await logSystemEvent("CompleteDraft", "error", `Failed to submit placeholder deck for team ${team.team_id}`, { error: submitResult.error });
               }
 
               console.log(`Triggering first deck vote for team ${team.team_id} for week ${firstWeek.id}`);
@@ -657,8 +660,9 @@ export async function completeDraft(
                   firstWeek.id,
                   firstWeek.end_date 
               );
+              
               if (!pollSuccess) {
-                  console.error(`Failed to create first deck vote poll for team ${team.team_id}: ${pollError}`);
+                  await logSystemEvent("CompleteDraft", "error", `Failed to create first deck vote poll for team ${team.team_id}`, { error: pollError });
               }
           }
       }
@@ -673,7 +677,7 @@ export async function completeDraft(
           getActiveSeasonDetails(),
         ]);
 
-                if (weeksResult.weeks && seasonResult.season) {
+        if (weeksResult.weeks && seasonResult.season) {
           const seasonObj = Array.isArray(sessionData.seasons) ? sessionData.seasons[0] : sessionData.seasons;
           const seasonName = seasonObj?.season_name || "";
           
@@ -773,6 +777,21 @@ export async function completeDraft(
              }
           } else {
              console.log(`[Draft Complete] Generating regular season schedule...`);
+             const regularWeeksCount = weeksResult.weeks.filter(w => !w.is_playoff_week && !w.is_championship_week).length;
+            
+             const schedResult = await generateFullSeasonSchedule(
+               sessionData.season_id, 
+               regularWeeksCount, 
+               seasonResult.season.has_rivals_week
+             );
+            
+             if (schedResult.success) {
+               console.log(`[Draft Complete] Successfully generated ${schedResult.scheduledGamesCount} games.`);
+             } else {
+               await logSystemEvent("CompleteDraft", "error", `Normal schedule generation failed`, { error: schedResult.error });
+             }
+          }
+        }
 
         // --- TRANSITION PHASE UNCONDITIONALLY ---
         const { error: phaseError } = await supabase
@@ -784,7 +803,7 @@ export async function completeDraft(
             .eq("id", sessionData.season_id);
             
         if (phaseError) {
-             console.error("[Draft Complete] Critical error updating season phase:", phaseError);
+             await logSystemEvent("CompleteDraft", "error", `Critical error updating season phase to preseason`, { error: phaseError.message });
         } else {
              console.log(`[Draft Complete] Season moved to Preseason phase.`);
         }
@@ -795,10 +814,13 @@ export async function completeDraft(
       p_message: "The draft has concluded. The league is now in the Preseason phase!",
     });
 
+    await logSystemEvent("CompleteDraft", "info", `Draft ${sessionId} fully completed and transitioned successfully.`);
+
     return { success: true };
   } catch (error) {
-    console.error("Unexpected error completing draft:", error);
-    return { success: false, error: String(error) };
+    const errString = String(error);
+    await logSystemEvent("CompleteDraft", "error", "Unexpected fatal error completing draft", { error: errString });
+    return { success: false, error: errString };
   }
 }
 
