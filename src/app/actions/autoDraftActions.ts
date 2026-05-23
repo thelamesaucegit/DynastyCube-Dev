@@ -217,7 +217,7 @@ export async function computeAutoDraftPick(
 
     // --- RAW ELO TOP N SLICE ---
     const DEFAULT_ELO = 1000;
-    const TOP_N_POOL_SIZE = 30; 
+    const TOP_N_POOL_SIZE = 15; 
 
     // Sort the entire valid pool strictly by RAW ELO (no multipliers yet)
     const rawSortedPool = [...candidatePool].sort((a, b) => 
@@ -231,8 +231,8 @@ export async function computeAutoDraftPick(
     const LAND_ELO_MODIFIER = 0.75; 
 
     // --- EXPONENTIAL DECAY CONSTANTS ---
-    const BASE_BONUS = 0.05; 
-    const BONUS_DECAY = 0.99; 
+    const BASE_BONUS = 0.03; 
+    const BONUS_DECAY = 0.90; 
 
     const colorModifiers: Record<string, number> = { W: 1, U: 1, B: 1, R: 1, G: 1 };
     const allColors = ["W", "U", "B", "R", "G"];
