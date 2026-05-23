@@ -1,6 +1,8 @@
 // src/app/actions/teamActions.ts
 "use server";
 
+import { type AnySupabaseClient } from "@/lib/supabase";
+
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
@@ -175,7 +177,7 @@ export async function getTeamByShortName(
  */
 export async function getTeamsWithDetails(
   includeHidden = false,
-  adminClient?: any // Using any here temporarily to avoid needing to import AnySupabaseClient at the top
+  adminClient?: AnySupabaseClient 
 ): Promise<{
   teams: TeamWithDetails[];
   error?: string;
