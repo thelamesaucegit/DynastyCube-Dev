@@ -871,7 +871,7 @@ console.log(`[Draft Complete] Archiving picks to historical_draft_picks for sess
  * It performs a very fast check to see if a draft is active before running
  * the more expensive timer logic.
  */
-eexport async function handleDraftTimerCron(): Promise<{
+export async function handleDraftTimerCron(): Promise<{
   status: "skipped" | "processed" | "error";
   details?: string;
   error?: string;
