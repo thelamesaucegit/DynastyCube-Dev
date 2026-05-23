@@ -97,6 +97,16 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
         }
     }
 
+    // Safely extract team name whether Supabase returns an array or an object
+    let extractedTeamName = 'Unknown Team';
+    if (pick.teams) {
+        if (Array.isArray(pick.teams)) {
+            extractedTeamName = pick.teams[0]?.name || 'Unknown Team';
+        } else {
+            extractedTeamName = pick.teams.name || 'Unknown Team';
+        }
+    }
+
     return {
       // Force ID to number to satisfy the frontend DraftPick interface, or change the interface to accept strings
       id: typeof pick.id === 'string' ? parseInt(pick.id.replace(/\D/g, '').substring(0, 8)) || 0 : pick.id,
@@ -108,11 +118,10 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
       oldest_image_url: pick.oldest_image_url,
       drafted_at: pick.drafted_at,
       team_id: pick.team_id,
-      team_name: pick.teams?.name || 'Unknown Team',
+      team_name: extractedTeamName, // Use safely extracted name
       color_identity: colorId || [], 
     };
   });
-}
 
 export default async function LiveDraftPage({ params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params;
