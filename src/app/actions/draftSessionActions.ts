@@ -593,7 +593,48 @@ export async function completeDraft(
       await logSystemEvent("CompleteDraft", "error", `Failed to update draft session status for ${sessionId}`, { error: error.message });
       return { success: false, error: error.message };
     }
+console.log(`[Draft Complete] Archiving picks to historical_draft_picks for session ${sessionId}...`);
+    
+    // 1. Fetch all active picks for this session
+    const { data: activePicks, error: fetchPicksError } = await supabase
+        .from('team_draft_picks')
+        .select('*')
+        .eq('draft_session_id', sessionId);
+        
+    if (fetchPicksError) {
+        await logSystemEvent("CompleteDraft", "error", `Failed to fetch active picks for archiving.`, { error: fetchPicksError.message });
+    } else if (activePicks && activePicks.length > 0) {
+        // 2. Map them to match the historical table schema
+        const historicalPayload = activePicks.map(pick => ({
+            draft_session_id: pick.draft_session_id,
+            team_id: pick.team_id,
+            card_id: pick.card_id,
+            card_name: pick.card_name,
+            card_set: pick.card_set,
+            card_type: pick.card_type,
+            rarity: pick.rarity,
+            colors: pick.colors,
+            color_identity: pick.color_identity,
+            image_url: pick.image_url,
+            oldest_image_url: pick.oldest_image_url,
+            mana_cost: pick.mana_cost,
+            cmc: pick.cmc,
+            pick_number: pick.pick_number,
+            pick_source: pick.pick_source,
+            drafted_at: pick.drafted_at || new Date().toISOString()
+        }));
 
+        // 3. Bulk insert them into the ledger
+        const { error: archiveError } = await supabase
+            .from('historical_draft_picks')
+            .insert(historicalPayload);
+            
+        if (archiveError) {
+            await logSystemEvent("CompleteDraft", "error", `Failed to bulk insert historical picks.`, { error: archiveError.message });
+        } else {
+            console.log(`[Draft Complete] Successfully archived ${historicalPayload.length} picks.`);
+        }
+    }
     console.log(`Draft ${sessionId} completed. Moving undrafted cards to The Wire.`);
     const { error: wireError } = await supabase
       .from('card_pools')
