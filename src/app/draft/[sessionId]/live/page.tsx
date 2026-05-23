@@ -29,9 +29,7 @@ interface SupabasePick {
   drafted_at: string; 
   team_id: string;
   color_identity?: string[] | null; // Natively on the historical table!
-  teams: {
-    name: string;
-  } | null;
+    teams: { name: string; } | Array<{ name: string; }> | null;
   card_pools?: { color_identity: string[] | null; } | Array<{ color_identity: string[] | null; }> | null; 
 }
 
