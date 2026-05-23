@@ -1,6 +1,8 @@
 // src/app/actions/teamActions.ts
 "use server";
 
+import { type AnySupabaseClient } from "@/lib/supabase";
+
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
@@ -173,52 +175,73 @@ export async function getTeamByShortName(
 /**
  * Fetch all teams with their members
  */
-export async function getTeamsWithMembers(): Promise<Team[]> {
-  const supabase = await createClient();
+export async function getTeamsWithDetails(
+  includeHidden = false,
+  adminClient?: AnySupabaseClient 
+): Promise<{
+  teams: TeamWithDetails[];
+  error?: string;
+}> {
+  // Use the passed admin client, or fallback to the cookie client for standard UI calls
+  const supabase = adminClient ?? await createClient();
+  
   try {
-    const { data: teams, error: teamsError } = await supabase
-      .from("teams")
-      .select("*")
-      .order("name");
+    // 1. Call the RPC function and explicitly type the expected return data
+    const rpcResponse = await supabase
+      .rpc('get_teams_with_stats', { p_include_hidden: includeHidden })
+      .returns<RpcTeamStatRow[]>();
+      
+    const teamsData = rpcResponse.data;
+    const teamsError = rpcResponse.error;
+
     if (teamsError) {
-      console.error("Error fetching teams:", teamsError);
-      return [];
+      console.error("Error fetching teams via RPC:", teamsError);
+      return { teams: [], error: teamsError.message };
     }
-    const { data: members, error: membersError } = await supabase
-      .from("team_members")
-      .select("*");
-    if (membersError) {
-      console.error("Error fetching team members:", membersError);
-      return teams || [];
+
+    if (!Array.isArray(teamsData) || teamsData.length === 0) {
+      return { teams: [] };
     }
-    const { data: users, error: usersError } = await supabase
-      .from("users")
-      .select("id, display_name, discord_username");
-    if (usersError) {
-      console.error("Error fetching users:", usersError);
+
+    // 2. Get latest picks with strict typing
+    const lastPickMap = new Map<string, { image_url: string | null; card_name: string }>();
+    const picksResponse = await supabase
+      .rpc('get_latest_pick_for_each_team')
+      .returns<Array<{ team_id: string; image_url: string | null; card_name: string }>>();
+    
+    const latestPicks = picksResponse.data;
+    if (Array.isArray(latestPicks)) {
+        latestPicks.forEach(pick => {
+            lastPickMap.set(pick.team_id, { image_url: pick.image_url, card_name: pick.card_name });
+        });
     }
-    const userDisplayNames = new Map(
-      (users || []).map((u) => [
-        u.id,
-        u.display_name || u.discord_username || "Unknown User"
-      ])
-    );
-    const teamsWithMembers = (teams || []).map((team) => ({
-      ...team,
-      members: (members || [])
-        .filter((member) => member.team_id === team.id)
-        .map((member) => ({
-          ...member,
-          user_display_name: userDisplayNames.get(member.user_id) || "Unknown User",
-        })),
+
+    // 3. Map to final interface with 100% type safety
+    const enrichedTeams: TeamWithDetails[] = teamsData.map((team: RpcTeamStatRow) => ({
+        id: team.id,
+        short_name: team.short_name,
+        name: team.name,
+        emoji: team.emoji,
+        motto: team.motto,
+        wins: team.wins,
+        losses: team.losses,
+        game_wins: team.game_wins,
+        game_losses: team.game_losses,
+        rival_short_name: team.rival_short_name,
+        primary_color: team.primary_color,
+        secondary_color: team.secondary_color,
+        member_count: team.member_count,
+        is_hidden: team.is_hidden,
+        last_pick: lastPickMap.get(team.id) || null,
     }));
-    return teamsWithMembers;
+
+    return { teams: enrichedTeams };
   } catch (error) {
-    console.error("Unexpected error fetching teams:", error);
-    return [];
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error("Unexpected error fetching team details:", errorMessage);
+    return { teams: [], error: "An unexpected error occurred" };
   }
 }
-
 /**
  * Add a user to a team
  */

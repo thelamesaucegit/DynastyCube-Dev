@@ -593,7 +593,48 @@ export async function completeDraft(
       await logSystemEvent("CompleteDraft", "error", `Failed to update draft session status for ${sessionId}`, { error: error.message });
       return { success: false, error: error.message };
     }
+console.log(`[Draft Complete] Archiving picks to historical_draft_picks for session ${sessionId}...`);
+    
+    // 1. Fetch all active picks for this session
+    const { data: activePicks, error: fetchPicksError } = await supabase
+        .from('team_draft_picks')
+        .select('*')
+        .eq('draft_session_id', sessionId);
+        
+    if (fetchPicksError) {
+        await logSystemEvent("CompleteDraft", "error", `Failed to fetch active picks for archiving.`, { error: fetchPicksError.message });
+    } else if (activePicks && activePicks.length > 0) {
+        // 2. Map them to match the historical table schema
+        const historicalPayload = activePicks.map(pick => ({
+            draft_session_id: pick.draft_session_id,
+            team_id: pick.team_id,
+            card_id: pick.card_id,
+            card_name: pick.card_name,
+            card_set: pick.card_set,
+            card_type: pick.card_type,
+            rarity: pick.rarity,
+            colors: pick.colors,
+            color_identity: pick.color_identity,
+            image_url: pick.image_url,
+            oldest_image_url: pick.oldest_image_url,
+            mana_cost: pick.mana_cost,
+            cmc: pick.cmc,
+            pick_number: pick.pick_number,
+            pick_source: pick.pick_source,
+            drafted_at: pick.drafted_at || new Date().toISOString()
+        }));
 
+        // 3. Bulk insert them into the ledger
+        const { error: archiveError } = await supabase
+            .from('historical_draft_picks')
+            .insert(historicalPayload);
+            
+        if (archiveError) {
+            await logSystemEvent("CompleteDraft", "error", `Failed to bulk insert historical picks.`, { error: archiveError.message });
+        } else {
+            console.log(`[Draft Complete] Successfully archived ${historicalPayload.length} picks.`);
+        }
+    }
     console.log(`Draft ${sessionId} completed. Moving undrafted cards to The Wire.`);
     const { error: wireError } = await supabase
       .from('card_pools')
@@ -608,18 +649,6 @@ export async function completeDraft(
       await logSystemEvent("CompleteDraft", "error", "Failed to move undrafted cards to The Wire", { error: wireError.message });
     }
 
-    // Generate placeholder decks for all teams in the draft.
-    const { data: firstWeek, error: weekError } = await supabase
-        .from('schedule_weeks') 
-        .select('id, end_date') 
-        .order('start_date', { ascending: true }) 
-        .limit(1)
-        .single();
-
-    if (weekError || !firstWeek) {
-        await logSystemEvent("CompleteDraft", "error", "Could not find the first week of the season. No deck votes will be created.", { error: weekError?.message });
-    }
-
     const { data: sessionData } = await supabase
       .from('draft_sessions')
       .select(`
@@ -629,46 +658,9 @@ export async function completeDraft(
       .eq('id', sessionId)
       .single();
 
-    const { data: teams, error: teamsError } = await supabase.from('draft_order').select('team_id').eq('season_id', sessionData?.season_id);
-
-    if (teamsError) {
-        await logSystemEvent("CompleteDraft", "error", "Error fetching teams for post-draft actions", { error: teamsError.message });
-    }
-
-    if (teams) {
-      console.log(`Starting post-draft actions for ${teams.length} teams in session ${sessionId}...`);
-      for (const team of teams) {
-          const { success, deckId, error: deckError } = await generatePlaceholderDeck(team.team_id, sessionId);
-          
-          if (!success) {
-              await logSystemEvent("CompleteDraft", "error", `Failed to generate placeholder deck for team ${team.team_id}`, { error: deckError });
-              continue; 
-          }
-          
-          console.log(`Successfully generated placeholder deck for team ${team.team_id}.`);
-          
-          if (firstWeek && deckId) {
-              console.log(`Setting placeholder deck as official active deck for Week 1...`);
-              const submitResult = await submitDeckForWeek(deckId, team.team_id, firstWeek.id);
-              if (!submitResult.success) {
-                  await logSystemEvent("CompleteDraft", "error", `Failed to submit placeholder deck for team ${team.team_id}`, { error: submitResult.error });
-              }
-
-              console.log(`Triggering first deck vote for team ${team.team_id} for week ${firstWeek.id}`);
-              const { success: pollSuccess, error: pollError } = await createDeckVotePoll(
-                  team.team_id,
-                  firstWeek.id,
-                  firstWeek.end_date 
-              );
-              
-              if (!pollSuccess) {
-                  await logSystemEvent("CompleteDraft", "error", `Failed to create first deck vote poll for team ${team.team_id}`, { error: pollError });
-              }
-          }
-      }
-    }
-
-    // --- NEW: AUTOMATED SCHEDULE GENERATION & PHASE TRANSITION ---
+    // =========================================================================================
+    // STEP 1: AUTOMATED SCHEDULE GENERATION (Must happen BEFORE decks/polls so weeks exist!)
+    // =========================================================================================
     console.log(`[Draft Complete] Checking schedule generation...`);
     
     if (sessionData?.season_id) {
@@ -687,18 +679,15 @@ export async function completeDraft(
              console.log("[Draft Complete] Test season detected. Generating Rapid Test Schedule...");
              
              try {
-                 // 1. Fetch Teams
                  const { teams } = await getTeamsWithDetails(false);
                  const activeTeams = (teams?.filter(t => t.is_hidden !== true) || []) as TeamWithDetails[];
                  
                  if (activeTeams.length < 2) {
                      await logSystemEvent("TestScheduleGen", "error", `Not enough teams to generate test schedule for ${sessionData.season_id}`);
                  } else {
-                     // 2. Generate Matchups
                      const allMatchups = await generateSeasonMatchups(activeTeams, 5, false);
                      const weekIds: string[] = [];
                      
-                     // --- THE 20 MINUTE PRESEASON BUFFER ---
                      // The first game starts exactly 20 minutes from RIGHT NOW.
                      const baseNow = new Date(Date.now() + 20 * 60000); 
                      
@@ -707,7 +696,6 @@ export async function completeDraft(
                      const weekSpacingMs = weekDurationMs + (20 * 60000); 
                      const testSeasonNumber = parseInt(seasonName.replace(/[^0-9]/g, '')) || 999;
 
-                     // 3. Create Weeks dynamically
                      for (let i = 1; i <= 5; i++) {
                          const weekStart = new Date(baseNow.getTime() + ((i - 1) * weekSpacingMs));
                          const weekEnd = new Date(weekStart.getTime() + weekDurationMs); 
@@ -726,7 +714,6 @@ export async function completeDraft(
                          }
                      }
 
-                     // 4. Pre-stage Week 1 games
                      if (weekIds.length > 0) {
                          const week1Matchups = allMatchups.filter(m => m.week === 1);
                          let matchOffsetMinutes = 0;
@@ -751,7 +738,6 @@ export async function completeDraft(
                              }
                          }
 
-                         // 5. Pre-stage Week 2-5 empty matchups
                          for (let week = 2; week <= 5; week++) {
                               const weekMatchups = allMatchups.filter(m => m.week === week);
                               for (const matchup of weekMatchups) {
@@ -792,8 +778,61 @@ export async function completeDraft(
              }
           }
         }
+    }
 
-        // --- TRANSITION PHASE UNCONDITIONALLY ---
+    // =========================================================================================
+    // STEP 2: GENERATE PLACEHOLDER DECKS AND POLLS (Now that the weeks exist!)
+    // =========================================================================================
+    const { data: firstWeek, error: weekError } = await supabase
+        .from('schedule_weeks') 
+        .select('id, end_date') 
+        .order('start_date', { ascending: true }) 
+        .limit(1)
+        .single();
+
+    if (weekError || !firstWeek) {
+        await logSystemEvent("CompleteDraft", "error", "Could not find the first week of the season. No deck votes will be created.", { error: weekError?.message });
+    }
+
+    const { data: teams, error: teamsError } = await supabase.from('draft_order').select('team_id').eq('season_id', sessionData?.season_id);
+
+    if (teamsError) {
+        await logSystemEvent("CompleteDraft", "error", "Error fetching teams for post-draft actions", { error: teamsError.message });
+    }
+
+    if (teams) {
+      console.log(`Starting post-draft actions for ${teams.length} teams in session ${sessionId}...`);
+      for (const team of teams) {
+          const { success, deckId, error: deckError } = await generatePlaceholderDeck(team.team_id, sessionId);
+          
+          if (!success) {
+              await logSystemEvent("CompleteDraft", "error", `Failed to generate placeholder deck for team ${team.team_id}`, { error: deckError });
+              continue; 
+          }
+          
+          if (firstWeek && deckId) {
+              const submitResult = await submitDeckForWeek(deckId, team.team_id, firstWeek.id);
+              if (!submitResult.success) {
+                  await logSystemEvent("CompleteDraft", "error", `Failed to submit placeholder deck for team ${team.team_id}`, { error: submitResult.error });
+              }
+
+              const { success: pollSuccess, error: pollError } = await createDeckVotePoll(
+                  team.team_id,
+                  firstWeek.id,
+                  firstWeek.end_date 
+              );
+              
+              if (!pollSuccess) {
+                  await logSystemEvent("CompleteDraft", "error", `Failed to create first deck vote poll for team ${team.team_id}`, { error: pollError });
+              }
+          }
+      }
+    }
+
+    // =========================================================================================
+    // STEP 3: TRANSITION PHASE UNCONDITIONALLY
+    // =========================================================================================
+    if (sessionData?.season_id) {
         const { error: phaseError } = await supabase
             .from("seasons")
             .update({ 
@@ -804,8 +843,6 @@ export async function completeDraft(
             
         if (phaseError) {
              await logSystemEvent("CompleteDraft", "error", `Critical error updating season phase to preseason`, { error: phaseError.message });
-        } else {
-             console.log(`[Draft Complete] Season moved to Preseason phase.`);
         }
     }
 

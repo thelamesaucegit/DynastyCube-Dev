@@ -19,7 +19,7 @@ export interface DraftPick {
 
 // Ensure this exactly matches the shape returned by the .select() query
 interface SupabasePick {
-  id: number;
+  id: number | string; // Historical IDs are UUID strings, active are numbers
   pick_number: number;
   card_name: string;
   card_set: string | null;
@@ -28,53 +28,80 @@ interface SupabasePick {
   oldest_image_url: string | null;
   drafted_at: string; 
   team_id: string;
+  color_identity?: string[] | null; // Natively on the historical table!
   teams: {
     name: string;
   } | null;
-  // Supabase might return an object or an array of objects depending on the foreign key setup
-  card_pools: { color_identity: string[] | null; } | Array<{ color_identity: string[] | null; }> | null; 
+  card_pools?: { color_identity: string[] | null; } | Array<{ color_identity: string[] | null; }> | null; 
 }
+
 
 async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
   const supabase = await createServerClient();
-  
-  const { data, error } = await supabase
-    .from('team_draft_picks') 
-    .select(`
-      id,
-      pick_number,
-      card_name,
-      card_set,
-      rarity,
-      image_url,
-      oldest_image_url,
-      drafted_at,
-      team_id, 
-      teams ( name ),
-      card_pools:card_pool_id ( color_identity )
-    `)
-    .eq('draft_session_id', sessionId)
-    .order('pick_number', { ascending: false })
-    .returns<SupabasePick[]>(); // <-- Safely cast the raw return data to our interface
+
+  // First, check the status of the draft session
+  const { data: session } = await supabase
+    .from('draft_sessions')
+    .select('status')
+    .eq('id', sessionId)
+    .single();
+
+  let data = null;
+  let error = null;
+
+  // If the draft is COMPLETED, pull from the permanent historical table
+  if (session?.status === 'completed') {
+    const response = await supabase
+      .from('historical_draft_picks') 
+      .select(`
+        id, pick_number, card_name, card_set, rarity, image_url, oldest_image_url, 
+        drafted_at, team_id, color_identity,
+        teams ( name )
+      `)
+      .eq('draft_session_id', sessionId)
+      .order('pick_number', { ascending: false });
+      
+    data = response.data;
+    error = response.error;
+
+  } else {
+    // If the draft is ACTIVE/PAUSED/SCHEDULED, pull from the active roster
+    const response = await supabase
+      .from('team_draft_picks') 
+      .select(`
+        id, pick_number, card_name, card_set, rarity, image_url, oldest_image_url, 
+        drafted_at, team_id, color_identity,
+        teams ( name ),
+        card_pools:card_pool_id ( color_identity )
+      `)
+      .eq('draft_session_id', sessionId)
+      .order('pick_number', { ascending: false });
+      
+    data = response.data;
+    error = response.error;
+  }
 
   if (error || !data) {
     console.error('Error fetching initial draft picks:', error?.message || 'Data was null.');
     return [];
   }
   
-  // Use the interface instead of 'any'
-  return data.map((pick: SupabasePick) => {
+  return data.map((pick: any) => {
     
-    // Safely extract the color identity regardless of whether Supabase returned an array or object
-    let colorId: string[] | null = null;
-    if (Array.isArray(pick.card_pools)) {
-        colorId = pick.card_pools[0]?.color_identity || null;
-    } else if (pick.card_pools) {
-        colorId = pick.card_pools.color_identity || null;
+    // Safely extract color identity. If it's historical, it's native. If it's active, we might need the join fallback.
+    let colorId: string[] | null = pick.color_identity || null;
+    
+    if (!colorId && pick.card_pools) {
+        if (Array.isArray(pick.card_pools)) {
+            colorId = pick.card_pools[0]?.color_identity || null;
+        } else {
+            colorId = pick.card_pools.color_identity || null;
+        }
     }
 
     return {
-      id: pick.id,
+      // Force ID to number to satisfy the frontend DraftPick interface, or change the interface to accept strings
+      id: typeof pick.id === 'string' ? parseInt(pick.id.replace(/\D/g, '').substring(0, 8)) || 0 : pick.id,
       pick_number: pick.pick_number,
       card_name: pick.card_name,
       card_set: pick.card_set,
