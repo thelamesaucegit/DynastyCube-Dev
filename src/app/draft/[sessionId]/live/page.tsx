@@ -122,6 +122,7 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
       color_identity: colorId || [], 
     };
   });
+}
 
 export default async function LiveDraftPage({ params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params;
