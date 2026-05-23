@@ -503,6 +503,7 @@ export async function captainForcePick(teamId: string, cardPoolId: string, draft
         p_team_id: teamId, p_draft_session_id: draftSessionId, p_card_pool_id: card.id,
         p_card_id: card.card_id, p_card_name: card.card_name, p_card_set: card.card_set,
         p_card_type: card.card_type, p_rarity: card.rarity, p_colors: card.colors,
+        p_color_identity: card.color_identity || card.colors || [], // <-- ADD THIS LINE
         p_image_url: card.image_url, p_oldest_image_url: card.oldest_image_url,
         p_mana_cost: card.mana_cost, p_cmc: card.cmc, p_pick_number: pickNumber,
         p_cost: effectiveCost, p_is_manual_pick: true, p_user_id: user.id,
