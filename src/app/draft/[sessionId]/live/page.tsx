@@ -86,7 +86,7 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
     return [];
   }
   
-  return data.map((pick: any) => {
+  return data.map((pick: SupabasePick) => {
     
     // Safely extract color identity. If it's historical, it's native. If it's active, we might need the join fallback.
     let colorId: string[] | null = pick.color_identity || null;
