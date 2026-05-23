@@ -871,40 +871,33 @@ console.log(`[Draft Complete] Archiving picks to historical_draft_picks for sess
  * It performs a very fast check to see if a draft is active before running
  * the more expensive timer logic.
  */
-export async function handleDraftTimerCron(): Promise<{
+eexport async function handleDraftTimerCron(): Promise<{
   status: "skipped" | "processed" | "error";
   details?: string;
   error?: string;
 }> {
   const supabase = createServiceClient();   
   try {
-    // 1. Perform a highly efficient check for any active draft sessions.
-    // We only select 'id' and limit to 1 for maximum performance.
+    // 1. Perform a highly efficient check for any active OR scheduled draft sessions.
     const { data: activeSession, error: checkError } = await supabase
       .from("draft_sessions")
       .select("id")
-      .eq("status", "active")
+      .in("status", ["active", "scheduled"]) // <--- CHANGED THIS LINE
       .limit(1)
       .single();
       
     if (checkError && checkError.code !== 'PGRST116') {
-      // PGRST116 means "exactly one row was not returned", which is expected if no active session exists.
-      // Any other error should be logged.
       console.error("Cron check for active session failed:", checkError);
       return { status: "error", error: "Failed to check for active sessions." };
     }
 
-    // 2. If no active session is found, do nothing and exit. This is the main optimization.
     if (!activeSession) {
-      return { status: "skipped", details: "No active draft session found." };
+      return { status: "skipped", details: "No active or scheduled draft session found." };
     }
 
-    // 3. If an active session exists, proceed with the full timer logic.
-    console.log(`Active draft session found (${activeSession.id}). Running full draft timer check.`);
+    console.log(`Draft session found (${activeSession.id}). Running full draft timer check.`);
     const result = await checkDraftTimer(supabase);
-
     return { status: "processed", details: result.action, error: result.error };
-
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error("Unexpected error in handleDraftTimerCron:", errorMessage);
@@ -930,18 +923,40 @@ export async function checkDraftTimer(
   error?: string;
 }> {
   const supabase = adminClient ?? createServiceClient();
-
   try {
+    // Fetch the session, ensuring we pull the 'status' column too
     const { data: session, error: sessionError } = await supabase
       .from("draft_sessions")
-      .select("id, start_time, hours_per_pick, consecutive_skipped_picks, locked_at")
-      .eq("status", "active")
+      .select("id, status, start_time, hours_per_pick, consecutive_skipped_picks, locked_at")
+      .in("status", ["active", "scheduled"]) // <--- CHANGED THIS LINE
       .single();
 
     if (sessionError || !session) {
-      return { action: "none", message: "No active draft session found." };
+      return { action: "none", message: "No active or scheduled draft session found." };
     }
 
+    // --- NEW: HANDLE SCHEDULED DRAFTS ---
+    if (session.status === "scheduled") {
+        const now = new Date();
+        const startTime = new Date(session.start_time);
+        
+        if (now >= startTime) {
+            console.log(`[DraftTimer] Scheduled draft start time reached. Activating session ${session.id}.`);
+            // We already have a robust activateDraft function, let's just use it!
+            const activateResult = await activateDraft(session.id, supabase);
+            
+            if (activateResult.success) {
+                await logSystemEvent("DraftTimer", "info", `Automatically activated scheduled draft ${session.id}.`);
+                return { action: "completed", message: "Draft successfully activated." };
+            } else {
+                await logSystemEvent("DraftTimer", "error", `Failed to automatically activate draft ${session.id}.`, { error: activateResult.error });
+                return { action: "error", error: `Failed to activate draft: ${activateResult.error}` };
+            }
+        }
+        
+        // If it's scheduled but the time hasn't passed, do nothing.
+        return { action: "none", message: "Draft is scheduled but start time has not been reached." };
+    }
     // --- LOCK CHECK ---
     // If locked_at is set, check if the lock is stale (older than 30 seconds).
     if (session.locked_at) {

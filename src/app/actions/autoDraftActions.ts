@@ -404,7 +404,9 @@ export async function executeAutoDraft(
         p_team_id: teamId, p_draft_session_id: draftSessionId, p_card_pool_id: cardToAttempt.id,
         p_card_id: cardToAttempt.card_id, p_card_name: cardToAttempt.card_name,
         p_card_set: cardToAttempt.card_set, p_card_type: cardToAttempt.card_type,
-        p_rarity: cardToAttempt.rarity, p_colors: cardToAttempt.colors, p_image_url: cardToAttempt.image_url,
+        p_rarity: cardToAttempt.rarity, p_colors: cardToAttempt.colors, 
+        p_color_identity: cardToAttempt.color_identity || cardToAttempt.colors || [], // <-- ADD THIS LINE
+        p_image_url: cardToAttempt.image_url,
         p_oldest_image_url: cardToAttempt.oldest_image_url, p_mana_cost: cardToAttempt.mana_cost,
         p_cmc: cardToAttempt.cmc, p_pick_number: pickNumber, p_cost: effectiveCost,
         p_is_manual_pick: preview.source === "manual_queue", p_user_id: null,
@@ -501,6 +503,7 @@ export async function captainForcePick(teamId: string, cardPoolId: string, draft
         p_team_id: teamId, p_draft_session_id: draftSessionId, p_card_pool_id: card.id,
         p_card_id: card.card_id, p_card_name: card.card_name, p_card_set: card.card_set,
         p_card_type: card.card_type, p_rarity: card.rarity, p_colors: card.colors,
+        p_color_identity: card.color_identity || card.colors || [], // <-- ADD THIS LINE
         p_image_url: card.image_url, p_oldest_image_url: card.oldest_image_url,
         p_mana_cost: card.mana_cost, p_cmc: card.cmc, p_pick_number: pickNumber,
         p_cost: effectiveCost, p_is_manual_pick: true, p_user_id: user.id,
