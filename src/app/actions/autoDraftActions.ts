@@ -278,15 +278,23 @@ export async function computeAutoDraftPick(
 
             let affinity = 1;
 
-            if (isLand) {
-                // LANDS: They *provide* mana. They are as valuable as your HIGHEST affinity 
-                // for the colors they produce.
+                        if (isLand) {
+                // LANDS: Start at 1.0 base, and add the excess (or deficit) for each color.
+                // This brilliantly rewards overlapping colors while organically penalizing dead colors.
                 if (identityColors.length > 0) {
-                    affinity = Math.max(...identityColors.map(c => colorModifiers[c] || 1));
+                    affinity = 1.0 + identityColors.reduce((sum, c) => {
+                        const mod = colorModifiers[c] || 1;
+                        return sum + (mod - 1.0); // Add the amount it exceeds or falls short of 1.0
+                    }, 0);
+                    
+                    // Clamp to a safe minimum to prevent 0 or negative ELOs on totally off-color lands
+                    affinity = Math.max(0.25, affinity);
                 } else {
+                    // True colorless utility lands
                     affinity = maxTeamAffinity;
                 }
             } else {
+ 
                 // NON-LAND SPELLS: They *require* mana.
                 if (castColors.length > 1) {
                     // Multi-colored cast: Constrained by your WEAKEST affinity among its casting colors
