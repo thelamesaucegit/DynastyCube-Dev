@@ -671,7 +671,7 @@ export async function completeDraft(
          try {
              // WRAPPED IN TRY/CATCH: If these functions use cookies, they will throw. 
              // We catch it so they don't break the schedule generator below!
-             const { success, deckId, error: deckError } = await generatePlaceholderDeck(team.team_id, sessionId);
+const { success, deckId, error: deckError } = await generatePlaceholderDeck(team.team_id, sessionId, supabase);
              
              if (!success) {
                  await logSystemEvent("CompleteDraft", "error", `Failed to generate placeholder deck for team ${team.team_id}`, { error: deckError });
@@ -679,14 +679,14 @@ export async function completeDraft(
              }
              
              if (firstWeek && deckId) {
-                 const submitResult = await submitDeckForWeek(deckId, team.team_id, firstWeek.id);
+const submitResult = await submitDeckForWeek(deckId, team.team_id, firstWeek.id, supabase);
                  if (!submitResult.success) {
                      await logSystemEvent("CompleteDraft", "error", `Failed to submit placeholder deck for team ${team.team_id}`, { error: submitResult.error });
                  }
 
-                 const { success: pollSuccess, error: pollError } = await createDeckVotePoll(
-                     team.team_id, firstWeek.id, firstWeek.end_date 
-                 );
+const { success: pollSuccess, error: pollError } = await createDeckVotePoll(
+    team.team_id, firstWeek.id, firstWeek.end_date, supabase 
+);
                  
                  if (!pollSuccess) {
                      await logSystemEvent("CompleteDraft", "error", `Failed to create first deck vote poll for team ${team.team_id}`, { error: pollError });
