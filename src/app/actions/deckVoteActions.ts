@@ -1,6 +1,7 @@
 //src/app/actions/deckVoteActions.ts
 
 "use server";
+import { type AnySupabaseClient } from "@/lib/supabase";
 
 import { createClient } from "@supabase/supabase-js";
 import { submitDeckForWeek } from "./deckGenerationActions";
@@ -49,7 +50,7 @@ export async function createDeckVotePoll(
     teamId: string,
     weekId: string,
     pollEndsAt: string,
-    adminClient?: any 
+    adminClient?: AnySupabaseClient
 ): Promise<{ success: boolean; pollId?: string; error?: string }> {
     const supabase = adminClient ?? createServiceClient();
 
