@@ -80,11 +80,11 @@ function formatAsDck(
 export async function generatePlaceholderDeck(
     teamId: string,
     draftSessionId?: string,
-    adminClient?: AnySupabaseClient
+    adminClient?: any // Add this
 ): Promise<{ success: boolean; deckId?: string; summary?: object; error?: string }> {
-    const supabase = adminClient ?? createServiceClient(); // <-- USE ADMIN CLIENT IF PROVIDED
-
-
+    // USE THE PASSED CLIENT!
+    const supabase = adminClient ?? createServiceClient(); 
+    
     try {
         // 1. Fetch active season's budget cap
         const { data: season, error: seasonError } = await supabase
@@ -297,11 +297,11 @@ export async function submitDeckForWeek(
     deckId: string,
     teamId: string,
     weekId: string,
-    adminClient?: AnySupabaseClient
+    adminClient?: any // Add this
 ): Promise<{ success: boolean; submissionId?: string; error?: string }> {
-    const supabase = adminClient ?? createServiceClient(); // <-- USE ADMIN CLIENT IF PROVIDED
-
-
+    // USE THE PASSED CLIENT!
+    const supabase = adminClient ?? createServiceClient();
+    
     try {
         // 1. Fetch mainboard cards for this deck
         const { data: cards, error: cardsError } = await supabase
