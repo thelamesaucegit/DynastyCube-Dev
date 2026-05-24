@@ -239,7 +239,7 @@ export async function computeAutoDraftPick(
     const evaluationPool = rawSortedPool.slice(0, TOP_N_POOL_SIZE);
     // ---------------------------
 
-    const LAND_ELO_MODIFIER = 0.85; 
+    const LAND_ELO_MODIFIER = 0.88; 
 
     // --- EXPONENTIAL DECAY CONSTANTS ---
     const BASE_BONUS = 0.03; 
@@ -276,6 +276,12 @@ export async function computeAutoDraftPick(
     const sortedCandidates = evaluationPool
         .map(card => {
             let elo = card.cubecobra_elo || DEFAULT_ELO;
+             // --- NEW: ELO FUZZING ---
+            // Introduce a random variance between -15 and +15 to the base ELO.
+            // This blurs the lines between mathematically identical cards, 
+            // making the bot pick less rigidly and more like a human with slight preferences.
+            const fuzzAmount = Math.floor(Math.random() * 31) - 15; // Random integer between -15 and 15
+            elo += fuzzAmount;
             
             // Slight, flat penalty on lands so teams prioritize 
             // spells over fixing in round 1, but let affinity do the rest of the work.
