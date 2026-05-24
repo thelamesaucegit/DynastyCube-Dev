@@ -80,7 +80,7 @@ function formatAsDck(
 export async function generatePlaceholderDeck(
     teamId: string,
     draftSessionId?: string,
-    adminClient?: any // Add this
+    adminClient?: AnySupabaseClient
 ): Promise<{ success: boolean; deckId?: string; summary?: object; error?: string }> {
     // USE THE PASSED CLIENT!
     const supabase = adminClient ?? createServiceClient(); 
@@ -297,7 +297,7 @@ export async function submitDeckForWeek(
     deckId: string,
     teamId: string,
     weekId: string,
-    adminClient?: any // Add this
+    adminClient?: AnySupabaseClient
 ): Promise<{ success: boolean; submissionId?: string; error?: string }> {
     // USE THE PASSED CLIENT!
     const supabase = adminClient ?? createServiceClient();
