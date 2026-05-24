@@ -650,55 +650,20 @@ export async function completeDraft(
       await logSystemEvent("CompleteDraft", "error", "Failed to move undrafted cards to The Wire", { error: wireError.message });
     }
 
-    const { data: firstWeek } = await supabase
-        .from('schedule_weeks') 
-        .select('id, end_date') 
-        .order('start_date', { ascending: true }) 
-        .limit(1)
-        .single();
-
     const { data: sessionData } = await supabase
       .from('draft_sessions')
-      .select(`season_id, seasons ( season_name )`)
+      .select(`
+        season_id,
+        seasons ( season_name )
+      `)
       .eq('id', sessionId)
       .single();
 
-    const { data: teams } = await supabase.from('draft_order').select('team_id').eq('season_id', sessionData?.season_id);
-
-    if (teams) {
-      console.log(`Starting post-draft actions for ${teams.length} teams in session ${sessionId}...`);
-      for (const team of teams) {
-         try {
-             // WRAPPED IN TRY/CATCH: If these functions use cookies, they will throw. 
-             // We catch it so they don't break the schedule generator below!
-const { success, deckId, error: deckError } = await generatePlaceholderDeck(team.team_id, sessionId, supabase);
-             
-             if (!success) {
-                 await logSystemEvent("CompleteDraft", "error", `Failed to generate placeholder deck for team ${team.team_id}`, { error: deckError });
-                 continue; 
-             }
-             
-             if (firstWeek && deckId) {
-const submitResult = await submitDeckForWeek(deckId, team.team_id, firstWeek.id, supabase);
-                 if (!submitResult.success) {
-                     await logSystemEvent("CompleteDraft", "error", `Failed to submit placeholder deck for team ${team.team_id}`, { error: submitResult.error });
-                 }
-
-const { success: pollSuccess, error: pollError } = await createDeckVotePoll(
-    team.team_id, firstWeek.id, firstWeek.end_date, supabase 
-);
-                 
-                 if (!pollSuccess) {
-                     await logSystemEvent("CompleteDraft", "error", `Failed to create first deck vote poll for team ${team.team_id}`, { error: pollError });
-                 }
-             }
-         } catch (deckErr) {
-             await logSystemEvent("CompleteDraft", "error", `Crash during deck generation for team ${team.team_id}`, { error: String(deckErr) });
-         }
-      }
-    }
-
+    // =========================================================================================
+    // STEP 1: AUTOMATED SCHEDULE GENERATION (Must happen BEFORE decks/polls so weeks exist!)
+    // =========================================================================================
     console.log(`[Draft Complete] Checking schedule generation...`);
+    
     if (sessionData?.season_id) {
         const [weeksResult, seasonResult] = await Promise.all([
           getScheduleWeeks(sessionData.season_id),
@@ -709,10 +674,12 @@ const { success: pollSuccess, error: pollError } = await createDeckVotePoll(
           const seasonObj = Array.isArray(sessionData.seasons) ? sessionData.seasons[0] : sessionData.seasons;
           const seasonName = seasonObj?.season_name || "";
           
-          if (seasonName.toUpperCase().includes("TEST")) {
+          const isTestSeason = seasonName.toUpperCase().includes("TEST");
+
+          if (isTestSeason) {
              console.log("[Draft Complete] Test season detected. Generating Rapid Test Schedule...");
+             
              try {
-                 // FIX: Pass the supabase admin client to avoid the cookie error!
                  const { teams } = await getTeamsWithDetails(false, supabase);
                  const activeTeams = (teams?.filter(t => t.is_hidden !== true) || []) as TeamWithDetails[];
                  
@@ -722,7 +689,9 @@ const { success: pollSuccess, error: pollError } = await createDeckVotePoll(
                      const allMatchups = await generateSeasonMatchups(activeTeams, 5, false);
                      const weekIds: string[] = [];
                      
+                     // The first game starts exactly 20 minutes from RIGHT NOW.
                      const baseNow = new Date(Date.now() + 20 * 60000); 
+                     
                      const matchupsPerWeek = Math.floor(activeTeams.length / 2);
                      const weekDurationMs = matchupsPerWeek * 3 * 20 * 60000;
                      const weekSpacingMs = weekDurationMs + (20 * 60000); 
@@ -751,11 +720,13 @@ const { success: pollSuccess, error: pollError } = await createDeckVotePoll(
                          let matchOffsetMinutes = 0;
                          
                          for (const matchup of week1Matchups) {
-                             const { data: matchupRecord } = await supabase.from('weekly_matchups').insert({
+                             const { data: matchupRecord, error: matchError } = await supabase.from('weekly_matchups').insert({
                                  season_id: sessionData.season_id, week_number: 1, team1_id: matchup.teamAId, team2_id: matchup.teamBId, is_playoff: false
                              }).select('id').single();
                              
-                             if (matchupRecord) {
+                             if (matchError) {
+                                 await logSystemEvent("TestScheduleGen", "error", `Failed to insert Week 1 matchup`, { error: matchError.message });
+                             } else if (matchupRecord) {
                                  for (let i = 0; i < 3; i++) {
                                      const matchDate = new Date(baseNow.getTime() + (matchOffsetMinutes * 60000));
                                      await supabase.from('schedule').insert({
@@ -796,39 +767,19 @@ const { success: pollSuccess, error: pollError } = await createDeckVotePoll(
              const regularWeeksCount = weeksResult.weeks.filter(w => !w.is_playoff_week && !w.is_championship_week).length;
             
              const schedResult = await generateFullSeasonSchedule(
-               sessionData.season_id, regularWeeksCount, seasonResult.season.has_rivals_week
+               sessionData.season_id, 
+               regularWeeksCount, 
+               seasonResult.season.has_rivals_week
              );
             
-             if (!schedResult.success) {
+             if (schedResult.success) {
+               console.log(`[Draft Complete] Successfully generated ${schedResult.scheduledGamesCount} games.`);
+             } else {
                await logSystemEvent("CompleteDraft", "error", `Normal schedule generation failed`, { error: schedResult.error });
              }
           }
         }
-
-        const { error: phaseError } = await supabase
-            .from("seasons")
-            .update({ phase: "preseason", phase_changed_at: new Date().toISOString() })
-            .eq("id", sessionData.season_id);
-            
-        if (phaseError) {
-             await logSystemEvent("CompleteDraft", "error", `Critical error updating season phase`, { error: phaseError.message });
-        }
     }
-
-    await supabase.rpc("notify_all_users_draft", {
-      p_notification_type: "draft_completed",
-      p_message: "The draft has concluded. The league is now in the Preseason phase!",
-    });
-
-    await logSystemEvent("CompleteDraft", "info", `Draft ${sessionId} fully completed and transitioned successfully.`);
-
-    return { success: true };
-  } catch (error) {
-    const errString = String(error);
-    await logSystemEvent("CompleteDraft", "error", "Unexpected fatal error completing draft", { error: errString });
-    return { success: false, error: errString };
-  }
-}
 
     // =========================================================================================
     // STEP 2: GENERATE PLACEHOLDER DECKS AND POLLS (Now that the weeks exist!)
@@ -853,29 +804,35 @@ const { success: pollSuccess, error: pollError } = await createDeckVotePoll(
     if (teams) {
       console.log(`Starting post-draft actions for ${teams.length} teams in session ${sessionId}...`);
       for (const team of teams) {
-          const { success, deckId, error: deckError } = await generatePlaceholderDeck(team.team_id, sessionId);
-          
-          if (!success) {
-              await logSystemEvent("CompleteDraft", "error", `Failed to generate placeholder deck for team ${team.team_id}`, { error: deckError });
-              continue; 
-          }
-          
-          if (firstWeek && deckId) {
-              const submitResult = await submitDeckForWeek(deckId, team.team_id, firstWeek.id);
-              if (!submitResult.success) {
-                  await logSystemEvent("CompleteDraft", "error", `Failed to submit placeholder deck for team ${team.team_id}`, { error: submitResult.error });
-              }
+         try {
+             // Pass supabase to avoid cookie errors!
+             const { success, deckId, error: deckError } = await generatePlaceholderDeck(team.team_id, sessionId, supabase);
+             
+             if (!success) {
+                 await logSystemEvent("CompleteDraft", "error", `Failed to generate placeholder deck for team ${team.team_id}`, { error: deckError });
+                 continue; 
+             }
+             
+             if (firstWeek && deckId) {
+                 const submitResult = await submitDeckForWeek(deckId, team.team_id, firstWeek.id, supabase);
+                 if (!submitResult.success) {
+                     await logSystemEvent("CompleteDraft", "error", `Failed to submit placeholder deck for team ${team.team_id}`, { error: submitResult.error });
+                 }
 
-              const { success: pollSuccess, error: pollError } = await createDeckVotePoll(
-                  team.team_id,
-                  firstWeek.id,
-                  firstWeek.end_date 
-              );
-              
-              if (!pollSuccess) {
-                  await logSystemEvent("CompleteDraft", "error", `Failed to create first deck vote poll for team ${team.team_id}`, { error: pollError });
-              }
-          }
+                 const { success: pollSuccess, error: pollError } = await createDeckVotePoll(
+                     team.team_id,
+                     firstWeek.id,
+                     firstWeek.end_date,
+                     supabase
+                 );
+                 
+                 if (!pollSuccess) {
+                     await logSystemEvent("CompleteDraft", "error", `Failed to create first deck vote poll for team ${team.team_id}`, { error: pollError });
+                 }
+             }
+         } catch (deckErr) {
+             await logSystemEvent("CompleteDraft", "error", `Crash during deck generation for team ${team.team_id}`, { error: String(deckErr) });
+         }
       }
     }
 
@@ -910,6 +867,7 @@ const { success: pollSuccess, error: pollError } = await createDeckVotePoll(
     return { success: false, error: errString };
   }
 }
+
 
 // ============================================================================
 // AUTO-DRAFT TIMER CHECK
