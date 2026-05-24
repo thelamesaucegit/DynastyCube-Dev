@@ -79,9 +79,11 @@ function formatAsDck(
  */
 export async function generatePlaceholderDeck(
     teamId: string,
-    draftSessionId?: string
+    draftSessionId?: string,
+    adminClient?: any // <-- ADD THIS
 ): Promise<{ success: boolean; deckId?: string; summary?: object; error?: string }> {
-    const supabase = createServiceClient();
+    const supabase = adminClient ?? createServiceClient(); // <-- USE ADMIN CLIENT IF PROVIDED
+
 
     try {
         // 1. Fetch active season's budget cap
