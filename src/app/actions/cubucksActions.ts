@@ -1106,6 +1106,7 @@ export async function createTestSeason(): Promise<{ success: boolean; seasonId?:
     const supabase = await createServerClient();
     try {
         await logSystemEvent("TestSeasonCreation", "info", "Starting automated test season creation process.");
+        
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
             return { success: false, error: "Not authenticated" };
@@ -1125,7 +1126,23 @@ export async function createTestSeason(): Promise<{ success: boolean; seasonId?:
 
         await supabase.from("seasons").update({ is_active: false }).neq("id", seasonId);
 
-        // 1.2 Allocate Cubucks
+        // --- NEW STEP 1.1: UNDRAFT ALL CARDS ---
+        await logSystemEvent("TestSeasonCreation", "info", "Wiping previous team rosters...");
+        const { error: deleteRostersError } = await supabase.from("team_draft_picks").delete().not("id", "is", null);
+        if (deleteRostersError) throw new Error(`Failed to clear rosters: ${deleteRostersError.message}`);
+
+        const { error: resetDraftedError } = await supabase.from("card_pools").update({ was_drafted: false, times_drafted: 0 }).eq("was_drafted", true);
+        if (resetDraftedError) throw new Error(`Failed to reset was_drafted flags: ${resetDraftedError.message}`);
+
+        // --- NEW STEP 1.2: MOVE ALL WIRE/FREE AGENT CARDS BACK TO DRAFT POOL ---
+        await logSystemEvent("TestSeasonCreation", "info", "Moving all cards back to the draft pool...");
+        const { error: restorePoolError } = await supabase
+            .from("card_pools")
+            .update({ pool_name: 'draft' })
+            .in('pool_name', ['wire', 'free_agents']); // Or 'free', depending on your exact string
+        if (restorePoolError) throw new Error(`Failed to restore draft pool: ${restorePoolError.message}`);
+
+        // 1.3 Allocate Cubucks
         const allocResult = await allocateCubucksToAllTeams(100);
         if (!allocResult.success) throw new Error(`Failed to allocate Cubucks: ${allocResult.error}`);
 
@@ -1140,7 +1157,6 @@ export async function createTestSeason(): Promise<{ success: boolean; seasonId?:
         });
         if (draftSessionError) throw new Error(`Draft session error: ${draftSessionError.message}`);
 
-        // Schedule generation has been moved to completeDraft
         await logSystemEvent("TestSeasonCreation", "info", "Test Season initialized. Draft scheduled.");
         return { success: true, seasonId };
     } catch (error) {
