@@ -618,6 +618,8 @@ export async function completeDraft(
                 image_url: pick.image_url,
                 oldest_image_url: pick.oldest_image_url,
                 mana_cost: pick.mana_cost,
+               effective_elo: pick.effective_elo,
+              algorithm_details: pick.algorithm_details,
                 cmc: pick.cmc,
                 pick_number: pick.pick_number,
                 pick_source: pick.pick_source,

@@ -25,17 +25,26 @@ function createServiceClient() {
 // ============================================================================
 // TYPES
 // ============================================================================
-
 export interface AlgorithmDetails {
-  top50CardIds: string[];
-  colorTotals: Record<string, number>;
-  colorAffinityModifiers: Record<string, number>;
-  bestColoredCard: { cardId: string; cardName: string; elo: number; color: string } | null;
-  bestColorlessCard: { cardId: string; cardName: string; elo: number } | null;
-  selectedSource: "colored" | "colorless" | "none";
-  teamDraftedColorCounts: Record<string, number>;
-  dominantColor: string | null;
+  // --- Legacy Properties (Kept to prevent UI/Frontend TS errors) ---
+  top50CardIds?: string[];
+  colorTotals?: Record<string, number>;
+  colorAffinityModifiers?: Record<string, number>;
+  bestColoredCard?: { cardId: string; cardName: string; elo: number; color: string } | null;
+  bestColorlessCard?: { cardId: string; cardName: string; elo: number } | null;
+  selectedSource?: "colored" | "colorless" | "none";
+  teamDraftedColorCounts?: Record<string, number>;
+  dominantColor?: string | null;
+ // --- New JSON Math Snapshot Properties ---
+  base_elo?: number;
+  effective_elo?: number;
+  affinity_multiplier?: number;
+  color_counts?: Record<string, number>;
+  color_modifiers?: Record<string, number>;
+  is_land?: boolean;
+  land_penalty?: number;
 }
+
 
 export interface QueueEntry {
   id?: string; cardPoolId: string; cardId: string; cardName: string; position: number; pinned: boolean;
@@ -316,9 +325,27 @@ export async function computeAutoDraftPick(
         })
         .sort((a, b) => b.effective_elo - a.effective_elo);
 
-    const bestPick = sortedCandidates[0] || null;
+     const bestPick = sortedCandidates[0] || null;
+    
+    let algoDetails: AlgorithmDetails | null = null;
+    if (bestPick) {
+        const baseElo = bestPick.cubecobra_elo || DEFAULT_ELO;
+        const isLand = bestPick.card_type?.toLowerCase().includes('land') || false;
+        const landPenalty = isLand ? LAND_ELO_MODIFIER : 1;
+        const affinityMultiplier = bestPick.effective_elo / (baseElo * landPenalty);
+        
+        algoDetails = {
+            base_elo: baseElo,
+            effective_elo: bestPick.effective_elo,
+            affinity_multiplier: affinityMultiplier,
+            color_counts: colorCounts,
+            color_modifiers: colorModifiers,
+            is_land: isLand,
+            land_penalty: landPenalty
+        };
+    }
 
-    return { recommendation: bestPick, algorithmDetails: null };
+    return { recommendation: bestPick, algorithmDetails: algoDetails };
   } catch (error) {
     console.error("Error computing auto-draft pick:", error);
     return { recommendation: null, algorithmDetails: null, error: "Failed to compute auto-draft pick" };
@@ -445,9 +472,18 @@ export async function executeAutoDraft(
 
     const pickSource = preview.source === "manual_queue" ? "manual_queue" : "algorithm";
     
-    if (newPick.id) {
-        await supabase.from("team_draft_picks").update({ pick_source: pickSource }).eq("id", newPick.id);
+       if (newPick.id) {
+        const calculatedElo = (cardToAttempt as typeof cardToAttempt & { effective_elo?: number }).effective_elo 
+                              || cardToAttempt.cubecobra_elo 
+                              || null;
+
+        await supabase.from("team_draft_picks").update({ 
+            pick_source: pickSource,
+            effective_elo: calculatedElo,
+            algorithm_details: preview.algorithmDetails || null 
+        }).eq("id", newPick.id);
     }
+
     
     await conditionallyCleanupDraftQueues(cardToAttempt.card_id, supabase);
     
