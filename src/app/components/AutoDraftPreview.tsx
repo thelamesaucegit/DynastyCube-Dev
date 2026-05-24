@@ -209,113 +209,82 @@ export function AutoDraftPreview({
 }
 
 function AlgorithmDetailsPanel({ details }: { details: AlgorithmDetails }) {
-  const maxTotal = Math.max(...Object.values(details.colorTotals), 1);
+  // Use the new properties if available, fallback to legacy if somehow loaded from old cache
+  const colorCounts = details.color_counts || details.teamDraftedColorCounts || { W: 0, U: 0, B: 0, R: 0, G: 0 };
+  const colorModifiers = details.color_modifiers || details.colorAffinityModifiers || { W: 1, U: 1, B: 1, R: 1, G: 1 };
+  
+  const baseElo = details.base_elo || 1000;
+  const effectiveElo = details.effective_elo || baseElo;
+  const multiplier = details.affinity_multiplier || (effectiveElo / baseElo);
+  const isLand = details.is_land || false;
+  const landPenalty = details.land_penalty || 1;
+
   return (
     <div className="mt-3 space-y-4 text-sm">
-      {/* Color ELO Totals */}
+      {/* Team Color Counts & Modifiers */}
       <div>
         <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-2">
-          Color ELO Totals (Top 50 Cards)
+          Team Color Affinity
         </h5>
         <div className="space-y-2">
           {(["W", "U", "B", "R", "G"] as const).map((color) => {
-            const total = details.colorTotals[color] || 0;
-            const modifier = details.colorAffinityModifiers[color] || 1;
-            const isDominant = color === details.dominantColor;
+            const count = colorCounts[color] || 0;
+            const modifier = colorModifiers[color] || 1;
             const colorInfo = COLOR_LABELS[color];
-            const barWidth = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+            
+            // Highlight the strongest color(s)
+            const isDominant = modifier === Math.max(...Object.values(colorModifiers));
+
             return (
-              <div key={color} className={`rounded p-2 ${isDominant ? "bg-accent" : ""}`}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="flex items-center gap-1">
-                    <span>{colorInfo.emoji}</span>
-                    <span className={`font-medium ${isDominant ? "text-foreground" : "text-muted-foreground"}`}>
-                      {colorInfo.label}
-                    </span>
-                    {isDominant && (
-                      <Badge className="text-[10px] px-1 py-0 bg-purple-500/15 text-purple-600 dark:text-purple-400">
-                        Dominant
-                      </Badge>
-                    )}
+              <div key={color} className={`rounded p-2 flex items-center justify-between ${isDominant ? "bg-accent/50" : "bg-muted/30"}`}>
+                <span className="flex items-center gap-2">
+                  <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs ${colorInfo.className}`}>
+                     {colorInfo.emoji}
                   </span>
-                  <span className="text-xs text-muted-foreground">
-                    {Math.round(total).toLocaleString()}
-                    {modifier > 1 && (
-                      <span className="text-green-600 dark:text-green-400 ml-1">
-                        ×{modifier.toFixed(2)}
-                      </span>
-                    )}
+                  <span className={`font-medium ${isDominant ? "text-foreground" : "text-muted-foreground"}`}>
+                    {colorInfo.label} ({count} drafted)
                   </span>
-                </div>
-                <div className="w-full bg-muted rounded-full h-1.5">
-                  <div
-                    className={`h-1.5 rounded-full transition-all ${isDominant ? "bg-purple-500" : "bg-muted-foreground/30"}`}
-                    style={{ width: `${barWidth}%` }}
-                  />
-                </div>
+                </span>
+                <span className={`text-xs font-mono font-bold ${modifier > 1 ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
+                  ×{modifier.toFixed(2)}
+                </span>
               </div>
             );
           })}
         </div>
       </div>
-      {/* Team Color Affinity */}
+
+      {/* Math Breakdown */}
       <div>
         <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-2">
-          Drafted Cards by Color
+          Calculated ELO Breakdown
         </h5>
-        <div className="flex flex-wrap gap-2">
-          {(["W", "U", "B", "R", "G"] as const).map((color) => {
-            const count = details.teamDraftedColorCounts[color] || 0;
-            const colorInfo = COLOR_LABELS[color];
-            return (
-              <span
-                key={color}
-                className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${colorInfo.className}`}
-              >
-                {colorInfo.emoji} {count}
-              </span>
-            );
-          })}
+        <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-lg p-2 border border-border bg-muted/20">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Base ELO</div>
+              <div className="font-medium">{Math.round(baseElo).toLocaleString()}</div>
+            </div>
+            
+            <div className="rounded-lg p-2 border border-border bg-muted/20">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">
+                {isLand ? `Land Mod (×${landPenalty.toFixed(2)})` : "Affinity Mod"}
+              </div>
+              <div className={`font-medium ${multiplier > 1 ? "text-green-600 dark:text-green-400" : ""}`}>
+                ×{multiplier.toFixed(2)}
+              </div>
+            </div>
+
+            <div className="rounded-lg p-2 border border-purple-500/30 bg-purple-500/10">
+              <div className="text-[10px] text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-1">Final ELO</div>
+              <div className="font-bold text-purple-700 dark:text-purple-300">
+                {Math.round(effectiveElo).toLocaleString()}
+              </div>
+            </div>
         </div>
       </div>
-      {/* Best Picks Comparison */}
-      <div>
-        <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-2">
-          Pick Decision
-        </h5>
-        <div className="grid grid-cols-2 gap-2">
-          {details.bestColoredCard && (
-            <div className={`rounded-lg p-2 border ${details.selectedSource === "colored" ? "border-green-500/40 bg-green-500/5" : "border-border"}`}>
-              <div className="text-xs text-muted-foreground mb-1">Best Colored</div>
-              <div className="font-medium text-sm">{details.bestColoredCard.cardName}</div>
-              <div className="text-xs text-muted-foreground">
-                ELO: {details.bestColoredCard.elo.toLocaleString()} ({COLOR_LABELS[details.bestColoredCard.color]?.emoji} {COLOR_LABELS[details.bestColoredCard.color]?.label})
-              </div>
-              {details.selectedSource === "colored" && (
-                <Badge className="text-[10px] mt-1 bg-green-500/15 text-green-600 dark:text-green-400 border-green-500/30">
-                  Selected
-                </Badge>
-              )}
-            </div>
-          )}
-          {details.bestColorlessCard && (
-            <div className={`rounded-lg p-2 border ${details.selectedSource === "colorless" ? "border-green-500/40 bg-green-500/5" : "border-border"}`}>
-              <div className="text-xs text-muted-foreground mb-1">Best Colorless</div>
-              <div className="font-medium text-sm">{details.bestColorlessCard.cardName}</div>
-              <div className="text-xs text-muted-foreground">
-                ELO: {details.bestColorlessCard.elo.toLocaleString()}
-              </div>
-              {details.selectedSource === "colorless" && (
-                <Badge className="text-[10px] mt-1 bg-green-500/15 text-green-600 dark:text-green-400 border-green-500/30">
-                  Selected
-                </Badge>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        Analyzed {details.top50CardIds.length} top ELO cards. Color modifier: ×1.01 per drafted card in that color.
+
+      <p className="text-[10px] text-muted-foreground leading-tight">
+        Analyzed Top 50 cards by raw ELO. Base multiplier +0.05 per drafted color (decaying by 0.99). Lands evaluate overlapping identities. Non-lands evaluate strictest casting cost.
       </p>
     </div>
   );
