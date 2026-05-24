@@ -445,9 +445,18 @@ export async function executeAutoDraft(
 
     const pickSource = preview.source === "manual_queue" ? "manual_queue" : "algorithm";
     
-    if (newPick.id) {
-        await supabase.from("team_draft_picks").update({ pick_source: pickSource }).eq("id", newPick.id);
+        if (newPick.id) {
+        // Extract the calculated ELO from the algorithm, or fallback to the base ELO for manual queue picks
+        const calculatedElo = (cardToAttempt as typeof cardToAttempt & { effective_elo?: number }).effective_elo 
+                              || cardToAttempt.cubecobra_elo 
+                              || null;
+
+        await supabase.from("team_draft_picks").update({ 
+            pick_source: pickSource,
+            effective_elo: calculatedElo
+        }).eq("id", newPick.id);
     }
+
     
     await conditionallyCleanupDraftQueues(cardToAttempt.card_id, supabase);
     
