@@ -48,9 +48,10 @@ interface PollSummary {
 export async function createDeckVotePoll(
     teamId: string,
     weekId: string,
-    pollEndsAt: string
+    pollEndsAt: string,
+    adminClient?: any 
 ): Promise<{ success: boolean; pollId?: string; error?: string }> {
-    const supabase = createServiceClient();
+    const supabase = adminClient ?? createServiceClient();
 
     try {
         const { data: team, error: teamError } = await supabase

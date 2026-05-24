@@ -571,7 +571,7 @@ export async function completeDraft(
   try {
     const supabase = adminClient ?? await createServerClient();
     
-    // Skip auth check when called via service-role admin client (e.g. background timer)
+    // Skip auth check when called via service-role admin client
     if (!adminClient) {
       const admin = await verifyAdmin(supabase as Awaited<ReturnType<typeof createServerClient>>);
       if (!admin.authorized) {
@@ -593,55 +593,56 @@ export async function completeDraft(
       await logSystemEvent("CompleteDraft", "error", `Failed to update draft session status for ${sessionId}`, { error: error.message });
       return { success: false, error: error.message };
     }
-console.log(`[Draft Complete] Archiving picks to historical_draft_picks for session ${sessionId}...`);
-    
-    // 1. Fetch all active picks for this session
-    const { data: activePicks, error: fetchPicksError } = await supabase
-        .from('team_draft_picks')
-        .select('*')
-        .eq('draft_session_id', sessionId);
-        
-    if (fetchPicksError) {
-        await logSystemEvent("CompleteDraft", "error", `Failed to fetch active picks for archiving.`, { error: fetchPicksError.message });
-    } else if (activePicks && activePicks.length > 0) {
-        // 2. Map them to match the historical table schema
-        const historicalPayload = activePicks.map(pick => ({
-            draft_session_id: pick.draft_session_id,
-            team_id: pick.team_id,
-            card_id: pick.card_id,
-            card_name: pick.card_name,
-            card_set: pick.card_set,
-            card_type: pick.card_type,
-            rarity: pick.rarity,
-            colors: pick.colors,
-            color_identity: pick.color_identity,
-            image_url: pick.image_url,
-            oldest_image_url: pick.oldest_image_url,
-            mana_cost: pick.mana_cost,
-            cmc: pick.cmc,
-            pick_number: pick.pick_number,
-            pick_source: pick.pick_source,
-            drafted_at: pick.drafted_at || new Date().toISOString()
-        }));
 
-        // 3. Bulk insert them into the ledger
-        const { error: archiveError } = await supabase
-            .from('historical_draft_picks')
-            .insert(historicalPayload);
+    // --- RESTORED: ARCHIVE DRAFT PICKS ---
+    console.log(`[Draft Complete] Archiving picks to historical_draft_picks for session ${sessionId}...`);
+    try {
+        const { data: activePicks, error: fetchPicksError } = await supabase
+            .from('team_draft_picks')
+            .select('*')
+            .eq('draft_session_id', sessionId);
             
-        if (archiveError) {
-            await logSystemEvent("CompleteDraft", "error", `Failed to bulk insert historical picks.`, { error: archiveError.message });
-        } else {
-            console.log(`[Draft Complete] Successfully archived ${historicalPayload.length} picks.`);
+        if (fetchPicksError) {
+            await logSystemEvent("CompleteDraft", "error", `Failed to fetch active picks for archiving.`, { error: fetchPicksError.message });
+        } else if (activePicks && activePicks.length > 0) {
+            const historicalPayload = activePicks.map(pick => ({
+                draft_session_id: pick.draft_session_id,
+                team_id: pick.team_id,
+                card_id: pick.card_id,
+                card_name: pick.card_name,
+                card_set: pick.card_set,
+                card_type: pick.card_type,
+                rarity: pick.rarity,
+                colors: pick.colors,
+                color_identity: pick.color_identity,
+                image_url: pick.image_url,
+                oldest_image_url: pick.oldest_image_url,
+                mana_cost: pick.mana_cost,
+                cmc: pick.cmc,
+                pick_number: pick.pick_number,
+                pick_source: pick.pick_source,
+                drafted_at: pick.drafted_at || new Date().toISOString()
+            }));
+
+            const { error: archiveError } = await supabase
+                .from('historical_draft_picks')
+                .insert(historicalPayload);
+                
+            if (archiveError) {
+                await logSystemEvent("CompleteDraft", "error", `Failed to bulk insert historical picks.`, { error: archiveError.message });
+            } else {
+                console.log(`[Draft Complete] Successfully archived ${historicalPayload.length} picks.`);
+            }
         }
+    } catch (archiveErr) {
+        await logSystemEvent("CompleteDraft", "error", `Fatal error during archiving.`, { error: String(archiveErr) });
     }
+    // ------------------------------------
+
     console.log(`Draft ${sessionId} completed. Moving undrafted cards to The Wire.`);
     const { error: wireError } = await supabase
       .from('card_pools')
-      .update({ 
-        pool_name: 'wire', 
-        on_wire_since: new Date().toISOString() 
-      })
+      .update({ pool_name: 'wire', on_wire_since: new Date().toISOString() })
       .eq('pool_name', 'draft')
       .eq('was_drafted', false);
     
@@ -649,20 +650,55 @@ console.log(`[Draft Complete] Archiving picks to historical_draft_picks for sess
       await logSystemEvent("CompleteDraft", "error", "Failed to move undrafted cards to The Wire", { error: wireError.message });
     }
 
+    const { data: firstWeek } = await supabase
+        .from('schedule_weeks') 
+        .select('id, end_date') 
+        .order('start_date', { ascending: true }) 
+        .limit(1)
+        .single();
+
     const { data: sessionData } = await supabase
       .from('draft_sessions')
-      .select(`
-        season_id,
-        seasons ( season_name )
-      `)
+      .select(`season_id, seasons ( season_name )`)
       .eq('id', sessionId)
       .single();
 
-    // =========================================================================================
-    // STEP 1: AUTOMATED SCHEDULE GENERATION (Must happen BEFORE decks/polls so weeks exist!)
-    // =========================================================================================
+    const { data: teams } = await supabase.from('draft_order').select('team_id').eq('season_id', sessionData?.season_id);
+
+    if (teams) {
+      console.log(`Starting post-draft actions for ${teams.length} teams in session ${sessionId}...`);
+      for (const team of teams) {
+         try {
+             // WRAPPED IN TRY/CATCH: If these functions use cookies, they will throw. 
+             // We catch it so they don't break the schedule generator below!
+const { success, deckId, error: deckError } = await generatePlaceholderDeck(team.team_id, sessionId, supabase);
+             
+             if (!success) {
+                 await logSystemEvent("CompleteDraft", "error", `Failed to generate placeholder deck for team ${team.team_id}`, { error: deckError });
+                 continue; 
+             }
+             
+             if (firstWeek && deckId) {
+const submitResult = await submitDeckForWeek(deckId, team.team_id, firstWeek.id, supabase);
+                 if (!submitResult.success) {
+                     await logSystemEvent("CompleteDraft", "error", `Failed to submit placeholder deck for team ${team.team_id}`, { error: submitResult.error });
+                 }
+
+const { success: pollSuccess, error: pollError } = await createDeckVotePoll(
+    team.team_id, firstWeek.id, firstWeek.end_date, supabase 
+);
+                 
+                 if (!pollSuccess) {
+                     await logSystemEvent("CompleteDraft", "error", `Failed to create first deck vote poll for team ${team.team_id}`, { error: pollError });
+                 }
+             }
+         } catch (deckErr) {
+             await logSystemEvent("CompleteDraft", "error", `Crash during deck generation for team ${team.team_id}`, { error: String(deckErr) });
+         }
+      }
+    }
+
     console.log(`[Draft Complete] Checking schedule generation...`);
-    
     if (sessionData?.season_id) {
         const [weeksResult, seasonResult] = await Promise.all([
           getScheduleWeeks(sessionData.season_id),
@@ -673,13 +709,11 @@ console.log(`[Draft Complete] Archiving picks to historical_draft_picks for sess
           const seasonObj = Array.isArray(sessionData.seasons) ? sessionData.seasons[0] : sessionData.seasons;
           const seasonName = seasonObj?.season_name || "";
           
-          const isTestSeason = seasonName.toUpperCase().includes("TEST");
-
-          if (isTestSeason) {
+          if (seasonName.toUpperCase().includes("TEST")) {
              console.log("[Draft Complete] Test season detected. Generating Rapid Test Schedule...");
-             
              try {
-                 const { teams } = await getTeamsWithDetails(false);
+                 // FIX: Pass the supabase admin client to avoid the cookie error!
+                 const { teams } = await getTeamsWithDetails(false, supabase);
                  const activeTeams = (teams?.filter(t => t.is_hidden !== true) || []) as TeamWithDetails[];
                  
                  if (activeTeams.length < 2) {
@@ -688,9 +722,7 @@ console.log(`[Draft Complete] Archiving picks to historical_draft_picks for sess
                      const allMatchups = await generateSeasonMatchups(activeTeams, 5, false);
                      const weekIds: string[] = [];
                      
-                     // The first game starts exactly 20 minutes from RIGHT NOW.
                      const baseNow = new Date(Date.now() + 20 * 60000); 
-                     
                      const matchupsPerWeek = Math.floor(activeTeams.length / 2);
                      const weekDurationMs = matchupsPerWeek * 3 * 20 * 60000;
                      const weekSpacingMs = weekDurationMs + (20 * 60000); 
@@ -719,13 +751,11 @@ console.log(`[Draft Complete] Archiving picks to historical_draft_picks for sess
                          let matchOffsetMinutes = 0;
                          
                          for (const matchup of week1Matchups) {
-                             const { data: matchupRecord, error: matchError } = await supabase.from('weekly_matchups').insert({
+                             const { data: matchupRecord } = await supabase.from('weekly_matchups').insert({
                                  season_id: sessionData.season_id, week_number: 1, team1_id: matchup.teamAId, team2_id: matchup.teamBId, is_playoff: false
                              }).select('id').single();
                              
-                             if (matchError) {
-                                 await logSystemEvent("TestScheduleGen", "error", `Failed to insert Week 1 matchup`, { error: matchError.message });
-                             } else if (matchupRecord) {
+                             if (matchupRecord) {
                                  for (let i = 0; i < 3; i++) {
                                      const matchDate = new Date(baseNow.getTime() + (matchOffsetMinutes * 60000));
                                      await supabase.from('schedule').insert({
@@ -766,19 +796,39 @@ console.log(`[Draft Complete] Archiving picks to historical_draft_picks for sess
              const regularWeeksCount = weeksResult.weeks.filter(w => !w.is_playoff_week && !w.is_championship_week).length;
             
              const schedResult = await generateFullSeasonSchedule(
-               sessionData.season_id, 
-               regularWeeksCount, 
-               seasonResult.season.has_rivals_week
+               sessionData.season_id, regularWeeksCount, seasonResult.season.has_rivals_week
              );
             
-             if (schedResult.success) {
-               console.log(`[Draft Complete] Successfully generated ${schedResult.scheduledGamesCount} games.`);
-             } else {
+             if (!schedResult.success) {
                await logSystemEvent("CompleteDraft", "error", `Normal schedule generation failed`, { error: schedResult.error });
              }
           }
         }
+
+        const { error: phaseError } = await supabase
+            .from("seasons")
+            .update({ phase: "preseason", phase_changed_at: new Date().toISOString() })
+            .eq("id", sessionData.season_id);
+            
+        if (phaseError) {
+             await logSystemEvent("CompleteDraft", "error", `Critical error updating season phase`, { error: phaseError.message });
+        }
     }
+
+    await supabase.rpc("notify_all_users_draft", {
+      p_notification_type: "draft_completed",
+      p_message: "The draft has concluded. The league is now in the Preseason phase!",
+    });
+
+    await logSystemEvent("CompleteDraft", "info", `Draft ${sessionId} fully completed and transitioned successfully.`);
+
+    return { success: true };
+  } catch (error) {
+    const errString = String(error);
+    await logSystemEvent("CompleteDraft", "error", "Unexpected fatal error completing draft", { error: errString });
+    return { success: false, error: errString };
+  }
+}
 
     // =========================================================================================
     // STEP 2: GENERATE PLACEHOLDER DECKS AND POLLS (Now that the weeks exist!)
