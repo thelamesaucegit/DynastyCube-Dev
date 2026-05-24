@@ -233,19 +233,11 @@ export async function getDraftSessions(): Promise<{
 }> {
   try {
     const supabase = await createServerClient();
-    const { data: activeSeason } = await supabase
-      .from("seasons")
-      .select("id")
-      .eq("is_active", true)
-      .single();
-    if (!activeSeason) {
-      return { sessions: [] };
-    }
-
+    
+    // Fetch ALL draft sessions, not just the active season's!
     const { data, error } = await supabase
       .from("draft_sessions")
       .select("*")
-      .eq("season_id", activeSeason.id)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -1072,15 +1064,17 @@ export async function checkDraftTimer(
                   actionResult = { action: "auto_drafted", message: `Team ${teamId}'s pick was skipped. Consecutive skips: ${newSkipCount}.` };
               }
             }
-          } 
+           } 
           else {
-            await resetSkipCounter(session.id, supabase);
-            await advanceDraft(supabase);
-            
+            // Log FIRST, then advance, because advanceDraft might trigger completeDraft!
             actionResult = {
               action: "auto_drafted",
               message: `Auto-drafted ${autoDraftResult.pick?.cardName || "a card"} for team ${teamId}.`
             };
+            console.log(`[DraftTimer] auto_drafted: ${actionResult.message}`);
+            
+            await resetSkipCounter(session.id, supabase);
+            await advanceDraft(supabase);
           }
       } finally {
           // --- RELEASE LOCK UNCONDITIONALLY ---
