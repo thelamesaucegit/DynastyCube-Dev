@@ -778,56 +778,59 @@ export async function completeDraft(
     // =========================================================================================
     // STEP 2: GENERATE PLACEHOLDER DECKS AND POLLS (Now that the weeks exist!)
     // =========================================================================================
-    const { data: firstWeek, error: weekError } = await supabase
-        .from('schedule_weeks') 
-        .select('id, end_date') 
-        .order('start_date', { ascending: true }) 
-        .limit(1)
-        .single();
+    if (sessionData?.season_id) {
+        const { data: firstWeek, error: weekError } = await supabase
+            .from('schedule_weeks') 
+            .select('id, end_date') 
+            .eq('season_id', sessionData.season_id) // <-- ADDED THIS CRITICAL FILTER!
+            .order('start_date', { ascending: true }) 
+            .limit(1)
+            .single();
 
-    if (weekError || !firstWeek) {
-        await logSystemEvent("CompleteDraft", "error", "Could not find the first week of the season. No deck votes will be created.", { error: weekError?.message });
-    }
+        if (weekError || !firstWeek) {
+            await logSystemEvent("CompleteDraft", "error", "Could not find the first week of the season. No deck votes will be created.", { error: weekError?.message });
+        } else {
+            const { data: teams, error: teamsError } = await supabase.from('draft_order').select('team_id').eq('season_id', sessionData.season_id);
 
-    const { data: teams, error: teamsError } = await supabase.from('draft_order').select('team_id').eq('season_id', sessionData?.season_id);
+            if (teamsError) {
+                await logSystemEvent("CompleteDraft", "error", "Error fetching teams for post-draft actions", { error: teamsError.message });
+            }
 
-    if (teamsError) {
-        await logSystemEvent("CompleteDraft", "error", "Error fetching teams for post-draft actions", { error: teamsError.message });
-    }
+            if (teams) {
+              console.log(`Starting post-draft actions for ${teams.length} teams in session ${sessionId}...`);
+              for (const team of teams) {
+                 try {
+                     // Pass supabase to avoid cookie errors!
+                     const { success, deckId, error: deckError } = await generatePlaceholderDeck(team.team_id, sessionId, supabase);
+                     
+                     if (!success) {
+                         await logSystemEvent("CompleteDraft", "error", `Failed to generate placeholder deck for team ${team.team_id}`, { error: deckError });
+                         continue; 
+                     }
+                     
+                     if (deckId) {
+                         const submitResult = await submitDeckForWeek(deckId, team.team_id, firstWeek.id, supabase);
+                         if (!submitResult.success) {
+                             await logSystemEvent("CompleteDraft", "error", `Failed to submit placeholder deck for team ${team.team_id}`, { error: submitResult.error });
+                         }
 
-    if (teams) {
-      console.log(`Starting post-draft actions for ${teams.length} teams in session ${sessionId}...`);
-      for (const team of teams) {
-         try {
-             // Pass supabase to avoid cookie errors!
-             const { success, deckId, error: deckError } = await generatePlaceholderDeck(team.team_id, sessionId, supabase);
-             
-             if (!success) {
-                 await logSystemEvent("CompleteDraft", "error", `Failed to generate placeholder deck for team ${team.team_id}`, { error: deckError });
-                 continue; 
-             }
-             
-             if (firstWeek && deckId) {
-                 const submitResult = await submitDeckForWeek(deckId, team.team_id, firstWeek.id, supabase);
-                 if (!submitResult.success) {
-                     await logSystemEvent("CompleteDraft", "error", `Failed to submit placeholder deck for team ${team.team_id}`, { error: submitResult.error });
+                         const { success: pollSuccess, error: pollError } = await createDeckVotePoll(
+                             team.team_id,
+                             firstWeek.id,
+                             firstWeek.end_date,
+                             supabase
+                         );
+                         
+                         if (!pollSuccess) {
+                             await logSystemEvent("CompleteDraft", "error", `Failed to create first deck vote poll for team ${team.team_id}`, { error: pollError });
+                         }
+                     }
+                 } catch (deckErr) {
+                     await logSystemEvent("CompleteDraft", "error", `Crash during deck generation for team ${team.team_id}`, { error: String(deckErr) });
                  }
-
-                 const { success: pollSuccess, error: pollError } = await createDeckVotePoll(
-                     team.team_id,
-                     firstWeek.id,
-                     firstWeek.end_date,
-                     supabase
-                 );
-                 
-                 if (!pollSuccess) {
-                     await logSystemEvent("CompleteDraft", "error", `Failed to create first deck vote poll for team ${team.team_id}`, { error: pollError });
-                 }
-             }
-         } catch (deckErr) {
-             await logSystemEvent("CompleteDraft", "error", `Crash during deck generation for team ${team.team_id}`, { error: String(deckErr) });
-         }
-      }
+              }
+            }
+        }
     }
 
     // =========================================================================================
