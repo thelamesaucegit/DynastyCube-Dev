@@ -30,6 +30,7 @@ export interface DraftPick {
   drafted_at?: string;
   pick_number?: number;
   cubecobra_elo?: number;
+    effective_elo?: number;
   rating_updated_at?: string;
   acquisition_method?: 'draft' | 'wire' | 'free_agent' | 'trade' | 'skipped';
   acquired_at?: string;
