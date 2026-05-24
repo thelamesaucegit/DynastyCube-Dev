@@ -3,7 +3,7 @@
 "use server";
 
 import { createClient } from "@supabase/supabase-js";
-import { createServerClient } from "@/lib/supabase";
+import { type AnySupabaseClient } from "@/lib/supabase";
 
 function createServiceClient() {
     return createClient(
@@ -80,7 +80,7 @@ function formatAsDck(
 export async function generatePlaceholderDeck(
     teamId: string,
     draftSessionId?: string,
-    adminClient?: any // <-- ADD THIS
+    adminClient?: AnySupabaseClient
 ): Promise<{ success: boolean; deckId?: string; summary?: object; error?: string }> {
     const supabase = adminClient ?? createServiceClient(); // <-- USE ADMIN CLIENT IF PROVIDED
 
@@ -297,7 +297,7 @@ export async function submitDeckForWeek(
     deckId: string,
     teamId: string,
     weekId: string,
-    adminClient?: any // <-- ADD THIS
+    adminClient?: AnySupabaseClient
 ): Promise<{ success: boolean; submissionId?: string; error?: string }> {
     const supabase = adminClient ?? createServiceClient(); // <-- USE ADMIN CLIENT IF PROVIDED
 
