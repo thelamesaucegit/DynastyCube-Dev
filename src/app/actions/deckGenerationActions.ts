@@ -296,9 +296,11 @@ export async function generatePlaceholderDeck(
 export async function submitDeckForWeek(
     deckId: string,
     teamId: string,
-    weekId: string
+    weekId: string,
+    adminClient?: any // <-- ADD THIS
 ): Promise<{ success: boolean; submissionId?: string; error?: string }> {
-    const supabase = createServiceClient();
+    const supabase = adminClient ?? createServiceClient(); // <-- USE ADMIN CLIENT IF PROVIDED
+
 
     try {
         // 1. Fetch mainboard cards for this deck
