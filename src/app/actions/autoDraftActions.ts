@@ -239,7 +239,7 @@ export async function computeAutoDraftPick(
     const evaluationPool = rawSortedPool.slice(0, TOP_N_POOL_SIZE);
     // ---------------------------
 
-    const LAND_ELO_MODIFIER = 0.89; 
+    const LAND_ELO_MODIFIER = 0.83; 
 
     // --- EXPONENTIAL DECAY CONSTANTS ---
     const BASE_BONUS = 0.03; 
