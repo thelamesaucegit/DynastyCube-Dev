@@ -144,33 +144,60 @@ export async function generateFullSeasonSchedule(
     regularSeasonWeeks: number,
     includeRivalsWeek: boolean
 ): Promise<{ success: boolean; error?: string; scheduledGamesCount?: number }> {
+    console.log(`[Scheduler] Starting generation for season ${seasonId}. (ReqWeeks: ${regularSeasonWeeks}, Rivals: ${includeRivalsWeek})`);
     try {
         const adminClient = createServiceClient(); // Safe for background tasks
         
-        const [{ teams, error: teamsError }, { weeks, error: weeksError }] = await Promise.all([
-            getTeamsWithDetails(false, adminClient), // <-- Passing the safe client!
-            getScheduleWeeks(seasonId)
+        console.log(`[Scheduler] Fetching teams and weeks...`);
+        const [{ teams, error: teamsError }, { data: weeks, error: weeksError }] = await Promise.all([
+            getTeamsWithDetails(false, adminClient), 
+            adminClient.from('schedule_weeks').select('*').eq('season_id', seasonId)
         ]);
 
-        if (teamsError || !teams) return { success: false, error: `Failed to fetch teams: ${teamsError || "No teams returned."}` };
-        if (weeksError || !weeks) return { success: false, error: `Failed to fetch schedule weeks: ${weeksError || "No weeks returned."}` };
+        if (teamsError || !teams) {
+            console.error(`[Scheduler] Team fetch failed: ${teamsError}`);
+            return { success: false, error: `Failed to fetch teams: ${teamsError || "No teams returned."}` };
+        }
+        if (weeksError || !weeks) {
+            console.error(`[Scheduler] Week fetch failed: ${weeksError}`);
+            return { success: false, error: `Failed to fetch schedule weeks: ${weeksError || "No weeks returned."}` };
+        }
         
         const activeTeams = teams.filter(t => t.is_hidden !== true);
-        if (activeTeams.length < 2) return { success: false, error: "At least 2 active teams are required." };
+        console.log(`[Scheduler] Found ${activeTeams.length} active teams and ${weeks.length} weeks.`);
+
+        if (activeTeams.length < 2) {
+            console.error(`[Scheduler] Not enough active teams!`);
+            return { success: false, error: "At least 2 active teams are required." };
+        }
         
         const totalWeeksToSchedule = includeRivalsWeek ? regularSeasonWeeks + 1 : regularSeasonWeeks;
-        if (weeks.length < totalWeeksToSchedule) return { success: false, error: `Requires ${totalWeeksToSchedule} weeks to be created, but only ${weeks.length} were found.` };
+        if (weeks.length < totalWeeksToSchedule) {
+            console.error(`[Scheduler] Week mismatch! Required: ${totalWeeksToSchedule}, Found: ${weeks.length}`);
+            return { success: false, error: `Requires ${totalWeeksToSchedule} weeks to be created, but only ${weeks.length} were found.` };
+        }
         
         const weeksByNumber = new Map(weeks.map(w => [w.week_number, w]));
+        
+        console.log(`[Scheduler] Generating round-robin matchups...`);
         const allMatchups = await generateSeasonMatchups(activeTeams, regularSeasonWeeks, includeRivalsWeek);
-        if (allMatchups.length === 0) return { success: false, error: "Failed to generate any matchups." };
+        
+        if (allMatchups.length === 0) {
+            console.error(`[Scheduler] generateSeasonMatchups returned 0 matchups!`);
+            return { success: false, error: "Failed to generate any matchups." };
+        }
 
+        console.log(`[Scheduler] Successfully generated ${allMatchups.length} matchups. Distributing to time slots...`);
         let totalScheduledGames = 0;
+
         for (let weekNum = 1; weekNum <= totalWeeksToSchedule; weekNum++) {
             const weekInfo = weeksByNumber.get(weekNum);
             const matchupsForThisWeek = allMatchups.filter(m => m.week === weekNum);
 
-            if (!weekInfo || matchupsForThisWeek.length === 0) continue;
+            if (!weekInfo || matchupsForThisWeek.length === 0) {
+                console.log(`[Scheduler] Skipping week ${weekNum} (No info or no matchups)`);
+                continue;
+            }
             
             const gamesPerMatchup = 9;
             const totalGamesInWeek = matchupsForThisWeek.length * gamesPerMatchup;
@@ -208,19 +235,21 @@ export async function generateFullSeasonSchedule(
                 if (result.success) {
                     totalScheduledGames++;
                 } else {
-                    console.warn(`Warning scheduling a game for week ${weekNum}:`, result.error);
+                    console.warn(`[Scheduler] Warning scheduling game for week ${weekNum}:`, result.error);
                 }
             }
         }
 
         if (totalScheduledGames === 0 && allMatchups.length > 0) {
+            console.error(`[Scheduler] Matchups were generated, but 0 games were successfully inserted into the DB!`);
             return { success: false, error: "No games were scheduled. Check server logs for warnings." };
         }
         
+        console.log(`[Scheduler] Success! ${totalScheduledGames} games inserted into the database.`);
         return { success: true, scheduledGamesCount: totalScheduledGames };
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : "An unknown critical error occurred.";
-        console.error("Critical error in generateFullSeasonSchedule:", message);
+        console.error("[Scheduler] Critical error in generateFullSeasonSchedule:", message);
         return { success: false, error: message };
     }
 }
