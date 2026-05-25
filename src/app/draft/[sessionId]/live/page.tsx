@@ -1,14 +1,16 @@
 //src/app/draft/[sessionId]/live/page.tsx
 
-export const dynamic = 'force-dynamic';
-export const fetchCache = 'force-no-store';
-export const revalidate = 0;
+
 
 import { createServerClient } from '@/lib/supabase';
 import LiveDraftBoard from '@/app/components/LiveDraftBoard';
 import HistoricalDraftBoard from '@/app/components/HistoricalDraftBoard';
 import { notFound } from 'next/navigation';
 import { logSystemEvent } from '@/lib/systemLogger';
+
+export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
+export const revalidate = 0;
 
 export interface DraftPick {
   id: string | number; 
