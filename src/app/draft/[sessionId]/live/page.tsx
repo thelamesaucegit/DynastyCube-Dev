@@ -1,3 +1,5 @@
+//src/app/draft/[sessionId]/live/page.tsx
+
 import { createServerClient } from '@/lib/supabase';
 import LiveDraftBoard from '@/app/components/LiveDraftBoard';
 import { notFound } from 'next/navigation';
