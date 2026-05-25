@@ -132,8 +132,8 @@ export default async function LiveDraftPage({ params }: { params: Promise<{ sess
     notFound();
   }
   
-  return (
-    <div className="container mx-auto p-4">
+   return (
+    <div key={`draft-page-${sessionId}`} className="container mx-auto p-4">
       <div className="text-center mb-8">
         <h1 className="text-4xl font-extrabold tracking-tight">
           {isCompleted ? "Draft History" : "Live Draft"}
