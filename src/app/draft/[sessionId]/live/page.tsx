@@ -84,18 +84,18 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
 
   if (error || !data) return [];
   
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return data.map((pick: any) => {
     
-    // Safely extract color identity
+    // Safely extract color identity, guaranteeing it is a string array!
     let colorId: string[] = [];
-    if (pick.color_identity && Array.isArray(pick.color_identity)) {
-        colorId = pick.color_identity;
+    if (Array.isArray(pick.color_identity)) {
+        colorId = pick.color_identity.filter(Boolean); // Filter out any null/undefined entries
     } else if (pick.card_pools) {
-        if (Array.isArray(pick.card_pools) && pick.card_pools[0]?.color_identity) {
-            colorId = pick.card_pools[0].color_identity;
-        } else if (!Array.isArray(pick.card_pools) && pick.card_pools.color_identity) {
-            colorId = pick.card_pools.color_identity;
+        if (Array.isArray(pick.card_pools) && Array.isArray(pick.card_pools[0]?.color_identity)) {
+            colorId = pick.card_pools[0].color_identity.filter(Boolean);
+        } else if (!Array.isArray(pick.card_pools) && Array.isArray(pick.card_pools.color_identity)) {
+            colorId = pick.card_pools.color_identity.filter(Boolean);
         }
     }
 
@@ -123,6 +123,11 @@ export default async function LiveDraftPage({ params }: { params: Promise<{ sess
     notFound();
   }
   
+  // Create a unique key based on the session ID and the total number of picks.
+  // This guarantees that if the draft flips to "completed" and loads the historical array (which might
+  // be exactly the same size, but from a different table), the UI board forces a complete redraw!
+  const boardKey = `${sessionId}-${initialPicks.length}`;
+  
   return (
     <div className="container mx-auto p-4">
       <div className="text-center mb-8">
@@ -131,6 +136,7 @@ export default async function LiveDraftPage({ params }: { params: Promise<{ sess
       </div>
       
       <LiveDraftBoard 
+        key={boardKey} 
         serverPicks={initialPicks} 
         sessionId={sessionId} 
       />
