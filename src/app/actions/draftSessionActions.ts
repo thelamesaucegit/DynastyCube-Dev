@@ -756,20 +756,24 @@ export async function completeDraft(
              } catch (testError) {
                  await logSystemEvent("TestScheduleGen", "error", "Fatal error generating test schedule", { error: String(testError) });
              }
-          } else {
+                   } else {
              console.log(`[Draft Complete] Generating regular season schedule...`);
-             const regularWeeksCount = weeksResult.weeks.filter(w => !w.is_playoff_week && !w.is_championship_week).length;
+             const regularWeeksCount = weeks.filter(w => !w.is_playoff_week && !w.is_championship_week).length;
+             
+             await logSystemEvent("CompleteDraft", "info", "Normal season detected. Preparing to generate schedule.", { 
+                 weeksFound: weeks.length, 
+                 regularWeeksCount: regularWeeksCount,
+                 hasRivalsWeek: season.has_rivals_week
+             });
             
              const schedResult = await generateFullSeasonSchedule(
-               sessionData.season_id, 
-               regularWeeksCount, 
-               seasonResult.season.has_rivals_week
+               sessionData.season_id, regularWeeksCount, season.has_rivals_week
              );
             
-             if (schedResult.success) {
-               console.log(`[Draft Complete] Successfully generated ${schedResult.scheduledGamesCount} games.`);
-             } else {
+             if (!schedResult.success) {
                await logSystemEvent("CompleteDraft", "error", `Normal schedule generation failed`, { error: schedResult.error });
+             } else {
+               await logSystemEvent("CompleteDraft", "info", `Schedule generated successfully!`, { gamesScheduled: schedResult.scheduledGamesCount });
              }
           }
         }
