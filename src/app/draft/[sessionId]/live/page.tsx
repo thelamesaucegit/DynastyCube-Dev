@@ -37,6 +37,7 @@ async function getInitialDraftPicks(sessionId: string): Promise<{ picks: DraftPi
   }
 
   const isCompleted = session?.status === 'completed';
+
   let data = null;
   let error = null;
 
@@ -83,6 +84,21 @@ async function getInitialDraftPicks(sessionId: string): Promise<{ picks: DraftPi
         console.log(`[Page.tsx] SUCCESS: Fetched ${data?.length} rows from active team_draft_picks!`);
     }
   }
+
+  if (error || !data) return { picks: [], isCompleted };
+  
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mappedPicks = data.map((pick: any) => {
+    let colorId: string[] = [];
+    if (Array.isArray(pick.color_identity)) {
+        colorId = pick.color_identity.filter(Boolean);
+    } else if (pick.card_pools) {
+        if (Array.isArray(pick.card_pools) && Array.isArray(pick.card_pools[0]?.color_identity)) {
+            colorId = pick.card_pools[0].color_identity.filter(Boolean);
+        } else if (!Array.isArray(pick.card_pools) && Array.isArray(pick.card_pools.color_identity)) {
+            colorId = pick.card_pools.color_identity.filter(Boolean);
+        }
+    }
 
     return {
       id: pick.id,
