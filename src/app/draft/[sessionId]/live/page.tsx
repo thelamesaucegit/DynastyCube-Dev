@@ -1,8 +1,16 @@
+//src/app/draft/[sessionId]/live/page.tsx
+
+
+
 import { createServerClient } from '@/lib/supabase';
 import LiveDraftBoard from '@/app/components/LiveDraftBoard';
 import HistoricalDraftBoard from '@/app/components/HistoricalDraftBoard';
 import { notFound } from 'next/navigation';
 import { logSystemEvent } from '@/lib/systemLogger';
+
+export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
+export const revalidate = 0;
 
 export interface DraftPick {
   id: string | number; 
@@ -126,8 +134,8 @@ export default async function LiveDraftPage({ params }: { params: Promise<{ sess
     notFound();
   }
   
-  return (
-    <div className="container mx-auto p-4">
+   return (
+    <div key={`draft-page-${sessionId}`} className="container mx-auto p-4">
       <div className="text-center mb-8">
         <h1 className="text-4xl font-extrabold tracking-tight">
           {isCompleted ? "Draft History" : "Live Draft"}
