@@ -563,12 +563,9 @@ export async function completeDraft(
   try {
     const supabase = adminClient ?? await createServerClient();
     
-    // Skip auth check when called via service-role admin client
     if (!adminClient) {
       const admin = await verifyAdmin(supabase as Awaited<ReturnType<typeof createServerClient>>);
-      if (!admin.authorized) {
-        return { success: false, error: admin.error };
-      }
+      if (!admin.authorized) return { success: false, error: admin.error };
     }
 
     const { error } = await supabase
@@ -582,122 +579,81 @@ export async function completeDraft(
       .eq("id", sessionId);
 
     if (error) {
-      await logSystemEvent("CompleteDraft", "error", `Failed to update draft session status for ${sessionId}`, { error: error.message });
+      await logSystemEvent("CompleteDraft", "error", `Failed to update draft session status`, { error: error.message });
       return { success: false, error: error.message };
     }
 
-    // --- RESTORED: ARCHIVE DRAFT PICKS ---
-    console.log(`[Draft Complete] Archiving picks to historical_draft_picks for session ${sessionId}...`);
+    // --- ARCHIVE DRAFT PICKS ---
+    console.log(`[Draft Complete] Archiving picks for session ${sessionId}...`);
     try {
-        const { data: activePicks, error: fetchPicksError } = await supabase
-            .from('team_draft_picks')
-            .select('*')
-            .eq('draft_session_id', sessionId);
+        const { data: activePicks, error: fetchPicksError } = await supabase.from('team_draft_picks').select('*').eq('draft_session_id', sessionId);
             
         if (fetchPicksError) {
-            await logSystemEvent("CompleteDraft", "error", `Failed to fetch active picks for archiving.`, { error: fetchPicksError.message });
+            await logSystemEvent("CompleteDraft", "error", `Failed to fetch active picks`, { error: fetchPicksError.message });
         } else if (activePicks && activePicks.length > 0) {
             const historicalPayload = activePicks.map(pick => ({
-                draft_session_id: pick.draft_session_id,
-                team_id: pick.team_id,
-                card_id: pick.card_id,
-                card_name: pick.card_name,
-                card_set: pick.card_set,
-                card_type: pick.card_type,
-                rarity: pick.rarity,
-                colors: pick.colors,
-                color_identity: pick.color_identity,
-                image_url: pick.image_url,
-                oldest_image_url: pick.oldest_image_url,
-                mana_cost: pick.mana_cost,
-                effective_elo: pick.effective_elo,
-                algorithm_details: pick.algorithm_details,
-                cmc: pick.cmc,
-                pick_number: pick.pick_number,
-                pick_source: pick.pick_source,
-                drafted_at: pick.drafted_at || new Date().toISOString()
+                draft_session_id: pick.draft_session_id, team_id: pick.team_id, card_id: pick.card_id,
+                card_name: pick.card_name, card_set: pick.card_set, card_type: pick.card_type,
+                rarity: pick.rarity, colors: pick.colors, color_identity: pick.color_identity,
+                image_url: pick.image_url, oldest_image_url: pick.oldest_image_url,
+                mana_cost: pick.mana_cost, effective_elo: pick.effective_elo,
+                algorithm_details: pick.algorithm_details, cmc: pick.cmc,
+                pick_number: pick.pick_number, pick_source: pick.pick_source, drafted_at: pick.drafted_at || new Date().toISOString()
             }));
 
-            const { error: archiveError } = await supabase
-                .from('historical_draft_picks')
-                .insert(historicalPayload);
-                
-            if (archiveError) {
-                await logSystemEvent("CompleteDraft", "error", `Failed to bulk insert historical picks.`, { error: archiveError.message });
-            } else {
-                console.log(`[Draft Complete] Successfully archived ${historicalPayload.length} picks.`);
-            }
+            const { error: archiveError } = await supabase.from('historical_draft_picks').insert(historicalPayload);
+            if (archiveError) await logSystemEvent("CompleteDraft", "error", `Failed to bulk insert historical picks`, { error: archiveError.message });
         }
     } catch (archiveErr) {
         await logSystemEvent("CompleteDraft", "error", `Fatal error during archiving.`, { error: String(archiveErr) });
     }
 
     console.log(`Draft ${sessionId} completed. Moving undrafted cards to The Wire.`);
-    const { error: wireError } = await supabase
-      .from('card_pools')
-      .update({ pool_name: 'wire', on_wire_since: new Date().toISOString() })
-      .eq('pool_name', 'draft')
-      .eq('was_drafted', false);
-    
-    if (wireError) {
-      await logSystemEvent("CompleteDraft", "error", "Failed to move undrafted cards to The Wire", { error: wireError.message });
-    }
+    await supabase.from('card_pools').update({ pool_name: 'wire', on_wire_since: new Date().toISOString() }).eq('pool_name', 'draft').eq('was_drafted', false);
 
-    const { data: sessionData } = await supabase
-      .from('draft_sessions')
-      .select(`season_id, seasons ( season_name )`)
-      .eq('id', sessionId)
-      .single();
+    const { data: sessionData } = await supabase.from('draft_sessions').select(`season_id, seasons ( season_name )`).eq('id', sessionId).single();
 
     // =========================================================================================
     // STEP 1: AUTOMATED SCHEDULE GENERATION (Must happen BEFORE decks/polls so weeks exist!)
     // =========================================================================================
+    console.log(`[Draft Complete] Checking schedule generation...`);
     await logSystemEvent("ScheduleGenTrace", "info", `[1] Starting Schedule Gen Phase for session: ${sessionId}`);
     
     if (sessionData?.season_id) {
         try {
-            await logSystemEvent("ScheduleGenTrace", "info", `[2] Fetching weeks and season data for season: ${sessionData.season_id}`);
-            
             const [weeksResponse, seasonResponse] = await Promise.all([
               supabase.from('schedule_weeks').select('*').eq('season_id', sessionData.season_id),
               supabase.from('seasons').select('*').eq('id', sessionData.season_id).single()
             ]);
 
-            if (weeksResponse.error) throw new Error(`Weeks fetch error: ${weeksResponse.error.message}`);
-            if (seasonResponse.error) throw new Error(`Season fetch error: ${seasonResponse.error.message}`);
-
             const weeks = weeksResponse.data || [];
             const season = seasonResponse.data;
 
             if (season) {
-              const seasonName = String(season.season_name || season.name || "");
+              const seasonObj = Array.isArray(sessionData.seasons) ? sessionData.seasons[0] : sessionData.seasons;
+              const seasonName = seasonObj?.season_name || season.season_name || season.name || "";
               const isTestSeason = seasonName.toUpperCase().includes("TEST");
               
-              await logSystemEvent("ScheduleGenTrace", "info", `[3] Season data loaded. Name: "${seasonName}". isTestSeason: ${isTestSeason}. Existing weeks: ${weeks.length}`);
+              await logSystemEvent("ScheduleGenTrace", "info", `[2] Season loaded. isTestSeason: ${isTestSeason}. Weeks found: ${weeks.length}`);
 
               if (isTestSeason) {
-                 await logSystemEvent("ScheduleGenTrace", "info", `[4] Entering Rapid Test Schedule logic.`);
-                 
                  const { teams } = await getTeamsWithDetails(false, supabase);
                  const activeTeams = (teams?.filter(t => t.is_hidden !== true) || []) as TeamWithDetails[];
-                 
-                 await logSystemEvent("ScheduleGenTrace", "info", `[5] Found ${activeTeams.length} active teams.`);
-                 
+                 await logSystemEvent("ScheduleGenTrace", "info", `[3] Rapid Test Gen: Found ${activeTeams.length} active teams.`);
+
                  if (activeTeams.length < 2) {
-                     await logSystemEvent("TestScheduleGen", "error", `Not enough teams to generate test schedule for ${sessionData.season_id}`);
+                     await logSystemEvent("TestScheduleGen", "error", `Not enough teams for test schedule.`);
                  } else {
                      const allMatchups = await generateSeasonMatchups(activeTeams, 5, false);
-                     await logSystemEvent("ScheduleGenTrace", "info", `[6] Generated ${allMatchups.length} matchups. Proceeding to insert weeks.`);
-                     
+                     await logSystemEvent("ScheduleGenTrace", "info", `[4] Generated ${allMatchups.length} matchups.`);
+
                      const weekIds: string[] = [];
                      const baseNow = new Date(Date.now() + 20 * 60000); 
-                     const matchupsPerWeek = Math.floor(activeTeams.length / 2);
-                     const weekDurationMs = matchupsPerWeek * 3 * 20 * 60000;
-                     const weekSpacingMs = weekDurationMs + (20 * 60000); 
                      const testSeasonNumber = parseInt(seasonName.replace(/[^0-9]/g, '')) || 999;
+                     const weekDurationMs = Math.floor(activeTeams.length / 2) * 3 * 20 * 60000;
 
                      for (let i = 1; i <= 5; i++) {
-                         const weekStart = new Date(baseNow.getTime() + ((i - 1) * weekSpacingMs));
+                         const weekStart = new Date(baseNow.getTime() + ((i - 1) * (weekDurationMs + 1200000)));
                          const weekEnd = new Date(weekStart.getTime() + weekDurationMs); 
                          
                          const { data: weekData, error: weekError } = await supabase.from("schedule_weeks").insert({
@@ -707,159 +663,88 @@ export async function completeDraft(
                              is_playoff_week: false, is_championship_week: false, notes: `Test Week ${i} (Rapid)`,
                          }).select('id').single();
                          
-                         if (weekError) {
-                             await logSystemEvent("TestScheduleGen", "error", `Failed to insert week ${i}`, { error: weekError.message });
-                         } else if (weekData) {
-                             weekIds.push(weekData.id);
-                         }
+                         if (weekError) await logSystemEvent("TestScheduleGen", "error", `Week ${i} insert failed: ${weekError.message}`);
+                         else if (weekData) weekIds.push(weekData.id);
                      }
 
-                     await logSystemEvent("ScheduleGenTrace", "info", `[7] Inserted ${weekIds.length} weeks. Proceeding to matchups.`);
+                     await logSystemEvent("ScheduleGenTrace", "info", `[5] Inserted ${weekIds.length} weeks.`);
 
                      if (weekIds.length > 0) {
-                         const week1Matchups = allMatchups.filter(m => m.week === 1);
-                         let matchOffsetMinutes = 0;
-                         let w1GamesScheduled = 0;
-                         
-                         for (const matchup of week1Matchups) {
-                             const { data: matchupRecord } = await supabase.from('weekly_matchups').insert({
-                                 season_id: sessionData.season_id, week_number: 1, team1_id: matchup.teamAId, team2_id: matchup.teamBId, is_playoff: false
-                             }).select('id').single();
-                             
-                             if (matchupRecord) {
-                                 for (let i = 0; i < 3; i++) {
-                                     const matchDate = new Date(baseNow.getTime() + (matchOffsetMinutes * 60000));
-                                     await supabase.from('schedule').insert({
-                                         season_id: sessionData.season_id, season_number: testSeasonNumber, week_id: weekIds[0], week_number: 1,
-                                         team1_id: matchup.teamAId, team2_id: matchup.teamBId, weekly_matchup_id: matchupRecord.id,
-                                         match_date: matchDate.toISOString(), status: 'scheduled'
-                                     });
-                                     matchOffsetMinutes += 20;
-                                     w1GamesScheduled++;
-                                 }
-                             }
-                         }
+                         let totalMatchups = 0, totalGames = 0;
 
-                         await logSystemEvent("ScheduleGenTrace", "info", `[8] Scheduled ${w1GamesScheduled} games for Week 1. Fleshing out Weeks 2-5...`);
-
-                         let futureGamesScheduled = 0;
-                         for (let week = 2; week <= 5; week++) {
+                         for (let week = 1; week <= 5; week++) {
                               const weekMatchups = allMatchups.filter(m => m.week === week);
+                              let matchOffsetMinutes = 0;
+
                               for (const matchup of weekMatchups) {
-                                  const { data: matchupRecord } = await supabase.from('weekly_matchups').insert({
+                                  const { data: matchupRecord, error: mError } = await supabase.from('weekly_matchups').insert({
                                      season_id: sessionData.season_id, week_number: week, team1_id: matchup.teamAId, team2_id: matchup.teamBId, is_playoff: false
                                  }).select('id').single();
                                  
+                                 if (mError) await logSystemEvent("TestScheduleGen", "error", `W${week} Matchup failed: ${mError.message}`);
+
                                  if (matchupRecord && weekIds[week - 1]) {
+                                     totalMatchups++;
                                      for (let i = 0; i < 3; i++) {
-                                         await supabase.from('schedule').insert({
+                                         const mDate = new Date(baseNow.getTime() + (matchOffsetMinutes * 60000));
+                                         const { error: sError } = await supabase.from('schedule').insert({
                                              season_id: sessionData.season_id, season_number: testSeasonNumber, week_id: weekIds[week - 1], week_number: week,
                                              team1_id: matchup.teamAId, team2_id: matchup.teamBId, weekly_matchup_id: matchupRecord.id,
-                                             match_date: new Date().toISOString(), status: 'scheduled'
+                                             match_date: mDate.toISOString(), status: 'scheduled'
                                          });
-                                         futureGamesScheduled++;
+                                         if (sError) await logSystemEvent("TestScheduleGen", "error", `Game insert failed: ${sError.message}`);
+                                         else totalGames++;
+                                         matchOffsetMinutes += 20;
                                      }
                                  }
                               }
                          }
-                         await logSystemEvent("ScheduleGenTrace", "info", `[9] Test schedule fully mapped out! (${futureGamesScheduled} future games scheduled).`);
+                         await logSystemEvent("ScheduleGenTrace", "info", `[6] Schedule Complete! ${totalMatchups} matchups, ${totalGames} games.`);
                      }
                  }
               } else {
-                 const regularWeeksCount = weeks.filter((w: { is_playoff_week: boolean; is_championship_week: boolean }) => !w.is_playoff_week && !w.is_championship_week).length;
-                 await logSystemEvent("ScheduleGenTrace", "info", `[4] Normal season detected. Calling generateFullSeasonSchedule for ${regularWeeksCount} weeks.`);
+                 const regWeeks = weeks.filter((w: { is_playoff_week: boolean; is_championship_week: boolean }) => !w.is_playoff_week && !w.is_championship_week).length;
+                 await logSystemEvent("ScheduleGenTrace", "info", `[3] Normal season. Generating for ${regWeeks} weeks.`);
                 
-                 const schedResult = await generateFullSeasonSchedule(
-                   sessionData.season_id, regularWeeksCount, season.has_rivals_week
-                 );
-                
-                 if (!schedResult.success) {
-                   await logSystemEvent("CompleteDraft", "error", `Normal schedule generation failed`, { error: schedResult.error });
-                 } else {
-                   await logSystemEvent("ScheduleGenTrace", "info", `[5] Normal schedule generated successfully! Games: ${schedResult.scheduledGamesCount}`);
-                 }
+                 const schedResult = await generateFullSeasonSchedule(sessionData.season_id, regWeeks, season.has_rivals_week);
+                 if (!schedResult.success) await logSystemEvent("CompleteDraft", "error", `Normal gen failed: ${schedResult.error}`);
+                 else await logSystemEvent("ScheduleGenTrace", "info", `[4] Normal schedule success! Games: ${schedResult.scheduledGamesCount}`);
               }
             }
         } catch (schedError) {
-            await logSystemEvent("CompleteDraft", "error", "Fatal error during schedule generation phase", { error: String(schedError) });
+            await logSystemEvent("CompleteDraft", "error", "Fatal error during schedule gen", { error: String(schedError) });
         }
 
         // =========================================================================================
-        // STEP 2: GENERATE PLACEHOLDER DECKS AND POLLS (Now that the weeks exist!)
+        // STEP 2: GENERATE PLACEHOLDER DECKS AND POLLS (Weeks now exist!)
         // =========================================================================================
-        const { data: firstWeek, error: weekError } = await supabase
-            .from('schedule_weeks') 
-            .select('id, end_date') 
-            .eq('season_id', sessionData.season_id) 
-            .order('start_date', { ascending: true }) 
-            .limit(1)
-            .single();
+        await logSystemEvent("ScheduleGenTrace", "info", `[7] Moving to Step 2: Decks and Polls.`);
+        const { data: firstWeek } = await supabase.from('schedule_weeks').select('id, end_date').eq('season_id', sessionData.season_id).order('start_date', { ascending: true }).limit(1).single();
 
-        if (weekError || !firstWeek) {
-            await logSystemEvent("CompleteDraft", "error", "Could not find the first week of the season. No deck votes will be created.", { error: weekError?.message });
-        } else {
-            const { data: teams, error: teamsError } = await supabase.from('draft_order').select('team_id').eq('season_id', sessionData.season_id);
-
-            if (teamsError) {
-                await logSystemEvent("CompleteDraft", "error", "Error fetching teams for post-draft actions", { error: teamsError.message });
-            }
-
-            if (teams) {
-              console.log(`Starting post-draft actions for ${teams.length} teams in session ${sessionId}...`);
-              for (const team of teams) {
-                 try {
-                     const { success, deckId, error: deckError } = await generatePlaceholderDeck(team.team_id, sessionId, supabase);
-                     
-                     if (!success) {
-                         await logSystemEvent("CompleteDraft", "error", `Failed to generate placeholder deck for team ${team.team_id}`, { error: deckError });
-                         continue; 
-                     }
-                     
-                     if (deckId) {
-                         const submitResult = await submitDeckForWeek(deckId, team.team_id, firstWeek.id, supabase);
-                         if (!submitResult.success) {
-                             await logSystemEvent("CompleteDraft", "error", `Failed to submit placeholder deck for team ${team.team_id}`, { error: submitResult.error });
-                         }
-
-                         const { success: pollSuccess, error: pollError } = await createDeckVotePoll(
-                             team.team_id,
-                             firstWeek.id,
-                             firstWeek.end_date,
-                             supabase
-                         );
-                         
-                         if (!pollSuccess) {
-                             await logSystemEvent("CompleteDraft", "error", `Failed to create first deck vote poll for team ${team.team_id}`, { error: pollError });
-                         }
-                     }
-                 } catch (deckErr) {
-                     await logSystemEvent("CompleteDraft", "error", `Crash during deck generation for team ${team.team_id}`, { error: String(deckErr) });
+        const { data: teams } = await supabase.from('draft_order').select('team_id').eq('season_id', sessionData.season_id);
+        if (teams) {
+          console.log(`Starting post-draft actions for ${teams.length} teams...`);
+          for (const team of teams) {
+             try {
+                 const { success, deckId } = await generatePlaceholderDeck(team.team_id, sessionId, supabase);
+                 
+                 if (success && deckId && firstWeek) {
+                     await submitDeckForWeek(deckId, team.team_id, firstWeek.id, supabase);
+                     await createDeckVotePoll(team.team_id, firstWeek.id, firstWeek.end_date, supabase);
                  }
-              }
-            }
+             } catch (deckErr) {
+                 await logSystemEvent("CompleteDraft", "error", `Crash on deck gen for team ${team.team_id}`, { error: String(deckErr) });
+             }
+          }
         }
 
         // =========================================================================================
         // STEP 3: TRANSITION PHASE UNCONDITIONALLY
         // =========================================================================================
-        const { error: phaseError } = await supabase
-            .from("seasons")
-            .update({ 
-                phase: "preseason", 
-                phase_changed_at: new Date().toISOString() 
-            })
-            .eq("id", sessionData.season_id);
-            
-        if (phaseError) {
-             await logSystemEvent("CompleteDraft", "error", `Critical error updating season phase to preseason`, { error: phaseError.message });
-        }
+        await supabase.from("seasons").update({ phase: "preseason", phase_changed_at: new Date().toISOString() }).eq("id", sessionData.season_id);
     }
 
-    await supabase.rpc("notify_all_users_draft", {
-      p_notification_type: "draft_completed",
-      p_message: "The draft has concluded. The league is now in the Preseason phase!",
-    });
-
+    await supabase.rpc("notify_all_users_draft", { p_notification_type: "draft_completed", p_message: "The draft has concluded. The league is now in the Preseason phase!" });
     await logSystemEvent("CompleteDraft", "info", `Draft ${sessionId} fully completed and transitioned successfully.`);
 
     return { success: true };
@@ -869,7 +754,6 @@ export async function completeDraft(
     return { success: false, error: errString };
   }
 }
-
 
 // ============================================================================
 // AUTO-DRAFT TIMER CHECK
