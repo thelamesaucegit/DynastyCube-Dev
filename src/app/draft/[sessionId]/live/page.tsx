@@ -22,6 +22,8 @@ export interface DraftPick {
 async function getInitialDraftPicks(sessionId: string): Promise<{ picks: DraftPick[], isCompleted: boolean }> {
   const supabase = await createServerClient();
 
+  console.log(`[Page.tsx] Loading draft board for session: ${sessionId}`);
+
   const { data: session, error: sessionError } = await supabase
     .from('draft_sessions')
     .select('status')
@@ -29,21 +31,20 @@ async function getInitialDraftPicks(sessionId: string): Promise<{ picks: DraftPi
     .single();
 
   if (sessionError) {
-      await logSystemEvent("DraftBoardLoad", "error", `Failed to fetch session status for ${sessionId}`, { error: sessionError.message });
+      console.error(`[Page.tsx] CRITICAL ERROR: Could not find session status!`, sessionError);
+  } else {
+      console.log(`[Page.tsx] Draft status is: ${session?.status}`);
   }
 
   const isCompleted = session?.status === 'completed';
-
   let data = null;
   let error = null;
 
-  const { data: teamsData, error: teamsError } = await supabase.from('teams').select('id, name');
-  if (teamsError) {
-      await logSystemEvent("DraftBoardLoad", "error", `Failed to fetch teams mapping.`, { error: teamsError.message });
-  }
+  const { data: teamsData } = await supabase.from('teams').select('id, name');
   const teamMap = new Map((teamsData || []).map(t => [t.id, t.name]));
 
   if (isCompleted) {
+    console.log(`[Page.tsx] Fetching from historical_draft_picks...`);
     const response = await supabase
       .from('historical_draft_picks') 
       .select(`
@@ -57,9 +58,12 @@ async function getInitialDraftPicks(sessionId: string): Promise<{ picks: DraftPi
     error = response.error;
     
     if (error) {
-        await logSystemEvent("DraftBoardLoad", "error", `Failed to fetch historical picks for ${sessionId}`, { error: error.message });
+        console.error(`[Page.tsx] ERROR fetching historical picks:`, error);
+    } else {
+        console.log(`[Page.tsx] SUCCESS: Fetched ${data?.length} rows from historical_draft_picks!`);
     }
   } else {
+    console.log(`[Page.tsx] Fetching from active team_draft_picks...`);
     const response = await supabase
       .from('team_draft_picks') 
       .select(`
@@ -74,24 +78,11 @@ async function getInitialDraftPicks(sessionId: string): Promise<{ picks: DraftPi
     error = response.error;
     
     if (error) {
-        await logSystemEvent("DraftBoardLoad", "error", `Failed to fetch active picks for ${sessionId}`, { error: error.message });
+        console.error(`[Page.tsx] ERROR fetching active picks:`, error);
+    } else {
+        console.log(`[Page.tsx] SUCCESS: Fetched ${data?.length} rows from active team_draft_picks!`);
     }
   }
-
-  if (error || !data) return { picks: [], isCompleted };
-  
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mappedPicks = data.map((pick: any) => {
-    let colorId: string[] = [];
-    if (Array.isArray(pick.color_identity)) {
-        colorId = pick.color_identity.filter(Boolean);
-    } else if (pick.card_pools) {
-        if (Array.isArray(pick.card_pools) && Array.isArray(pick.card_pools[0]?.color_identity)) {
-            colorId = pick.card_pools[0].color_identity.filter(Boolean);
-        } else if (!Array.isArray(pick.card_pools) && Array.isArray(pick.card_pools.color_identity)) {
-            colorId = pick.card_pools.color_identity.filter(Boolean);
-        }
-    }
 
     return {
       id: pick.id,
