@@ -1,3 +1,7 @@
+export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
+export const revalidate = 0;
+
 import { createServerClient } from '@/lib/supabase';
 import LiveDraftBoard from '@/app/components/LiveDraftBoard';
 import HistoricalDraftBoard from '@/app/components/HistoricalDraftBoard';
