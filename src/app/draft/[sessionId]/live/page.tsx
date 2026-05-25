@@ -86,44 +86,44 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
   
   return data.map((pick: SupabasePick) => {
     
-    // Safely extract color identity. If it's historical, it's native. If it's active, we might need the join fallback.
-    let colorId: string[] | null = pick.color_identity || null;
-    
-    if (!colorId && pick.card_pools) {
-        if (Array.isArray(pick.card_pools)) {
-            colorId = pick.card_pools[0]?.color_identity || null;
-        } else {
-            colorId = pick.card_pools.color_identity || null;
+    // Safely extract color identity.
+    let colorId: string[] = [];
+    if (pick.color_identity && Array.isArray(pick.color_identity)) {
+        colorId = pick.color_identity;
+    } else if (pick.card_pools) {
+        if (Array.isArray(pick.card_pools) && pick.card_pools[0]?.color_identity) {
+            colorId = pick.card_pools[0].color_identity;
+        } else if (!Array.isArray(pick.card_pools) && pick.card_pools.color_identity) {
+            colorId = pick.card_pools.color_identity;
         }
     }
 
     // Safely extract team name whether Supabase returns an array or an object
     let extractedTeamName = 'Unknown Team';
     if (pick.teams) {
-        if (Array.isArray(pick.teams)) {
-            extractedTeamName = pick.teams[0]?.name || 'Unknown Team';
-        } else {
-            extractedTeamName = pick.teams.name || 'Unknown Team';
+        if (Array.isArray(pick.teams) && pick.teams[0]?.name) {
+            extractedTeamName = pick.teams[0].name;
+        } else if (!Array.isArray(pick.teams) && pick.teams.name) {
+            extractedTeamName = pick.teams.name;
         }
     }
 
     return {
-      // Force ID to number to satisfy the frontend DraftPick interface, or change the interface to accept strings
-      id: typeof pick.id === 'string' ? parseInt(pick.id.replace(/\D/g, '').substring(0, 8)) || 0 : pick.id,
-      pick_number: pick.pick_number,
-      card_name: pick.card_name,
-      card_set: pick.card_set,
-      rarity: pick.rarity,
-      image_url: pick.image_url,
-      oldest_image_url: pick.oldest_image_url,
-      drafted_at: pick.drafted_at,
-      team_id: pick.team_id,
-      team_name: extractedTeamName, // Use safely extracted name
-      color_identity: colorId || [], 
+      // Safely parse ID to an integer for the frontend
+      id: typeof pick.id === 'string' ? parseInt(pick.id.replace(/\D/g, '').substring(0, 8), 16) || Math.floor(Math.random() * 1000000) : pick.id,
+      pick_number: pick.pick_number || 0,
+      card_name: pick.card_name || 'Unknown Card',
+      card_set: pick.card_set || null,
+      rarity: pick.rarity || null,
+      image_url: pick.image_url || null,
+      oldest_image_url: pick.oldest_image_url || null,
+      drafted_at: pick.drafted_at || new Date().toISOString(),
+      team_id: pick.team_id || '',
+      team_name: extractedTeamName,
+      color_identity: colorId, 
     };
   });
 }
-
 export default async function LiveDraftPage({ params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params;
   
