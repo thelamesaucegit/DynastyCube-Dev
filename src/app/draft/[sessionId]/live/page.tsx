@@ -1,10 +1,12 @@
-// src/app/draft/[sessionId]/live/page.tsx
+//src/app/draft/[sessionId]/live/page.tsx
+
 import { createServerClient } from '@/lib/supabase';
 import LiveDraftBoard from '@/app/components/LiveDraftBoard';
 import { notFound } from 'next/navigation';
+import { logSystemEvent } from '@/lib/systemLogger'; // <-- ADDED LOGGER
 
 export interface DraftPick {
-  id: number;
+  id: string | number; // Updated to safely support UUIDs and numbers
   pick_number: number;
   card_name: string;
   card_set: string | null;
@@ -17,59 +19,54 @@ export interface DraftPick {
   color_identity: string[] | null; 
 }
 
-// Ensure this exactly matches the shape returned by the .select() query
-interface SupabasePick {
-  id: number | string; // Historical IDs are UUID strings, active are numbers
-  pick_number: number;
-  card_name: string;
-  card_set: string | null;
-  rarity: string | null;
-  image_url: string | null;
-  oldest_image_url: string | null;
-  drafted_at: string; 
-  team_id: string;
-  color_identity?: string[] | null; // Natively on the historical table!
-    teams: { name: string; } | Array<{ name: string; }> | null;
-  card_pools?: { color_identity: string[] | null; } | Array<{ color_identity: string[] | null; }> | null; 
-}
-
-
 async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
   const supabase = await createServerClient();
 
-  // First, check the status of the draft session
-  const { data: session } = await supabase
+  const { data: session, error: sessionError } = await supabase
     .from('draft_sessions')
     .select('status')
     .eq('id', sessionId)
     .single();
 
+  if (sessionError) {
+      await logSystemEvent("DraftBoardLoad", "error", `Failed to fetch session status for ${sessionId}`, { error: sessionError.message });
+  }
+
   let data = null;
   let error = null;
 
-  // If the draft is COMPLETED, pull from the permanent historical table
+  // 1. Fetch Teams manually to completely bypass any Supabase schema cache relationship errors
+  const { data: teamsData, error: teamsError } = await supabase.from('teams').select('id, name');
+  if (teamsError) {
+      await logSystemEvent("DraftBoardLoad", "error", `Failed to fetch teams mapping.`, { error: teamsError.message });
+  }
+  const teamMap = new Map((teamsData || []).map(t => [t.id, t.name]));
+
+  // 2. Fetch the picks without the tricky team join
   if (session?.status === 'completed') {
     const response = await supabase
       .from('historical_draft_picks') 
       .select(`
         id, pick_number, card_name, card_set, rarity, image_url, oldest_image_url, 
-        drafted_at, team_id, color_identity,
-        teams ( name )
+        drafted_at, team_id, color_identity
       `)
       .eq('draft_session_id', sessionId)
       .order('pick_number', { ascending: false });
       
     data = response.data;
     error = response.error;
-
+    
+    if (error) {
+        await logSystemEvent("DraftBoardLoad", "error", `Failed to fetch historical picks for ${sessionId}`, { error: error.message });
+    } else {
+        await logSystemEvent("DraftBoardLoad", "info", `Successfully loaded ${data?.length || 0} historical picks for ${sessionId}`);
+    }
   } else {
-    // If the draft is ACTIVE/PAUSED/SCHEDULED, pull from the active roster
     const response = await supabase
       .from('team_draft_picks') 
       .select(`
         id, pick_number, card_name, card_set, rarity, image_url, oldest_image_url, 
         drafted_at, team_id, color_identity,
-        teams ( name ),
         card_pools:card_pool_id ( color_identity )
       `)
       .eq('draft_session_id', sessionId)
@@ -77,16 +74,20 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
       
     data = response.data;
     error = response.error;
+    
+    if (error) {
+        await logSystemEvent("DraftBoardLoad", "error", `Failed to fetch active picks for ${sessionId}`, { error: error.message });
+    } else {
+        await logSystemEvent("DraftBoardLoad", "info", `Successfully loaded ${data?.length || 0} active picks for ${sessionId}`);
+    }
   }
 
-  if (error || !data) {
-    console.error('Error fetching initial draft picks:', error?.message || 'Data was null.');
-    return [];
-  }
+  if (error || !data) return [];
   
-  return data.map((pick: SupabasePick) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return data.map((pick: any) => {
     
-    // Safely extract color identity.
+    // Safely extract color identity
     let colorId: string[] = [];
     if (pick.color_identity && Array.isArray(pick.color_identity)) {
         colorId = pick.color_identity;
@@ -98,19 +99,8 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
         }
     }
 
-    // Safely extract team name whether Supabase returns an array or an object
-    let extractedTeamName = 'Unknown Team';
-    if (pick.teams) {
-        if (Array.isArray(pick.teams) && pick.teams[0]?.name) {
-            extractedTeamName = pick.teams[0].name;
-        } else if (!Array.isArray(pick.teams) && pick.teams.name) {
-            extractedTeamName = pick.teams.name;
-        }
-    }
-
     return {
-      // Safely parse ID to an integer for the frontend
-      id: typeof pick.id === 'string' ? parseInt(pick.id.replace(/\D/g, '').substring(0, 8), 16) || Math.floor(Math.random() * 1000000) : pick.id,
+      id: pick.id, // Passes UUID or number safely directly to the UI
       pick_number: pick.pick_number || 0,
       card_name: pick.card_name || 'Unknown Card',
       card_set: pick.card_set || null,
@@ -119,16 +109,16 @@ async function getInitialDraftPicks(sessionId: string): Promise<DraftPick[]> {
       oldest_image_url: pick.oldest_image_url || null,
       drafted_at: pick.drafted_at || new Date().toISOString(),
       team_id: pick.team_id || '',
-      team_name: extractedTeamName,
+      team_name: teamMap.get(pick.team_id) || 'Unknown Team', // Mapped perfectly in memory
       color_identity: colorId, 
     };
   });
 }
+
 export default async function LiveDraftPage({ params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params;
   
   const initialPicks = await getInitialDraftPicks(sessionId);
-
   if (!initialPicks) {
     notFound();
   }
