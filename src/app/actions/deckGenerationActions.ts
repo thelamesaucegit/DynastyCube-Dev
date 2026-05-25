@@ -195,14 +195,13 @@ export async function generatePlaceholderDeck(
             basicLandCounts['W'] = basicLandsToAddCount;
         }
 
-        // 10. Delete any existing auto-generated deck for this team this season
-        //     (identified by created_by = null and deck_name pattern)
+        // 10. Delete ALL existing auto-generated decks for this team to save space!
+        //     (Any deck where created_by is null is a system-generated deck)
         await supabase
             .from('team_decks')
             .delete()
             .eq('team_id', teamId)
-            .is('created_by', null)
-            .like('deck_name', `Auto-Generated%Season ${season.season_number}%`);
+            .is('created_by', null);
 
         // 11. Create team_decks row
         const deckName = `Auto-Generated Deck — Season ${season.season_number}`;
