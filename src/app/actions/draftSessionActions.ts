@@ -610,8 +610,8 @@ export async function completeDraft(
                 image_url: pick.image_url,
                 oldest_image_url: pick.oldest_image_url,
                 mana_cost: pick.mana_cost,
-               effective_elo: pick.effective_elo,
-              algorithm_details: pick.algorithm_details,
+                effective_elo: pick.effective_elo,
+                algorithm_details: pick.algorithm_details,
                 cmc: pick.cmc,
                 pick_number: pick.pick_number,
                 pick_source: pick.pick_source,
@@ -631,7 +631,6 @@ export async function completeDraft(
     } catch (archiveErr) {
         await logSystemEvent("CompleteDraft", "error", `Fatal error during archiving.`, { error: String(archiveErr) });
     }
-    // ------------------------------------
 
     console.log(`Draft ${sessionId} completed. Moving undrafted cards to The Wire.`);
     const { error: wireError } = await supabase
@@ -646,10 +645,7 @@ export async function completeDraft(
 
     const { data: sessionData } = await supabase
       .from('draft_sessions')
-      .select(`
-        season_id,
-        seasons ( season_name )
-      `)
+      .select(`season_id, seasons ( season_name )`)
       .eq('id', sessionId)
       .single();
 
@@ -659,21 +655,28 @@ export async function completeDraft(
     console.log(`[Draft Complete] Checking schedule generation...`);
     
     if (sessionData?.season_id) {
-        const [weeksResult, seasonResult] = await Promise.all([
-          getScheduleWeeks(sessionData.season_id),
-          getActiveSeasonDetails(),
-        ]);
+        try {
+            // BYPASS the UI helper functions to avoid `cookies` errors! Fetch directly with admin client.
+            const [weeksResponse, seasonResponse] = await Promise.all([
+              supabase.from('schedule_weeks').select('*').eq('season_id', sessionData.season_id),
+              supabase.from('seasons').select('*').eq('id', sessionData.season_id).single()
+            ]);
 
-        if (weeksResult.weeks && seasonResult.season) {
-          const seasonObj = Array.isArray(sessionData.seasons) ? sessionData.seasons[0] : sessionData.seasons;
-          const seasonName = seasonObj?.season_name || "";
-          
-          const isTestSeason = seasonName.toUpperCase().includes("TEST");
+            if (weeksResponse.error) throw new Error(`Weeks fetch error: ${weeksResponse.error.message}`);
+            if (seasonResponse.error) throw new Error(`Season fetch error: ${seasonResponse.error.message}`);
 
-          if (isTestSeason) {
-             console.log("[Draft Complete] Test season detected. Generating Rapid Test Schedule...");
-             
-             try {
+            const weeks = weeksResponse.data;
+            const season = seasonResponse.data;
+
+            if (weeks && season) {
+              const seasonObj = Array.isArray(sessionData.seasons) ? sessionData.seasons[0] : sessionData.seasons;
+              const seasonName = seasonObj?.season_name || "";
+              
+              const isTestSeason = seasonName.toUpperCase().includes("TEST");
+
+              if (isTestSeason) {
+                 console.log("[Draft Complete] Test season detected. Generating Rapid Test Schedule...");
+                 
                  const { teams } = await getTeamsWithDetails(false, supabase);
                  const activeTeams = (teams?.filter(t => t.is_hidden !== true) || []) as TeamWithDetails[];
                  
@@ -683,9 +686,7 @@ export async function completeDraft(
                      const allMatchups = await generateSeasonMatchups(activeTeams, 5, false);
                      const weekIds: string[] = [];
                      
-                     // The first game starts exactly 20 minutes from RIGHT NOW.
                      const baseNow = new Date(Date.now() + 20 * 60000); 
-                     
                      const matchupsPerWeek = Math.floor(activeTeams.length / 2);
                      const weekDurationMs = matchupsPerWeek * 3 * 20 * 60000;
                      const weekSpacingMs = weekDurationMs + (20 * 60000); 
@@ -714,13 +715,11 @@ export async function completeDraft(
                          let matchOffsetMinutes = 0;
                          
                          for (const matchup of week1Matchups) {
-                             const { data: matchupRecord, error: matchError } = await supabase.from('weekly_matchups').insert({
+                             const { data: matchupRecord } = await supabase.from('weekly_matchups').insert({
                                  season_id: sessionData.season_id, week_number: 1, team1_id: matchup.teamAId, team2_id: matchup.teamBId, is_playoff: false
                              }).select('id').single();
                              
-                             if (matchError) {
-                                 await logSystemEvent("TestScheduleGen", "error", `Failed to insert Week 1 matchup`, { error: matchError.message });
-                             } else if (matchupRecord) {
+                             if (matchupRecord) {
                                  for (let i = 0; i < 3; i++) {
                                      const matchDate = new Date(baseNow.getTime() + (matchOffsetMinutes * 60000));
                                      await supabase.from('schedule').insert({
@@ -753,40 +752,38 @@ export async function completeDraft(
                          }
                      }
                  }
-             } catch (testError) {
-                 await logSystemEvent("TestScheduleGen", "error", "Fatal error generating test schedule", { error: String(testError) });
-             }
-                   } else {
-             console.log(`[Draft Complete] Generating regular season schedule...`);
-             const regularWeeksCount = weeks.filter(w => !w.is_playoff_week && !w.is_championship_week).length;
-             
-             await logSystemEvent("CompleteDraft", "info", "Normal season detected. Preparing to generate schedule.", { 
-                 weeksFound: weeks.length, 
-                 regularWeeksCount: regularWeeksCount,
-                 hasRivalsWeek: season.has_rivals_week
-             });
-            
-             const schedResult = await generateFullSeasonSchedule(
-               sessionData.season_id, regularWeeksCount, season.has_rivals_week
-             );
-            
-             if (!schedResult.success) {
-               await logSystemEvent("CompleteDraft", "error", `Normal schedule generation failed`, { error: schedResult.error });
-             } else {
-               await logSystemEvent("CompleteDraft", "info", `Schedule generated successfully!`, { gamesScheduled: schedResult.scheduledGamesCount });
-             }
-          }
+              } else {
+                 console.log(`[Draft Complete] Generating regular season schedule...`);
+                 const regularWeeksCount = weeks.filter((w: any) => !w.is_playoff_week && !w.is_championship_week).length;
+                 
+                 await logSystemEvent("CompleteDraft", "info", "Normal season detected. Preparing to generate schedule.", { 
+                     weeksFound: weeks.length, 
+                     regularWeeksCount: regularWeeksCount,
+                     hasRivalsWeek: season.has_rivals_week
+                 });
+                
+                 const schedResult = await generateFullSeasonSchedule(
+                   sessionData.season_id, regularWeeksCount, season.has_rivals_week
+                 );
+                
+                 if (!schedResult.success) {
+                   await logSystemEvent("CompleteDraft", "error", `Normal schedule generation failed`, { error: schedResult.error });
+                 } else {
+                   await logSystemEvent("CompleteDraft", "info", `Schedule generated successfully!`, { gamesScheduled: schedResult.scheduledGamesCount });
+                 }
+              }
+            }
+        } catch (schedError) {
+            await logSystemEvent("CompleteDraft", "error", "Fatal error during schedule generation phase", { error: String(schedError) });
         }
-    }
 
-    // =========================================================================================
-    // STEP 2: GENERATE PLACEHOLDER DECKS AND POLLS (Now that the weeks exist!)
-    // =========================================================================================
-    if (sessionData?.season_id) {
+        // =========================================================================================
+        // STEP 2: GENERATE PLACEHOLDER DECKS AND POLLS (Now that the weeks exist!)
+        // =========================================================================================
         const { data: firstWeek, error: weekError } = await supabase
             .from('schedule_weeks') 
             .select('id, end_date') 
-            .eq('season_id', sessionData.season_id) // <-- ADDED THIS CRITICAL FILTER!
+            .eq('season_id', sessionData.season_id) 
             .order('start_date', { ascending: true }) 
             .limit(1)
             .single();
@@ -804,7 +801,6 @@ export async function completeDraft(
               console.log(`Starting post-draft actions for ${teams.length} teams in session ${sessionId}...`);
               for (const team of teams) {
                  try {
-                     // Pass supabase to avoid cookie errors!
                      const { success, deckId, error: deckError } = await generatePlaceholderDeck(team.team_id, sessionId, supabase);
                      
                      if (!success) {
@@ -835,12 +831,10 @@ export async function completeDraft(
               }
             }
         }
-    }
 
-    // =========================================================================================
-    // STEP 3: TRANSITION PHASE UNCONDITIONALLY
-    // =========================================================================================
-    if (sessionData?.season_id) {
+        // =========================================================================================
+        // STEP 3: TRANSITION PHASE UNCONDITIONALLY
+        // =========================================================================================
         const { error: phaseError } = await supabase
             .from("seasons")
             .update({ 
