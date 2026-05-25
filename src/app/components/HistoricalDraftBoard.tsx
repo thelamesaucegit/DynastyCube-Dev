@@ -115,11 +115,24 @@ export default function HistoricalDraftBoard({ serverPicks, sessionId }: { serve
   const [draftOrder, setDraftOrder] = useState<DraftOrderTeam[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
 
+  // --- NEW AGGRESSIVE BROWSER LOGGING ---
+  console.log("[HistoricalDraftBoard] Component mounted!");
+  console.log(`[HistoricalDraftBoard] Received sessionId: ${sessionId}`);
+  console.log(`[HistoricalDraftBoard] Received serverPicks count: ${serverPicks?.length}`);
+  if (serverPicks?.length > 0) {
+      console.log("[HistoricalDraftBoard] Sample pick 1:", serverPicks[0]);
+  }
+  // --------------------------------------
+
   useEffect(() => {
     const fetchDraftOrder = async () => {
+      console.log("[HistoricalDraftBoard] Fetching draft order...");
       const { draftOrder: fetchedOrder, error } = await getDraftBoardData(sessionId);
-      if (error) console.error("Failed to fetch draft order:", error);
-      else setDraftOrder(fetchedOrder);
+      if (error) console.error("[HistoricalDraftBoard] Failed to fetch draft order:", error);
+      else {
+          console.log(`[HistoricalDraftBoard] Fetched ${fetchedOrder?.length} teams for draft order.`);
+          setDraftOrder(fetchedOrder);
+      }
     };
     if (sessionId) fetchDraftOrder();
   }, [sessionId]);
@@ -137,9 +150,16 @@ export default function HistoricalDraftBoard({ serverPicks, sessionId }: { serve
         </div>
       </div>
 
-      {viewMode === 'list' && <ListView picks={serverPicks} />}
-      {viewMode === 'team' && draftOrder.length > 0 && <TeamView picks={serverPicks} draftOrder={draftOrder} />}
-      {viewMode === 'team' && draftOrder.length === 0 && <div className="text-center text-muted-foreground py-8">Loading teams...</div>}
+      {serverPicks.length === 0 && (
+          <div className="bg-red-900/20 border border-red-500/50 p-6 rounded-lg text-center my-8">
+              <h3 className="text-xl font-bold text-red-400 mb-2">No Draft Data Found</h3>
+              <p className="text-gray-300">The server returned 0 picks for this draft session ({sessionId}). Check your terminal logs to see if the database query failed.</p>
+          </div>
+      )}
+
+      {serverPicks.length > 0 && viewMode === 'list' && <ListView picks={serverPicks} />}
+      {serverPicks.length > 0 && viewMode === 'team' && draftOrder.length > 0 && <TeamView picks={serverPicks} draftOrder={draftOrder} />}
+      {serverPicks.length > 0 && viewMode === 'team' && draftOrder.length === 0 && <div className="text-center text-muted-foreground py-8">Loading teams...</div>}
     </div>
   );
 }
