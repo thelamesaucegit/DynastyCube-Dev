@@ -754,7 +754,7 @@ export async function completeDraft(
                  }
               } else {
                  console.log(`[Draft Complete] Generating regular season schedule...`);
-                 const regularWeeksCount = weeks.filter((w: any) => !w.is_playoff_week && !w.is_championship_week).length;
+const regularWeeksCount = weeks.filter((w: { is_playoff_week: boolean; is_championship_week: boolean }) => !w.is_playoff_week && !w.is_championship_week).length;
                  
                  await logSystemEvent("CompleteDraft", "info", "Normal season detected. Preparing to generate schedule.", { 
                      weeksFound: weeks.length, 
