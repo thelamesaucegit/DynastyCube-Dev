@@ -60,7 +60,7 @@ const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small
 }; 
 
 // MODIFIED: ListView now has corrected responsive grid classes
-const ListView: FC<{ picks: DraftPick[], newestPickId: number | null }> = ({ picks, newestPickId }) => {
+const ListView: FC<{ picks: DraftPick[], newestPickId: string | number | null }> = ({ picks, newestPickId }) => {
   const newestPick = picks.length > 0 ? picks[0] : null;
   const historicalPicks = picks.slice(1);
   
@@ -90,7 +90,7 @@ const ListView: FC<{ picks: DraftPick[], newestPickId: number | null }> = ({ pic
   );
 };
 
-const TeamView: FC<{ picks: DraftPick[], draftOrder: DraftOrderTeam[], newestPickId: number | null }> = ({ picks, draftOrder, newestPickId }) => {
+const TeamView: FC<{ picks: DraftPick[], draftOrder: DraftOrderTeam[], newestPickId: string | number | null }> = ({ picks, draftOrder, newestPickId }) => {
   const picksByTeam = useMemo(() => {
     const grouped: Record<string, DraftPick[]> = {};
     for (const team of draftOrder) { if (team.team_id) grouped[team.team_id] = []; }
@@ -140,7 +140,7 @@ export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoar
   const [picks, setPicks] = useState<DraftPick[]>(serverPicks);
   const [draftOrder, setDraftOrder] = useState<DraftOrderTeam[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [newestPickId, setNewestPickId] = useState<number | null>(null);
+  const [newestPickId, setNewestPickId] = useState<string | number | null>(null);
 
   useEffect(() => {
     const fetchDraftOrder = async () => {
