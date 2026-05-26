@@ -14,6 +14,31 @@ export interface StreamMatch {
     life_timeline: [number, number][]; 
 }
 
+// Local interfaces to satisfy TypeScript
+interface DbTeam {
+    id: string;
+    name: string;
+    emoji: string;
+}
+
+interface PlayerState {
+    name?: string;
+    life?: number;
+}
+
+interface GameStateUpdate {
+    gameState?: {
+        players?: Record<string, PlayerState>;
+    };
+    player1Life?: number;
+    player2Life?: number;
+}
+
+interface SimMatchData {
+    argentum_game_states?: GameStateUpdate[];
+    game_states?: GameStateUpdate[];
+}
+
 export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | null }> {
     const supabase = await createServerClient();
     
@@ -58,29 +83,33 @@ export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | nul
         if (upcomingMatch) targetMatch = upcomingMatch;
     }
 
+    // Safely extract teams regardless of how PostgREST returned them
+    const t1 = (Array.isArray(targetMatch.team1) ? targetMatch.team1[0] : targetMatch.team1) as unknown as DbTeam;
+    const t2 = (Array.isArray(targetMatch.team2) ? targetMatch.team2[0] : targetMatch.team2) as unknown as DbTeam;
+
     // Fetch the teams' current active season records
     const { data: records } = await supabase
         .from('team_records_view')
         .select('team_id, wins, losses')
-        .in('team_id', [targetMatch.team1.id, targetMatch.team2.id]);
+        .in('team_id', [t1.id, t2.id]);
 
     const recordMap = new Map((records || []).map(r => [r.team_id, r]));
 
     // Extract life timeline
     let lifeTimeline: [number, number][] = [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const simData = Array.isArray(targetMatch.sim_match) ? targetMatch.sim_match[0] : targetMatch.sim_match as any;
+    
+    // Safely extract sim match data
+    const simMatchArray = Array.isArray(targetMatch.sim_match) ? targetMatch.sim_match : [targetMatch.sim_match];
+    const simData = simMatchArray[0] as unknown as SimMatchData;
     
     if (simData) {
         const states = simData.argentum_game_states || simData.game_states || [];
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        lifeTimeline = states.map((state: any) => {
+        lifeTimeline = states.map((state: GameStateUpdate) => {
             let t1Life = 20, t2Life = 20;
             if (state.gameState?.players) {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                Object.values(state.gameState.players).forEach((p: any) => {
-                    if (p.name === targetMatch.team1.name) t1Life = p.life ?? 20;
-                    if (p.name === targetMatch.team2.name) t2Life = p.life ?? 20;
+                Object.values(state.gameState.players).forEach((p: PlayerState) => {
+                    if (p.name === t1.name) t1Life = p.life ?? 20;
+                    if (p.name === t2.name) t2Life = p.life ?? 20;
                 });
             } else {
                 t1Life = state.player1Life ?? 20;
@@ -92,11 +121,14 @@ export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | nul
 
     return { 
         match: {
-            ...targetMatch,
-            team1: targetMatch.team1 as any,
-            team2: targetMatch.team2 as any,
-            team1_record: recordMap.get(targetMatch.team1.id) || { wins: 0, losses: 0 },
-            team2_record: recordMap.get(targetMatch.team2.id) || { wins: 0, losses: 0 },
+            id: targetMatch.id,
+            match_date: targetMatch.match_date,
+            status: targetMatch.status,
+            sim_match_id: targetMatch.sim_match_id,
+            team1: t1,
+            team2: t2,
+            team1_record: recordMap.get(t1.id) || { wins: 0, losses: 0 },
+            team2_record: recordMap.get(t2.id) || { wins: 0, losses: 0 },
             life_timeline: lifeTimeline
         } 
     };
