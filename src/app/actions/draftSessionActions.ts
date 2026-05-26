@@ -669,9 +669,9 @@ export async function completeDraft(
 
                      await logSystemEvent("ScheduleGenTrace", "info", `[5] Inserted ${weekIds.length} weeks.`);
 
-                                      if (weekIds.length > 0) {
+                     if (weekIds.length > 0) {
                          let totalMatchups = 0, totalGames = 0;
-                         
+
                          // Start the very first game 10 minutes from now
                          let currentMatchCursor = new Date(Date.now() + 10 * 60000);
 
@@ -705,8 +705,7 @@ export async function completeDraft(
                                  }
                               }
                          }
-                         await logSystemEvent("ScheduleGenTrace", "info", `[6] Schedule Complete! ${totalMatchups} matchups, ${totalGames} games.`);Something went wrong while answering your question. Please try again later.
-
+                         await logSystemEvent("ScheduleGenTrace", "info", `[6] Schedule Complete! ${totalMatchups} matchups, ${totalGames} games.`);
                      }
                  }
               } else {
@@ -761,6 +760,7 @@ export async function completeDraft(
     return { success: false, error: errString };
   }
 }
+
 
 // ============================================================================
 // AUTO-DRAFT TIMER CHECK
