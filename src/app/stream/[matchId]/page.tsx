@@ -47,10 +47,10 @@ export default async function LiveStreamPage({ params }: { params: Promise<{ mat
     // 2. Extract unique card names to fetch mapping data
     const cardNamesToFetch = new Set<string>();
     
-    gameStates.forEach((state: SpectatorStateUpdate) => {
+        gameStates.forEach((state: SpectatorStateUpdate) => {
         if (state.gameState?.zones) {
-            // Assert the zones object as a Record of arrays of cards
-            const zones = state.gameState.zones as Record<string, CardInZone[]>;
+            // Safely cast through unknown first to bridge the gap between Array and Record types
+            const zones = state.gameState.zones as unknown as Record<string, CardInZone[]>;
             
             Object.values(zones).forEach((zone: CardInZone[]) => {
                 if (Array.isArray(zone)) {
@@ -61,6 +61,7 @@ export default async function LiveStreamPage({ params }: { params: Promise<{ mat
             });
         }
     });
+
 
     const cardDataMap = await getCardDataForReplay(Array.from(cardNamesToFetch));
 
