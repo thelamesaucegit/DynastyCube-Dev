@@ -228,7 +228,7 @@ export async function computeAutoDraftPick(
 
     // --- RAW ELO TOP N SLICE ---
     const DEFAULT_ELO = 1000;
-    const TOP_N_POOL_SIZE = 15; 
+    const TOP_N_POOL_SIZE = 20; 
 
     // Sort the entire valid pool strictly by RAW ELO (no multipliers yet)
     const rawSortedPool = [...candidatePool].sort((a, b) => 
@@ -239,7 +239,7 @@ export async function computeAutoDraftPick(
     const evaluationPool = rawSortedPool.slice(0, TOP_N_POOL_SIZE);
     // ---------------------------
 
-    const LAND_ELO_MODIFIER = 0.83; 
+    const LAND_ELO_MODIFIER = 0.80; 
 
     // --- EXPONENTIAL DECAY CONSTANTS ---
     const BASE_BONUS = 0.03; 
@@ -280,7 +280,7 @@ export async function computeAutoDraftPick(
             // Introduce a random variance between -15 and +15 to the base ELO.
             // This blurs the lines between mathematically identical cards, 
             // making the bot pick less rigidly and more like a human with slight preferences.
-            const fuzzAmount = Math.floor(Math.random() * 31) - 15; // Random integer between -15 and 15
+            const fuzzAmount = Math.floor(Math.random() * 101) - 50; // Random integer between -50 and 50
             elo += fuzzAmount;
             
             // Slight, flat penalty on lands so teams prioritize 
