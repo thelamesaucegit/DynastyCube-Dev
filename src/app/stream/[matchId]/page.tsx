@@ -108,21 +108,18 @@ export default async function LiveStreamPage({ params }: { params: Promise<{ mat
     const reconstructedGameStates = reconstructGameStates(rawGameStates);
     const validStates = reconstructedGameStates.filter(s => s?.gameState != null);
 
-    // 2. Extract unique card names from the reconstructed arrays
+       // 2. Extract unique card names from the reconstructed arrays
     const cardNamesToFetch = new Set<string>();
     
     validStates.forEach((state: SpectatorStateUpdate) => {
-        if (state.gameState?.zones) {
-            state.gameState.zones.forEach((zone: ClientZone) => {
-                if (Array.isArray(zone.cards)) {
-                    // Strictly typed ClientCard
-                    zone.cards.forEach((card: ClientCard) => {
-                        if (card?.name) cardNamesToFetch.add(card.name);
-                    });
-                }
+        if (state.gameState?.cards) {
+            // Read directly from the master cards dictionary!
+            Object.values(state.gameState.cards).forEach((card: ClientCard) => {
+                if (card?.name) cardNamesToFetch.add(card.name);
             });
         }
     });
+
 
     const cardDataMap = await getCardDataForReplay(Array.from(cardNamesToFetch));
 
