@@ -669,12 +669,14 @@ export async function completeDraft(
 
                      await logSystemEvent("ScheduleGenTrace", "info", `[5] Inserted ${weekIds.length} weeks.`);
 
-                     if (weekIds.length > 0) {
+                                      if (weekIds.length > 0) {
                          let totalMatchups = 0, totalGames = 0;
+                         
+                         // Start the very first game 10 minutes from now
+                         let currentMatchCursor = new Date(Date.now() + 10 * 60000);
 
                          for (let week = 1; week <= 5; week++) {
                               const weekMatchups = allMatchups.filter(m => m.week === week);
-                              let matchOffsetMinutes = 0;
 
                               for (const matchup of weekMatchups) {
                                   const { data: matchupRecord, error: mError } = await supabase.from('weekly_matchups').insert({
@@ -685,29 +687,26 @@ export async function completeDraft(
 
                                  if (matchupRecord && weekIds[week - 1]) {
                                      totalMatchups++;
-                                                                       for (let i = 0; i < 3; i++) {
-                                         const mDate = new Date(baseNow.getTime() + (matchOffsetMinutes * 60000));
+                                     for (let i = 0; i < 3; i++) {
                                          const { error: sError } = await supabase.from('schedule').insert({
-                                             season_id: sessionData.season_id, 
-                                             season_number: testSeasonNumber, 
-                                             week_id: weekIds[week - 1], 
-                                             week_number: week,
-                                             team1_id: matchup.teamAId, 
-                                             team2_id: matchup.teamBId, 
-                                             weekly_matchup_id: matchupRecord.id,
-                                             match_date: mDate.toISOString(), 
-                                             status: 'scheduled',
-                                             team1_ai_profile: 'default', // <-- ADDED
-                                             team2_ai_profile: 'default'  // <-- ADDED
+                                             season_id: sessionData.season_id, season_number: testSeasonNumber, week_id: weekIds[week - 1], week_number: week,
+                                             team1_id: matchup.teamAId, team2_id: matchup.teamBId, weekly_matchup_id: matchupRecord.id,
+                                             match_date: currentMatchCursor.toISOString(), status: 'scheduled',
+                                             team1_ai_profile: 'default',
+                                             team2_ai_profile: 'default'
                                          });
+                                         
                                          if (sError) await logSystemEvent("TestScheduleGen", "error", `Game insert failed: ${sError.message}`);
                                          else totalGames++;
-                                         matchOffsetMinutes += 20;
+                                         
+                                         // Advance the cursor by 10 minutes for the VERY NEXT GAME
+                                         currentMatchCursor = new Date(currentMatchCursor.getTime() + 10 * 60000);
                                      }
                                  }
                               }
                          }
-                         await logSystemEvent("ScheduleGenTrace", "info", `[6] Schedule Complete! ${totalMatchups} matchups, ${totalGames} games.`);
+                         await logSystemEvent("ScheduleGenTrace", "info", `[6] Schedule Complete! ${totalMatchups} matchups, ${totalGames} games.`);Something went wrong while answering your question. Please try again later.
+
                      }
                  }
               } else {
