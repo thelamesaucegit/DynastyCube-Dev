@@ -1,4 +1,3 @@
-// src/app/schedule/page.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -20,13 +19,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/app/components/ui/select";
-import { Calendar, Clock, Loader2, AlertCircle, PlayCircle, Bot, Swords } from "lucide-react";
+import { Calendar, Clock, Loader2, AlertCircle, PlayCircle, Bot, Swords, ChevronDown, ChevronUp } from "lucide-react";
 import { formatDateTime } from "@/app/utils/timezoneUtils";
 import { useUserTimezone } from "@/hooks/useUserTimezone";
 
 interface WeekWithMatches extends ScheduleWeek {
   matches: UnifiedMatch[];
 }
+
+// Helper moved outside so it can be easily accessed everywhere
+const getWeekStatus = (week: ScheduleWeek) => {
+  const now = new Date();
+  const startDate = new Date(week.start_date);
+  const endDate = new Date(week.end_date);
+  if (now < startDate) return "upcoming";
+  if (now > endDate) return "completed";
+  return "current";
+};
 
 export default function SchedulePage() {
   const { timezone } = useUserTimezone();
@@ -35,10 +44,35 @@ export default function SchedulePage() {
   const [selectedSeason, setSelectedSeason] = useState<{ id: string; name: string; status: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Track which weeks are expanded
+  const [openWeeks, setOpenWeeks] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     loadData();
   }, []);
+
+  const setupDefaultOpenWeeks = (weeksData: WeekWithMatches[]) => {
+    const defaultOpen: Record<string, boolean> = {};
+    
+    // Auto-expand the current week
+    const currentWeek = weeksData.find(w => getWeekStatus(w) === "current");
+    
+    if (currentWeek) {
+      defaultOpen[currentWeek.id] = true;
+    } else {
+      // If no week is currently active, expand the next upcoming one
+      const upcomingWeek = weeksData.find(w => getWeekStatus(w) === "upcoming");
+      if (upcomingWeek) {
+        defaultOpen[upcomingWeek.id] = true;
+      } else if (weeksData.length > 0) {
+        // If all weeks are completed, expand the very last week (e.g. Finals)
+        defaultOpen[weeksData[weeksData.length - 1].id] = true;
+      }
+    }
+    
+    setOpenWeeks(defaultOpen);
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -47,7 +81,6 @@ export default function SchedulePage() {
       const scheduleResult = await getActiveSeasonSchedule();
       if (scheduleResult.success && scheduleResult.season) {
         
-        // FIX: Fetch matches for each week just like the admin panel does
         const weeksWithData = await Promise.all(
           (scheduleResult.weeks as ScheduleWeek[]).map(async (week) => {
             const { matches } = await getWeekMatchesAndSims(week.id);
@@ -60,6 +93,7 @@ export default function SchedulePage() {
         
         setWeeks(weeksWithData);
         setSelectedSeason(scheduleResult.season);
+        setupDefaultOpenWeeks(weeksWithData); // Set default expanded state
       } else {
         setError(scheduleResult.error || "No active season found");
       }
@@ -88,8 +122,8 @@ export default function SchedulePage() {
       if (result.error) {
         setError(result.error);
         setWeeks([]);
+        setOpenWeeks({});
       } else {
-        // FIX: Fetch matches when changing seasons
         const weeksWithData = await Promise.all(
           result.weeks.map(async (week) => {
             const { matches } = await getWeekMatchesAndSims(week.id);
@@ -102,6 +136,7 @@ export default function SchedulePage() {
         
         setWeeks(weeksWithData);
         setSelectedSeason(season);
+        setupDefaultOpenWeeks(weeksWithData); // Set default expanded state for new season
       }
     } catch (err) {
       console.error("Error loading season schedule:", err);
@@ -111,14 +146,8 @@ export default function SchedulePage() {
     }
   };
 
-  const getWeekStatus = (week: WeekWithMatches) => {
-    const now = new Date();
-    const startDate = new Date(week.start_date);
-    const endDate = new Date(week.end_date);
-
-    if (now < startDate) return "upcoming";
-    if (now > endDate) return "completed";
-    return "current";
+  const toggleWeek = (weekId: string) => {
+    setOpenWeeks(prev => ({ ...prev, [weekId]: !prev[weekId] }));
   };
 
   const formatDate = (dateString: string) => {
@@ -154,7 +183,6 @@ export default function SchedulePage() {
               : "View match schedules and deadlines"}
           </p>
         </div>
-
         {seasons.length > 0 && (
           <div className="w-full md:w-64">
             <label className="block text-sm font-medium text-muted-foreground mb-2">Select Season</label>
@@ -184,7 +212,7 @@ export default function SchedulePage() {
           <CardContent className="py-16 text-center">
             <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h2 className="text-2xl font-bold mb-2">No Schedule Available</h2>
-            <p className="text-muted-foreground">The schedule for this season hasn&apos;t been set up yet.</p>
+            <p className="text-muted-foreground">The schedule for this season hasn't been set up yet.</p>
           </CardContent>
         </Card>
       ) : (
@@ -192,121 +220,133 @@ export default function SchedulePage() {
           {weeks.map((week) => {
             const status = getWeekStatus(week);
             const deckDeadlinePassed = new Date(week.deck_submission_deadline) < new Date();
+            const isOpen = openWeeks[week.id] || false;
 
             return (
               <Card
                 key={week.id}
-                className={`transition-all ${
+                className={`transition-all overflow-hidden ${
                   status === "current" ? "border-primary shadow-lg ring-1 ring-primary/20"
-                    : status === "upcoming" ? "border-border" : "border-border opacity-75"
+                    : status === "upcoming" ? "border-border" : "border-border opacity-80"
                 }`}
               >
-                <CardHeader>
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-3 mb-1">
-                        <CardTitle className="text-2xl">Week {week.week_number}</CardTitle>
-                        {status === "current" && <Badge className="bg-primary">CURRENT WEEK</Badge>}
-                        {status === "upcoming" && <Badge variant="secondary">UPCOMING</Badge>}
+                <div 
+                  onClick={() => toggleWeek(week.id)}
+                  className="cursor-pointer select-none hover:bg-muted/30 transition-colors"
+                >
+                  <CardHeader>
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-3 mb-1">
+                          <CardTitle className="text-2xl">Week {week.week_number}</CardTitle>
+                          {status === "current" && <Badge className="bg-primary">CURRENT WEEK</Badge>}
+                          {status === "upcoming" && <Badge variant="secondary">UPCOMING</Badge>}
+                        </div>
+                        <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                          <Calendar className="h-3.5 w-3.5" />
+                          {formatDate(week.start_date)} - {formatDate(week.end_date)}
+                        </p>
                       </div>
-                      <p className="text-sm text-muted-foreground flex items-center gap-1.5">
-                        <Calendar className="h-3.5 w-3.5" />
-                        {formatDate(week.start_date)} - {formatDate(week.end_date)}
-                      </p>
+                      
+                      <div className="flex items-center justify-between md:justify-end gap-4 md:ml-4">
+                        <div className="text-left md:text-right">
+                          <p className={`text-sm font-medium flex items-center md:justify-end gap-1.5 ${deckDeadlinePassed ? "text-destructive" : "text-muted-foreground"}`}>
+                            <Clock className="h-3.5 w-3.5" /> Deck Submission Deadline
+                          </p>
+                          <p className={`text-lg font-bold ${deckDeadlinePassed ? "text-destructive" : ""}`}>
+                            {formatDeadline(week.deck_submission_deadline)}
+                            {deckDeadlinePassed && " (Passed)"}
+                          </p>
+                        </div>
+                        <Button variant="ghost" size="icon" className="shrink-0 pointer-events-none rounded-full">
+                          {isOpen ? <ChevronUp className="h-6 w-6" /> : <ChevronDown className="h-6 w-6" />}
+                        </Button>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className={`text-sm font-medium flex items-center gap-1.5 justify-end ${deckDeadlinePassed ? "text-destructive" : "text-muted-foreground"}`}>
-                        <Clock className="h-3.5 w-3.5" /> Deck Submission Deadline
-                      </p>
-                      <p className={`text-lg font-bold ${deckDeadlinePassed ? "text-destructive" : ""}`}>
-                        {formatDeadline(week.deck_submission_deadline)}
-                        {deckDeadlinePassed && " (Passed)"}
-                      </p>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {week.notes && (
-                    <div className="mb-4 p-3 bg-accent rounded-lg">
-                      <p className="text-sm">{week.notes}</p>
-                    </div>
-                  )}
+                  </CardHeader>
+                </div>
 
-                  <div>
-                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                      Scheduled Matches
-                    </h3>
-                    {week.matches.length === 0 ? (
-                      <p className="text-sm text-muted-foreground italic">No matches scheduled for this week</p>
-                    ) : (
-                      <div className="space-y-3">
-                        {week.matches.map((match) => (
-                          <Card key={match.id} className="bg-muted/50 border border-border/50">
-                            <CardContent className="p-4">
-                              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                                
-                                {/* Teams Section */}
-                                <div className="flex items-center justify-between gap-4 flex-1">
-                                  <div className="flex items-center gap-2 flex-1">
-                                    <span className="text-2xl">{match.home_team?.emoji}</span>
-                                    <span className="font-semibold text-lg">{match.home_team?.name || 'TBD'}</span>
-                                  </div>
-                                  
-                                  {/* Score / VS */}
-<div className="flex items-center gap-3 text-center px-4">
-  {match.status === 'completed' ? (
-    <>
-      <span className={`text-xl font-bold ${match.home_team_wins > match.away_team_wins ? 'text-primary' : 'text-muted-foreground'}`}>
-        {match.home_team_wins}
-      </span>
-      <span className="text-muted-foreground text-sm font-medium">VS</span>
-      <span className={`text-xl font-bold ${match.away_team_wins > match.home_team_wins ? 'text-primary' : 'text-muted-foreground'}`}>
-        {match.away_team_wins}
-      </span>
-    </>
-  ) : (
-    <span className="text-muted-foreground text-sm font-medium">VS</span>
-  )}
-</div>
-                                  <div className="flex items-center gap-2 flex-1 justify-end">
-                                    <span className="font-semibold text-lg">{match.away_team?.name || 'TBD'}</span>
-                                    <span className="text-2xl">{match.away_team?.emoji}</span>
-                                  </div>
-                                </div>
-
-                                {/* Status & Actions Section */}
-                                <div className="flex flex-row lg:flex-col items-center justify-between lg:justify-center gap-3 lg:gap-1 lg:ml-6 lg:pl-6 lg:border-l border-border/50 min-w-[140px]">
-                                  <div className="flex flex-col items-center">
-                                    <Badge
-                                      variant={match.status === "completed" ? "default" : match.status === "in_progress" ? "secondary" : "outline"}
-                                      className={`mb-1 ${match.status === "completed" ? "bg-emerald-600" : ""}`}
-                                    >
-                                      {match.status.replace("_", " ").toUpperCase()}
-                                    </Badge>
-                                    <span className="text-xs text-muted-foreground whitespace-nowrap flex items-center gap-1">
-                                      {match.matchType === 'sim' ? <Bot className="h-3 w-3"/> : <Swords className="h-3 w-3"/>}
-                                      {match.scheduled_for ? formatDateTime(match.scheduled_for, timezone) : 'Unscheduled'}
-                                    </span>
-                                  </div>
-
-                                  {/* FIX: Link to the public replay page */}
-                                  {match.status === "completed" && match.sim_match_id && (
-                                    <Link href={`/argentum-viewer/${match.sim_match_id}`}>
-                                      <Button size="sm" variant="secondary" className="w-full mt-2 flex items-center gap-1.5">
-                                        <PlayCircle className="h-4 w-4" /> Watch Replay
-                                      </Button>
-                                    </Link>
-                                  )}
-                                </div>
-
-                              </div>
-                            </CardContent>
-                          </Card>
-                        ))}
+                {isOpen && (
+                  <CardContent className="pt-4 border-t border-border/50">
+                    {week.notes && (
+                      <div className="mb-4 p-3 bg-accent rounded-lg">
+                        <p className="text-sm">{week.notes}</p>
                       </div>
                     )}
-                  </div>
-                </CardContent>
+                    <div>
+                      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                        Scheduled Matches
+                      </h3>
+                      {week.matches.length === 0 ? (
+                        <p className="text-sm text-muted-foreground italic">No matches scheduled for this week</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {week.matches.map((match) => (
+                            <Card key={match.id} className="bg-muted/50 border border-border/50">
+                              <CardContent className="p-4">
+                                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                                  
+                                  {/* Teams Section */}
+                                  <div className="flex items-center justify-between gap-4 flex-1">
+                                    <div className="flex items-center gap-2 flex-1">
+                                      <span className="text-2xl">{match.home_team?.emoji}</span>
+                                      <span className="font-semibold text-lg">{match.home_team?.name || 'TBD'}</span>
+                                    </div>
+                                    
+                                    {/* Score / VS */}
+                                    <div className="flex items-center gap-3 text-center px-4">
+                                      {match.status === 'completed' ? (
+                                        <>
+                                          <span className={`text-xl font-bold ${match.home_team_wins > match.away_team_wins ? 'text-primary' : 'text-muted-foreground'}`}>
+                                            {match.home_team_wins}
+                                          </span>
+                                          <span className="text-muted-foreground text-sm font-medium">VS</span>
+                                          <span className={`text-xl font-bold ${match.away_team_wins > match.home_team_wins ? 'text-primary' : 'text-muted-foreground'}`}>
+                                            {match.away_team_wins}
+                                          </span>
+                                        </>
+                                      ) : (
+                                        <span className="text-muted-foreground text-sm font-medium">VS</span>
+                                      )}
+                                    </div>
+                                    
+                                    <div className="flex items-center gap-2 flex-1 justify-end">
+                                      <span className="font-semibold text-lg">{match.away_team?.name || 'TBD'}</span>
+                                      <span className="text-2xl">{match.away_team?.emoji}</span>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Status & Actions Section */}
+                                  <div className="flex flex-row lg:flex-col items-center justify-between lg:justify-center gap-3 lg:gap-1 lg:ml-6 lg:pl-6 lg:border-l border-border/50 min-w-[140px]">
+                                    <div className="flex flex-col items-center">
+                                      <Badge
+                                        variant={match.status === "completed" ? "default" : match.status === "in_progress" ? "secondary" : "outline"}
+                                        className={`mb-1 ${match.status === "completed" ? "bg-emerald-600" : ""}`}
+                                      >
+                                        {match.status.replace("_", " ").toUpperCase()}
+                                      </Badge>
+                                      <span className="text-xs text-muted-foreground whitespace-nowrap flex items-center gap-1">
+                                        {match.matchType === 'sim' ? <Bot className="h-3 w-3"/> : <Swords className="h-3 w-3"/>}
+                                        {match.scheduled_for ? formatDateTime(match.scheduled_for, timezone) : 'Unscheduled'}
+                                      </span>
+                                    </div>
+                                    {match.status === "completed" && match.sim_match_id && (
+                                      <Link href={`/argentum-viewer/${match.sim_match_id}`}>
+                                        <Button size="sm" variant="secondary" className="w-full mt-2 flex items-center gap-1.5">
+                                          <PlayCircle className="h-4 w-4" /> Watch Replay
+                                        </Button>
+                                      </Link>
+                                    )}
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                )}
               </Card>
             );
           })}
