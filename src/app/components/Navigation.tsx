@@ -225,13 +225,13 @@ export default function Navigation() {
                   </NavigationMenuItem>
                 )}
                 
-                {/* Matches Link */}
+                {/* Schedule Link */}
                 <NavigationMenuItem>
                   <Link href="/schedule" legacyBehavior passHref>
                     <NavigationMenuLink
                       className={`${navigationMenuTriggerStyle()} bg-transparent ${isActive("/schedule") ? "bg-accent/50 text-accent-foreground font-medium" : ""}`}
                     >
-                      Matches
+                      Schedule
                     </NavigationMenuLink>
                   </Link>
                 </NavigationMenuItem>
@@ -386,7 +386,7 @@ export default function Navigation() {
                   Teams
                 </Link>
                 <Link href="/schedule" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/schedule") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
-                  Matches
+                  Schedule
                 </Link>
                 {user && (
                   <Link href="/vote" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/vote") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
