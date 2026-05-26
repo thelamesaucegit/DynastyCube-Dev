@@ -45,6 +45,8 @@ export default function HomePage() {
   const [draftSessionId, setDraftSessionId] = useState<string | null>(null);
   const [liveMatch, setLiveMatch] = useState<StreamMatch | null>(null);
   const [loading, setLoading] = useState(true);
+    const [liveLife, setLiveLife] = useState<{t1: number, t2: number} | null>(null);
+
 
   // State for the random background panning
   const [bgPosition, setBgPosition] = useState({ x: 50, y: 50 });
@@ -68,6 +70,36 @@ export default function HomePage() {
     };
   }, []);
 
+   // Synchronize Live Life Totals if the broadcast is active
+  useEffect(() => {
+    if (!liveMatch || !liveMatch.life_timeline || liveMatch.life_timeline.length === 0) return;
+    
+    // The stream begins exactly 30 minutes after the match date
+    const broadcastTime = new Date(new Date(liveMatch.match_date).getTime() + (30 * 60000)).getTime();
+    
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const diff = now - broadcastTime;
+      
+      // If the broadcast has started
+      if (diff > 0) {
+        // Calculate exact index based on 750ms step duration
+        const ticksPassed = Math.floor(diff / 750);
+        
+        if (ticksPassed < liveMatch.life_timeline.length) {
+           const [t1, t2] = liveMatch.life_timeline[ticksPassed];
+           setLiveLife({ t1, t2 });
+        } else {
+           // Lock to the final life totals if the match ended
+           const [t1, t2] = liveMatch.life_timeline[liveMatch.life_timeline.length - 1];
+           setLiveLife({ t1, t2 });
+        }
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [liveMatch]);
+  
   const loadData = async () => {
     setLoading(true);
     try {
