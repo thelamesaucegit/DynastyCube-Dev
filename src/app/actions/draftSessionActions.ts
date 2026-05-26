@@ -647,13 +647,19 @@ export async function completeDraft(
                      const allMatchups = await generateSeasonMatchups(activeTeams, 5, false);
                      await logSystemEvent("ScheduleGenTrace", "info", `[4] Generated ${allMatchups.length} matchups.`);
 
-                     const weekIds: string[] = [];
-                     const baseNow = new Date(Date.now() + 20 * 60000); 
+                    const weekIds: string[] = [];
+                     
+                     // Align everything to start exactly 10 minutes from now
+                     const baseNow = new Date(Date.now() + 10 * 60000); 
                      const testSeasonNumber = parseInt(seasonName.replace(/[^0-9]/g, '')) || 999;
-                     const weekDurationMs = Math.floor(activeTeams.length / 2) * 3 * 20 * 60000;
+                     
+                     // 10 minutes per game.
+                     const matchupsPerWeek = Math.floor(activeTeams.length / 2);
+                     const weekDurationMs = matchupsPerWeek * 3 * 10 * 60000;
 
                      for (let i = 1; i <= 5; i++) {
-                         const weekStart = new Date(baseNow.getTime() + ((i - 1) * (weekDurationMs + 1200000)));
+                         // Weeks are now contiguous blocks of time with no artificial gaps
+                         const weekStart = new Date(baseNow.getTime() + ((i - 1) * weekDurationMs));
                          const weekEnd = new Date(weekStart.getTime() + weekDurationMs); 
                          
                          const { data: weekData, error: weekError } = await supabase.from("schedule_weeks").insert({
@@ -672,8 +678,8 @@ export async function completeDraft(
                      if (weekIds.length > 0) {
                          let totalMatchups = 0, totalGames = 0;
 
-                         // Start the very first game 10 minutes from now
-                         let currentMatchCursor = new Date(Date.now() + 10 * 60000);
+                         // Start the cursor exactly at the beginning of Week 1
+                         let currentMatchCursor = new Date(baseNow.getTime());
 
                          for (let week = 1; week <= 5; week++) {
                               const weekMatchups = allMatchups.filter(m => m.week === week);
