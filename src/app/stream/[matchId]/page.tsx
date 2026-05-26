@@ -107,7 +107,7 @@ export default async function LiveStreamPage({ params }: { params: Promise<{ mat
     // 1. Inflate the diffs!
     const reconstructedGameStates = reconstructGameStates(rawGameStates);
     const validStates = reconstructedGameStates.filter(s => s?.gameState != null);
-
+ const matchDate = data.match_date;
        // 2. Extract unique card names from the reconstructed arrays
     const cardNamesToFetch = new Set<string>();
     
