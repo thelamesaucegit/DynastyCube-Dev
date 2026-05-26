@@ -1,14 +1,13 @@
 // src/app/page.tsx
-
 "use client";
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import Image from "next/image"; // Import the Image component
+import Image from "next/image"; 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { Badge } from "@/app/components/ui/badge";
-import { Users, Trophy, Calendar, ArrowRight, Info } from "lucide-react";
+import { Users, Trophy, Calendar, ArrowRight, Info, PlayCircle, Radio } from "lucide-react";
 import CountdownTimer from "@/app/components/CountdownTimer";
 import { DraftStatusWidget } from "@/app/components/DraftStatusWidget";
 import {
@@ -24,6 +23,7 @@ import {
   type RecentGame,
   type CountdownTimer as CountdownTimerType,
 } from "@/app/actions/homeActions";
+import { getLatestStreamMatch, type StreamMatch } from "@/app/actions/liveStreamActions";
 
 function getRelativeTime(dateString: string): string {
   const date = new Date(dateString);
@@ -43,13 +43,17 @@ export default function HomePage() {
   const [recentGames, setRecentGames] = useState<RecentGame[]>([]);
   const [countdownTimer, setCountdownTimer] = useState<CountdownTimerType | null>(null);
   const [draftSessionId, setDraftSessionId] = useState<string | null>(null);
+  const [liveMatch, setLiveMatch] = useState<StreamMatch | null>(null);
   const [loading, setLoading] = useState(true);
+    const [liveLife, setLiveLife] = useState<{t1: number, t2: number} | null>(null);
+
 
   // State for the random background panning
   const [bgPosition, setBgPosition] = useState({ x: 50, y: 50 });
 
   useEffect(() => {
     loadData();
+
     // Setup the random background panning interval
     const moveBackground = () => {
       setBgPosition({
@@ -57,26 +61,56 @@ export default function HomePage() {
         y: Math.floor(Math.random() * 100),
       });
     };
-    // Give it a tiny delay to start moving immediately on first load
     const initialTimeout = setTimeout(moveBackground, 100);
-    // Pick a new random destination every 25 seconds
     const panInterval = setInterval(moveBackground, 25000);
+
     return () => {
       clearTimeout(initialTimeout);
       clearInterval(panInterval);
     };
   }, []);
 
+   // Synchronize Live Life Totals if the broadcast is active
+  useEffect(() => {
+    if (!liveMatch || !liveMatch.life_timeline || liveMatch.life_timeline.length === 0) return;
+    
+    // The stream begins exactly 30 minutes after the match date
+    const broadcastTime = new Date(new Date(liveMatch.match_date).getTime() + (30 * 60000)).getTime();
+    
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const diff = now - broadcastTime;
+      
+      // If the broadcast has started
+      if (diff > 0) {
+        // Calculate exact index based on 750ms step duration
+        const ticksPassed = Math.floor(diff / 750);
+        
+        if (ticksPassed < liveMatch.life_timeline.length) {
+           const [t1, t2] = liveMatch.life_timeline[ticksPassed];
+           setLiveLife({ t1, t2 });
+        } else {
+           // Lock to the final life totals if the match ended
+           const [t1, t2] = liveMatch.life_timeline[liveMatch.life_timeline.length - 1];
+           setLiveLife({ t1, t2 });
+        }
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [liveMatch]);
+  
   const loadData = async () => {
     setLoading(true);
     try {
-      const [seasonResult, newsResult, picksResult, gamesResult, timerResult, draftSessionResult] = await Promise.all([
+      const [seasonResult, newsResult, picksResult, gamesResult, timerResult, draftSessionResult, streamResult] = await Promise.all([
         getCurrentSeason(),
         getAdminNews(3),
         getRecentDraftPicks(5),
         getRecentGames(5),
         getActiveCountdownTimer(),
         getActiveDraftSession(),
+        getLatestStreamMatch()
       ]);
       setSeason(seasonResult.season);
       setAdminNews(newsResult.news);
@@ -84,6 +118,7 @@ export default function HomePage() {
       setRecentGames(gamesResult.games);
       setCountdownTimer(timerResult.timer);
       setDraftSessionId(draftSessionResult.session?.id || null);
+      setLiveMatch(streamResult.match);
     } catch (error) {
       console.error("Error loading home page data:", error);
     } finally {
@@ -104,7 +139,6 @@ export default function HomePage() {
   if (loading) {
     return (
       <div className="container max-w-7xl mx-auto px-4 py-16 text-center">
-        {/* Changed loading spinner color */}
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
         <p className="text-muted-foreground">Loading...</p>
       </div>
@@ -113,28 +147,39 @@ export default function HomePage() {
 
   const liveDraftLink = draftSessionId ? `/draft/${draftSessionId}/live` : "#";
 
+  // Calculate stream status
+  let streamStatus = 'replay';
+  let formattedStreamTime = '';
+  if (liveMatch) {
+      const broadcastTime = new Date(new Date(liveMatch.match_date).getTime() + (30 * 60000));
+      const now = Date.now();
+      const diff = broadcastTime.getTime() - now;
+
+      if (diff > 0) {
+          streamStatus = 'upcoming';
+          formattedStreamTime = broadcastTime.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      } else if (diff > -900000) { // Within 15 minutes of start time
+          streamStatus = 'live';
+      }
+  }
+
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8 space-y-12">
       {/* Hero Section with Random Panning Background */}
       <section className="relative overflow-hidden rounded-2xl min-h-[400px] flex flex-col justify-center">
-        {/* The Image Layer */}
         <div
           className="absolute inset-0"
           style={{
             backgroundImage: "url('/images/logo/logo.jpg')",
-            backgroundSize: "150%", // Zoom in to allow panning without showing edges
+            backgroundSize: "150%", 
             backgroundRepeat: "no-repeat",
             backgroundPosition: `${bgPosition.x}% ${bgPosition.y}%`,
-            transition: "background-position 25s ease-in-out", // Matches interval for endless smooth gliding
+            transition: "background-position 25s ease-in-out", 
           }}
         />
-        {/* The Overlays for Legibility */}
-        <div className="absolute inset-0 bg-black/60" /> {/* Base darkness */}
-
-        {/* Content Layer */}
+        <div className="absolute inset-0 bg-black/60" /> 
         <div className="relative px-8 py-16 md:py-24 z-10">
           <div className="max-w-3xl">
-            {/* Season Badge is now above the title */}
             {season && (
               <div className="mb-4">
                 <Badge variant="secondary" className="text-xs bg-black/50 text-white border-white/20 backdrop-blur-md">
@@ -142,10 +187,7 @@ export default function HomePage() {
                 </Badge>
               </div>
             )}
-
-            {/* Container for logo and title */}
             <div className="flex items-center gap-4 md:gap-6 mb-4">
-              {/* Scaled-up logo */}
               <Image
                 src="/images/logo/logo.jpg"
                 alt="Dynasty Cube Logo"
@@ -153,19 +195,15 @@ export default function HomePage() {
                 height={56}
                 className="size-10 md:size-14 rounded-lg drop-shadow-md flex-shrink-0"
               />
-              {/* Main title */}
               <h1 className="text-4xl md:text-6xl font-bold text-white drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] tracking-tight">
                 The Dynasty Cube
               </h1>
             </div>
-
             <p className="text-lg md:text-xl text-zinc-200 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] mb-8 max-w-2xl font-medium leading-relaxed">
               A collaborative, living draft league where teams compete, evolve, and shape the fate of the multiverse.
               Part draft league, part fantasy sports, part cosmic entity.
             </p>
-
             <div className="flex flex-wrap gap-4">
-              {/* Removed purple color from primary button */}
               <Button size="lg" className="shadow-lg" asChild>
                 <Link href="/about">
                   <Info className="mr-2 size-4" />
@@ -186,6 +224,65 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* NEW: Live Stream Banner */}
+      {liveMatch && (
+        <section>
+          <Card className={`overflow-hidden relative border ${streamStatus === 'live' ? 'border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.2)] bg-red-950/10' : 'border-blue-500/30 bg-blue-950/10'}`}>
+            {streamStatus === 'live' && <div className="absolute top-0 left-0 w-1 h-full bg-red-500 animate-pulse" />}
+            <CardContent className="p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6">
+              
+              <div className="flex-1 text-center md:text-left">
+                {streamStatus === 'live' ? (
+                   <Badge className="bg-red-500 hover:bg-red-600 mb-3 animate-pulse px-3 py-1"><Radio className="size-3 mr-2 animate-ping" /> LIVE NOW</Badge>
+                ) : streamStatus === 'upcoming' ? (
+                   <Badge variant="secondary" className="mb-3 px-3 py-1 text-blue-400 border-blue-400/30">UPCOMING BROADCAST</Badge>
+                ) : (
+                   <Badge variant="outline" className="mb-3 px-3 py-1">LATEST REPLAY</Badge>
+                )}
+                <h3 className="text-2xl font-bold mb-1">Watch Matchup Stream</h3>
+                <p className="text-muted-foreground text-sm">
+                  {streamStatus === 'upcoming' ? `Stream begins exactly at ${formattedStreamTime}` : 'Synchronized global broadcast'}
+                </p>
+              </div>
+              
+                            <div className="flex items-center gap-6 flex-1 justify-center bg-background/50 px-8 py-4 rounded-xl border border-border/50">
+                <div className="text-center">
+                  <div className="text-4xl mb-1 drop-shadow-md">{liveMatch.team1.emoji}</div>
+                  <div className="font-bold text-sm truncate max-w-[100px]">{liveMatch.team1.name}</div>
+                  <div className="text-xs text-muted-foreground font-mono mt-1 mb-2">{liveMatch.team1_record.wins} - {liveMatch.team1_record.losses}</div>
+                  {streamStatus === 'live' && liveLife && (
+                    <Badge variant="outline" className="text-lg px-3 py-1 border-red-500/30 bg-red-950/20 text-red-400">
+                       ♥ {liveLife.t1}
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-2xl font-black text-muted-foreground/30 px-4">VS</div>
+                <div className="text-center">
+                  <div className="text-4xl mb-1 drop-shadow-md">{liveMatch.team2.emoji}</div>
+                  <div className="font-bold text-sm truncate max-w-[100px]">{liveMatch.team2.name}</div>
+                  <div className="text-xs text-muted-foreground font-mono mt-1 mb-2">{liveMatch.team2_record.wins} - {liveMatch.team2_record.losses}</div>
+                  {streamStatus === 'live' && liveLife && (
+                    <Badge variant="outline" className="text-lg px-3 py-1 border-red-500/30 bg-red-950/20 text-red-400">
+                       ♥ {liveLife.t2}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+
+              <div className="flex-1 flex justify-center md:justify-end">
+                <Button asChild size="lg" className={`${streamStatus === 'live' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'} text-white font-bold w-full md:w-auto h-14 px-8 text-lg shadow-xl`}>
+                  <Link href={`/stream/${liveMatch.sim_match_id}`}>
+                    Tune In <PlayCircle className="ml-2 size-5" />
+                  </Link>
+                </Button>
+              </div>
+
+            </CardContent>
+          </Card>
+        </section>
+      )}
+
       {/* Countdown Timer */}
       {countdownTimer && (
         <CountdownTimer
@@ -196,7 +293,6 @@ export default function HomePage() {
         />
       )}
 
-      {/* Draft Status */}
       <DraftStatusWidget variant="full" />
 
       {/* Stats Overview */}
@@ -381,9 +477,7 @@ export default function HomePage() {
         )}
       </section>
 
-      {/* CubeCobra Link */}
       <section>
-        {/* Removed purple border and gradient background */}
         <Card>
           <CardContent className="p-6 text-center">
             <p className="text-muted-foreground mb-4">
