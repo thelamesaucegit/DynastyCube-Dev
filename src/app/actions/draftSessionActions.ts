@@ -685,12 +685,20 @@ export async function completeDraft(
 
                                  if (matchupRecord && weekIds[week - 1]) {
                                      totalMatchups++;
-                                     for (let i = 0; i < 3; i++) {
+                                                                       for (let i = 0; i < 3; i++) {
                                          const mDate = new Date(baseNow.getTime() + (matchOffsetMinutes * 60000));
                                          const { error: sError } = await supabase.from('schedule').insert({
-                                             season_id: sessionData.season_id, season_number: testSeasonNumber, week_id: weekIds[week - 1], week_number: week,
-                                             team1_id: matchup.teamAId, team2_id: matchup.teamBId, weekly_matchup_id: matchupRecord.id,
-                                             match_date: mDate.toISOString(), status: 'scheduled'
+                                             season_id: sessionData.season_id, 
+                                             season_number: testSeasonNumber, 
+                                             week_id: weekIds[week - 1], 
+                                             week_number: week,
+                                             team1_id: matchup.teamAId, 
+                                             team2_id: matchup.teamBId, 
+                                             weekly_matchup_id: matchupRecord.id,
+                                             match_date: mDate.toISOString(), 
+                                             status: 'scheduled',
+                                             team1_ai_profile: 'default', // <-- ADDED
+                                             team2_ai_profile: 'default'  // <-- ADDED
                                          });
                                          if (sError) await logSystemEvent("TestScheduleGen", "error", `Game insert failed: ${sError.message}`);
                                          else totalGames++;
