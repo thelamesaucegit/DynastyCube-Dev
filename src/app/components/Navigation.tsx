@@ -1,5 +1,3 @@
-//src/app/components/Navigation.tsx
-
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -39,32 +37,33 @@ import {
   Sun,
   Moon,
   Shield,
-  BookOpen,
-  Newspaper,
-  History,
-Group, 
-  Info,
+  Group, 
   LayoutGrid,
   Cable,
   Sparkles,
   Palmtree, 
-   CheckSquare ,
+  CheckSquare,
+  ChevronDown,
+  ChevronRight
 } from "lucide-react";
 import { getDraftSessions, type DraftSession } from "@/app/actions/draftSessionActions";
 import { getUserTeam } from "@/app/actions/teamActions";
-
 
 export default function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [draftSessions, setDraftSessions] = useState<DraftSession[]>([]);
   const pathname = usePathname();
-    const [userTeam, setUserTeam] = useState<{ short_name: string; emoji: string; name: string } | null>(null);
+  const [userTeam, setUserTeam] = useState<{ short_name: string; emoji: string; name: string } | null>(null);
+  
+  // Track expanded state of mobile menu sections
+  const [mobileExpanded, setMobileExpanded] = useState<Record<string, boolean>>({});
+
   const { user, loading, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { isAdmin } = useIsAdmin();
 
-   useEffect(() => {
+  useEffect(() => {
     setMounted(true);
     async function loadData() {
       const { sessions } = await getDraftSessions();
@@ -83,6 +82,10 @@ export default function Navigation() {
   const handleSignOut = async () => {
     await signOut();
     setMobileMenuOpen(false);
+  };
+
+  const toggleMobileSection = (section: string) => {
+    setMobileExpanded(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
   const displayName =
@@ -124,12 +127,14 @@ export default function Navigation() {
               Dynasty Cube
             </span>
           </Link>
-           {/* --- NEW: FLOATING MOBILE EMOJI --- */}
+
+          {/* FLOATING MOBILE EMOJI */}
           {userTeam && (
              <Link href={`/teams/${userTeam.short_name}`} className="md:hidden text-2xl hover:scale-110 transition-transform">
                 {userTeam.emoji}
              </Link>
           )}
+
           {/* Desktop Nav */}
           <nav className="hidden md:flex items-center gap-1">
             <NavigationMenu>
@@ -143,6 +148,7 @@ export default function Navigation() {
                     </NavigationMenuLink>
                   </Link>
                 </NavigationMenuItem>
+
                 {/* Drafts Dropdown */}
                 <NavigationMenuItem>
                   <DropdownMenu>
@@ -177,7 +183,6 @@ export default function Navigation() {
                           <LayoutGrid className="size-4" /> Draft Pool
                         </Link>
                       </DropdownMenuItem>
-                      {/* 2. Added Resort Pool link to desktop menu */}
                       <DropdownMenuItem asChild>
                         <Link href="/pools/resort" className="flex items-center gap-2">
                           <Palmtree className="size-4" /> The Resort Pool
@@ -188,7 +193,7 @@ export default function Navigation() {
                           <Cable className="size-4" /> THE WIRE
                         </Link>
                       </DropdownMenuItem>
-  <DropdownMenuItem asChild>
+                      <DropdownMenuItem asChild>
                         <Link href="/pools/chamber" className="flex items-center gap-2">
                           <Group className="size-4" /> The Chamber
                         </Link>
@@ -201,6 +206,7 @@ export default function Navigation() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </NavigationMenuItem>
+
                 {/* Teams Link */}
                 <NavigationMenuItem>
                   <Link href="/teams" legacyBehavior passHref>
@@ -211,7 +217,8 @@ export default function Navigation() {
                     </NavigationMenuLink>
                   </Link>
                 </NavigationMenuItem>
-               {/* --- NEW: USER'S TEAM EMOJI LINK --- */}
+
+                {/* USER'S TEAM EMOJI LINK */}
                 {userTeam && (
                   <NavigationMenuItem>
                     <Link href={`/teams/${userTeam.short_name}`} legacyBehavior passHref>
@@ -245,6 +252,7 @@ export default function Navigation() {
                     </Link>
                   </NavigationMenuItem>
                 )}
+
                 {/* Info Dropdown */}
                 <NavigationMenuItem>
                   <DropdownMenu>
@@ -259,30 +267,30 @@ export default function Navigation() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </NavigationMenuItem>
+
+                {/* Admin Dropdown */}
                 {user && isAdmin && (
-                   <>
-    <NavigationMenuItem>
-      <Link href="/admin" legacyBehavior passHref>
-        <NavigationMenuLink
-          className={`${navigationMenuTriggerStyle()} bg-transparent flex items-center gap-1.5 ${isActive("/admin") && !isActive("/admin/tasks") ? "bg-orange-500/20 text-orange-600 dark:text-orange-400 font-medium" : "text-orange-600 dark:text-orange-400 hover:bg-orange-500/10"}`}
-        >
-          <Shield className="size-3.5" />
-          Admin
-        </NavigationMenuLink>
-      </Link>
-    </NavigationMenuItem>
-    <NavigationMenuItem>
-      <Link href="/admin/tasks" legacyBehavior passHref>
-        <NavigationMenuLink
-          className={`${navigationMenuTriggerStyle()} bg-transparent flex items-center gap-1.5 ${isActive("/admin/tasks") ? "bg-orange-500/20 text-orange-600 dark:text-orange-400 font-medium" : "text-orange-600 dark:text-orange-400 hover:bg-orange-500/10"}`}
-        >
-          <CheckSquare className="size-3.5" />
-          Task Board
-        </NavigationMenuLink>
-      </Link>
-    </NavigationMenuItem>
-  </>
-)}
+                  <NavigationMenuItem>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger className={`${navigationMenuTriggerStyle()} bg-transparent ${isDropdownActive(["/admin"]) ? "bg-orange-500/20 text-orange-600 dark:text-orange-400 font-medium" : "text-orange-600 dark:text-orange-400 hover:bg-orange-500/10"}`}>
+                        <Shield className="size-3.5 mr-1.5" />
+                        Admin
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                         <DropdownMenuItem asChild>
+                           <Link href="/admin" className="flex items-center gap-2">
+                             <LayoutGrid className="size-4" /> Dashboard
+                           </Link>
+                         </DropdownMenuItem>
+                         <DropdownMenuItem asChild>
+                           <Link href="/admin/tasks" className="flex items-center gap-2">
+                             <CheckSquare className="size-4" /> Task Board
+                           </Link>
+                         </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </NavigationMenuItem>
+                )}
               </NavigationMenuList>
             </NavigationMenu>
           </nav>
@@ -304,6 +312,7 @@ export default function Navigation() {
               <span className="size-4" />
             )}
           </Button>
+
           {loading ? (
             <div className="size-8 rounded-full bg-muted animate-pulse" />
           ) : user ? (
@@ -336,6 +345,7 @@ export default function Navigation() {
               <Link href="/auth/login">Sign In</Link>
             </Button>
           )}
+
           {/* Mobile menu */}
           <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
             <SheetTrigger asChild className="md:hidden">
@@ -345,85 +355,137 @@ export default function Navigation() {
             </SheetTrigger>
             <SheetContent side="right" className="w-72 overflow-y-auto">
               <nav className="flex flex-col gap-1 mt-8">
+                
                 <Link href="/" onClick={() => setMobileMenuOpen(false)} className={`px-4 py-2.5 rounded-md text-left transition-colors ${isActive("/") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
                   Home
                 </Link>
                 
-                <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-                  Draft
-                </div>
-                {draftSessions.map((session) => (
-                  <Link
-                    key={session.id}
-                    href={`/draft/${session.id}/live`}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive(`/draft/${session.id}`) ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}
-                  >
-                    {session.name || `Draft from ${new Date(session.created_at).toLocaleDateString()}`}
-                  </Link>
-                ))}
-                
-                <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-                  Pools
-                </div>
-                <Link href="/pools/draft" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/draft") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
-                  Draft Pool
-                </Link>
-                 {/* 3. Added Resort Pool link to mobile menu */}
-                <Link href="/pools/resort" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/resort") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
-                  The Resort Pool
-                </Link>
-                <Link href="/pools/wire" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/wire") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
-                  The Wire
-                </Link>
-                <Link href="/pools/free-agents" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/free-agents") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
-                  Free Agents
-                </Link>
-                <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-                  League
-                </div>
-                <Link href="/teams" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/teams") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
-                  Teams
-                </Link>
-                <Link href="/schedule" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/schedule") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
-                  Schedule
-                </Link>
-                {user && (
-                  <Link href="/vote" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/vote") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
-                    Vote
-                  </Link>
+                {/* DRAFTS */}
+                <button 
+                  onClick={() => toggleMobileSection('drafts')}
+                  className="flex items-center justify-between w-full pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase hover:text-foreground transition-colors outline-none"
+                >
+                  <span>Drafts ({draftSessions.length})</span>
+                  {mobileExpanded['drafts'] ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+                </button>
+                {mobileExpanded['drafts'] && (
+                  <div className="flex flex-col gap-1 mb-2">
+                    {draftSessions.map((session) => (
+                      <Link
+                        key={session.id}
+                        href={`/draft/${session.id}/live`}
+                        onClick={() => setMobileMenuOpen(false)}
+                        className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive(`/draft/${session.id}`) ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}
+                      >
+                        {session.name || `Draft from ${new Date(session.created_at).toLocaleDateString()}`}
+                      </Link>
+                    ))}
+                  </div>
                 )}
                 
-                <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-                  Info
-                </div>
-                <Link href="/about" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/about") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
-                  About
-                </Link>
-                <Link href="/history" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/history") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
-                  History
-                </Link>
-                <Link href="/news" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/news") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
-                  News
-                </Link>
-                <Link href="/glossary" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/glossary") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
-                  Glossary
-                </Link>
+                {/* POOLS */}
+                <button 
+                  onClick={() => toggleMobileSection('pools')}
+                  className="flex items-center justify-between w-full pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase hover:text-foreground transition-colors outline-none"
+                >
+                  <span>Pools</span>
+                  {mobileExpanded['pools'] ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+                </button>
+                {mobileExpanded['pools'] && (
+                  <div className="flex flex-col gap-1 mb-2">
+                    <Link href="/pools/draft" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/draft") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
+                      Draft Pool
+                    </Link>
+                    <Link href="/pools/resort" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/resort") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
+                      The Resort Pool
+                    </Link>
+                    <Link href="/pools/wire" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/wire") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
+                      The Wire
+                    </Link>
+                    <Link href="/pools/chamber" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/chamber") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
+                      The Chamber
+                    </Link>
+                    <Link href="/pools/free-agents" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/free-agents") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
+                      Free Agents
+                    </Link>
+                  </div>
+                )}
+
+                {/* LEAGUE */}
+                <button 
+                  onClick={() => toggleMobileSection('league')}
+                  className="flex items-center justify-between w-full pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase hover:text-foreground transition-colors outline-none"
+                >
+                  <span>League</span>
+                  {mobileExpanded['league'] ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+                </button>
+                {mobileExpanded['league'] && (
+                  <div className="flex flex-col gap-1 mb-2">
+                    <Link href="/teams" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/teams") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
+                      Teams
+                    </Link>
+                    <Link href="/schedule" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/schedule") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
+                      Schedule
+                    </Link>
+                    {user && (
+                      <Link href="/vote" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/vote") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
+                        Vote
+                      </Link>
+                    )}
+                  </div>
+                )}
+                
+                {/* INFO */}
+                <button 
+                  onClick={() => toggleMobileSection('info')}
+                  className="flex items-center justify-between w-full pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase hover:text-foreground transition-colors outline-none"
+                >
+                  <span>Info</span>
+                  {mobileExpanded['info'] ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+                </button>
+                {mobileExpanded['info'] && (
+                  <div className="flex flex-col gap-1 mb-2">
+                    <Link href="/about" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/about") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
+                      About
+                    </Link>
+                    <Link href="/history" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/history") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
+                      History
+                    </Link>
+                    <Link href="/news" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/news") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
+                      News
+                    </Link>
+                    <Link href="/glossary" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/glossary") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
+                      Glossary
+                    </Link>
+                  </div>
+                )}
+
+                {/* ADMIN */}
                 {user && isAdmin && (
-                   <>
-    <div className="pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-      Admin
-    </div>
-    <Link href="/admin" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors flex items-center gap-2 ${isActive("/admin") && !isActive("/admin/tasks") ? "bg-orange-500/20 text-orange-600 dark:text-orange-400 font-medium" : "text-orange-600 dark:text-orange-400 hover:bg-orange-500/10"}`}>
-      <Shield className="size-4" />
-      Dashboard
-    </Link>
-    <Link href="/admin/tasks" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors flex items-center gap-2 ${isActive("/admin/tasks") ? "bg-orange-500/20 text-orange-600 dark:text-orange-400 font-medium" : "text-orange-600 dark:text-orange-400 hover:bg-orange-500/10"}`}>
-      <CheckSquare className="size-4" />
-      Task Board
-    </Link>
-  </>
-)}
+                  <>
+                    <button 
+                      onClick={() => toggleMobileSection('admin')}
+                      className="flex items-center justify-between w-full pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase hover:text-foreground transition-colors outline-none"
+                    >
+                      <span className="text-orange-600 dark:text-orange-400">Admin</span>
+                      {mobileExpanded['admin'] ? <ChevronDown className="size-3 text-orange-600 dark:text-orange-400" /> : <ChevronRight className="size-3 text-orange-600 dark:text-orange-400" />}
+                    </button>
+                    {mobileExpanded['admin'] && (
+                      <div className="flex flex-col gap-1 mb-2">
+                        <Link href="/admin" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors flex items-center gap-2 ${isActive("/admin") && !isActive("/admin/tasks") ? "bg-orange-500/20 text-orange-600 dark:text-orange-400 font-medium" : "text-orange-600 dark:text-orange-400 hover:bg-orange-500/10"}`}>
+                          <LayoutGrid className="size-4" />
+                          Dashboard
+                        </Link>
+                        <Link href="/admin/tasks" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors flex items-center gap-2 ${isActive("/admin/tasks") ? "bg-orange-500/20 text-orange-600 dark:text-orange-400 font-medium" : "text-orange-600 dark:text-orange-400 hover:bg-orange-500/10"}`}>
+                          <CheckSquare className="size-4" />
+                          Task Board
+                        </Link>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Bottom Buttons */}
                 {user && (
                   <div className="flex items-center gap-3 px-4 py-2 border-t mt-4 pt-6">
                     <ReportButton />
