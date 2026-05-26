@@ -1,3 +1,4 @@
+//src/app/components/game/ArgentumLiveStreamPlayer.tsx
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
