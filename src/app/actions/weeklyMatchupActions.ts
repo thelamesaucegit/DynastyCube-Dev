@@ -114,17 +114,22 @@ export async function recordSimGameResult(
 ): Promise<{ success: boolean; matchupFinalized: boolean; error?: string }> {
     const supabase = createServiceClient();
 
-    const { data: matchup, error: fetchError } = await supabase
+        const { data: matchup, error: fetchError } = await supabase
         .from('weekly_matchups')
-        .select(`*, season:seasons!inner(season_name, phase)`)
+        .select(`*, season:seasons (season_name, phase)`)
         .eq('id', weeklyMatchupId)
         .single();
 
     if (fetchError || !matchup) return { success: false, matchupFinalized: false, error: 'Matchup not found' };
 
-    const seasonName = Array.isArray(matchup.season) ? matchup.season[0].season_name : matchup.season?.season_name;
-    const currentPhase = Array.isArray(matchup.season) ? matchup.season[0].phase : matchup.season?.phase;
-    const isTestSeason = seasonName?.toUpperCase().includes("TEST");
+    // Safely extract the nested season data regardless of PostgREST array/object return type
+    const seasonData = Array.isArray(matchup.season) ? matchup.season[0] : matchup.season;
+    const seasonName = seasonData?.season_name || "";
+    const currentPhase = seasonData?.phase || "";
+    
+    // Check if the season name contains "TEST"
+    const isTestSeason = seasonName.toUpperCase().includes("TEST");
+
     
     // --- AUTOMATION: Preseason -> Season Transition ---
     // If this is the very first game of week 1, shift phase to Season

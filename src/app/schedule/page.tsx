@@ -33,11 +33,15 @@ interface WeekWithMatches extends ScheduleWeek {
 const getWeekStatus = (week: ScheduleWeek) => {
   const now = new Date();
   const startDate = new Date(week.start_date);
-  const endDate = new Date(week.end_date);
+  // Consider the week "completed" 10 minutes before its official end date!
+  // This causes the UI to flip to the next week right as the final game of this week begins simulating.
+  const logicalEndDate = new Date(new Date(week.end_date).getTime() - (10 * 60000));
+  
   if (now < startDate) return "upcoming";
-  if (now > endDate) return "completed";
+  if (now > logicalEndDate) return "completed";
   return "current";
 };
+
 
 export default function SchedulePage() {
   const { timezone } = useUserTimezone();
