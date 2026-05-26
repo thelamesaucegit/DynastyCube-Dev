@@ -1,3 +1,5 @@
+//src/app/stream/[matchId]/page.tsx
+
 import { createServerClient } from "@/lib/supabase";
 import { notFound } from "next/navigation";
 import { ArgentumLiveStreamPlayer } from "@/app/components/game/ArgentumLiveStreamPlayer";
