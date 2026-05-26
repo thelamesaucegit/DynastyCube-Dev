@@ -114,6 +114,7 @@ export default async function LiveStreamPage({ params }: { params: Promise<{ mat
         }
     });
 
+
     const cardDataMap = await getCardDataForReplay(Array.from(cardNamesToFetch));
 
     const serializableCardMap: Record<string, ReplayCardData> = {};
