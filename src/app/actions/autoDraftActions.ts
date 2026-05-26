@@ -228,7 +228,7 @@ export async function computeAutoDraftPick(
 
     // --- RAW ELO TOP N SLICE ---
     const DEFAULT_ELO = 1000;
-    const TOP_N_POOL_SIZE = 15; 
+    const TOP_N_POOL_SIZE = 20; 
 
     // Sort the entire valid pool strictly by RAW ELO (no multipliers yet)
     const rawSortedPool = [...candidatePool].sort((a, b) => 
