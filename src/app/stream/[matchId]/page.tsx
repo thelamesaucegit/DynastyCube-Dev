@@ -1,10 +1,16 @@
-//src/app/stream/[matchId]/page.tsx
-
 import { createServerClient } from "@/lib/supabase";
 import { notFound } from "next/navigation";
 import { ArgentumLiveStreamPlayer } from "@/app/components/game/ArgentumLiveStreamPlayer";
 import { getCardDataForReplay } from "@/app/actions/cardActions";
-import type { SpectatorStateUpdate, ReplayCardData, ReplayStateItem, SpectatorStateDiff, ClientPlayer, ClientZone } from "@/types";
+import type { 
+    SpectatorStateUpdate, 
+    ReplayCardData, 
+    ReplayStateItem, 
+    SpectatorStateDiff, 
+    ClientPlayer, 
+    ClientZone,
+    ClientCard // <-- Added ClientCard
+} from "@/types";
 import { produce } from "immer";
 
 // Define the shape of the database response for the sim match
@@ -48,15 +54,15 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     if (gsd.cards) Object.assign(draft.gameState.cards, JSON.parse(JSON.stringify(gsd.cards)));
                     
                     if (gsd.players) {
-                        // FIX: players is an Array!
-                        Object.values(gsd.players).forEach((p: any) => {
+                        // Strictly type the Object.values as ClientPlayer[]
+                        Object.values(gsd.players as unknown as Record<string, ClientPlayer>).forEach((p: ClientPlayer) => {
                             const index = draft.gameState.players.findIndex((pl: ClientPlayer) => pl.playerId === p.playerId);
                             if (index !== -1) draft.gameState.players[index] = JSON.parse(JSON.stringify(p));
                         });
                     }
                     if (gsd.zones) {
-                        // FIX: zones is an Array!
-                        Object.values(gsd.zones).forEach((z: any) => {
+                        // Strictly type the Object.values as ClientZone[]
+                        Object.values(gsd.zones as unknown as Record<string, ClientZone>).forEach((z: ClientZone) => {
                             const index = draft.gameState.zones.findIndex((zn: ClientZone) => zn.zoneId.ownerId === z.zoneId.ownerId && zn.zoneId.zoneType === z.zoneId.zoneType);
                             if (index !== -1) draft.gameState.zones[index] = JSON.parse(JSON.stringify(z));
                         });
@@ -97,8 +103,7 @@ export default async function LiveStreamPage({ params }: { params: Promise<{ mat
     const simMatch = simMatchArray[0] as unknown as DbSimMatch;
     
     const rawGameStates: ReplayStateItem[] = simMatch?.argentum_game_states || simMatch?.game_states || [];
-    const matchDate = data.match_date;
-
+    
     // 1. Inflate the diffs!
     const reconstructedGameStates = reconstructGameStates(rawGameStates);
     const validStates = reconstructedGameStates.filter(s => s?.gameState != null);
@@ -106,14 +111,18 @@ export default async function LiveStreamPage({ params }: { params: Promise<{ mat
     // 2. Extract unique card names from the reconstructed arrays
     const cardNamesToFetch = new Set<string>();
     
-    validStates.forEach(state => {
-        if (state.gameState.cards) {
-            for (const card of Object.values(state.gameState.cards)) {
-                if (card?.name) cardNamesToFetch.add(card.name);
-            }
+    validStates.forEach((state: SpectatorStateUpdate) => {
+        if (state.gameState?.zones) {
+            state.gameState.zones.forEach((zone: ClientZone) => {
+                if (Array.isArray(zone.cards)) {
+                    // Strictly typed ClientCard
+                    zone.cards.forEach((card: ClientCard) => {
+                        if (card?.name) cardNamesToFetch.add(card.name);
+                    });
+                }
+            });
         }
     });
-
 
     const cardDataMap = await getCardDataForReplay(Array.from(cardNamesToFetch));
 
