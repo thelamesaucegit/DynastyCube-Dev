@@ -2,6 +2,8 @@
 // src/app/argentum-viewer/[matchId]/page.tsx
 "use client";
 
+import { useRouter } from 'next/navigation';
+
 import React, { useState, useEffect, use } from 'react';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
 import { getPublicMatchReplayData } from './public-actions'; 
@@ -87,7 +89,8 @@ export default function ReplayPage(props: PageProps) {
     } | null>(null);
     
     const [isLoading, setIsLoading] = useState(true);
-
+ const router = useRouter();
+    
     useEffect(() => {
         console.log("[Viewer Debug] useEffect triggered. Current matchId:", matchId);
         
@@ -107,6 +110,17 @@ export default function ReplayPage(props: PageProps) {
                 if (!rawGameStates || rawGameStates.length === 0) {
                     throw new Error("No game states found for this match in database.");
                 }
+
+                if (matchDate) {
+                const broadcastStart = new Date(matchDate).getTime() + (30 * 60000);
+                const broadcastEnd = broadcastStart + (rawGameStates.length * 2000);
+                
+                if (Date.now() < broadcastEnd) {
+                    console.log("[Spoiler Lock] Stream hasn't finished! Redirecting to live view...");
+                    router.replace(`/stream/${matchId}`);
+                    return; // Stop rendering the replay
+                }
+            }
                 console.log(`[Viewer Debug] Success! Retrieved ${rawGameStates.length} raw game states.`);
                 
                 console.log("[Viewer Debug] Reconstructing game states...");
