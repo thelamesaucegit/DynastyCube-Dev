@@ -101,7 +101,7 @@ function LiveCardRow({ zoneId, faceDown = false, interactive = false, small = fa
 
   // --- FAN-AWARE SIZING MATH ---
   // Target width is ~60% of battlefield cards (half-size visual footprint)
-  const targetWidth = small ? responsive.smallCardWidth : responsive.battlefieldCardWidth * 0.6;
+  const targetWidth = small ? responsive.smallCardWidth : responsive.battlefieldCardWidth * 0.85;
   const minWidth = small ? 30 : 50;
   
   let fittingWidth = targetWidth;
@@ -184,7 +184,7 @@ function ReplayCardRow({ zoneId, snapshot, cardDataMap, useOldestArt, faceDown =
   const cardCount = showPlaceholders ? zoneSize : totalCardCount;
 
   // --- FAN-AWARE SIZING MATH ---
-  const targetWidth = small ? responsive.smallCardWidth : responsive.battlefieldCardWidth * 0.6;
+  const targetWidth = small ? responsive.smallCardWidth : responsive.battlefieldCardWidth * 0.85;
   const minWidth = small ? 30 : 50;
   
   let fittingWidth = targetWidth;
