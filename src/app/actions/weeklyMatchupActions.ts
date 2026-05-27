@@ -426,7 +426,7 @@ async function finalizeWeeklyOutcome(weeklyMatchupId: string): Promise<boolean> 
         } catch (statErr) {
             const msg = statErr instanceof Error ? statErr.message : String(statErr);
             console.error(`[Action/finalizeWeeklyOutcome] ⚠️ Failed to update season stats:`, msg);
-            await logSystemEvent("FinalizeMatchup", "warning", `Season stats update failed for matchup ${weeklyMatchupId}`, { error: msg });
+            await logSystemEvent("FinalizeMatchup", "warn", `Season stats update failed for matchup ${weeklyMatchupId}`, { error: msg });
         }
 
         return true;
