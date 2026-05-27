@@ -1,3 +1,5 @@
+//src/components/game/board/ReplayBattlefield.tsx
+
 "use client";
 
 import React, { useMemo } from 'react';
