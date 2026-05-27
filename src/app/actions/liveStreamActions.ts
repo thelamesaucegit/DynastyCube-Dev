@@ -39,8 +39,15 @@ interface SimMatchData {
     game_states?: GameStateUpdate[];
 }
 
+function createServiceClient() {
+    return createSupabaseClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_KEY!
+    );
+}
+
 export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | null }> {
-    const supabase = await createServerClient();
+    const supabase = createServiceClient();
     
     // Fetch the last 15 matches that have been simulated to build our "broadcast queue"
     const { data, error } = await supabase

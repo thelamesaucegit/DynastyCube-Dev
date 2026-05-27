@@ -7,7 +7,6 @@ import { cookies } from "next/headers";
 // Create a Supabase client with cookies support
 async function createClient() {
   const cookieStore = await cookies();
-
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -29,15 +28,18 @@ async function createClient() {
     }
   );
 }
+
 export interface ActiveDraftSession {
   id: string;
 }
+
 export interface RecentDraftPick {
   id: string;
   card_id: string;
   card_name: string;
   card_type?: string;
   image_url?: string;
+  oldest_image_url?: string; // <-- ADDED
   team_id: string;
   team_name: string;
   team_emoji: string;
@@ -83,6 +85,7 @@ export interface RecentGame {
   winner_id?: string;
   played_at: string;
 }
+
 /**
  * Get the currently active draft session ID
  */
@@ -99,10 +102,7 @@ export async function getActiveDraftSession(): Promise<{
       .single();
 
     if (error) {
-      // It's not an error if no session is active
-      if (error.code === "PGRST116") {
-        return { session: null };
-      }
+      if (error.code === "PGRST116") return { session: null };
       console.error("Error fetching active draft session:", error);
       return { session: null, error: error.message };
     }
@@ -112,6 +112,7 @@ export async function getActiveDraftSession(): Promise<{
     return { session: null, error: "An unexpected error occurred" };
   }
 }
+
 /**
  * Get the currently active countdown timer
  */
@@ -120,7 +121,6 @@ export async function getActiveCountdownTimer(): Promise<{
   error?: string;
 }> {
   const supabase = await createClient();
-
   try {
     const { data, error } = await supabase
       .from("countdown_timers")
@@ -129,14 +129,10 @@ export async function getActiveCountdownTimer(): Promise<{
       .single();
 
     if (error) {
-      // No active timer is not an error
-      if (error.code === "PGRST116") {
-        return { timer: null };
-      }
+      if (error.code === "PGRST116") return { timer: null };
       console.error("Error fetching active countdown timer:", error);
       return { timer: null, error: error.message };
     }
-
     return { timer: data };
   } catch (error) {
     console.error("Unexpected error fetching active countdown timer:", error);
@@ -152,7 +148,6 @@ export async function getRecentDraftPicks(limit: number = 10): Promise<{
   error?: string;
 }> {
   const supabase = await createClient();
-
   try {
     const { data, error } = await supabase
       .from("team_draft_picks")
@@ -162,6 +157,7 @@ export async function getRecentDraftPicks(limit: number = 10): Promise<{
         card_name,
         card_type,
         image_url,
+        oldest_image_url, 
         team_id,
         pick_number,
         drafted_at,
@@ -187,6 +183,7 @@ export async function getRecentDraftPicks(limit: number = 10): Promise<{
         card_name: pick.card_name || "Unknown Card",
         card_type: pick.card_type,
         image_url: pick.image_url,
+        oldest_image_url: pick.oldest_image_url, // <-- ADDED
         team_id: pick.team_id,
         team_name: team?.name || "Unknown Team",
         team_emoji: team?.emoji || "❓",
@@ -210,7 +207,6 @@ export async function getCurrentSeason(): Promise<{
   error?: string;
 }> {
   const supabase = await createClient();
-
   try {
     const { data, error } = await supabase
       .from("seasons")
@@ -219,14 +215,10 @@ export async function getCurrentSeason(): Promise<{
       .single();
 
     if (error) {
-      // No active season is not an error
-      if (error.code === "PGRST116") {
-        return { season: null };
-      }
+      if (error.code === "PGRST116") return { season: null };
       console.error("Error fetching current season:", error);
       return { season: null, error: error.message };
     }
-
     return { season: data };
   } catch (error) {
     console.error("Unexpected error fetching current season:", error);
@@ -242,7 +234,6 @@ export async function getAdminNews(limit: number = 5): Promise<{
   error?: string;
 }> {
   const supabase = await createClient();
-
   try {
     const { data, error } = await supabase
       .from("admin_news")
@@ -267,7 +258,7 @@ export async function getAdminNews(limit: number = 5): Promise<{
       title: item.title,
       content: item.content,
       created_at: item.created_at,
-      author_name: "Admin Team", // Simplified - no user lookup needed
+      author_name: "Admin Team",
     }));
 
     return { news };
@@ -285,7 +276,6 @@ export async function getRecentGames(limit: number = 5): Promise<{
   error?: string;
 }> {
   const supabase = await createClient();
-
   try {
     const { data, error } = await supabase
       .from("matches")
@@ -320,6 +310,7 @@ export async function getRecentGames(limit: number = 5): Promise<{
     const games: RecentGame[] = (data || []).map((match) => {
       const team1 = Array.isArray(match.team1) ? match.team1[0] : match.team1;
       const team2 = Array.isArray(match.team2) ? match.team2[0] : match.team2;
+
       return {
         id: match.id,
         team1_id: match.home_team_id,
