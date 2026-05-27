@@ -53,9 +53,10 @@ export interface UnifiedMatch {
   away_team: { id: string; name: string; emoji: string; } | null;
   scheduled_for?: string | null;
   winner_team_id?: string | null;
-  home_team_wins: number; // Added
-  away_team_wins: number; // Added
-  sim_match_id?: string | null; // Added for replay links
+  home_team_wins: number; 
+  away_team_wins: number; 
+  sim_match_id?: string | null; 
+  total_steps?: number; 
 }
 
 export async function getWeekMatchesAndSims(weekId: string): Promise<{
@@ -77,14 +78,15 @@ export async function getWeekMatchesAndSims(weekId: string): Promise<{
 
     if (pvpError) throw pvpError;
 
-    // 2. Fetch Sim Matches (from 'schedule' table)
+    // 2. Fetch Sim Matches (PULLING THE GAME STATES TO GET THE STEP COUNT)
     const { data: simMatches, error: simError } = await supabase
       .from("schedule")
       .select(`
         id, status, match_date, winner_team_id, sim_match_id,
         team1_id, team2_id,
         home_team:teams!team1_id(id, name, emoji),
-        away_team:teams!team2_id(id, name, emoji)
+        away_team:teams!team2_id(id, name, emoji),
+        sim_match:sim_matches!sim_match_id(argentum_game_states, game_states)
       `)
       .eq("week_id", weekId);
 
@@ -96,6 +98,7 @@ export async function getWeekMatchesAndSims(weekId: string): Promise<{
     (pvpMatches || []).forEach(m => {
         const homeTeam = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team;
         const awayTeam = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
+
         unifiedList.push({
             id: m.id,
             matchType: 'pvp',
@@ -113,7 +116,12 @@ export async function getWeekMatchesAndSims(weekId: string): Promise<{
         const homeTeam = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team;
         const awayTeam = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
         
-        // Derive sim scores (Sims are single games, so 1-0 or 0-1)
+        // Count the steps for the Spoiler Lock
+        const simMatchArray = Array.isArray(m.sim_match) ? m.sim_match : [m.sim_match];
+        const simData = simMatchArray[0] as any;
+        const totalSteps = simData?.argentum_game_states?.length || simData?.game_states?.length || 0;
+        
+        // Derive sim scores
         let hWins = 0;
         let aWins = 0;
         if (m.status === 'completed' && m.winner_team_id) {
@@ -124,14 +132,15 @@ export async function getWeekMatchesAndSims(weekId: string): Promise<{
         unifiedList.push({
             id: m.id,
             matchType: 'sim',
-            status: m.status,
+            status: m.status, // We pass the raw status, the UI will override it based on stream math
             home_team: homeTeam || null,
             away_team: awayTeam || null,
             scheduled_for: m.match_date,
             winner_team_id: m.winner_team_id,
-            sim_match_id: m.sim_match_id, // For the replay link
+            sim_match_id: m.sim_match_id,
             home_team_wins: hWins,
-            away_team_wins: aWins
+            away_team_wins: aWins,
+            total_steps: totalSteps // <-- Included for the UI calculation
         });
     });
     
@@ -147,7 +156,6 @@ export async function getWeekMatchesAndSims(weekId: string): Promise<{
     return { matches: [], error: message };
   }
 }
-
 /**
  * Get all matches for a specific week (or all matches if weekId is null)
  */
