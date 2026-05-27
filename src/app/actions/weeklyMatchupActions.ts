@@ -4,6 +4,8 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@/lib/supabase";
+import { logSystemEvent } from "@/lib/systemLogger"; 
+
 
 function createServiceClient() {
     return createClient(
@@ -313,12 +315,10 @@ async function finalizeWeeklyOutcome(weeklyMatchupId: string): Promise<boolean> 
             .eq('id', weeklyMatchupId)
             .single();
 
-        if (error) {
-            console.error(`[Action/finalizeWeeklyOutcome] ❌ Failed to fetch matchup:`, error.message);
-            return false;
-        }
-        if (!matchup) {
-            console.error(`[Action/finalizeWeeklyOutcome] ❌ Matchup not found in DB!`);
+        if (error || !matchup) {
+            const errMsg = error?.message || "Matchup not found in DB";
+            console.error(`[Action/finalizeWeeklyOutcome] ❌ Failed to fetch matchup:`, errMsg);
+            await logSystemEvent("FinalizeMatchup", "error", `Failed to fetch matchup ${weeklyMatchupId}`, { error: errMsg });
             return false;
         }
 
@@ -343,8 +343,6 @@ async function finalizeWeeklyOutcome(weeklyMatchupId: string): Promise<boolean> 
             }
         }
 
-        console.log(`[Action/finalizeWeeklyOutcome] Calculated Winner: ${winner_team_id ?? 'DRAW'}`);
-
         // This is the most likely failure point (Playoff Trigger execution)
         const { error: finalizeError } = await supabase
             .from('weekly_matchups')
@@ -352,7 +350,9 @@ async function finalizeWeeklyOutcome(weeklyMatchupId: string): Promise<boolean> 
             .eq('id', weeklyMatchupId);
 
         if (finalizeError) {
-            console.error(`[Action/finalizeWeeklyOutcome] ❌ DB Update Error (Trigger failed?):`, finalizeError.message, finalizeError.details, finalizeError.hint);
+            const errDetails = { msg: finalizeError.message, details: finalizeError.details, hint: finalizeError.hint };
+            console.error(`[Action/finalizeWeeklyOutcome] ❌ DB Update Error (Trigger failed?):`, errDetails);
+            await logSystemEvent("FinalizeMatchup", "error", `Failed to UPDATE weekly_matchup ${weeklyMatchupId}. Postgres Trigger crash?`, errDetails);
             return false;
         }
 
@@ -397,35 +397,47 @@ async function finalizeWeeklyOutcome(weeklyMatchupId: string): Promise<boolean> 
             onConflict: 'team_id,weekly_matchup_id',
         });
         
-        if (h2hError) console.error(`[Action/finalizeWeeklyOutcome] ⚠️ Failed to upsert head-to-head records:`, h2hError.message);
+        if (h2hError) {
+            console.error(`[Action/finalizeWeeklyOutcome] ⚠️ Failed to upsert head-to-head records:`, h2hError.message);
+            await logSystemEvent("FinalizeMatchup", "warning", `H2H Upsert failed for matchup ${weeklyMatchupId}`, { error: h2hError.message });
+        }
 
         // Update team_season_stats for both teams
-        await updateTeamSeasonStats(matchup.team1_id, matchup.season_id, {
-            sim_wins: matchup.sim_team1_wins,
-            sim_losses: matchup.sim_team2_wins,
-            sim_draws: matchup.sim_draws,
-            pvp_wins: matchup.pvp_team1_wins,
-            pvp_losses: matchup.pvp_team2_wins,
-            pvp_draws: matchup.pvp_draws,
-            weekly_outcome: team1Outcome as 'win' | 'loss' | 'draw',
-        });
+        try {
+            await updateTeamSeasonStats(matchup.team1_id, matchup.season_id, {
+                sim_wins: matchup.sim_team1_wins,
+                sim_losses: matchup.sim_team2_wins,
+                sim_draws: matchup.sim_draws,
+                pvp_wins: matchup.pvp_team1_wins,
+                pvp_losses: matchup.pvp_team2_wins,
+                pvp_draws: matchup.pvp_draws,
+                weekly_outcome: team1Outcome as 'win' | 'loss' | 'draw',
+            });
 
-        await updateTeamSeasonStats(matchup.team2_id, matchup.season_id, {
-            sim_wins: matchup.sim_team2_wins,
-            sim_losses: matchup.sim_team1_wins,
-            sim_draws: matchup.sim_draws,
-            pvp_wins: matchup.pvp_team2_wins,
-            pvp_losses: matchup.pvp_team1_wins,
-            pvp_draws: matchup.pvp_draws,
-            weekly_outcome: team2Outcome as 'win' | 'loss' | 'draw',
-        });
+            await updateTeamSeasonStats(matchup.team2_id, matchup.season_id, {
+                sim_wins: matchup.sim_team2_wins,
+                sim_losses: matchup.sim_team1_wins,
+                sim_draws: matchup.sim_draws,
+                pvp_wins: matchup.pvp_team2_wins,
+                pvp_losses: matchup.pvp_team1_wins,
+                pvp_draws: matchup.pvp_draws,
+                weekly_outcome: team2Outcome as 'win' | 'loss' | 'draw',
+            });
+        } catch (statErr) {
+            const msg = statErr instanceof Error ? statErr.message : String(statErr);
+            console.error(`[Action/finalizeWeeklyOutcome] ⚠️ Failed to update season stats:`, msg);
+            await logSystemEvent("FinalizeMatchup", "warning", `Season stats update failed for matchup ${weeklyMatchupId}`, { error: msg });
+        }
 
         return true;
     } catch (e) {
-        console.error(`[Action/finalizeWeeklyOutcome] ❌ FATAL ERROR:`, e);
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`[Action/finalizeWeeklyOutcome] ❌ FATAL ERROR:`, msg);
+        await logSystemEvent("FinalizeMatchup", "error", `Fatal try/catch crash finalizing matchup ${weeklyMatchupId}`, { error: msg });
         return false;
     }
 }
+
 
 
 async function updateTeamSeasonStats(
