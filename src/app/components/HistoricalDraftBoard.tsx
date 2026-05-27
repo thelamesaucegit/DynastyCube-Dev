@@ -2,6 +2,8 @@
 
 "use client";
 
+import { CardPreview } from "@/app/components/CardPreview";
+
 import { useEffect, useState, useMemo, FC } from "react";
 import Image from "next/image";
 import { getDraftBoardData } from "@/app/actions/liveDraftActions";
@@ -17,35 +19,38 @@ type ViewMode = 'list' | 'team';
 
 const DraftCard: FC<{ pick: DraftPick; size: 'large' | 'small' }> = ({ pick, size }) => {
   const { useOldestArt } = useSettings();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const imageUrl = getCardImageUrl(pick as any, useOldestArt);
+  const cardPreviewData = { card_name: pick.card_name, image_url: pick.image_url, oldest_image_url: pick.oldest_image_url };
 
   if (size === 'large') {
     return (
       <div className="transition-all duration-300 transform hover:scale-105">
-        <ColorIdentityGlow colors={pick.color_identity}>
-          <div className="bg-gray-800 rounded-lg shadow-lg p-2">
-            <div className="flex justify-between items-center mb-2 text-xs">
-              <span className="font-bold text-white bg-blue-600 px-2 py-1 rounded">#{pick.pick_number}</span>
-              <span className="font-semibold text-gray-300 truncate">{pick.team_name}</span>
+        <CardPreview card={cardPreviewData}>
+          <ColorIdentityGlow colors={pick.color_identity}>
+            <div className="bg-gray-800 rounded-lg shadow-lg p-2">
+              <div className="flex justify-between items-center mb-2 text-xs">
+                <span className="font-bold text-white bg-blue-600 px-2 py-1 rounded">#{pick.pick_number}</span>
+                <span className="font-semibold text-gray-300 truncate">{pick.team_name}</span>
+              </div>
+              <Image 
+                  src={imageUrl || '/images/placeholder-card.png'} 
+                  alt={pick.card_name} 
+                  width={745} 
+                  height={1040} 
+                  sizes="100vw" 
+                  className="w-full h-auto rounded-md shadow-md" 
+              />
+              <h3 className="font-semibold text-center text-sm text-gray-100 mt-2 truncate">{pick.card_name}</h3>
             </div>
-            <Image 
-                src={imageUrl || '/images/placeholder-card.png'} 
-                alt={pick.card_name} 
-                width={745} 
-                height={1040} 
-                sizes="100vw" 
-                className="w-full h-auto rounded-md shadow-md" 
-            />
-            <h3 className="font-semibold text-center text-sm text-gray-100 mt-2 truncate">{pick.card_name}</h3>
-          </div>
-        </ColorIdentityGlow>
+          </ColorIdentityGlow>
+        </CardPreview>
       </div>
     );
   }
 
   return (
     <div className="rounded-md">
+      <CardPreview card={cardPreviewData}>
         <ColorIdentityGlow colors={pick.color_identity} className="!p-1 !rounded-md">
             <div className="bg-gray-800/80 rounded-sm p-1 flex flex-col justify-center min-h-[3rem]">
                 <p className="text-[11px] xl:text-xs text-center text-gray-200 font-semibold leading-tight line-clamp-2" title={pick.card_name}>
@@ -54,6 +59,7 @@ const DraftCard: FC<{ pick: DraftPick; size: 'large' | 'small' }> = ({ pick, siz
                 <p className="text-[9px] xl:text-[10px] text-center text-gray-400 mt-0.5">P: {pick.pick_number}</p>
             </div>
         </ColorIdentityGlow>
+      </CardPreview>
     </div>
   );
 };
