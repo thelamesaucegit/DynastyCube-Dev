@@ -18,7 +18,7 @@ interface ArgentumLiveStreamPlayerProps {
 
 type StreamStatus = 'waiting' | 'live' | 'ended';
 
-const STEP_DURATION_MS = 1500; 
+const STEP_DURATION_MS = 2000; 
 const STREAM_DELAY_MINUTES = 30; 
 
 export function ArgentumLiveStreamPlayer({ matchId, initialGameStates, cardDataMap, scheduledMatchDate }: ArgentumLiveStreamPlayerProps) {
