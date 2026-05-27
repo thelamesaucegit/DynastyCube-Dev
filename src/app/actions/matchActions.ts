@@ -59,6 +59,11 @@ export interface UnifiedMatch {
   total_steps?: number; 
 }
 
+  interface SimMatchData {
+            argentum_game_states?: unknown[];
+            game_states?: unknown[];
+        }
+        
 export async function getWeekMatchesAndSims(weekId: string): Promise<{
   matches: UnifiedMatch[];
   error?: string;
@@ -117,8 +122,8 @@ export async function getWeekMatchesAndSims(weekId: string): Promise<{
         const awayTeam = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
         
         // Count the steps for the Spoiler Lock
-        const simMatchArray = Array.isArray(m.sim_match) ? m.sim_match : [m.sim_match];
-        const simData = simMatchArray[0] as any;
+         const simMatchArray = Array.isArray(m.sim_match) ? m.sim_match : [m.sim_match];
+        const simData = simMatchArray[0] as unknown as SimMatchData;
         const totalSteps = simData?.argentum_game_states?.length || simData?.game_states?.length || 0;
         
         // Derive sim scores
