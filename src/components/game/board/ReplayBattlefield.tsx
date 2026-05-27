@@ -1,4 +1,5 @@
-// /src/components/game/board/ReplayBattlefield.tsx
+//src/components/game/board/ReplayBattlefield.tsx
+
 "use client";
 
 import React, { useMemo } from 'react';
@@ -7,20 +8,25 @@ import type { SpectatorStateUpdate, ReplayCardData, ClientCard, EntityId } from 
 import { entityId, zoneIdEquals, battlefield } from '@/types';
 
 export interface GroupedCard {
-  card: ClientCard;
-  count: number;
-  cardIds: readonly EntityId[];
-  cards: readonly ClientCard[];
+    card: ClientCard;
+    count: number;
+    cardIds: readonly EntityId[];
+    cards: readonly ClientCard[];
 }
 
 function groupCards(cards: readonly ClientCard[]): GroupedCard[] {
     const groups: Record<string, ClientCard[]> = {};
+    
     for (const card of cards) {
-        // Grouping by unique ID is safer for battlefield objects which are distinct instances
-        const key = card.id;
-        if (!groups[key]) { groups[key] = []; }
+        // FIX: Grouping by Name so identical copies of the same card stack together visually!
+        const key = card.name;
+        
+        if (!groups[key]) {
+            groups[key] = [];
+        }
         groups[key]!.push(card);
     }
+    
     return Object.values(groups).map((cardGroup) => ({
         card: cardGroup[0]!,
         count: cardGroup.length,
@@ -30,94 +36,92 @@ function groupCards(cards: readonly ClientCard[]): GroupedCard[] {
 }
 
 interface ReplayBattlefieldProps {
-  isOpponent: boolean;
-  snapshot: SpectatorStateUpdate;
-  cardDataMap: Record<string, ReplayCardData>;
-  useOldestArt: boolean;
+    isOpponent: boolean;
+    snapshot: SpectatorStateUpdate;
+    cardDataMap: Record<string, ReplayCardData>;
+    useOldestArt: boolean;
 }
 
 export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldestArt }: ReplayBattlefieldProps) {
-  const { groupedCreatures, groupedLands, groupedOther } = useMemo(() => {
-    const playerId = isOpponent ? snapshot.player2Id : snapshot.player1Id;
-    if (!playerId) return { groupedCreatures: [], groupedLands: [], groupedOther: [] };
+    const { groupedCreatures, groupedLands, groupedOther } = useMemo(() => {
+        const playerId = isOpponent ? snapshot.player2Id : snapshot.player1Id;
+        
+        if (!playerId) return { groupedCreatures: [], groupedLands: [], groupedOther: [] };
+        
+        const targetZoneId = battlefield(entityId(playerId));
+        const zone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, targetZoneId));
+        const cards = zone ? zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [];
+        
+        const lands = cards.filter(c => c.cardTypes.includes('Land'));
+        const creatures = cards.filter(c => c.cardTypes.includes('Creature'));
+        const otherPermanents = cards.filter(c => !c.cardTypes.includes('Land') && !c.cardTypes.includes('Creature'));
+        
+        return {
+            groupedLands: groupCards(lands),
+            groupedCreatures: groupCards(creatures),
+            groupedOther: groupCards(otherPermanents),
+        };
+    }, [snapshot, isOpponent]);
 
-    const targetZoneId = battlefield(entityId(playerId));
-    const zone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, targetZoneId));
-    const cards = zone ? zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [];
-    
-    const lands = cards.filter(c => c.cardTypes.includes('Land'));
-    const creatures = cards.filter(c => c.cardTypes.includes('Creature'));
-    const otherPermanents = cards.filter(c => !c.cardTypes.includes('Land') && !c.cardTypes.includes('Creature'));
-
-    return {
-        groupedLands: groupCards(lands),
-        groupedCreatures: groupCards(creatures),
-        groupedOther: groupCards(otherPermanents),
-    };
-  }, [snapshot, isOpponent]);
-
-  return (
-    <div 
-        style={{ 
-            display: 'flex', 
+    return (
+        <div style={{
+            display: 'flex',
             flexDirection: 'column',
-            gap: '8px', 
-            padding: '8px', 
-            width: '100%', 
+            gap: '8px',
+            padding: '8px',
+            width: '100%',
             alignItems: 'center',
-           
-        }}
-    >
-        {/* Creatures Row */}
-        <div 
-            data-row="creatures" 
-            style={{ 
-                display: 'flex', 
-                flexWrap: 'wrap', 
-                gap: '8px', 
-                justifyContent: 'center',
-                width: '100%',
-                order: isOpponent ? 2 : 0
-            }}
-        >
-            {groupedCreatures.map((group) => (
-                <ReplayCardStack key={group.card.id} group={group} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
-            ))}
+        }}>
+            {/* Creatures Row */}
+            <div
+                data-row="creatures"
+                style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '8px',
+                    justifyContent: 'center',
+                    width: '100%',
+                    order: isOpponent ? 2 : 0
+                }}
+            >
+                {groupedCreatures.map((group) => (
+                    <ReplayCardStack key={group.card.id} group={group} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
+                ))}
+            </div>
+            
+            {/* Other Permanents Row (Artifacts, Enchantments, etc.) */}
+            <div
+                data-row="other-permanents"
+                style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '8px',
+                    justifyContent: 'center',
+                    width: '100%',
+                    order: 1
+                }}
+            >
+                {groupedOther.map((group) => (
+                    <ReplayCardStack key={group.card.id} group={group} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
+                ))}
+            </div>
+            
+            {/* Lands Row */}
+            <div
+                data-row="lands"
+                style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '8px',
+                    justifyContent: 'center',
+                    width: '100%',
+                    order: isOpponent ? 0 : 2
+                }}
+            >
+                {groupedLands.map((group) => (
+                    <ReplayCardStack key={group.card.id} group={group} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
+                ))}
+            </div>
         </div>
-
-        {/* Other Permanents Row (Artifacts, Enchantments, etc.) */}
-        <div 
-            data-row="other-permanents" 
-            style={{ 
-                display: 'flex', 
-                flexWrap: 'wrap', 
-                gap: '8px', 
-                justifyContent: 'center',
-                width: '100%',
-                order: 1
-            }}
-        >
-            {groupedOther.map((group) => (
-                <ReplayCardStack key={group.card.id} group={group} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
-            ))}
-        </div>
-
-        {/* Lands Row */}
-        <div 
-            data-row="lands" 
-            style={{ 
-                display: 'flex', 
-                flexWrap: 'wrap', 
-                gap: '8px', 
-                justifyContent: 'center',
-                width: '100%',
-                order: isOpponent ? 0 : 2
-            }}
-        >
-            {groupedLands.map((group) => (
-                <ReplayCardStack key={group.card.id} group={group} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
-            ))}
-        </div>
-    </div>
-  );
+    );
 }
