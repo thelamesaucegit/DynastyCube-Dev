@@ -19,9 +19,17 @@ type ViewMode = 'list' | 'team';
 
 const DraftCard: FC<{ pick: DraftPick; size: 'large' | 'small' }> = ({ pick, size }) => {
   const { useOldestArt } = useSettings();
-  const imageUrl = getCardImageUrl(pick as any, useOldestArt);
-  const cardPreviewData = { card_name: pick.card_name, image_url: pick.image_url, oldest_image_url: pick.oldest_image_url };
+  
+  // FIX: Explicitly structure the object to satisfy the expected interface without using 'any'
+  const cardDataForImage = { 
+      card_name: pick.card_name, 
+      image_url: pick.image_url, 
+      oldest_image_url: pick.oldest_image_url 
+  };
 
+  const imageUrl = getCardImageUrl(cardDataForImage, useOldestArt);
+  const cardPreviewData = cardDataForImage;
+  
   if (size === 'large') {
     return (
       <div className="transition-all duration-300 transform hover:scale-105">
