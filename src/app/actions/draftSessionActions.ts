@@ -676,13 +676,13 @@ export async function completeDraft(
 
                      await logSystemEvent("ScheduleGenTrace", "info", `[5] Inserted ${weekIds.length} weeks.`);
 
-                     if (weekIds.length > 0) {
+                      if (weekIds.length > 0) {
                          let totalMatchups = 0, totalGames = 0;
 
-                                         // Advance the cursor by 30 minutes for the VERY NEXT GAME
-                                         currentMatchCursor = new Date(currentMatchCursor.getTime() + 30 * 60000);
+                         // 4. Create the global cursor starting exactly at the beginning of Week 1
+                         let currentMatchCursor = new Date(baseNow.getTime());
 
-                         for (let week = 1; week <= 5; week++) {
+                         for (let week = 1; week <= 6; week++) { // <-- Make sure this is 6 for Rivals Week!
                               const weekMatchups = allMatchups.filter(m => m.week === week);
 
                               for (const matchup of weekMatchups) {
@@ -694,6 +694,8 @@ export async function completeDraft(
 
                                  if (matchupRecord && weekIds[week - 1]) {
                                      totalMatchups++;
+                                     
+                                     // 5. Force 3 strictly consecutive games at 30-minute intervals
                                      for (let i = 0; i < 3; i++) {
                                          const { error: sError } = await supabase.from('schedule').insert({
                                              season_id: sessionData.season_id, season_number: testSeasonNumber, week_id: weekIds[week - 1], week_number: week,
@@ -706,8 +708,8 @@ export async function completeDraft(
                                          if (sError) await logSystemEvent("TestScheduleGen", "error", `Game insert failed: ${sError.message}`);
                                          else totalGames++;
                                          
-                                         // Advance the cursor by 10 minutes for the VERY NEXT GAME
-                                         currentMatchCursor = new Date(currentMatchCursor.getTime() + 10 * 60000);
+                                         // Advance the cursor by 30 minutes for the VERY NEXT GAME
+                                         currentMatchCursor = new Date(currentMatchCursor.getTime() + 30 * 60000);
                                      }
                                  }
                               }
