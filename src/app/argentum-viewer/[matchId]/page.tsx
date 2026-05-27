@@ -1,11 +1,6 @@
-
-// src/app/argentum-viewer/[matchId]/page.tsx
 "use client";
 
 import { useRouter } from 'next/navigation';
-import { redirect } from 'next/navigation';
-import { createServerClient } from '@/lib/supabase';
-
 import React, { useState, useEffect, use } from 'react';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
 import { getPublicMatchReplayData } from './public-actions'; 
@@ -15,6 +10,7 @@ import { ResponsiveContext } from '@/components/game/board/shared';
 import { useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
 import { produce } from 'immer';
+import { createClient } from '@supabase/supabase-js'; // Use standard client for the quick fetch
 
 // --- (Reconstruction logic remains unchanged) ---
 function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
@@ -25,13 +21,9 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     if (!rawStates || rawStates.length === 0) return [];
     const reconstructed: SpectatorStateUpdate[] = [];
     let currentBlueprint: SpectatorStateUpdate | null = null;
-
     for (const item of rawStates) {
         if (isDiff(item)) {
-            if (!currentBlueprint || reconstructed.length === 0) {
-                console.warn("[Viewer Debug] Found a diff before a blueprint. Skipping.", item); 
-                continue;
-            }
+            if (!currentBlueprint || reconstructed.length === 0) continue;
             const previousState = reconstructed[reconstructed.length - 1];
             const nextState = produce(previousState, draft => {
                 if (item.combat !== undefined) draft.combat = JSON.parse(JSON.stringify(item.combat));
@@ -75,68 +67,63 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     return reconstructed;
 }
 
-// --- FIX: Use PageProps and React.use() to safely unwrap params ---
 interface PageProps {
     params: Promise<{ matchId: string }>;
 }
 
 export default function ReplayPage(props: PageProps) {
     const unwrappedParams = use(props.params);
-    const matchId = unwrappedParams?.matchId; // Use optional chaining
-
+    const matchId = unwrappedParams?.matchId;
     const responsiveSizes = useResponsive();
+    const router = useRouter();
+    
     const [data, setData] = useState<{
         gameStates: SpectatorStateUpdate[] | null;
         cardDataMap: Record<string, ReplayCardData> | null;
     } | null>(null);
     
     const [isLoading, setIsLoading] = useState(true);
- const router = useRouter();
     
     useEffect(() => {
-        console.log("[Viewer Debug] useEffect triggered. Current matchId:", matchId);
-        
-        if (!matchId) {
-            console.log("[Viewer Debug] matchId is still null/undefined. Waiting...");
-            return;
-        }
+        if (!matchId) return;
 
         async function fetchData() {
             setIsLoading(true);
-            console.log(`[Viewer Debug] Initiating fetch for matchId: ${matchId}`);
-            
             try {
-                console.log("[Viewer Debug] Calling getPublicMatchReplayData...");
                 const { gameStates: rawGameStates } = await getPublicMatchReplayData(matchId);
                 
                 if (!rawGameStates || rawGameStates.length === 0) {
                     throw new Error("No game states found for this match in database.");
                 }
- const supabase = await createServerClient();
-            const { data: scheduleRow } = await supabase
-                .from('schedule')
-                .select('match_date')
-                .eq('sim_match_id', matchId)
-                .single();
 
-            if (scheduleRow && scheduleRow.match_date) {
-                const broadcastStart = new Date(scheduleRow.match_date).getTime() + (30 * 60000);
-                const broadcastEnd = broadcastStart + (rawGameStates.length * 2000);
+                // --- SPOILER LOCK USING CLIENT FETCH ---
+                const supabase = createClient(
+                    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+                );
                 
-                if (Date.now() < broadcastEnd) {
-                    console.log("[Spoiler Lock] Stream hasn't finished! Redirecting to Live View.");
-                    redirect(`/stream/${matchId}`);
+                const { data: scheduleRow } = await supabase
+                    .from('schedule')
+                    .select('match_date')
+                    .eq('sim_match_id', matchId)
+                    .single();
+
+                if (scheduleRow && scheduleRow.match_date) {
+                    const broadcastStart = new Date(scheduleRow.match_date).getTime() + (30 * 60000);
+                    const broadcastEnd = broadcastStart + (rawGameStates.length * 2000);
+                    
+                    if (Date.now() < broadcastEnd) {
+                        console.log("[Spoiler Lock] Stream hasn't finished! Redirecting to Live View.");
+                        router.replace(`/stream/${matchId}`);
+                        return; // Stop rendering!
+                    }
                 }
-            }
-                console.log(`[Viewer Debug] Success! Retrieved ${rawGameStates.length} raw game states.`);
+                // ----------------------------------------
                 
-                console.log("[Viewer Debug] Reconstructing game states...");
                 const finalGameStates = reconstructGameStates(rawGameStates as ReplayStateItem[]);
                 const validStates = finalGameStates.filter(s => s?.gameState != null);
                 
-                if (validStates.length === 0) {
-                    throw new Error("No valid game states remained after reconstruction.");
-                }
+                if (validStates.length === 0) throw new Error("No valid game states remained after reconstruction.");
                 
                 const allCardNames = new Set<string>();
                 validStates.forEach(state => {
@@ -147,20 +134,13 @@ export default function ReplayPage(props: PageProps) {
                     }
                 });
                 
-                console.log("[Viewer Debug] Calling getCardDataForReplay...");
                 const cardDataMapFromAction = await getCardDataForReplay(Array.from(allCardNames));
-                
-                if (!cardDataMapFromAction) {
-                    throw new Error("getCardDataForReplay returned undefined/null.");
-                }
+                if (!cardDataMapFromAction) throw new Error("getCardDataForReplay returned undefined/null.");
                 
                 const cardDataMap = Object.fromEntries(cardDataMapFromAction);
-                console.log(`[Viewer Debug] Success! Card data mapped.`);
-
                 setData({ gameStates: validStates, cardDataMap });
-
             } catch (error) {
-                console.error("[Viewer Debug] FATAL ERROR during fetch pipeline:", error);
+                console.error("FATAL ERROR during fetch pipeline:", error);
                 setData(null);
             } finally {
                 setIsLoading(false);
@@ -168,24 +148,16 @@ export default function ReplayPage(props: PageProps) {
         }
         
         fetchData();
-    }, [matchId]);
+    }, [matchId, router]);
     
-    if (isLoading) { 
-        return <div className="text-white p-8 text-center mt-20">Loading and reconstructing replay...</div>; 
-    }
-    
-    if (!data || !data.gameStates) { 
-        return <div className="text-white p-8 text-center mt-20">Failed to load replay data. Please check browser console for logs.</div>; 
-    }
+    if (isLoading) return <div className="text-white p-8 text-center mt-20">Loading and reconstructing replay...</div>; 
+    if (!data || !data.gameStates) return <div className="text-white p-8 text-center mt-20">Failed to load replay data.</div>; 
 
     return (
         <main className="w-full h-screen bg-gray-900">
             <ResponsiveContext.Provider value={responsiveSizes}>
                 <SettingsProvider>
-                    <ArgentumReplayPlayer
-                        initialGameStates={data.gameStates}
-                        cardDataMap={data.cardDataMap!}
-                    />
+                    <ArgentumReplayPlayer initialGameStates={data.gameStates} cardDataMap={data.cardDataMap!} />
                 </SettingsProvider>
             </ResponsiveContext.Provider>
         </main>
