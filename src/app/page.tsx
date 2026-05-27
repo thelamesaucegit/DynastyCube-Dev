@@ -214,9 +214,9 @@ export default function HomePage() {
                 ) : streamStatus === 'upcoming' ? (
                    <Badge variant="secondary" className="mb-3 px-3 py-1 text-blue-400 border-blue-400/30">UPCOMING BROADCAST</Badge>
                 ) : (
-                   <Badge variant="outline" className="mb-3 px-3 py-1">LATEST REPLAY</Badge>
+                   <Badge variant="outline" className="mb-3 px-3 py-1">LATEST GAME</Badge>
                 )}
-                <h3 className="text-2xl font-bold mb-1">Watch Matchup Stream</h3>
+                <h3 className="text-2xl font-bold mb-1">Live Game Stream</h3>
                 <p className="text-muted-foreground text-sm">
                   {streamStatus === 'upcoming' ? `Stream begins exactly at ${formattedStreamTime}` : 'Synchronized global broadcast'}
                 </p>
