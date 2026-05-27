@@ -693,9 +693,15 @@ function getTargetDateCT(baseDate: Date, addDays: number, targetHourCT: number):
  */
 async function generateInitialPlayoffBracket(seasonId: string, isTestSeason: boolean) {
     const supabase = createServiceClient();
+    await logSystemEvent("Playoffs", "info", `Generating initial playoff bracket for season ${seasonId}`);
     await supabase.from('seasons').update({ phase: 'playoffs' }).eq('id', seasonId);
 
-    const { data: standings } = await supabase.from('team_records_view').select('*').order('wins', { ascending: false }).order('game_wins', { ascending: false });
+    const { data: standings, error: standingsErr } = await supabase.from('team_records_view').select('*').order('wins', { ascending: false }).order('game_wins', { ascending: false });
+    
+    if (standingsErr) {
+        await logSystemEvent("Playoffs", "error", `Failed to fetch standings`, { error: standingsErr.message });
+        return;
+    }
     if (!standings || standings.length < 2) return;
 
     const playoffSpots = Math.floor(standings.length / 2.0);
@@ -704,29 +710,43 @@ async function generateInitialPlayoffBracket(seasonId: string, isTestSeason: boo
     // Week 100 = Round 1 (Semis/Quarters), Week 101 = Finals
     const roundNumber = 100;
 
-    const { data: playoffWeek } = await supabase.from('schedule_weeks').insert({
+    // Align playoff start to 10 minutes from now for Test Seasons
+    const baseStart = new Date(Date.now() + 10 * 60000);
+    const weekEnd = isTestSeason 
+        ? new Date(baseStart.getTime() + (playoffSpots * 9 * 10 * 60000)) 
+        : new Date(baseStart.getTime() + 7 * 86400000);
+
+    const { data: playoffWeek, error: weekErr } = await supabase.from('schedule_weeks').insert({
         season_id: seasonId, week_number: roundNumber,
-        start_date: new Date().toISOString(), end_date: new Date(new Date().getTime() + 7 * 86400000).toISOString(),
-        deck_submission_deadline: new Date().toISOString(), match_completion_deadline: new Date(new Date().getTime() + 7 * 86400000).toISOString(),
+        start_date: baseStart.toISOString(), end_date: weekEnd.toISOString(),
+        deck_submission_deadline: baseStart.toISOString(), match_completion_deadline: weekEnd.toISOString(),
         is_playoff_week: true, notes: `Playoffs Round 1`
     }).select('id').single();
 
-    if (!playoffWeek) return;
+    if (weekErr || !playoffWeek) {
+        await logSystemEvent("Playoffs", "error", `Failed to create playoff week`, { error: weekErr?.message });
+        return;
+    }
 
     let left = 0;
     let right = playoffTeams.length - 1;
     if (playoffTeams.length % 2 !== 0) left++; // 1st place gets a BYE
 
     const matchupsToSchedule = [];
-     while (left < right) {
-        const { data: matchup } = await supabase.from('weekly_matchups').insert({
+    while (left < right) {
+        const { data: matchup, error: matchErr } = await supabase.from('weekly_matchups').insert({
             season_id: seasonId, week_number: roundNumber, team1_id: playoffTeams[left].team_id, team2_id: playoffTeams[right].team_id, is_playoff: true
-        }).select('id, team1_id, team2_id').single(); // <-- Updated here
-        if (matchup) matchupsToSchedule.push(matchup);
+        }).select('id, team1_id, team2_id').single(); 
+
+        if (matchErr) {
+            await logSystemEvent("Playoffs", "error", `Failed to create weekly matchup`, { error: matchErr.message });
+        } else if (matchup) {
+            matchupsToSchedule.push(matchup);
+        }
         left++; right--;
     }
 
-    await buildSequentialAlternatingSchedule( seasonId, playoffWeek.id, roundNumber, matchupsToSchedule, isTestSeason, false);
+    await buildSequentialAlternatingSchedule(seasonId, playoffWeek.id, roundNumber, matchupsToSchedule, isTestSeason, false);
 }
 
 /**
@@ -735,7 +755,6 @@ async function generateInitialPlayoffBracket(seasonId: string, isTestSeason: boo
 async function advancePlayoffBracket(seasonId: string, isTestSeason: boolean) {
     const supabase = createServiceClient();
     
-    // Find the current highest playoff week
     const { data: lastRound } = await supabase.from('schedule_weeks')
         .select('week_number')
         .eq('season_id', seasonId).eq('is_playoff_week', true)
@@ -749,44 +768,53 @@ async function advancePlayoffBracket(seasonId: string, isTestSeason: boolean) {
 
     const advancingTeams = currentMatchups?.map(m => m.winner_team_id).filter(Boolean) || [];
 
-    // If only 1 matchup was played, we just finished the Championship!
     if (advancingTeams.length <= 1) {
         console.log(`[PLAYOFFS] Championship complete! Winner: ${advancingTeams[0]}`);
+        await logSystemEvent("Playoffs", "info", `Championship complete! Winner: ${advancingTeams[0]}`);
         await supabase.from('seasons').update({ phase: 'postseason' }).eq('id', seasonId);
         return;
     }
 
-    // Schedule the next round
     const nextRoundNum = currentRoundNum + 1;
     const isChampionship = advancingTeams.length === 2;
 
-    const { data: playoffWeek } = await supabase.from('schedule_weeks').insert({
+    const baseStart = new Date(Date.now() + 10 * 60000);
+    const weekEnd = isTestSeason 
+        ? new Date(baseStart.getTime() + (Math.floor(advancingTeams.length / 2) * 9 * 10 * 60000)) 
+        : new Date(baseStart.getTime() + 7 * 86400000);
+
+    const { data: playoffWeek, error: weekErr } = await supabase.from('schedule_weeks').insert({
         season_id: seasonId, week_number: nextRoundNum,
-        start_date: new Date().toISOString(), end_date: new Date(new Date().getTime() + 7 * 86400000).toISOString(),
-        deck_submission_deadline: new Date().toISOString(), match_completion_deadline: new Date(new Date().getTime() + 7 * 86400000).toISOString(),
+        start_date: baseStart.toISOString(), end_date: weekEnd.toISOString(),
+        deck_submission_deadline: baseStart.toISOString(), match_completion_deadline: weekEnd.toISOString(),
         is_playoff_week: true, is_championship_week: isChampionship, notes: isChampionship ? `Championship` : `Playoffs Round ${nextRoundNum - 99}`
     }).select('id').single();
 
-    if (!playoffWeek) return;
+    if (weekErr || !playoffWeek) {
+        await logSystemEvent("Playoffs", "error", `Failed to create playoff week ${nextRoundNum}`, { error: weekErr?.message });
+        return;
+    }
 
     const matchupsToSchedule = [];
     let left = 0; let right = advancingTeams.length - 1;
-       while (left < right) {
-        const { data: matchup } = await supabase.from('weekly_matchups').insert({
+    while (left < right) {
+        const { data: matchup, error: matchErr } = await supabase.from('weekly_matchups').insert({
             season_id: seasonId, week_number: nextRoundNum, team1_id: advancingTeams[left], team2_id: advancingTeams[right], is_playoff: true
-        }).select('id, team1_id, team2_id').single(); // <-- Updated here
-        if (matchup) matchupsToSchedule.push(matchup);
+        }).select('id, team1_id, team2_id').single(); 
+
+        if (matchErr) {
+            await logSystemEvent("Playoffs", "error", `Failed to create weekly matchup`, { error: matchErr.message });
+        } else if (matchup) {
+            matchupsToSchedule.push(matchup);
+        }
         left++; right--;
     }
-
 
     await buildSequentialAlternatingSchedule(seasonId, playoffWeek.id, nextRoundNum, matchupsToSchedule, isTestSeason, isChampionship);
 }
 
 /**
  * Builds the 1-thread alternating schedule.
- * If Championship: Schedules starting Saturday 10AM CT.
- * If standard Playoff Round: Schedules backwards from Friday 8PM CT.
  */
 async function buildSequentialAlternatingSchedule(
     seasonId: string, 
@@ -796,42 +824,40 @@ async function buildSequentialAlternatingSchedule(
     isTestSeason: boolean, 
     isChampionship: boolean
 ) {
-    const supabase = createServiceClient(); // Initialize the client directly here!
+    const supabase = createServiceClient(); 
     
-    const requiredGames = isTestSeason ? 3 : 9;
+    const requiredGames = isTestSeason ? 3 : 9; // Test season playoffs are best of 3 for speed
     const totalGames = matchups.length * requiredGames;
     const timeSlots: Date[] = [];
     
     if (isTestSeason) {
-        // Test season: rapid fire starting 20 minutes from now
         const now = new Date();
         for (let i = 0; i < totalGames; i++) {
-            timeSlots.push(new Date(now.getTime() + (20 * 60000) + (i * 20 * 60000)));
+            // FIX: Perfect 10-minute spacing for rapid seasons!
+            timeSlots.push(new Date(now.getTime() + (10 * 60000) + (i * 10 * 60000)));
         }
     } else {
-        // Normal Season Time Math
         const now = new Date();
         if (isChampionship) {
-            // Start at 10 AM CT on Saturday
             const baseStart = getTargetDateCT(now, 10, 10); 
             for (let i = 0; i < totalGames; i++) {
                 timeSlots.push(new Date(baseStart.getTime() + (i * 60 * 60 * 1000))); 
             }
         } else {
-            // Regular Playoff Round: End at Friday 8 PM CT (20:00). 
             const baseEnd = getTargetDateCT(now, 9, 20); 
             for (let i = 0; i < totalGames; i++) {
                 timeSlots.push(new Date(baseEnd.getTime() - (i * 60 * 60 * 1000))); 
             }
-            timeSlots.reverse(); // Flip chronological
+            timeSlots.reverse(); 
         }
     }
 
-    // Interleave/Alternate the games for the 1-thread sim
     let slotIndex = 0;
+    let successCount = 0;
+
     for (let gameIndex = 0; gameIndex < requiredGames; gameIndex++) {
         for (const matchup of matchups) {
-            await supabase.from('schedule').insert({
+            const { error } = await supabase.from('schedule').insert({
                 season_id: seasonId,
                 week_id: weekId,
                 week_number: weekNum,
@@ -839,9 +865,20 @@ async function buildSequentialAlternatingSchedule(
                 team2_id: matchup.team2_id,
                 weekly_matchup_id: matchup.id,
                 match_date: timeSlots[slotIndex].toISOString(),
-                status: 'scheduled'
+                status: 'scheduled',
+                team1_ai_profile: 'default', // <-- FIX: MUST HAVE AI PROFILES
+                team2_ai_profile: 'default'  // <-- FIX: MUST HAVE AI PROFILES
             });
+
+            if (error) {
+                await logSystemEvent("Playoffs", "error", `Failed to insert schedule row`, { error: error.message });
+            } else {
+                successCount++;
+            }
             slotIndex++;
         }
     }
+    
+    await logSystemEvent("Playoffs", "info", `Scheduled ${successCount}/${totalGames} games for Week ${weekNum}`);
 }
+
