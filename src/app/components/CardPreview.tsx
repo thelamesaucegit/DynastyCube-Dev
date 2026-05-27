@@ -33,7 +33,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
   }, []);
 
   const imageUrl = getCardImageUrl(card, useOldestArt);
-  const scryfallUrl = `https://scryfall.com/cards/named?exact=${encodeURIComponent(card.card_name)}`;
+  const scryfallUrl = `https://scryfall.com/search?as=grid&order=name&q=${encodeURIComponent('"' + card.card_name + '"')}`;
 
   const previewElement = isHovering && imageUrl && mounted ? (
     createPortal(
