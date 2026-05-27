@@ -51,7 +51,7 @@ function enhanceMatchWithStreamTiming(match: UnifiedMatch): StreamMatchUI {
     const broadcastStartTime = baseTime + (30 * 60000);
     
     // 2. Calculate Broadcast End (Start + (Steps * 2s)). Fallback to 10 mins if steps aren't provided.
-    const steps = (match as any).total_steps || 300; 
+    const steps = match.total_steps || 300; 
     const broadcastEndTime = broadcastStartTime + (steps * 2000);
     
     const now = Date.now();
