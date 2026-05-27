@@ -921,5 +921,4 @@ async function buildSequentialAlternatingSchedule(
     await logSystemEvent("Playoffs", "info", `Scheduled ${successCount}/${totalGames} games for Week ${weekNum}`);
 }
     
-    await logSystemEvent("Playoffs", "info", `Scheduled ${successCount}/${totalGames} games for Week ${weekNum}`);
-}
+  
