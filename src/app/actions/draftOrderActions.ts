@@ -442,14 +442,16 @@ const standingsMap = new Map<string, { win_pct: number }>();
             });
         }
 
-        const insertRows = orderedTeams.map((team, idx) => ({
+        cconst insertRows = orderedTeams.map((team, idx) => ({
             season_id: seasonId,
             team_id: team.id,
             pick_position: idx + 1,
             previous_season_wins: 0,
             previous_season_losses: 0,
             previous_season_win_pct: (team as typeof team & { win_pct?: number }).win_pct ?? 0,
-            lottery_number: team.lotteryNumber,
+            // FIX: Lottery number is now strictly the inverse of their pick position!
+            // (e.g., if there are 8 teams, Pick 1 gets Lottery 8, Pick 8 gets Lottery 1)
+            lottery_number: teamsToInclude.length - idx, 
             is_lottery_winner: (winPctGroups.get((team as typeof team & { win_pct?: number }).win_pct ?? 0) ?? 0) > 1,
         }));
 
