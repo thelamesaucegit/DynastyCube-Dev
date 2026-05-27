@@ -399,7 +399,7 @@ async function finalizeWeeklyOutcome(weeklyMatchupId: string): Promise<boolean> 
         
         if (h2hError) {
             console.error(`[Action/finalizeWeeklyOutcome] ⚠️ Failed to upsert head-to-head records:`, h2hError.message);
-            await logSystemEvent("FinalizeMatchup", "warning", `H2H Upsert failed for matchup ${weeklyMatchupId}`, { error: h2hError.message });
+            await logSystemEvent("FinalizeMatchup", "warn", `H2H Upsert failed for matchup ${weeklyMatchupId}`, { error: h2hError.message });
         }
 
         // Update team_season_stats for both teams
