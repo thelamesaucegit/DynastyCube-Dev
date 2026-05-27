@@ -13,6 +13,7 @@ export interface StreamMatch {
     team1_record: { wins: number; losses: number };
     team2_record: { wins: number; losses: number };
     life_timeline: [number, number][]; 
+    total_steps: number;
 }
 
 // Local interfaces to satisfy TypeScript
