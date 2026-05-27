@@ -663,11 +663,11 @@ async function scheduleNextWeekJIT(seasonId: string, weekNumber: number) {
     if (!pendingMatches || pendingMatches.length === 0) return;
 
     const now = new Date();
-    let offsetMinutes = 20;
+    let offsetMinutes = 10;
     for (const match of pendingMatches) {
         const matchDate = new Date(now.getTime() + (offsetMinutes * 60000));
         await supabase.from('schedule').update({ match_date: matchDate.toISOString() }).eq('id', match.id);
-        offsetMinutes += 20;
+        offsetMinutes += 10;
     }
 }
 
