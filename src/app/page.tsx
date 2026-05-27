@@ -131,21 +131,27 @@ export default function HomePage() {
 
   const liveDraftLink = draftSessionId ? `/draft/${draftSessionId}/live` : "#";
 
-  let streamStatus = 'replay';
+let streamStatus = 'replay';
   let formattedStreamTime = '';
   if (liveMatch) {
-      const broadcastTime = new Date(new Date(liveMatch.match_date).getTime() + (30 * 60000));
+      // Stream starts exactly 30 mins after scheduled time
+      const broadcastStartTime = new Date(liveMatch.match_date).getTime() + (30 * 60000);
+      
+      // Stream ends exactly when (steps * 2 seconds) has elapsed
+      const broadcastDurationMs = liveMatch.total_steps * 2000;
+      const broadcastEndTime = broadcastStartTime + broadcastDurationMs;
+      
       const now = Date.now();
-      const diff = broadcastTime.getTime() - now;
 
-      if (diff > 0) {
+      if (now < broadcastStartTime) {
           streamStatus = 'upcoming';
-          formattedStreamTime = broadcastTime.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      } else if (diff > -900000) { 
+          formattedStreamTime = new Date(broadcastStartTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      } else if (now >= broadcastStartTime && now <= broadcastEndTime) { 
           streamStatus = 'live';
+      } else {
+          streamStatus = 'replay';
       }
   }
-
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8 space-y-12">
       
