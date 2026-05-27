@@ -1,5 +1,4 @@
-//src/app/schedule/page.tsx
-
+// src/app/schedule/page.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -21,27 +20,53 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/app/components/ui/select";
-import { Calendar, Clock, Loader2, AlertCircle, PlayCircle, Bot, Swords, ChevronDown, ChevronUp } from "lucide-react";
+import { Calendar, Clock, Loader2, AlertCircle, PlayCircle, Bot, Swords, ChevronDown, ChevronUp, Radio } from "lucide-react";
 import { formatDateTime } from "@/app/utils/timezoneUtils";
 import { useUserTimezone } from "@/hooks/useUserTimezone";
 
-interface WeekWithMatches extends ScheduleWeek {
-  matches: UnifiedMatch[];
+// Add broadcast timing helpers to UnifiedMatch for the UI
+interface StreamMatchUI extends UnifiedMatch {
+    broadcastStartTime: number;
+    broadcastEndTime: number;
+    streamStatus: 'upcoming' | 'live' | 'replay';
 }
 
-// Helper moved outside so it can be easily accessed everywhere
+interface WeekWithMatches extends ScheduleWeek {
+  matches: StreamMatchUI[];
+}
+
 const getWeekStatus = (week: ScheduleWeek) => {
   const now = new Date();
   const startDate = new Date(week.start_date);
-  // Consider the week "completed" 10 minutes before its official end date!
-  // This causes the UI to flip to the next week right as the final game of this week begins simulating.
   const logicalEndDate = new Date(new Date(week.end_date).getTime() - (10 * 60000));
-  
   if (now < startDate) return "upcoming";
   if (now > logicalEndDate) return "completed";
   return "current";
 };
 
+// HELPER: Attach Broadcast Timings to matches!
+function enhanceMatchWithStreamTiming(match: UnifiedMatch): StreamMatchUI {
+    // 1. Calculate Broadcast Start (Match Date + 30 mins)
+    const baseTime = new Date(match.scheduled_for || match.created_at || Date.now()).getTime();
+    const broadcastStartTime = baseTime + (30 * 60000);
+    
+    // 2. Calculate Broadcast End (Start + (Steps * 2s)). Fallback to 10 mins if steps aren't provided.
+    const steps = (match as any).total_steps || 300; 
+    const broadcastEndTime = broadcastStartTime + (steps * 2000);
+    
+    const now = Date.now();
+    let streamStatus: 'upcoming' | 'live' | 'replay' = 'replay';
+    
+    if (now < broadcastStartTime) streamStatus = 'upcoming';
+    else if (now >= broadcastStartTime && now <= broadcastEndTime) streamStatus = 'live';
+
+    return {
+        ...match,
+        broadcastStartTime,
+        broadcastEndTime,
+        streamStatus
+    };
+}
 
 export default function SchedulePage() {
   const { timezone } = useUserTimezone();
@@ -50,33 +75,21 @@ export default function SchedulePage() {
   const [selectedSeason, setSelectedSeason] = useState<{ id: string; name: string; status: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  // Track which weeks are expanded
   const [openWeeks, setOpenWeeks] = useState<Record<string, boolean>>({});
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   const setupDefaultOpenWeeks = (weeksData: WeekWithMatches[]) => {
     const defaultOpen: Record<string, boolean> = {};
-    
-    // Auto-expand the current week
     const currentWeek = weeksData.find(w => getWeekStatus(w) === "current");
     
     if (currentWeek) {
       defaultOpen[currentWeek.id] = true;
     } else {
-      // If no week is currently active, expand the next upcoming one
       const upcomingWeek = weeksData.find(w => getWeekStatus(w) === "upcoming");
-      if (upcomingWeek) {
-        defaultOpen[upcomingWeek.id] = true;
-      } else if (weeksData.length > 0) {
-        // If all weeks are completed, expand the very last week (e.g. Finals)
-        defaultOpen[weeksData[weeksData.length - 1].id] = true;
-      }
+      if (upcomingWeek) defaultOpen[upcomingWeek.id] = true;
+      else if (weeksData.length > 0) defaultOpen[weeksData[weeksData.length - 1].id] = true;
     }
-    
     setOpenWeeks(defaultOpen);
   };
 
@@ -86,28 +99,20 @@ export default function SchedulePage() {
     try {
       const scheduleResult = await getActiveSeasonSchedule();
       if (scheduleResult.success && scheduleResult.season) {
-        
         const weeksWithData = await Promise.all(
           (scheduleResult.weeks as ScheduleWeek[]).map(async (week) => {
             const { matches } = await getWeekMatchesAndSims(week.id);
-            return {
-              ...week,
-              matches: matches || [],
-            };
+            return { ...week, matches: (matches || []).map(enhanceMatchWithStreamTiming) };
           })
         );
-        
         setWeeks(weeksWithData);
         setSelectedSeason(scheduleResult.season);
-        setupDefaultOpenWeeks(weeksWithData); // Set default expanded state
+        setupDefaultOpenWeeks(weeksWithData); 
       } else {
         setError(scheduleResult.error || "No active season found");
       }
-
       const seasonsResult = await getAllSeasons();
-      if (seasonsResult.success) {
-        setSeasons(seasonsResult.seasons);
-      }
+      if (seasonsResult.success) setSeasons(seasonsResult.seasons);
     } catch (err) {
       console.error("Error loading schedule:", err);
       setError("Failed to load schedule");
@@ -120,7 +125,6 @@ export default function SchedulePage() {
     if (!seasonId) return;
     const season = seasons.find((s) => s.id === seasonId);
     if (!season) return;
-
     setLoading(true);
     setError(null);
     try {
@@ -133,16 +137,12 @@ export default function SchedulePage() {
         const weeksWithData = await Promise.all(
           result.weeks.map(async (week) => {
             const { matches } = await getWeekMatchesAndSims(week.id);
-            return {
-              ...week,
-              matches: matches || [],
-            };
+            return { ...week, matches: (matches || []).map(enhanceMatchWithStreamTiming) };
           })
         );
-        
         setWeeks(weeksWithData);
         setSelectedSeason(season);
-        setupDefaultOpenWeeks(weeksWithData); // Set default expanded state for new season
+        setupDefaultOpenWeeks(weeksWithData);
       }
     } catch (err) {
       console.error("Error loading season schedule:", err);
@@ -152,19 +152,9 @@ export default function SchedulePage() {
     }
   };
 
-  const toggleWeek = (weekId: string) => {
-    setOpenWeeks(prev => ({ ...prev, [weekId]: !prev[weekId] }));
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  };
-
-  const formatDeadline = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-  };
+  const toggleWeek = (weekId: string) => setOpenWeeks(prev => ({ ...prev, [weekId]: !prev[weekId] }));
+  const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const formatDeadline = (dateString: string) => new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
   if (loading) {
     return (
@@ -244,9 +234,9 @@ export default function SchedulePage() {
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div>
                         <div className="flex items-center gap-3 mb-1">
-<CardTitle className="text-2xl">
-    {week.is_playoff_week ? (week.notes || "Playoffs") : `Week ${week.week_number}`}
-  </CardTitle>
+                          <CardTitle className="text-2xl">
+                              {week.is_playoff_week ? (week.notes || "Playoffs") : `Week ${week.week_number}`}
+                          </CardTitle>
                           {status === "current" && <Badge className="bg-primary">CURRENT WEEK</Badge>}
                           {status === "upcoming" && <Badge variant="secondary">UPCOMING</Badge>}
                         </div>
@@ -289,67 +279,80 @@ export default function SchedulePage() {
                         <p className="text-sm text-muted-foreground italic">No matches scheduled for this week</p>
                       ) : (
                         <div className="space-y-3">
-                          {week.matches.map((match) => (
-                            <Card key={match.id} className="bg-muted/50 border border-border/50">
-                              <CardContent className="p-4">
-                                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                                  
-                                  {/* Teams Section */}
-                                  <div className="flex items-center justify-between gap-4 flex-1">
-                                    <div className="flex items-center gap-2 flex-1">
-                                      <span className="text-2xl">{match.home_team?.emoji}</span>
-                                      <span className="font-semibold text-lg">{match.home_team?.name || 'TBD'}</span>
+                          {week.matches.map((match) => {
+                            // NEW: Destructure the dynamic statuses we calculated at the top
+                            const { streamStatus, broadcastStartTime, broadcastEndTime } = match;
+                            const isMasked = streamStatus === 'upcoming' || streamStatus === 'live';
+
+                            return (
+                              <Card key={match.id} className="bg-muted/50 border border-border/50">
+                                <CardContent className="p-4">
+                                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                                    
+                                    {/* Teams Section */}
+                                    <div className="flex items-center justify-between gap-4 flex-1">
+                                      <div className="flex items-center gap-2 flex-1">
+                                        <span className="text-2xl">{match.home_team?.emoji}</span>
+                                        <span className="font-semibold text-lg">{match.home_team?.name || 'TBD'}</span>
+                                      </div>
+                                      
+                                      {/* Score / VS - MASKED IF BEFORE BROADCAST END */}
+                                      <div className="flex items-center gap-3 text-center px-4">
+                                        {match.status === 'completed' && !isMasked ? (
+                                          <>
+                                            <span className={`text-xl font-bold ${match.home_team_wins > match.away_team_wins ? 'text-primary' : 'text-muted-foreground'}`}>
+                                              {match.home_team_wins}
+                                            </span>
+                                            <span className="text-muted-foreground text-sm font-medium">VS</span>
+                                            <span className={`text-xl font-bold ${match.away_team_wins > match.home_team_wins ? 'text-primary' : 'text-muted-foreground'}`}>
+                                              {match.away_team_wins}
+                                            </span>
+                                          </>
+                                        ) : (
+                                          <span className="text-muted-foreground text-sm font-medium">VS</span>
+                                        )}
+                                      </div>
+                                      
+                                      <div className="flex items-center gap-2 flex-1 justify-end">
+                                        <span className="font-semibold text-lg">{match.away_team?.name || 'TBD'}</span>
+                                        <span className="text-2xl">{match.away_team?.emoji}</span>
+                                      </div>
                                     </div>
                                     
-                                    {/* Score / VS */}
-                                    <div className="flex items-center gap-3 text-center px-4">
-                                      {match.status === 'completed' ? (
-                                        <>
-                                          <span className={`text-xl font-bold ${match.home_team_wins > match.away_team_wins ? 'text-primary' : 'text-muted-foreground'}`}>
-                                            {match.home_team_wins}
-                                          </span>
-                                          <span className="text-muted-foreground text-sm font-medium">VS</span>
-                                          <span className={`text-xl font-bold ${match.away_team_wins > match.home_team_wins ? 'text-primary' : 'text-muted-foreground'}`}>
-                                            {match.away_team_wins}
-                                          </span>
-                                        </>
-                                      ) : (
-                                        <span className="text-muted-foreground text-sm font-medium">VS</span>
+                                    {/* Status & Actions Section */}
+                                    <div className="flex flex-row lg:flex-col items-center justify-between lg:justify-center gap-3 lg:gap-1 lg:ml-6 lg:pl-6 lg:border-l border-border/50 min-w-[140px]">
+                                      <div className="flex flex-col items-center">
+                                        {/* Status Badge is purely based on the Stream Time! */}
+                                        <Badge
+                                          variant={streamStatus === 'replay' ? "default" : streamStatus === "live" ? "destructive" : "outline"}
+                                          className={`mb-1 ${streamStatus === 'replay' ? 'bg-emerald-600' : ''} ${streamStatus === 'live' ? 'animate-pulse' : ''}`}
+                                        >
+                                          {streamStatus === 'replay' ? 'COMPLETED' : streamStatus === 'live' ? 'LIVE NOW' : 'UPCOMING'}
+                                        </Badge>
+                                        
+                                        <span className="text-xs text-muted-foreground whitespace-nowrap flex items-center gap-1">
+                                          {match.matchType === 'sim' ? <Bot className="h-3 w-3"/> : <Swords className="h-3 w-3"/>}
+                                          {/* Format the BROADCAST time, not the DB time */}
+                                          {formatDateTime(new Date(broadcastStartTime).toISOString(), timezone)}
+                                        </span>
+                                      </div>
+                                      
+                                      {/* Replay or Live Stream Button based on window */}
+                                      {match.sim_match_id && (
+                                        <Link href={isMasked ? `/stream/${match.sim_match_id}` : `/argentum-viewer/${match.sim_match_id}`}>
+                                          <Button size="sm" variant={streamStatus === 'live' ? 'default' : 'secondary'} className={`w-full mt-2 flex items-center gap-1.5 ${streamStatus === 'live' ? 'bg-red-600 hover:bg-red-700 text-white' : ''}`}>
+                                            {streamStatus === 'live' ? <Radio className="h-4 w-4 animate-ping" /> : <PlayCircle className="h-4 w-4" />} 
+                                            {streamStatus === 'upcoming' ? 'Waiting Room' : streamStatus === 'live' ? 'Tune In' : 'Watch Replay'}
+                                          </Button>
+                                        </Link>
                                       )}
                                     </div>
-                                    
-                                    <div className="flex items-center gap-2 flex-1 justify-end">
-                                      <span className="font-semibold text-lg">{match.away_team?.name || 'TBD'}</span>
-                                      <span className="text-2xl">{match.away_team?.emoji}</span>
-                                    </div>
+
                                   </div>
-                                  
-                                  {/* Status & Actions Section */}
-                                  <div className="flex flex-row lg:flex-col items-center justify-between lg:justify-center gap-3 lg:gap-1 lg:ml-6 lg:pl-6 lg:border-l border-border/50 min-w-[140px]">
-                                    <div className="flex flex-col items-center">
-                                      <Badge
-                                        variant={match.status === "completed" ? "default" : match.status === "in_progress" ? "secondary" : "outline"}
-                                        className={`mb-1 ${match.status === "completed" ? "bg-emerald-600" : ""}`}
-                                      >
-                                        {match.status.replace("_", " ").toUpperCase()}
-                                      </Badge>
-                                      <span className="text-xs text-muted-foreground whitespace-nowrap flex items-center gap-1">
-                                        {match.matchType === 'sim' ? <Bot className="h-3 w-3"/> : <Swords className="h-3 w-3"/>}
-                                        {match.scheduled_for ? formatDateTime(match.scheduled_for, timezone) : 'Unscheduled'}
-                                      </span>
-                                    </div>
-                                    {match.status === "completed" && match.sim_match_id && (
-                                      <Link href={`/argentum-viewer/${match.sim_match_id}`}>
-                                        <Button size="sm" variant="secondary" className="w-full mt-2 flex items-center gap-1.5">
-                                          <PlayCircle className="h-4 w-4" /> Watch Replay
-                                        </Button>
-                                      </Link>
-                                    )}
-                                  </div>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          ))}
+                                </CardContent>
+                              </Card>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
