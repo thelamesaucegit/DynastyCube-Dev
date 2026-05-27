@@ -442,7 +442,7 @@ const standingsMap = new Map<string, { win_pct: number }>();
             });
         }
 
-        cconst insertRows = orderedTeams.map((team, idx) => ({
+        const insertRows = orderedTeams.map((team, idx) => ({
             season_id: seasonId,
             team_id: team.id,
             pick_position: idx + 1,
