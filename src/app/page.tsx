@@ -10,6 +10,7 @@ import { Badge } from "@/app/components/ui/badge";
 import { ArrowRight, Info, PlayCircle, Radio } from "lucide-react";
 import CountdownTimer from "@/app/components/CountdownTimer";
 import { DraftStatusWidget } from "@/app/components/DraftStatusWidget";
+import { CardPreview } from "@/app/components/CardPreview"; // <-- Added CardPreview
 import {
   getRecentDraftPicks,
   getCurrentSeason,
@@ -22,6 +23,7 @@ import {
   type CountdownTimer as CountdownTimerType,
 } from "@/app/actions/homeActions";
 import { getLatestStreamMatch, type StreamMatch } from "@/app/actions/liveStreamActions";
+import { getTeamsWithDetails } from "@/app/actions/teamActions"; // <-- Added to count active teams
 
 function getRelativeTime(dateString: string): string {
   const date = new Date(dateString);
@@ -44,13 +46,11 @@ export default function HomePage() {
   const [liveLife, setLiveLife] = useState<{t1: number, t2: number} | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // State for the random background panning
   const [bgPosition, setBgPosition] = useState({ x: 50, y: 50 });
 
   useEffect(() => {
     loadData();
 
-    // Setup the random background panning interval
     const moveBackground = () => {
       setBgPosition({
         x: Math.floor(Math.random() * 100),
@@ -69,20 +69,26 @@ export default function HomePage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [seasonResult, newsResult, picksResult, timerResult, draftSessionResult, streamResult] = await Promise.all([
+      // Fetch up to 20 picks initially, we will slice it down based on the actual team count
+      const [teamsResult, seasonResult, newsResult, picksResult, timerResult, draftSessionResult, streamResult] = await Promise.all([
+        getTeamsWithDetails(),
         getCurrentSeason(),
         getAdminNews(3),
-        getRecentDraftPicks(10), // Increased to 10 since it has the full width now
+        getRecentDraftPicks(20), 
         getActiveCountdownTimer(),
         getActiveDraftSession(),
         getLatestStreamMatch()
       ]);
+
+      const activeTeamCount = teamsResult.teams?.filter(t => !t.is_hidden).length || 8;
+
       setSeason(seasonResult.season);
       setAdminNews(newsResult.news);
-      setRecentPicks(picksResult.picks);
+      setRecentPicks(picksResult.picks.slice(0, activeTeamCount)); // Exactly 1 per active team!
       setCountdownTimer(timerResult.timer);
       setDraftSessionId(draftSessionResult.session?.id || null);
       setLiveMatch(streamResult.match);
+
     } catch (error) {
       console.error("Error loading home page data:", error);
     } finally {
@@ -90,7 +96,6 @@ export default function HomePage() {
     }
   };
 
-  // Synchronize Live Life Totals if the broadcast is active
   useEffect(() => {
     if (!liveMatch || !liveMatch.life_timeline || liveMatch.life_timeline.length === 0) return;
     
@@ -112,7 +117,6 @@ export default function HomePage() {
         }
       }
     }, 100);
-
     return () => clearInterval(interval);
   }, [liveMatch]);
 
@@ -127,7 +131,6 @@ export default function HomePage() {
 
   const liveDraftLink = draftSessionId ? `/draft/${draftSessionId}/live` : "#";
 
-  // Calculate stream status
   let streamStatus = 'replay';
   let formattedStreamTime = '';
   if (liveMatch) {
@@ -184,16 +187,18 @@ export default function HomePage() {
               A collaborative, living draft league where teams compete, evolve, and shape the fate of the multiverse.
             </p>
           </div>
-          <div className="flex flex-wrap lg:flex-col lg:items-end gap-3 flex-shrink-0">
-            <Button size="lg" className="shadow-lg w-full lg:w-48" asChild>
+          
+          {/* FIX: Side-by-side buttons with aligned icons */}
+          <div className="flex flex-row items-center gap-3 flex-shrink-0 w-full lg:w-auto">
+            <Button size="lg" className="shadow-lg flex-1 lg:flex-none lg:w-48" asChild>
               <Link href="/about">
-                <Info className="mr-2 size-4" />
                 League Info
+                <Info className="ml-2 size-4" />
               </Link>
             </Button>
-            <Button size="lg" variant="secondary" className="bg-white/10 hover:bg-white/20 text-white border-white/20 backdrop-blur-sm w-full lg:w-48" asChild>
-              <Link href="/pools">
-                Card Pools
+            <Button size="lg" variant="secondary" className="bg-white/10 hover:bg-white/20 text-white border-white/20 backdrop-blur-sm flex-1 lg:flex-none lg:w-48" asChild>
+              <Link href="/pools/draft">
+                Draft Pool
                 <ArrowRight className="ml-2 size-4" />
               </Link>
             </Button>
@@ -201,9 +206,9 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Live Stream Banner */}
+      {/* Live Stream Banner (Shrunk to max-w-5xl to be 80% width and centered) */}
       {liveMatch && (
-        <section>
+        <section className="max-w-5xl mx-auto w-full">
           <Card className={`overflow-hidden relative border ${streamStatus === 'live' ? 'border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.2)] bg-red-950/10' : 'border-blue-500/30 bg-blue-950/10'}`}>
             {streamStatus === 'live' && <div className="absolute top-0 left-0 w-1 h-full bg-red-500 animate-pulse" />}
             <CardContent className="p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6">
@@ -245,7 +250,6 @@ export default function HomePage() {
                   )}
                 </div>
               </div>
-
               <div className="flex-1 flex justify-center md:justify-end">
                 <Button asChild size="lg" className={`${streamStatus === 'live' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'} text-white font-bold w-full md:w-auto h-14 px-8 text-lg shadow-xl hover:scale-105 transition-transform`}>
                   <Link href={`/stream/${liveMatch.sim_match_id}`}>
@@ -253,13 +257,12 @@ export default function HomePage() {
                   </Link>
                 </Button>
               </div>
-
             </CardContent>
           </Card>
         </section>
       )}
 
-      {/* Latest News (Moved directly under Live Match) */}
+      {/* Latest News (Full Width natively) */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">Latest News</h2>
@@ -310,8 +313,8 @@ export default function HomePage() {
 
       <DraftStatusWidget variant="full" />
 
-      {/* Recent Draft Picks (Now takes full width) */}
-      <section className="space-y-4">
+      {/* Recent Draft Picks (Shrunk to max-w-5xl to be 80% width and centered) */}
+      <section className="max-w-5xl mx-auto w-full space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">Recent Draft Picks</h2>
           <Button variant="ghost" asChild>
@@ -321,41 +324,43 @@ export default function HomePage() {
         <Card>
           <CardContent className="p-0">
             {recentPicks.length > 0 ? (
-              <div className="divide-y divide-border/50">
+              <div className="flex flex-col">
                 {recentPicks.map((pick) => (
-                  <div key={pick.id} className="p-4 hover:bg-accent/50 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 flex items-center gap-4">
-                        {pick.image_url && (
-                          <Image 
-                            src={pick.image_url} 
-                            alt={pick.card_name} 
-                            width={40} 
-                            height={56} 
-                            className="rounded-sm object-cover shadow-sm hidden sm:block"
-                          />
-                        )}
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-semibold text-lg">{pick.card_name}</span>
-                            {pick.card_type && (
-                              <Badge variant="secondary" className="text-[10px]">
-                                {pick.card_type}
-                              </Badge>
-                            )}
+                  <CardPreview key={pick.id} card={{ card_name: pick.card_name, image_url: pick.image_url, oldest_image_url: pick.oldest_image_url }}>
+                    <div className="p-4 hover:bg-accent/50 transition-colors cursor-pointer border-b border-border/50 last:border-0">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 flex items-center gap-4">
+                          {pick.image_url && (
+                            <Image 
+                              src={pick.image_url} 
+                              alt={pick.card_name} 
+                              width={40} 
+                              height={56} 
+                              className="rounded-sm object-cover shadow-sm hidden sm:block"
+                            />
+                          )}
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-semibold text-lg">{pick.card_name}</span>
+                              {pick.card_type && (
+                                <Badge variant="secondary" className="text-[10px]">
+                                  {pick.card_type}
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                              <span className="text-lg">{pick.team_emoji}</span>
+                              <span className="font-medium text-foreground/80">{pick.team_name}</span>
+                              {pick.pick_number && <span className="text-xs opacity-70 ml-1">&middot; Pick #{pick.pick_number}</span>}
+                            </p>
                           </div>
-                          <p className="text-sm text-muted-foreground flex items-center gap-1.5">
-                            <span className="text-lg">{pick.team_emoji}</span>
-                            <span className="font-medium text-foreground/80">{pick.team_name}</span>
-                            {pick.pick_number && <span className="text-xs opacity-70 ml-1">&middot; Pick #{pick.pick_number}</span>}
-                          </p>
                         </div>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap ml-4 font-medium bg-muted/50 px-2 py-1 rounded-full">
+                          {getRelativeTime(pick.drafted_at)}
+                        </span>
                       </div>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap ml-4 font-medium bg-muted/50 px-2 py-1 rounded-full">
-                        {getRelativeTime(pick.drafted_at)}
-                      </span>
                     </div>
-                  </div>
+                  </CardPreview>
                 ))}
               </div>
             ) : (
