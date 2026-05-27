@@ -100,23 +100,19 @@ function LiveCardRow({ zoneId, faceDown = false, interactive = false, small = fa
   const shouldShowFan = isPlayerHand || isOpponentHand || isSpectatorBottomHand;
 
   // --- FAN-AWARE SIZING MATH ---
-  // Target width is ~60% of battlefield cards (half-size visual footprint)
   const targetWidth = small ? responsive.smallCardWidth : responsive.battlefieldCardWidth * 0.85;
-  const minWidth = small ? 30 : 50;
+  const minWidth = small ? 30 : 60;
   
   let fittingWidth = targetWidth;
   
   if (shouldShowFan && cardCount > 1) {
-      // Calculate how wide the fan will be with overlapping cards
       const overlapFactor = Math.max(0.5, 0.85 - (cardCount * 0.025));
       const maxNeededWidth = targetWidth + (cardCount - 1) * (targetWidth * overlapFactor);
       
       if (maxNeededWidth > availableWidth) {
-          // Only shrink if the fully-overlapped fan breaches the edge of the monitor
           fittingWidth = availableWidth / (1 + (cardCount - 1) * overlapFactor);
       }
   } else if (!shouldShowFan) {
-      // If it's just a flat row, use standard math
       fittingWidth = calculateFittingCardWidth(cardCount, availableWidth, responsive.cardGap, targetWidth, minWidth);
   }
 
@@ -183,9 +179,9 @@ function ReplayCardRow({ zoneId, snapshot, cardDataMap, useOldestArt, faceDown =
   const totalCardCount = faceDown ? zoneSize : cards.length;
   const cardCount = showPlaceholders ? zoneSize : totalCardCount;
 
-  // --- FAN-AWARE SIZING MATH ---
-  const targetWidth = small ? responsive.smallCardWidth : responsive.battlefieldCardWidth * 0.85;
-  const minWidth = small ? 30 : 50;
+  // FIX: Completely bypass the `small` flag to aggressively force 85% width!
+  const targetWidth = responsive.battlefieldCardWidth * 0.85;
+  const minWidth = 60;
   
   let fittingWidth = targetWidth;
   
@@ -275,7 +271,6 @@ export function HandFan({
         const verticalOffset = (1 - Math.abs(centerOffset) ** 1.5) * maxVerticalOffset;
         const left = index * cardSpacing;
         
-        // Slightly raise hovered cards
         const isHovered = hoveredIndex === index && !inverted;
         const hoverOffset = isHovered ? (inverted ? 20 : -20) : 0;
         const finalVerticalOffset = inverted ? verticalOffset + hoverOffset : -verticalOffset + hoverOffset;
@@ -330,7 +325,12 @@ export function HandFan({
                 }}
                 style={wrapperStyle}
             >
-                <div onMouseEnter={() => setHoveredIndex(index)} onMouseLeave={() => setHoveredIndex(null)}>
+                {/* FIX: Add strict inline dimensions to the immediate parent of ReplayGameCard */}
+                <div 
+                    onMouseEnter={() => setHoveredIndex(index)} 
+                    onMouseLeave={() => setHoveredIndex(null)}
+                    style={{ width: fittingWidth, height: cardHeight }}
+                >
                     <ReplayGameCard
                         cardData={{
                             name: item.card.name,
