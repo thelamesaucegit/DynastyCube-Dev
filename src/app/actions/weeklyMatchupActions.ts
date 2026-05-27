@@ -298,55 +298,109 @@ export async function recordPvpResult(
  * 
  * Then writes head_to_head and updates team_season_stats.
  */
+/**
+ * Determine the final weekly outcome once all games are complete.
+ */
 async function finalizeWeeklyOutcome(weeklyMatchupId: string): Promise<boolean> {
     const supabase = createServiceClient();
+    
+    console.log(`[Action/finalizeWeeklyOutcome] 🔄 Starting finalization for Matchup: ${weeklyMatchupId}`);
 
-    const { data: matchup, error } = await supabase
-        .from('weekly_matchups')
-        .select('*')
-        .eq('id', weeklyMatchupId)
-        .single();
+    try {
+        const { data: matchup, error } = await supabase
+            .from('weekly_matchups')
+            .select('*')
+            .eq('id', weeklyMatchupId)
+            .single();
 
-    if (error || !matchup) return false;
+        if (error) {
+            console.error(`[Action/finalizeWeeklyOutcome] ❌ Failed to fetch matchup:`, error.message);
+            return false;
+        }
+        if (!matchup) {
+            console.error(`[Action/finalizeWeeklyOutcome] ❌ Matchup not found in DB!`);
+            return false;
+        }
 
-    const team1Total = matchup.sim_team1_wins + matchup.pvp_team1_wins;
-    const team2Total = matchup.sim_team2_wins + matchup.pvp_team2_wins;
+        const team1Total = (matchup.sim_team1_wins || 0) + (matchup.pvp_team1_wins || 0);
+        const team2Total = (matchup.sim_team2_wins || 0) + (matchup.pvp_team2_wins || 0);
 
-    let winner_team_id: string | null = null;
-    let is_draw = false;
+        let winner_team_id: string | null = null;
+        let is_draw = false;
 
-    if (team1Total > team2Total) {
-        winner_team_id = matchup.team1_id;
-    } else if (team2Total > team1Total) {
-        winner_team_id = matchup.team2_id;
-    } else {
-        // Tiebreaker: PvP wins
-        if (matchup.pvp_team1_wins > matchup.pvp_team2_wins) {
+        if (team1Total > team2Total) {
             winner_team_id = matchup.team1_id;
-        } else if (matchup.pvp_team2_wins > matchup.pvp_team1_wins) {
+        } else if (team2Total > team1Total) {
             winner_team_id = matchup.team2_id;
         } else {
-            is_draw = true;
+            // Tiebreaker: PvP wins
+            if ((matchup.pvp_team1_wins || 0) > (matchup.pvp_team2_wins || 0)) {
+                winner_team_id = matchup.team1_id;
+            } else if ((matchup.pvp_team2_wins || 0) > (matchup.pvp_team1_wins || 0)) {
+                winner_team_id = matchup.team2_id;
+            } else {
+                is_draw = true;
+            }
         }
-    }
 
-    const { error: finalizeError } = await supabase
-        .from('weekly_matchups')
-        .update({ winner_team_id, is_draw, is_outcome_final: true })
-        .eq('id', weeklyMatchupId);
+        console.log(`[Action/finalizeWeeklyOutcome] Calculated Winner: ${winner_team_id ?? 'DRAW'}`);
 
-    if (finalizeError) return false;
+        // This is the most likely failure point (Playoff Trigger execution)
+        const { error: finalizeError } = await supabase
+            .from('weekly_matchups')
+            .update({ winner_team_id, is_draw, is_outcome_final: true })
+            .eq('id', weeklyMatchupId);
 
-    // Write head-to-head records (two rows — one per team's perspective)
-    const team1Outcome = is_draw ? 'draw' : (winner_team_id === matchup.team1_id ? 'win' : 'loss');
-    const team2Outcome = is_draw ? 'draw' : (winner_team_id === matchup.team2_id ? 'win' : 'loss');
+        if (finalizeError) {
+            console.error(`[Action/finalizeWeeklyOutcome] ❌ DB Update Error (Trigger failed?):`, finalizeError.message, finalizeError.details, finalizeError.hint);
+            return false;
+        }
 
-    const h2hRows: HeadToHeadRecord[] = [
-        {
-            team_id: matchup.team1_id,
-            opponent_id: matchup.team2_id,
-            season_id: matchup.season_id,
-            weekly_matchup_id: weeklyMatchupId,
+        console.log(`[Action/finalizeWeeklyOutcome] ✅ Successfully updated is_outcome_final to TRUE.`);
+
+        // Write head-to-head records
+        const team1Outcome = is_draw ? 'draw' : (winner_team_id === matchup.team1_id ? 'win' : 'loss');
+        const team2Outcome = is_draw ? 'draw' : (winner_team_id === matchup.team2_id ? 'win' : 'loss');
+
+        const h2hRows: HeadToHeadRecord[] = [
+            {
+                team_id: matchup.team1_id,
+                opponent_id: matchup.team2_id,
+                season_id: matchup.season_id,
+                weekly_matchup_id: weeklyMatchupId,
+                sim_wins: matchup.sim_team1_wins,
+                sim_losses: matchup.sim_team2_wins,
+                sim_draws: matchup.sim_draws,
+                pvp_wins: matchup.pvp_team1_wins,
+                pvp_losses: matchup.pvp_team2_wins,
+                pvp_draws: matchup.pvp_draws,
+                weekly_outcome: team1Outcome as 'win' | 'loss' | 'draw',
+                is_playoff: matchup.is_playoff,
+            },
+            {
+                team_id: matchup.team2_id,
+                opponent_id: matchup.team1_id,
+                season_id: matchup.season_id,
+                weekly_matchup_id: weeklyMatchupId,
+                sim_wins: matchup.sim_team2_wins,
+                sim_losses: matchup.sim_team1_wins,
+                sim_draws: matchup.sim_draws,
+                pvp_wins: matchup.pvp_team2_wins,
+                pvp_losses: matchup.pvp_team1_wins,
+                pvp_draws: matchup.pvp_draws,
+                weekly_outcome: team2Outcome as 'win' | 'loss' | 'draw',
+                is_playoff: matchup.is_playoff,
+            },
+        ];
+
+        const { error: h2hError } = await supabase.from('team_head_to_head').upsert(h2hRows, {
+            onConflict: 'team_id,weekly_matchup_id',
+        });
+        
+        if (h2hError) console.error(`[Action/finalizeWeeklyOutcome] ⚠️ Failed to upsert head-to-head records:`, h2hError.message);
+
+        // Update team_season_stats for both teams
+        await updateTeamSeasonStats(matchup.team1_id, matchup.season_id, {
             sim_wins: matchup.sim_team1_wins,
             sim_losses: matchup.sim_team2_wins,
             sim_draws: matchup.sim_draws,
@@ -354,13 +408,9 @@ async function finalizeWeeklyOutcome(weeklyMatchupId: string): Promise<boolean> 
             pvp_losses: matchup.pvp_team2_wins,
             pvp_draws: matchup.pvp_draws,
             weekly_outcome: team1Outcome as 'win' | 'loss' | 'draw',
-            is_playoff: matchup.is_playoff,
-        },
-        {
-            team_id: matchup.team2_id,
-            opponent_id: matchup.team1_id,
-            season_id: matchup.season_id,
-            weekly_matchup_id: weeklyMatchupId,
+        });
+
+        await updateTeamSeasonStats(matchup.team2_id, matchup.season_id, {
             sim_wins: matchup.sim_team2_wins,
             sim_losses: matchup.sim_team1_wins,
             sim_draws: matchup.sim_draws,
@@ -368,37 +418,15 @@ async function finalizeWeeklyOutcome(weeklyMatchupId: string): Promise<boolean> 
             pvp_losses: matchup.pvp_team1_wins,
             pvp_draws: matchup.pvp_draws,
             weekly_outcome: team2Outcome as 'win' | 'loss' | 'draw',
-            is_playoff: matchup.is_playoff,
-        },
-    ];
+        });
 
-    await supabase.from('team_head_to_head').upsert(h2hRows, {
-        onConflict: 'team_id,weekly_matchup_id',
-    });
-
-    // Update team_season_stats for both teams
-    await updateTeamSeasonStats(matchup.team1_id, matchup.season_id, {
-        sim_wins: matchup.sim_team1_wins,
-        sim_losses: matchup.sim_team2_wins,
-        sim_draws: matchup.sim_draws,
-        pvp_wins: matchup.pvp_team1_wins,
-        pvp_losses: matchup.pvp_team2_wins,
-        pvp_draws: matchup.pvp_draws,
-        weekly_outcome: team1Outcome as 'win' | 'loss' | 'draw',
-    });
-
-    await updateTeamSeasonStats(matchup.team2_id, matchup.season_id, {
-        sim_wins: matchup.sim_team2_wins,
-        sim_losses: matchup.sim_team1_wins,
-        sim_draws: matchup.sim_draws,
-        pvp_wins: matchup.pvp_team2_wins,
-        pvp_losses: matchup.pvp_team1_wins,
-        pvp_draws: matchup.pvp_draws,
-        weekly_outcome: team2Outcome as 'win' | 'loss' | 'draw',
-    });
-
-    return true;
+        return true;
+    } catch (e) {
+        console.error(`[Action/finalizeWeeklyOutcome] ❌ FATAL ERROR:`, e);
+        return false;
+    }
 }
+
 
 async function updateTeamSeasonStats(
     teamId: string,
