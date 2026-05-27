@@ -1,5 +1,6 @@
 "use server";
 
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createServerClient } from "@/lib/supabase";
 
 export interface StreamMatch {
