@@ -1,7 +1,8 @@
-// src/app/components/CardPreview.tsx
+//src/app/components/CardPreview.tsx
+
 "use client";
 
-import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
+import React, { useState, useRef, useLayoutEffect } from "react";
 import { useSettings } from "@/contexts/SettingsContext";
 import { getCardImageUrl } from "@/app/utils/cardUtils";
 
@@ -13,7 +14,7 @@ interface CardPreviewProps {
   };
   children: React.ReactNode;
   className?: string;
-  style?: React.CSSProperties; // <-- ADD THIS PROP
+  style?: React.CSSProperties;
   headerOffset?: number;
 }
 
@@ -21,21 +22,22 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
   card,
   children,
   className = "",
-  style = {}, // <-- ADD DEFAULT
+  style = {}, 
   headerOffset = 55,
 }) => {
   const { useOldestArt } = useSettings();
   const [isHovering, setIsHovering] = useState(false);
   const [position, setPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLAnchorElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
-
   const imageUrl = getCardImageUrl(card, useOldestArt);
+
+  // Construct the Scryfall search URL
+  const scryfallUrl = `https://scryfall.com/cards/named?exact=${encodeURIComponent(card.card_name)}`;
 
   useLayoutEffect(() => {
     if (!isHovering || !containerRef.current || !previewRef.current) return;
-
     const updatePosition = () => {
       if (!containerRef.current || !previewRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
@@ -47,27 +49,19 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
       const padding = 12;
 
       let x = rect.right + padding;
-      if (x + pWidth > viewportW - padding) {
-        x = rect.left - pWidth - padding;
-      }
-      if (x < padding) {
-        x = (viewportW - pWidth) / 2;
-      }
+      if (x + pWidth > viewportW - padding) x = rect.left - pWidth - padding;
+      if (x < padding) x = (viewportW - pWidth) / 2;
 
       let y = rect.top;
-      if (y + pHeight > viewportH - padding) {
-        y = viewportH - pHeight - padding;
-      }
-      if (y < headerOffset + padding) {
-        y = headerOffset + padding;
-      }
+      if (y + pHeight > viewportH - padding) y = viewportH - pHeight - padding;
+      if (y < headerOffset + padding) y = headerOffset + padding;
+
       setPosition({ x, y });
     };
 
     updatePosition();
     window.addEventListener("scroll", updatePosition, true);
     window.addEventListener("resize", updatePosition);
-
     return () => {
       window.removeEventListener("scroll", updatePosition, true);
       window.removeEventListener("resize", updatePosition);
@@ -76,16 +70,19 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
 
   return (
     <>
-      <div
+      <a
+        href={scryfallUrl}
+        target="_blank"
+        rel="noopener noreferrer"
         ref={containerRef}
         className={className}
         onMouseEnter={() => setIsHovering(true)}
         onMouseLeave={() => setIsHovering(false)}
-        // Combine the passed style with the inline-block fix
-        style={{ display: 'inline-block', ...style }} 
+        style={{ display: 'inline-block', textDecoration: 'none', color: 'inherit', cursor: 'pointer', ...style }} 
+        onClick={(e) => e.stopPropagation()}
       >
         {children}
-      </div>
+      </a>
       
       {isHovering && imageUrl && (
         <div
