@@ -244,7 +244,9 @@ export default function SchedulePage() {
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div>
                         <div className="flex items-center gap-3 mb-1">
-                          <CardTitle className="text-2xl">Week {week.week_number}</CardTitle>
+<CardTitle className="text-2xl">
+    {week.is_playoff_week ? (week.notes || "Playoffs") : `Week ${week.week_number}`}
+  </CardTitle>
                           {status === "current" && <Badge className="bg-primary">CURRENT WEEK</Badge>}
                           {status === "upcoming" && <Badge variant="secondary">UPCOMING</Badge>}
                         </div>
