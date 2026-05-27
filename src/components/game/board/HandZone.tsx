@@ -13,7 +13,6 @@ import { GameCard } from '../card';
 import { ReplayGameCard } from '../card/ReplayGameCard';
 import { CardPreview } from '@/app/components/CardPreview';
 import { CARD_BACK_IMAGE_URL } from '@/utils/cardImages';
-import { useSettings } from '@/contexts/SettingsContext';
 
 // ========================================================================
 // PROPS INTERFACES
@@ -75,7 +74,7 @@ export function CardRow(props: CardRowProps) {
 }
 
 // ========================================================================
-// LIVE COMPONENT (uses hooks and original GameCard)
+// LIVE COMPONENT
 // ========================================================================
 function LiveCardRow({ zoneId, faceDown = false, interactive = false, small = false, inverted = false, ghostCards = [] }: LiveCardRowProps) {
   const cards = useZoneCards(zoneId);
@@ -94,16 +93,36 @@ function LiveCardRow({ zoneId, faceDown = false, interactive = false, small = fa
   const availableWidth = responsive.viewportWidth - (responsive.containerPadding * 2) - (sideZoneWidth * 2);
   const totalCardCount = (faceDown ? zoneSize : cards.length) + ghostCards.length;
   const cardCount = showPlaceholders ? zoneSize : totalCardCount;
-  const baseWidth = small ? responsive.smallCardWidth : responsive.cardWidth;
-  const minWidth = small ? 30 : 45;
-  const fittingWidth = calculateFittingCardWidth(cardCount, availableWidth, responsive.cardGap, baseWidth, minWidth);
-  
+
   const isPlayerHand = interactive && !faceDown;
   const isOpponentHand = faceDown && inverted;
   const isSpectatorBottomHand = faceDown && !inverted && !interactive;
+  const shouldShowFan = isPlayerHand || isOpponentHand || isSpectatorBottomHand;
+
+  // --- FAN-AWARE SIZING MATH ---
+  // Target width is ~60% of battlefield cards (half-size visual footprint)
+  const targetWidth = small ? responsive.smallCardWidth : responsive.battlefieldCardWidth * 0.6;
+  const minWidth = small ? 30 : 50;
+  
+  let fittingWidth = targetWidth;
+  
+  if (shouldShowFan && cardCount > 1) {
+      // Calculate how wide the fan will be with overlapping cards
+      const overlapFactor = Math.max(0.5, 0.85 - (cardCount * 0.025));
+      const maxNeededWidth = targetWidth + (cardCount - 1) * (targetWidth * overlapFactor);
+      
+      if (maxNeededWidth > availableWidth) {
+          // Only shrink if the fully-overlapped fan breaches the edge of the monitor
+          fittingWidth = availableWidth / (1 + (cardCount - 1) * overlapFactor);
+      }
+  } else if (!shouldShowFan) {
+      // If it's just a flat row, use standard math
+      fittingWidth = calculateFittingCardWidth(cardCount, availableWidth, responsive.cardGap, targetWidth, minWidth);
+  }
+
+  if (fittingWidth < minWidth) fittingWidth = minWidth;
   const cardHeight = Math.round(fittingWidth * 1.4);
   const hasRevealedCards = faceDown && cards.length > 0;
-  const shouldShowFan = isPlayerHand || isOpponentHand || isSpectatorBottomHand;
 
   if (shouldShowFan) {
     return (
@@ -140,7 +159,7 @@ function LiveCardRow({ zoneId, faceDown = false, interactive = false, small = fa
 }
 
 // ========================================================================
-// REPLAY COMPONENT (zero hooks, uses ReplayGameCard)
+// REPLAY COMPONENT
 // ========================================================================
 function ReplayCardRow({ zoneId, snapshot, cardDataMap, useOldestArt, faceDown = false, small = false, inverted = false }: ReplayCardRowProps) {
   const responsive = useResponsiveContext();
@@ -163,64 +182,45 @@ function ReplayCardRow({ zoneId, snapshot, cardDataMap, useOldestArt, faceDown =
   const availableWidth = responsive.viewportWidth - (responsive.containerPadding * 2) - (sideZoneWidth * 2);
   const totalCardCount = faceDown ? zoneSize : cards.length;
   const cardCount = showPlaceholders ? zoneSize : totalCardCount;
-  const baseWidth = small ? responsive.smallCardWidth : responsive.cardWidth;
-  const minWidth = small ? 30 : 45;
-  const fittingWidth = calculateFittingCardWidth(cardCount, availableWidth, responsive.cardGap, baseWidth, minWidth);
-  const cardHeight = Math.round(fittingWidth * 1.4);
-  const hasRevealedCards = faceDown && cards.length > 0;
-  const shouldShowFan = true; // Always show fan in replay
 
-  if (shouldShowFan) {
-    return (
-      <HandFan
-        cards={cards}
-        cardDataMap={cardDataMap}
-        useOldestArt={useOldestArt}
-        placeholderCount={showPlaceholders ? zoneSize : unrevealedCount}
-        fittingWidth={fittingWidth}
-        cardHeight={cardHeight}
-        faceDown={faceDown && !hasRevealedCards}
-        revealedCards={hasRevealedCards}
-        interactive={false}
-        small={small}
-        inverted={inverted}
-      />
-    );
+  // --- FAN-AWARE SIZING MATH ---
+  const targetWidth = small ? responsive.smallCardWidth : responsive.battlefieldCardWidth * 0.6;
+  const minWidth = small ? 30 : 50;
+  
+  let fittingWidth = targetWidth;
+  
+  if (cardCount > 1) {
+      const overlapFactor = Math.max(0.5, 0.85 - (cardCount * 0.025));
+      const maxNeededWidth = targetWidth + (cardCount - 1) * (targetWidth * overlapFactor);
+      
+      if (maxNeededWidth > availableWidth) {
+          fittingWidth = availableWidth / (1 + (cardCount - 1) * overlapFactor);
+      }
   }
 
+  if (fittingWidth < minWidth) fittingWidth = minWidth;
+  const cardHeight = Math.round(fittingWidth * 1.4);
+  const hasRevealedCards = faceDown && cards.length > 0;
+
   return (
-    <div style={{ ...styles.cardRow, gap: responsive.cardGap, padding: responsive.cardGap }}>
-      {cards.map((card) => {
-          const cardImageData = cardDataMap[card.name];
-          return (
-            <CardPreview
-                key={card.id}
-                card={{
-                    card_name: card.name,
-                    image_url: cardImageData?.image_url ?? null,
-                    oldest_image_url: cardImageData?.oldest_image_url ?? null,
-                }}
-            >
-                <ReplayGameCard
-                    cardData={{
-                        name: card.name,
-                        card_type: cardImageData?.card_type ?? card.typeLine,
-                        image_url: cardImageData?.image_url ?? null,
-                        oldest_image_url: cardImageData?.oldest_image_url ?? null,
-                    }}
-                    useOldestArt={useOldestArt ?? false}
-                    width={`${fittingWidth}px`}
-                    height={`${cardHeight}px`}
-                />
-            </CardPreview>
-          );
-      })}
-    </div>
+    <HandFan
+      cards={cards}
+      cardDataMap={cardDataMap}
+      useOldestArt={useOldestArt}
+      placeholderCount={showPlaceholders ? zoneSize : unrevealedCount}
+      fittingWidth={fittingWidth}
+      cardHeight={cardHeight}
+      faceDown={faceDown && !hasRevealedCards}
+      revealedCards={hasRevealedCards}
+      interactive={false}
+      small={small}
+      inverted={inverted}
+    />
   );
 }
 
 // ========================================================================
-// HandFan (The "Dumb" Renderer)
+// HandFan
 // ========================================================================
 export function HandFan({
   cards,
@@ -261,6 +261,7 @@ export function HandFan({
   const maxRotation = Math.min(12, 40 / Math.max(cardCount, 1));
   const maxVerticalOffset = Math.min(15, 45 / Math.max(cardCount, 1));
   const overlapFactor = Math.max(0.5, 0.85 - (cardCount * 0.025));
+  
   const cardSpacing = fittingWidth * overlapFactor;
   const totalWidth = cardSpacing * (cardCount - 1) + fittingWidth;
   const edgeMargin = -15;
@@ -273,13 +274,19 @@ export function HandFan({
         const rotation = centerOffset * maxRotation * rotationMultiplier;
         const verticalOffset = (1 - Math.abs(centerOffset) ** 1.5) * maxVerticalOffset;
         const left = index * cardSpacing;
-        const zIndex = 50 - Math.abs(index - Math.floor(cardCount / 2));
+        
+        // Slightly raise hovered cards
+        const isHovered = hoveredIndex === index && !inverted;
+        const hoverOffset = isHovered ? (inverted ? 20 : -20) : 0;
+        const finalVerticalOffset = inverted ? verticalOffset + hoverOffset : -verticalOffset + hoverOffset;
+        
+        const zIndex = isHovered ? 100 : 50 - Math.abs(index - Math.floor(cardCount / 2));
         const key = item.type === 'card' ? item.card.id : `placeholder-${item.index}`;
         
         const wrapperStyle: React.CSSProperties = {
             position: 'absolute', 
             left, 
-            ...(inverted ? { top: edgeMargin, transform: `translateY(${verticalOffset}px) rotate(${rotation}deg)` } : { bottom: edgeMargin, transform: `translateY(${-verticalOffset}px) rotate(${rotation}deg)` }), 
+            ...(inverted ? { top: edgeMargin, transform: `translateY(${finalVerticalOffset}px) rotate(${rotation}deg)` } : { bottom: edgeMargin, transform: `translateY(${finalVerticalOffset}px) rotate(${rotation}deg)` }), 
             transformOrigin: inverted ? 'top center' : 'bottom center', 
             zIndex, 
             transition: 'all 0.12s ease-out', 
@@ -298,7 +305,7 @@ export function HandFan({
 
         if (interactive) {
             return (
-                <div key={key} style={wrapperStyle} onMouseEnter={() => !inverted && setHoveredIndex(index)} onMouseLeave={() => !inverted && setHoveredIndex(null)}>
+                <div key={key} style={wrapperStyle} onMouseEnter={() => setHoveredIndex(index)} onMouseLeave={() => setHoveredIndex(null)}>
                     <GameCard
                         card={item.card}
                         faceDown={faceDown && !item.showFaceUp}
@@ -323,7 +330,7 @@ export function HandFan({
                 }}
                 style={wrapperStyle}
             >
-                <div onMouseEnter={() => !inverted && setHoveredIndex(index)} onMouseLeave={() => !inverted && setHoveredIndex(null)}>
+                <div onMouseEnter={() => setHoveredIndex(index)} onMouseLeave={() => setHoveredIndex(null)}>
                     <ReplayGameCard
                         cardData={{
                             name: item.card.name,
