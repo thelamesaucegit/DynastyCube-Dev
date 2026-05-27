@@ -644,21 +644,21 @@ export async function completeDraft(
                  if (activeTeams.length < 2) {
                      await logSystemEvent("TestScheduleGen", "error", `Not enough teams for test schedule.`);
                  } else {
-                     const allMatchups = await generateSeasonMatchups(activeTeams, 5, false);
+                                          // Generate 5 weeks + 1 Rivals week = 6 total weeks
+                     const allMatchups = await generateSeasonMatchups(activeTeams, 5, true); 
                      await logSystemEvent("ScheduleGenTrace", "info", `[4] Generated ${allMatchups.length} matchups.`);
 
                     const weekIds: string[] = [];
                      
-                     // Align everything to start exactly 10 minutes from now
-                     const baseNow = new Date(Date.now() + 10 * 60000); 
+                     // 1-Hour Preseason: Align everything to start exactly 60 minutes from now
+                     const baseNow = new Date(Date.now() + 60 * 60000); 
                      const testSeasonNumber = parseInt(seasonName.replace(/[^0-9]/g, '')) || 999;
                      
-                     // 10 minutes per game.
+                     // 30 minutes per game.
                      const matchupsPerWeek = Math.floor(activeTeams.length / 2);
-                     const weekDurationMs = matchupsPerWeek * 3 * 10 * 60000;
+                     const weekDurationMs = matchupsPerWeek * 3 * 30 * 60000; 
 
-                     for (let i = 1; i <= 5; i++) {
-                         // Weeks are now contiguous blocks of time with no artificial gaps
+                     for (let i = 1; i <= 6; i++) { // <-- Update to loop to 6 weeks
                          const weekStart = new Date(baseNow.getTime() + ((i - 1) * weekDurationMs));
                          const weekEnd = new Date(weekStart.getTime() + weekDurationMs); 
                          
@@ -666,8 +666,9 @@ export async function completeDraft(
                              season_id: sessionData.season_id, season_number: testSeasonNumber, week_number: i,
                              start_date: weekStart.toISOString(), end_date: weekEnd.toISOString(),
                              deck_submission_deadline: weekStart.toISOString(), match_completion_deadline: weekEnd.toISOString(),
-                             is_playoff_week: false, is_championship_week: false, notes: `Test Week ${i} (Rapid)`,
+                             is_playoff_week: false, is_championship_week: false, notes: i === 6 ? `Rivals Week` : `Regular Season Week ${i}`,
                          }).select('id').single();
+
                          
                          if (weekError) await logSystemEvent("TestScheduleGen", "error", `Week ${i} insert failed: ${weekError.message}`);
                          else if (weekData) weekIds.push(weekData.id);
@@ -678,8 +679,8 @@ export async function completeDraft(
                      if (weekIds.length > 0) {
                          let totalMatchups = 0, totalGames = 0;
 
-                         // Start the cursor exactly at the beginning of Week 1
-                         let currentMatchCursor = new Date(baseNow.getTime());
+                                         // Advance the cursor by 30 minutes for the VERY NEXT GAME
+                                         currentMatchCursor = new Date(currentMatchCursor.getTime() + 30 * 60000);
 
                          for (let week = 1; week <= 5; week++) {
                               const weekMatchups = allMatchups.filter(m => m.week === week);
