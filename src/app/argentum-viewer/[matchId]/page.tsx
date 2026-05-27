@@ -3,6 +3,8 @@
 "use client";
 
 import { useRouter } from 'next/navigation';
+import { redirect } from 'next/navigation';
+import { createServerClient } from '@/lib/supabase';
 
 import React, { useState, useEffect, use } from 'react';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
@@ -110,15 +112,20 @@ export default function ReplayPage(props: PageProps) {
                 if (!rawGameStates || rawGameStates.length === 0) {
                     throw new Error("No game states found for this match in database.");
                 }
+ const supabase = await createServerClient();
+            const { data: scheduleRow } = await supabase
+                .from('schedule')
+                .select('match_date')
+                .eq('sim_match_id', matchId)
+                .single();
 
-                if (matchDate) {
-                const broadcastStart = new Date(matchDate).getTime() + (30 * 60000);
+            if (scheduleRow && scheduleRow.match_date) {
+                const broadcastStart = new Date(scheduleRow.match_date).getTime() + (30 * 60000);
                 const broadcastEnd = broadcastStart + (rawGameStates.length * 2000);
                 
                 if (Date.now() < broadcastEnd) {
-                    console.log("[Spoiler Lock] Stream hasn't finished! Redirecting to live view...");
-                    router.replace(`/stream/${matchId}`);
-                    return; // Stop rendering the replay
+                    console.log("[Spoiler Lock] Stream hasn't finished! Redirecting to Live View.");
+                    redirect(`/stream/${matchId}`);
                 }
             }
                 console.log(`[Viewer Debug] Success! Retrieved ${rawGameStates.length} raw game states.`);
