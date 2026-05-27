@@ -826,6 +826,15 @@ async function buildSequentialAlternatingSchedule(
 ) {
     const supabase = createServiceClient(); 
     
+    // --- FIX: Fetch the human-readable season_number for the DB ---
+    const { data: seasonData } = await supabase
+        .from('seasons')
+        .select('season_number')
+        .eq('id', seasonId)
+        .single();
+    
+    const seasonNumber = seasonData?.season_number || null;
+    
     const requiredGames = isTestSeason ? 3 : 9; // Test season playoffs are best of 3 for speed
     const totalGames = matchups.length * requiredGames;
     const timeSlots: Date[] = [];
@@ -833,7 +842,7 @@ async function buildSequentialAlternatingSchedule(
     if (isTestSeason) {
         const now = new Date();
         for (let i = 0; i < totalGames; i++) {
-            // FIX: Perfect 10-minute spacing for rapid seasons!
+            // Perfect 10-minute spacing for rapid seasons!
             timeSlots.push(new Date(now.getTime() + (10 * 60000) + (i * 10 * 60000)));
         }
     } else {
@@ -859,6 +868,7 @@ async function buildSequentialAlternatingSchedule(
         for (const matchup of matchups) {
             const { error } = await supabase.from('schedule').insert({
                 season_id: seasonId,
+                season_number: seasonNumber, // <-- FIX: Now properly populated!
                 week_id: weekId,
                 week_number: weekNum,
                 team1_id: matchup.team1_id,
@@ -866,8 +876,8 @@ async function buildSequentialAlternatingSchedule(
                 weekly_matchup_id: matchup.id,
                 match_date: timeSlots[slotIndex].toISOString(),
                 status: 'scheduled',
-                team1_ai_profile: 'default', // <-- FIX: MUST HAVE AI PROFILES
-                team2_ai_profile: 'default'  // <-- FIX: MUST HAVE AI PROFILES
+                team1_ai_profile: 'default', 
+                team2_ai_profile: 'default'  
             });
 
             if (error) {
@@ -881,4 +891,3 @@ async function buildSequentialAlternatingSchedule(
     
     await logSystemEvent("Playoffs", "info", `Scheduled ${successCount}/${totalGames} games for Week ${weekNum}`);
 }
-
