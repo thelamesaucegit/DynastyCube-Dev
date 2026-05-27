@@ -138,7 +138,9 @@ export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | nul
             team2: t2,
             team1_record: recordMap.get(t1.id) || { wins: 0, losses: 0 },
             team2_record: recordMap.get(t2.id) || { wins: 0, losses: 0 },
-            life_timeline: lifeTimeline
+            life_timeline: lifeTimeline,
+                        total_steps: simData?.argentum_game_states?.length || simData?.game_states?.length || 0 // <-- ADD THIS
+
         } 
     };
 }
