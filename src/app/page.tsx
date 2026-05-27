@@ -84,7 +84,7 @@ export default function HomePage() {
       // If the broadcast has started
       if (diff > 0) {
         // Calculate exact index based on 750ms step duration
-        const ticksPassed = Math.floor(diff / 750);
+        const ticksPassed = Math.floor(diff / 2000);
         
         if (ticksPassed < liveMatch.life_timeline.length) {
            const [t1, t2] = liveMatch.life_timeline[ticksPassed];
