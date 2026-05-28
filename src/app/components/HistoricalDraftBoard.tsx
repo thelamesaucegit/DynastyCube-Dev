@@ -56,9 +56,8 @@ const DraftCard: FC<{ pick: DraftPick; size: 'large' | 'small' }> = ({ pick, siz
     );
   }
 
-  // Small card for team view
   return (
-    <div className={`rounded-md w-full flex flex-col items-stretch [&>*]:w-full [&>*]:block ${isNewest ? "ring-2 ring-green-400" : ""}`}>
+    <div className="rounded-md w-full flex flex-col items-stretch [&>*]:w-full [&>*]:block">
       <CardPreview card={cardPreviewData}>
         <div className="w-full block">
           <ColorIdentityGlow colors={pick.color_identity}>
@@ -73,6 +72,7 @@ const DraftCard: FC<{ pick: DraftPick; size: 'large' | 'small' }> = ({ pick, siz
       </CardPreview>
     </div>
   );
+
 
 
 };
