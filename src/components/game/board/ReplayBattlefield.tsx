@@ -140,19 +140,23 @@ export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldest
         const attackers = combat?.attackers?.map(a => a.attackerId) || [];
         const blockers = combat?.attackers?.flatMap(a => a.blockers.map(b => b.blockerId)) || [];
 
-        // SORT FRONT ROW: Attackers -> Blockers -> Untapped -> Tapped
+         // SORT FRONT ROW: Attackers -> Blockers -> Planeswalkers -> Untapped Creatures -> Tapped Creatures
         frontRowCards.sort((a, b) => {
             const getFrontRank = (c: ClientCard) => {
                 if (attackers.includes(c.id)) return 1; // Attackers first
                 if (blockers.includes(c.id)) return 2;  // Blockers second
-                if (!c.isTapped) return 3;              // Untapped third
-                return 4;                               // Tapped/Summoning sickness last
+                if (c.cardTypes.includes('Planeswalker')) return 3; // Planeswalkers neatly grouped
+                if (!c.isTapped) return 4;              // Untapped Creatures
+                return 5;                               // Tapped/Summoning Sickness Creatures
             };
             const rankA = getFrontRank(a);
             const rankB = getFrontRank(b);
             if (rankA !== rankB) return rankA - rankB;
+            
+            // If they are the same rank, group them alphabetically
             return a.name.localeCompare(b.name);
         });
+
 
         // SORT BACKROW BY TYPE: Lands -> Enchantments -> Artifacts -> Everything else
         backRowCards.sort((a, b) => {
