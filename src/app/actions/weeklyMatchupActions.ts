@@ -187,7 +187,9 @@ export async function recordSimGameResult(
     }
 
     let requiredGames = isTestSeason ? 3 : 5;
-    if (matchup.is_playoff) requiredGames = 9; 
+    if (matchup.is_playoff) {
+        requiredGames = isTestSeason ? 3 : 9;
+    }
 
     let finalized = false;
     
@@ -717,7 +719,15 @@ async function generateInitialPlayoffBracket(seasonId: string, isTestSeason: boo
     console.log(`[PlayoffGen] Top ${playoffSpots} teams qualify. Creating matchups...`);
 
     // Week 100 = Round 1 (Semis/Quarters), Week 101 = Finals
-    const roundNumber = 100;
+     const roundNumber = 100;
+
+    // --- ANTI-RACE CONDITION CHECK ---
+    const { data: existingWeek } = await supabase.from('schedule_weeks')
+        .select('id').eq('season_id', seasonId).eq('week_number', roundNumber).maybeSingle();
+    if (existingWeek) {
+        console.log(`[PlayoffGen] ⚠️ Round ${roundNumber} already exists! Another thread beat us to it. Skipping.`);
+        return;
+    }
 
     const baseStart = new Date(Date.now() + 10 * 60000);
     const weekEnd = isTestSeason 
@@ -786,14 +796,36 @@ async function advancePlayoffBracket(seasonId: string, isTestSeason: boolean) {
 
     const advancingTeams = currentMatchups?.map(m => m.winner_team_id).filter(Boolean) || [];
 
-    if (advancingTeams.length <= 1) {
+     if (advancingTeams.length <= 1) {
         console.log(`[PLAYOFFS] 👑 Championship complete! Winner: ${advancingTeams[0]}`);
         await logSystemEvent("Playoffs", "info", `Championship complete! Winner: ${advancingTeams[0]}`);
-        await supabase.from('seasons').update({ phase: 'postseason' }).eq('id', seasonId);
+        await supabase.from('seasons').update({ phase: 'offseason' }).eq('id', seasonId);
+        
+        // Set 2 Hour Offseason Timer (or 5 minutes if it's a Test Season!)
+        const offSeasonDurationMs = isTestSeason ? (5 * 60000) : (2 * 60 * 60 * 1000);
+        const offSeasonEnd = new Date(Date.now() + offSeasonDurationMs);
+        
+        await supabase.from('countdown_timers').update({ is_active: false }).eq('is_active', true); // Clear old timers
+        await supabase.from('countdown_timers').insert({
+            title: 'Offseason Curation & Next Draft',
+            end_time: offSeasonEnd.toISOString(),
+            link_text: 'View Final Standings',
+            link_url: '/teams',
+            is_active: true
+        });
+
         return;
     }
 
     const nextRoundNum = currentRoundNum + 1;
+    
+    // --- ANTI-RACE CONDITION CHECK ---
+    const { data: existingWeek } = await supabase.from('schedule_weeks')
+        .select('id').eq('season_id', seasonId).eq('week_number', nextRoundNum).maybeSingle();
+    if (existingWeek) {
+        console.log(`[PlayoffGen] ⚠️ Round ${nextRoundNum} already exists! Another thread beat us to it. Skipping.`);
+        return;
+    }
     const isChampionship = advancingTeams.length === 2;
     console.log(`[PlayoffGen] Creating Round ${nextRoundNum} (IsChampionship: ${isChampionship})`);
 
@@ -921,5 +953,4 @@ async function buildSequentialAlternatingSchedule(
     await logSystemEvent("Playoffs", "info", `Scheduled ${successCount}/${totalGames} games for Week ${weekNum}`);
 }
     
-    await logSystemEvent("Playoffs", "info", `Scheduled ${successCount}/${totalGames} games for Week ${weekNum}`);
-}
+  

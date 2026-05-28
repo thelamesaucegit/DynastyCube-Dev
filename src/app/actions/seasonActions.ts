@@ -2,6 +2,9 @@
 "use server";
 
 import { createServerClient } from "@/lib/supabase";
+import { importNextSetToChamber } from "./chamberActions"; // Ensure this is imported at the top
+import { generateDraftOrder } from "./draftOrderActions";
+
 
 export interface CardCostChange {
   card_id: string;
@@ -11,6 +14,152 @@ export interface CardCostChange {
   was_drafted: boolean;
 }
 
+/**
+ * Fires when the Offseason Timer hits zero!
+ */
+export async function executeSeasonRollover(): Promise<{ success: boolean; error?: string }> {
+    // FIX: Force God-Mode because Cron jobs don't have browser cookies!
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_KEY!
+    );
+    
+    console.log("[SeasonRollover] 🔄 Starting full season rollover...");
+    
+    try {
+        // 1. Run the Curation Economy
+        const curationResult = await executeOffseasonCuration();
+        if (!curationResult.success) throw new Error(curationResult.error);
+
+        // 2. Identify Previous Season
+        const { data: oldSeason } = await supabase.from('seasons').select('*').eq('is_active', true).single();
+        if (!oldSeason) throw new Error("Could not find active season to roll over.");
+
+        const nextSeasonNumber = oldSeason.season_number + 1;
+        const isTestSeason = oldSeason.season_name.toUpperCase().includes("TEST");
+        const nextSeasonName = isTestSeason ? `Test Season ${nextSeasonNumber}` : `Season ${nextSeasonNumber}`;
+
+        console.log(`[SeasonRollover] Building ${nextSeasonName}...`);
+
+        // 3. Deactivate Old, Create New
+        await supabase.from('seasons').update({ is_active: false }).eq('id', oldSeason.id);
+        
+        const { data: newSeason, error: seasonErr } = await supabase.from('seasons').insert({
+            season_name: nextSeasonName,
+            season_number: nextSeasonNumber,
+            is_active: true,
+            phase: 'draft'
+        }).select('id').single();
+
+        if (seasonErr || !newSeason) throw new Error("Failed to create new season.");
+
+        // 4. Generate the highly-calculated Draft Order!
+        const draftOrderResult = await generateDraftOrder(newSeason.id, { orderType: 'previous_season' });
+        if (!draftOrderResult.success) throw new Error(`Draft order generation failed: ${draftOrderResult.error}`);
+
+        // 5. Spawn the new Draft Session!
+        const startTime = new Date(Date.now() + 5 * 60000).toISOString(); // Draft starts 5 mins after generation
+        
+        await supabase.from("draft_sessions").insert({
+            season_id: newSeason.id,
+            status: "scheduled",
+            total_rounds: 15, // Set to your cube standard
+            hours_per_pick: isTestSeason ? 0.05 : 12, // 3 mins for test, 12 hours for real
+            start_time: startTime,
+            started_by: null,
+        });
+
+        // Clear the countdown timer
+        await supabase.from('countdown_timers').update({ is_active: false }).eq('is_active', true);
+
+        console.log("[SeasonRollover] ✅ Rollover complete! New draft scheduled.");
+        return { success: true };
+
+    } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error("[SeasonRollover] ❌ Rollover Failed:", msg);
+        return { success: false, error: msg };
+    }
+}
+
+/**
+ * Executes the strict economic and pool curation rules for the Offseason.
+ */
+export async function executeOffseasonCuration(): Promise<{ success: boolean; error?: string }> {
+    const supabase = await createServerClient();
+    console.log("[Offseason] Starting Draft Pool Curation...");
+
+    try {
+        // 1. Double the cubucks_cost for all Keepers
+        const { data: keepers } = await supabase.from('team_draft_picks').select('card_id').eq('is_keeper', true);
+        if (keepers && keepers.length > 0) {
+            const keeperIds = keepers.map(k => k.card_id);
+            // Quick raw SQL RPC call or sequential update (RPC is better, but this works for scale)
+            for (const id of keeperIds) {
+                const { data: card } = await supabase.from('card_pools').select('cubucks_cost').eq('card_id', id).single();
+                if (card) {
+                    await supabase.from('card_pools').update({ cubucks_cost: card.cubucks_cost * 2 }).eq('card_id', id);
+                }
+            }
+        }
+
+        // 2. Increase cubucks_cost by 1 for all remaining Draft pool cards (excluding keepers)
+        const keeperIdList = keepers?.map(k => k.card_id) || [];
+        const { data: draftCards } = await supabase.from('card_pools').select('id, cubucks_cost').eq('pool_name', 'draft').not('card_id', 'in', `(${keeperIdList.join(',')})`);
+        if (draftCards) {
+            for (const card of draftCards) {
+                await supabase.from('card_pools').update({ cubucks_cost: card.cubucks_cost + 1 }).eq('id', card.id);
+            }
+        }
+
+        // 3. Remove non-keepers from teams (Undraft)
+        await supabase.from('team_draft_picks').delete().eq('is_keeper', false);
+
+        // 4. Free Agent Aging & Retirement
+        const { data: freeAgents } = await supabase.from('card_pools').select('*').eq('pool_name', 'free');
+        if (freeAgents) {
+            for (const card of freeAgents) {
+                const newSeasonsInFa = (card.seasons_in_free_agency || 0) + 1;
+                
+                if (newSeasonsInFa >= 2) {
+                    // Retire the card
+                    await supabase.from('retired_cards').insert({
+                        card_id: card.card_id, card_name: card.card_name, card_set: card.card_set, card_type: card.card_type, rarity: card.rarity,
+                        colors: card.colors, color_identity: card.color_identity, image_url: card.image_url, oldest_image_url: card.oldest_image_url,
+                        oracle_id: card.oracle_id, mana_cost: card.mana_cost, cmc: card.cmc, cubucks_cost: card.cubucks_cost,
+                        retired_reason: 'Free agent for 2 seasons'
+                    });
+                    await supabase.from('card_pools').delete().eq('id', card.id);
+                } else {
+                    // Age it, and if it still has value > 0, return to draft pool
+                    if (card.cubucks_cost > 0) {
+                        await supabase.from('card_pools').update({ pool_name: 'draft', seasons_in_free_agency: newSeasonsInFa }).eq('id', card.id);
+                    } else {
+                        await supabase.from('card_pools').update({ seasons_in_free_agency: newSeasonsInFa }).eq('id', card.id);
+                    }
+                }
+            }
+        }
+
+        // 5. Promote Wire & Chamber to Draft
+        await supabase.from('card_pools').update({ pool_name: 'draft' }).in('pool_name', ['wire', 'chamber']);
+
+        // 6. Import Next Set into the Chamber
+        const importResult = await importNextSetToChamber();
+        if (!importResult.success) {
+            console.warn("[Offseason] Chamber import returned an issue:", importResult.message);
+        }
+
+        console.log("[Offseason] Curation complete!");
+        return { success: true };
+
+    } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error("[Offseason] Curation Failed:", msg);
+        return { success: false, error: msg };
+    }
+}
 async function verifyAdmin(supabase: Awaited<ReturnType<typeof createServerClient>>): Promise<{
   authorized: boolean;
   userId?: string;

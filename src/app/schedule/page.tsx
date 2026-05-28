@@ -47,7 +47,7 @@ const getWeekStatus = (week: ScheduleWeek) => {
 // HELPER: Attach Broadcast Timings to matches!
 function enhanceMatchWithStreamTiming(match: UnifiedMatch): StreamMatchUI {
     // 1. Calculate Broadcast Start (Match Date + 30 mins)
-    const baseTime = new Date(match.scheduled_for || match.created_at || Date.now()).getTime();
+    const baseTime = new Date(match.scheduled_for || Date.now()).getTime();
     const broadcastStartTime = baseTime + (30 * 60000);
     
     // 2. Calculate Broadcast End (Start + (Steps * 2s)). Fallback to 10 mins if steps aren't provided.
