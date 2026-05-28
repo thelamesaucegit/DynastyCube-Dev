@@ -5,13 +5,14 @@ import { executeSeasonRollover } from '@/app/actions/seasonActions';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
-    // Basic security: require a secret token in the cron ping
-    const authHeader = request.headers.get('authorization');
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    // Basic security: require a simple token in the URL (e.g. /api/cron/rollover?token=my-secret-token)
+    const { searchParams } = new URL(request.url);
+    if (searchParams.get('token') !== process.env.SUPABASE_SERVICE_KEY?.substring(0, 10)) {
         return new NextResponse('Unauthorized', { status: 401 });
     }
 
     try {
+        // God-mode client for checking the timer
         const supabase = createClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
             process.env.SUPABASE_SERVICE_KEY!
