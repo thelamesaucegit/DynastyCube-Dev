@@ -83,15 +83,14 @@ export async function getWeekMatchesAndSims(weekId: string): Promise<{
 
     if (pvpError) throw pvpError;
 
-    // 2. Fetch Sim Matches (PULLING THE GAME STATES TO GET THE STEP COUNT)
+    // 2. Fetch Sim Matches (Now grabbing total_steps directly, no JSON join!)
     const { data: simMatches, error: simError } = await supabase
       .from("schedule")
       .select(`
-        id, status, match_date, winner_team_id, sim_match_id,
+        id, status, match_date, winner_team_id, sim_match_id, total_steps,
         team1_id, team2_id,
         home_team:teams!team1_id(id, name, emoji),
-        away_team:teams!team2_id(id, name, emoji),
-        sim_match:sim_matches!sim_match_id(argentum_game_states, game_states)
+        away_team:teams!team2_id(id, name, emoji)
       `)
       .eq("week_id", weekId);
 
@@ -121,11 +120,6 @@ export async function getWeekMatchesAndSims(weekId: string): Promise<{
         const homeTeam = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team;
         const awayTeam = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
         
-        // Count the steps for the Spoiler Lock
-         const simMatchArray = Array.isArray(m.sim_match) ? m.sim_match : [m.sim_match];
-        const simData = simMatchArray[0] as unknown as SimMatchData;
-        const totalSteps = simData?.argentum_game_states?.length || simData?.game_states?.length || 0;
-        
         // Derive sim scores
         let hWins = 0;
         let aWins = 0;
@@ -137,7 +131,7 @@ export async function getWeekMatchesAndSims(weekId: string): Promise<{
         unifiedList.push({
             id: m.id,
             matchType: 'sim',
-            status: m.status, // We pass the raw status, the UI will override it based on stream math
+            status: m.status, 
             home_team: homeTeam || null,
             away_team: awayTeam || null,
             scheduled_for: m.match_date,
@@ -145,7 +139,7 @@ export async function getWeekMatchesAndSims(weekId: string): Promise<{
             sim_match_id: m.sim_match_id,
             home_team_wins: hWins,
             away_team_wins: aWins,
-            total_steps: totalSteps // <-- Included for the UI calculation
+            total_steps: m.total_steps || 300 // Natively pulled from the DB!
         });
     });
     
@@ -161,6 +155,7 @@ export async function getWeekMatchesAndSims(weekId: string): Promise<{
     return { matches: [], error: message };
   }
 }
+
 /**
  * Get all matches for a specific week (or all matches if weekId is null)
  */
