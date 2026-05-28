@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { getCardImageWithFallback } from "@/app/utils/cardUtils";
+import { getCardImageUrl } from "@/app/utils/cardUtils";
 import { useSettings } from "@/contexts/SettingsContext";
 
 interface CardPreviewProps {
