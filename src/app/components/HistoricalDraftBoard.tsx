@@ -118,9 +118,9 @@ const TeamView: FC<{ picks: DraftPick[], draftOrder: DraftOrderTeam[] }> = ({ pi
                 {team.name}
               </p>
             </div>
-             <div className="space-y-1.5 flex-grow w-full flex flex-col items-stretch overflow-hidden">
+            <div className="space-y-1.5 flex-grow w-full flex flex-col items-stretch overflow-hidden">
               {(picksByTeam[team.id] || []).map(pick => (
-                <DraftCard key={pick.id} pick={pick} isNewest={pick.id === newestPickId} size="small" />
+                <DraftCard key={pick.id} pick={pick} size="small" />
               ))}
             </div>
           </div>
