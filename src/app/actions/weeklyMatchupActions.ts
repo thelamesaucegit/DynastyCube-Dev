@@ -717,7 +717,15 @@ async function generateInitialPlayoffBracket(seasonId: string, isTestSeason: boo
     console.log(`[PlayoffGen] Top ${playoffSpots} teams qualify. Creating matchups...`);
 
     // Week 100 = Round 1 (Semis/Quarters), Week 101 = Finals
-    const roundNumber = 100;
+     const roundNumber = 100;
+
+    // --- ANTI-RACE CONDITION CHECK ---
+    const { data: existingWeek } = await supabase.from('schedule_weeks')
+        .select('id').eq('season_id', seasonId).eq('week_number', roundNumber).maybeSingle();
+    if (existingWeek) {
+        console.log(`[PlayoffGen] ⚠️ Round ${roundNumber} already exists! Another thread beat us to it. Skipping.`);
+        return;
+    }
 
     const baseStart = new Date(Date.now() + 10 * 60000);
     const weekEnd = isTestSeason 
@@ -808,6 +816,14 @@ async function advancePlayoffBracket(seasonId: string, isTestSeason: boolean) {
     }
 
     const nextRoundNum = currentRoundNum + 1;
+    
+    // --- ANTI-RACE CONDITION CHECK ---
+    const { data: existingWeek } = await supabase.from('schedule_weeks')
+        .select('id').eq('season_id', seasonId).eq('week_number', nextRoundNum).maybeSingle();
+    if (existingWeek) {
+        console.log(`[PlayoffGen] ⚠️ Round ${nextRoundNum} already exists! Another thread beat us to it. Skipping.`);
+        return;
+    }
     const isChampionship = advancingTeams.length === 2;
     console.log(`[PlayoffGen] Creating Round ${nextRoundNum} (IsChampionship: ${isChampionship})`);
 
