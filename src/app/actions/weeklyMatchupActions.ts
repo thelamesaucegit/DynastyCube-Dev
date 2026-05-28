@@ -187,7 +187,9 @@ export async function recordSimGameResult(
     }
 
     let requiredGames = isTestSeason ? 3 : 5;
-    if (matchup.is_playoff) requiredGames = 9; 
+    if (matchup.is_playoff) {
+        requiredGames = isTestSeason ? 3 : 9;
+    }
 
     let finalized = false;
     
