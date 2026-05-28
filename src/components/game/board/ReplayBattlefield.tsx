@@ -137,8 +137,9 @@ export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldest
         
         // Extract Combat Data to identify Attackers and Blockers
         const combat = snapshot.gameState.combat || snapshot.combat;
-        const attackers = combat?.attackers?.map(a => a.attackerId) || [];
-        const blockers = combat?.attackers?.flatMap(a => a.blockers.map(b => b.blockerId)) || [];
+                const attackers = combat?.attackers?.map(a => a.creatureId) || [];
+        const blockers = combat?.attackers?.flatMap(a => a.blockers.map(b => b.creatureId)) || [];
+
 
          // SORT FRONT ROW: Attackers -> Blockers -> Planeswalkers -> Untapped Creatures -> Tapped Creatures
         frontRowCards.sort((a, b) => {
