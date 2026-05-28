@@ -217,7 +217,7 @@ let streamStatus = 'replay';
         <section className="max-w-5xl mx-auto w-full">
           <Card className={`overflow-hidden relative border ${streamStatus === 'live' ? 'border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.2)] bg-red-950/10' : 'border-blue-500/30 bg-blue-950/10'}`}>
             {streamStatus === 'live' && <div className="absolute top-0 left-0 w-1 h-full bg-red-500 animate-pulse" />}
-            <CardContent className="p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6">
+                        <CardContent className="p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6">
               
               <div className="flex-1 text-center md:text-left">
                 {streamStatus === 'live' ? (
@@ -225,12 +225,20 @@ let streamStatus = 'replay';
                 ) : streamStatus === 'upcoming' ? (
                    <Badge variant="secondary" className="mb-3 px-3 py-1 text-blue-400 border-blue-400/30">UPCOMING BROADCAST</Badge>
                 ) : (
-                   <Badge variant="outline" className="mb-3 px-3 py-1">LATEST GAME</Badge>
+                   <Badge variant="outline" className="mb-3 px-3 py-1">NEXT SCHEDULED GAME</Badge>
                 )}
+                
                 <h3 className="text-2xl font-bold mb-1">Live Game Stream</h3>
                 <p className="text-muted-foreground text-sm">
                   {streamStatus === 'upcoming' ? `Stream begins exactly at ${formattedStreamTime}` : 'Synchronized global broadcast'}
                 </p>
+                
+                {/* NEW: Matchup Context */}
+                {liveMatch.matchup && (
+                  <p className="text-xs font-semibold uppercase tracking-wider mt-3 text-primary">
+                      Game {liveMatch.matchup.game_number} of {liveMatch.matchup.total_games} ({liveMatch.matchup.t1_wins}-{liveMatch.matchup.t2_wins})
+                  </p>
+                )}
               </div>
               
               <div className="flex items-center gap-6 flex-1 justify-center bg-background/50 px-8 py-4 rounded-xl border border-border/50 shadow-inner">
@@ -244,7 +252,14 @@ let streamStatus = 'replay';
                     </Badge>
                   )}
                 </div>
-                <div className="text-2xl font-black text-muted-foreground/30 px-4 italic">VS</div>
+
+                <div className="flex flex-col items-center justify-center">
+                  <div className="text-2xl font-black text-muted-foreground/30 px-4 italic mb-1">VS</div>
+                  <span className="text-[10px] text-muted-foreground">
+                    {new Date(liveMatch.match_date).toLocaleDateString([], { month: 'numeric', day: 'numeric'})}
+                  </span>
+                </div>
+
                 <div className="text-center">
                   <div className="text-4xl mb-1 drop-shadow-md">{liveMatch.team2.emoji}</div>
                   <div className="font-bold text-sm truncate max-w-[100px]">{liveMatch.team2.name}</div>
@@ -256,6 +271,7 @@ let streamStatus = 'replay';
                   )}
                 </div>
               </div>
+
               <div className="flex-1 flex justify-center md:justify-end">
                 <Button asChild size="lg" className={`${streamStatus === 'live' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'} text-white font-bold w-full md:w-auto h-14 px-8 text-lg shadow-xl hover:scale-105 transition-transform`}>
                   <Link href={`/stream/${liveMatch.sim_match_id}`}>
@@ -263,7 +279,9 @@ let streamStatus = 'replay';
                   </Link>
                 </Button>
               </div>
+
             </CardContent>
+
           </Card>
         </section>
       )}
