@@ -668,8 +668,11 @@ export async function completeDraft(
                      } else {
                          // Production: Draft starts Thu 12PM CT. Scheduled length = 7 days.
                          // Preseason ends 6 days later = 13 days after Draft Start (Wednesday 12PM CT).
-                         const draftStart = new Date(sessionData.start_time);
-                         week1Start = getTargetDateCT(draftStart, 13, 12); 
+                         // Pull the start_time from the draft session that was just completed
+                         const { data: sessionInfo } = await supabase.from('draft_sessions').select('start_time').eq('id', sessionId).single();
+                         const draftStart = sessionInfo?.start_time ? new Date(sessionInfo.start_time) : new Date();
+
+                       week1Start = getTargetDateCT(draftStart, 13, 12); 
                      }
 
                      const matchupsPerWeek = Math.floor(activeTeams.length / 2);
