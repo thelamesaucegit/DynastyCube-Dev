@@ -38,7 +38,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  const imageUrl = getCardImageWithFallback(card, useOldestArt);
+const imageUrl = getCardImageUrl(card, useOldestArt);
+
   const scryfallUrl = `https://scryfall.com/search?as=grid&order=name&q=${encodeURIComponent('"' + card.card_name + '"')}`;
 
   const handleMobileClick = (e: React.MouseEvent) => {
