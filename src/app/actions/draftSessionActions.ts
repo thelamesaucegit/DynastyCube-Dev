@@ -644,37 +644,133 @@ export async function completeDraft(
                  if (activeTeams.length < 2) {
                      await logSystemEvent("TestScheduleGen", "error", `Not enough teams for test schedule.`);
                  } else {
-                                          // Generate 5 weeks + 1 Rivals week = 6 total weeks
+                                         // Generate 5 weeks + 1 Rivals week = 6 total weeks
                      const allMatchups = await generateSeasonMatchups(activeTeams, 5, true); 
                      await logSystemEvent("ScheduleGenTrace", "info", `[4] Generated ${allMatchups.length} matchups.`);
 
-                    const weekIds: string[] = [];
-                     
-                     // 1-Hour Preseason: Align everything to start exactly 60 minutes from now
-                     const baseNow = new Date(Date.now() + 60 * 60000); 
+                     // HELPER: Calculates dynamic CT dates (handles DST via UTC interpretation)
+                     function getTargetDateCT(baseDate: Date, addDays: number, targetHourCT: number): Date {
+                         const d = new Date(baseDate);
+                         d.setUTCDate(d.getUTCDate() + addDays);
+                         const month = d.getUTCMonth();
+                         const isDST = month > 2 && month < 10; 
+                         const utcOffset = isDST ? 5 : 6;
+                         d.setUTCHours(targetHourCT + utcOffset, 0, 0, 0);
+                         return d;
+                     }
+
+                     const isTestSeason = seasonName.toUpperCase().includes("TEST");
                      const testSeasonNumber = parseInt(seasonName.replace(/[^0-9]/g, '')) || 999;
                      
-                     // 30 minutes per game.
-                     const matchupsPerWeek = Math.floor(activeTeams.length / 2);
-                     const weekDurationMs = matchupsPerWeek * 3 * 30 * 60000; 
+                     let week1Start: Date;
+                     if (isTestSeason) {
+                         week1Start = new Date(Date.now() + 60 * 60000); // 1 hour preseason
+                     } else {
+                         // Production: Draft starts Thu 12PM CT. Scheduled length = 7 days.
+                         // Preseason ends 6 days later = 13 days after Draft Start (Wednesday 12PM CT).
+                         const draftStart = new Date(sessionData.start_time);
+                         week1Start = getTargetDateCT(draftStart, 13, 12); 
+                     }
 
-                     for (let i = 1; i <= 6; i++) { // <-- Update to loop to 6 weeks
-                         const weekStart = new Date(baseNow.getTime() + ((i - 1) * weekDurationMs));
+                     const matchupsPerWeek = Math.floor(activeTeams.length / 2);
+                     const weekDurationMs = isTestSeason ? (matchupsPerWeek * 3 * 30 * 60000) : (7 * 86400000); 
+
+                     let currentMatchCursor = new Date(week1Start.getTime());
+                     let totalMatchups = 0, totalGames = 0;
+
+                     for (let week = 1; week <= 6; week++) { 
+                         const weekStart = new Date(week1Start.getTime() + ((week - 1) * weekDurationMs));
                          const weekEnd = new Date(weekStart.getTime() + weekDurationMs); 
                          
                          const { data: weekData, error: weekError } = await supabase.from("schedule_weeks").insert({
-                             season_id: sessionData.season_id, season_number: testSeasonNumber, week_number: i,
+                             season_id: sessionData.season_id, season_number: testSeasonNumber, week_number: week,
                              start_date: weekStart.toISOString(), end_date: weekEnd.toISOString(),
                              deck_submission_deadline: weekStart.toISOString(), match_completion_deadline: weekEnd.toISOString(),
-                             is_playoff_week: false, is_championship_week: false, notes: i === 6 ? `Rivals Week` : `Regular Season Week ${i}`,
+                             is_playoff_week: false, is_championship_week: false, notes: week === 6 ? `Rivals Week` : `Regular Season Week ${week}`,
                          }).select('id').single();
-
                          
-                         if (weekError) await logSystemEvent("TestScheduleGen", "error", `Week ${i} insert failed: ${weekError.message}`);
-                         else if (weekData) weekIds.push(weekData.id);
-                     }
+                         if (weekError || !weekData) {
+                             await logSystemEvent("TestScheduleGen", "error", `Failed to create week ${week}: ${weekError?.message}`);
+                             continue;
+                         }
 
-                     await logSystemEvent("ScheduleGenTrace", "info", `[5] Inserted ${weekIds.length} weeks.`);
+                         const weekMatchups = allMatchups.filter(m => m.week === week);
+                         const matchupRecords = [];
+
+                         // 1. Create all matchups for the week first
+                         for (const matchup of weekMatchups) {
+                             const { data: matchupRecord, error: mError } = await supabase.from('weekly_matchups').insert({
+                                 season_id: sessionData.season_id, week_number: week, team1_id: matchup.teamAId, team2_id: matchup.teamBId, is_playoff: false
+                             }).select('id').single();
+                             
+                             if (mError) {
+                                 await logSystemEvent("TestScheduleGen", "error", `W${week} Matchup failed: ${mError.message}`);
+                             } else if (matchupRecord) {
+                                 totalMatchups++;
+                                 matchupRecords.push({ ...matchup, recordId: matchupRecord.id });
+                             }
+                         }
+
+                         // 2. Generate games
+                         if (isTestSeason) {
+                             // Rapid 30-min sequential layout
+                             for (const matchup of matchupRecords) {
+                                 for (let i = 0; i < 3; i++) {
+                                     await supabase.from('schedule').insert({
+                                         season_id: sessionData.season_id, season_number: testSeasonNumber, week_id: weekData.id, week_number: week,
+                                         team1_id: matchup.teamAId, team2_id: matchup.teamBId, weekly_matchup_id: matchup.recordId,
+                                         match_date: currentMatchCursor.toISOString(), status: 'scheduled',
+                                         team1_ai_profile: 'default', team2_ai_profile: 'default'
+                                     });
+                                     totalGames++;
+                                     currentMatchCursor = new Date(currentMatchCursor.getTime() + 30 * 60000);
+                                 }
+                             }
+                         } else {
+                             // Production: 5 games, interleaved, Thu-Tue, on the hour streams
+                             const requiredGames = 5;
+                             const weekTotalGames = matchupRecords.length * requiredGames;
+                             
+                             // Generate 144 hourly slots (Thu 00:00 CT to Tue 23:00 CT)
+                             const firstSlotTimeCT = getTargetDateCT(weekStart, 1, 0); 
+                             const availableSlots = Array.from({length: 144}, (_, i) => i);
+                             const shuffledSlots = shuffleArray(availableSlots).slice(0, weekTotalGames).sort((a,b) => a-b);
+                             
+                             // Interleave matchups to prevent back-to-back games
+                             const counts = new Map();
+                             matchupRecords.forEach(m => counts.set(m.recordId, requiredGames));
+                             const finalSchedule = [];
+                             let lastRecordId = null;
+                             
+                             for (let i = 0; i < weekTotalGames; i++) {
+                                 const available = matchupRecords.filter(m => counts.get(m.recordId) > 0 && m.recordId !== lastRecordId);
+                                 // Fallback to any available if we get stuck at the very end
+                                 const chosen = available.length > 0 
+                                     ? available[Math.floor(Math.random() * available.length)] 
+                                     : matchupRecords.find(m => counts.get(m.recordId) > 0)!;
+                                 
+                                 counts.set(chosen.recordId, counts.get(chosen.recordId) - 1);
+                                 lastRecordId = chosen.recordId;
+                                 finalSchedule.push(chosen);
+                             }
+                             
+                             // Insert games into exact DB slots (sim 30 mins before stream)
+                             for (let i = 0; i < weekTotalGames; i++) {
+                                 const matchup = finalSchedule[i];
+                                 const streamTime = new Date(firstSlotTimeCT.getTime() + shuffledSlots[i] * 3600000);
+                                 const simTime = new Date(streamTime.getTime() - 30 * 60000); 
+                                 
+                                 await supabase.from('schedule').insert({
+                                     season_id: sessionData.season_id, season_number: testSeasonNumber, week_id: weekData.id, week_number: week,
+                                     team1_id: matchup.teamAId, team2_id: matchup.teamBId, weekly_matchup_id: matchup.recordId,
+                                     match_date: simTime.toISOString(), status: 'scheduled',
+                                     team1_ai_profile: 'default', team2_ai_profile: 'default'
+                                 });
+                                 totalGames++;
+                             }
+                         }
+                     }
+                     await logSystemEvent("ScheduleGenTrace", "info", `[6] Schedule Complete! ${totalMatchups} matchups, ${totalGames} games.`);
 
                       if (weekIds.length > 0) {
                          let totalMatchups = 0, totalGames = 0;
