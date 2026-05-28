@@ -790,46 +790,7 @@ export async function completeDraft(
                      }
                      await logSystemEvent("ScheduleGenTrace", "info", `[6] Schedule Complete! ${totalMatchups} matchups, ${totalGames} games.`);
 
-                      if (weekIds.length > 0) {
-                         let totalMatchups = 0, totalGames = 0;
-
-                         // 4. Create the global cursor starting exactly at the beginning of Week 1
-                         let currentMatchCursor = new Date(baseNow.getTime());
-
-                         for (let week = 1; week <= 6; week++) { // <-- Make sure this is 6 for Rivals Week!
-                              const weekMatchups = allMatchups.filter(m => m.week === week);
-
-                              for (const matchup of weekMatchups) {
-                                  const { data: matchupRecord, error: mError } = await supabase.from('weekly_matchups').insert({
-                                     season_id: sessionData.season_id, week_number: week, team1_id: matchup.teamAId, team2_id: matchup.teamBId, is_playoff: false
-                                 }).select('id').single();
-                                 
-                                 if (mError) await logSystemEvent("TestScheduleGen", "error", `W${week} Matchup failed: ${mError.message}`);
-
-                                 if (matchupRecord && weekIds[week - 1]) {
-                                     totalMatchups++;
-                                     
-                                     // 5. Force 3 strictly consecutive games at 30-minute intervals
-                                 const requiredGames = isTestSeason ? 3 : 5;
-                                     for (let i = 0; i < requiredGames; i++) {                                         const { error: sError } = await supabase.from('schedule').insert({
-                                             season_id: sessionData.season_id, season_number: testSeasonNumber, week_id: weekIds[week - 1], week_number: week,
-                                             team1_id: matchup.teamAId, team2_id: matchup.teamBId, weekly_matchup_id: matchupRecord.id,
-                                             match_date: currentMatchCursor.toISOString(), status: 'scheduled',
-                                             team1_ai_profile: 'default',
-                                             team2_ai_profile: 'default'
-                                         });
-                                         
-                                         if (sError) await logSystemEvent("TestScheduleGen", "error", `Game insert failed: ${sError.message}`);
-                                         else totalGames++;
-                                         
-                                         // Advance the cursor by 30 minutes for the VERY NEXT GAME
-                                         currentMatchCursor = new Date(currentMatchCursor.getTime() + 30 * 60000);
-                                     }
-                                 }
-                              }
-                         }
-                         await logSystemEvent("ScheduleGenTrace", "info", `[6] Schedule Complete! ${totalMatchups} matchups, ${totalGames} games.`);
-                     }
+                    
                  }
               } else {
                  const regWeeks = weeks.filter((w: { is_playoff_week: boolean; is_championship_week: boolean }) => !w.is_playoff_week && !w.is_championship_week).length;
