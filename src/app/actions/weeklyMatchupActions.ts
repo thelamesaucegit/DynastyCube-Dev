@@ -786,10 +786,24 @@ async function advancePlayoffBracket(seasonId: string, isTestSeason: boolean) {
 
     const advancingTeams = currentMatchups?.map(m => m.winner_team_id).filter(Boolean) || [];
 
-    if (advancingTeams.length <= 1) {
+     if (advancingTeams.length <= 1) {
         console.log(`[PLAYOFFS] 👑 Championship complete! Winner: ${advancingTeams[0]}`);
         await logSystemEvent("Playoffs", "info", `Championship complete! Winner: ${advancingTeams[0]}`);
-        await supabase.from('seasons').update({ phase: 'postseason' }).eq('id', seasonId);
+        await supabase.from('seasons').update({ phase: 'offseason' }).eq('id', seasonId);
+        
+        // Set 2 Hour Offseason Timer (or 5 minutes if it's a Test Season!)
+        const offSeasonDurationMs = isTestSeason ? (5 * 60000) : (2 * 60 * 60 * 1000);
+        const offSeasonEnd = new Date(Date.now() + offSeasonDurationMs);
+        
+        await supabase.from('countdown_timers').update({ is_active: false }).eq('is_active', true); // Clear old timers
+        await supabase.from('countdown_timers').insert({
+            title: 'Offseason Curation & Next Draft',
+            end_time: offSeasonEnd.toISOString(),
+            link_text: 'View Final Standings',
+            link_url: '/teams',
+            is_active: true
+        });
+
         return;
     }
 
