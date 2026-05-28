@@ -54,7 +54,7 @@ export function ArgentumLiveStreamPlayer({ matchId, initialGameStates, cardDataM
                     clearInterval(interval);
                     
                     // The broadcast has officially concluded. Redirect to the replay viewer!
-                    router.push(`/argentum-viewer/${matchId}`);
+                    router.push(`/match/${matchId}/summary`);
                 } else {
                     setStreamStatus('live');
                     setCurrentIndex(ticksPassed);
