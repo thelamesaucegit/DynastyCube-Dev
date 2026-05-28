@@ -3,6 +3,8 @@
 
 import { createServerClient } from "@/lib/supabase";
 import { importNextSetToChamber } from "./chamberActions"; // Ensure this is imported at the top
+import { generateDraftOrder } from "./draftOrderActions";
+import { executeOffseasonCuration } from "./automationActions"; // Assumes you put the curation logic here!
 
 
 export interface CardCostChange {
@@ -11,6 +13,69 @@ export interface CardCostChange {
   old_cost: number;
   new_cost: number;
   was_drafted: boolean;
+}
+
+/**
+ * Fires when the Offseason Timer hits zero!
+ */
+export async function executeSeasonRollover(): Promise<{ success: boolean; error?: string }> {
+    const supabase = await createServerClient();
+    console.log("[SeasonRollover] 🔄 Starting full season rollover...");
+
+    try {
+        // 1. Run the Curation Economy
+        const curationResult = await executeOffseasonCuration();
+        if (!curationResult.success) throw new Error(curationResult.error);
+
+        // 2. Identify Previous Season
+        const { data: oldSeason } = await supabase.from('seasons').select('*').eq('is_active', true).single();
+        if (!oldSeason) throw new Error("Could not find active season to roll over.");
+
+        const nextSeasonNumber = oldSeason.season_number + 1;
+        const isTestSeason = oldSeason.season_name.toUpperCase().includes("TEST");
+        const nextSeasonName = isTestSeason ? `Test Season ${nextSeasonNumber}` : `Season ${nextSeasonNumber}`;
+
+        console.log(`[SeasonRollover] Building ${nextSeasonName}...`);
+
+        // 3. Deactivate Old, Create New
+        await supabase.from('seasons').update({ is_active: false }).eq('id', oldSeason.id);
+        
+        const { data: newSeason, error: seasonErr } = await supabase.from('seasons').insert({
+            season_name: nextSeasonName,
+            season_number: nextSeasonNumber,
+            is_active: true,
+            phase: 'draft'
+        }).select('id').single();
+
+        if (seasonErr || !newSeason) throw new Error("Failed to create new season.");
+
+        // 4. Generate the highly-calculated Draft Order!
+        const draftOrderResult = await generateDraftOrder(newSeason.id, { orderType: 'previous_season' });
+        if (!draftOrderResult.success) throw new Error(`Draft order generation failed: ${draftOrderResult.error}`);
+
+        // 5. Spawn the new Draft Session!
+        const startTime = new Date(Date.now() + 5 * 60000).toISOString(); // Draft starts 5 mins after generation
+        
+        await supabase.from("draft_sessions").insert({
+            season_id: newSeason.id,
+            status: "scheduled",
+            total_rounds: 15, // Set to your cube standard
+            hours_per_pick: isTestSeason ? 0.05 : 12, // 3 mins for test, 12 hours for real
+            start_time: startTime,
+            started_by: null,
+        });
+
+        // Clear the countdown timer
+        await supabase.from('countdown_timers').update({ is_active: false }).eq('is_active', true);
+
+        console.log("[SeasonRollover] ✅ Rollover complete! New draft scheduled.");
+        return { success: true };
+
+    } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error("[SeasonRollover] ❌ Rollover Failed:", msg);
+        return { success: false, error: msg };
+    }
 }
 
 /**
