@@ -899,7 +899,7 @@ async function buildSequentialAlternatingSchedule(
     const seasonNumber = seasonData?.season_number || null;
     console.log(`[PlayoffGen] Season Number: ${seasonNumber}`);
     
-    const requiredGames = isTestSeason ? 3 : 9; 
+    const requiredGames = isTestSeason ? 3 : (isChampionship ? 9 : 7); 
     const totalGames = matchups.length * requiredGames;
     const timeSlots: Date[] = [];
     
