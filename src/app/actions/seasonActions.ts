@@ -4,7 +4,6 @@
 import { createServerClient } from "@/lib/supabase";
 import { importNextSetToChamber } from "./chamberActions"; // Ensure this is imported at the top
 import { generateDraftOrder } from "./draftOrderActions";
-import { executeOffseasonCuration } from "./automationActions"; // Assumes you put the curation logic here!
 
 
 export interface CardCostChange {
