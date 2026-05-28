@@ -186,9 +186,14 @@ export async function recordSimGameResult(
             .eq('status', 'scheduled');
     }
 
-    let requiredGames = isTestSeason ? 3 : 5;
+  let requiredGames = isTestSeason ? 3 : 5; // Regular Season: BO5
     if (matchup.is_playoff) {
-        requiredGames = isTestSeason ? 3 : 9;
+        // Championship week vs Standard Playoff Week
+        if (matchup.season?.phase === 'playoffs' && matchup.week_number > 100) {
+            requiredGames = isTestSeason ? 3 : 9; // Championship: BO9
+        } else {
+            requiredGames = isTestSeason ? 3 : 7; // Playoffs (Round 1 & 2): BO7
+        }
     }
 
     let finalized = false;
