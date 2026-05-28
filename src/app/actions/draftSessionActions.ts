@@ -712,9 +712,10 @@ export async function completeDraft(
 
                          // 1. Create all matchups for the week first
                          for (const matchup of weekMatchups) {
+                             // Force the TypeScript return signature to expect an ID string
                              const { data: matchupRecord, error: mError } = await supabase.from('weekly_matchups').insert({
                                  season_id: sessionData.season_id, week_number: week, team1_id: matchup.teamAId, team2_id: matchup.teamBId, is_playoff: false
-                             }).select('id').single();
+                             }).select('id').single<{ id: string }>();
                              
                              if (mError) {
                                  await logSystemEvent("TestScheduleGen", "error", `W${week} Matchup failed: ${mError.message}`);
