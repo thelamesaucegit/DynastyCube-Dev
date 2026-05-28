@@ -717,16 +717,16 @@ export async function completeDraft(
                              }).select('id').single();
                              
                              const mError = result.error;
-                             const matchupRecord = result.data as { id: string } | null;
                              
                              if (mError) {
                                  await logSystemEvent("TestScheduleGen", "error", `W${week} Matchup failed: ${mError.message}`);
-                             } else if (matchupRecord) {
+                             } else if (result.data) {
+                                 const safeMatchupRecord = result.data as { id: string };
                                  totalMatchups++;
-                                 matchupRecords.push({ ...matchup, recordId: matchupRecord.id });
+                                 matchupRecords.push({ ...matchup, recordId: safeMatchupRecord.id });
                              }
                          }
-
+                         
                          // 2. Generate games
                          if (isTestSeason) {
                              // Rapid 30-min sequential layout
