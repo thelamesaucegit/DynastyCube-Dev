@@ -11,7 +11,7 @@ import type {
     SpectatorStateDiff, 
     ClientPlayer, 
     ClientZone,
-    ClientCard // <-- Added ClientCard
+    ClientCard 
 } from "@/types";
 import { produce } from "immer";
 
