@@ -58,8 +58,11 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
         const draftOrderResult = await generateDraftOrder(newSeason.id, { orderType: 'previous_season' });
         if (!draftOrderResult.success) throw new Error(`Draft order generation failed: ${draftOrderResult.error}`);
 
-        // 5. Spawn the new Draft Session!
-        const startTime = new Date(Date.now() + 5 * 60000).toISOString(); // Draft starts 5 mins after generation
+               // Draft starts IMMEDIATELY when the offseason timer hits zero (Thursday 12 PM CT)!
+        const startTime = isTestSeason 
+            ? new Date(Date.now() + 5 * 60000).toISOString() 
+            : new Date().toISOString(); 
+
         
         await supabase.from("draft_sessions").insert({
             season_id: newSeason.id,
