@@ -1,3 +1,5 @@
+//src/app/api/cron/rollover/route.ts
+
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { executeSeasonRollover } from '@/app/actions/seasonActions';
