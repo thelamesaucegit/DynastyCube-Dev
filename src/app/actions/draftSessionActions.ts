@@ -696,8 +696,8 @@ export async function completeDraft(
                                      totalMatchups++;
                                      
                                      // 5. Force 3 strictly consecutive games at 30-minute intervals
-                                     for (let i = 0; i < 3; i++) {
-                                         const { error: sError } = await supabase.from('schedule').insert({
+                                 const requiredGames = isTestSeason ? 3 : 5;
+                                     for (let i = 0; i < requiredGames; i++) {                                         const { error: sError } = await supabase.from('schedule').insert({
                                              season_id: sessionData.season_id, season_number: testSeasonNumber, week_id: weekIds[week - 1], week_number: week,
                                              team1_id: matchup.teamAId, team2_id: matchup.teamBId, weekly_matchup_id: matchupRecord.id,
                                              match_date: currentMatchCursor.toISOString(), status: 'scheduled',
