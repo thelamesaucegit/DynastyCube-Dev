@@ -31,6 +31,102 @@ export interface ScheduleWeek {
   updated_at: string;
 }
 
+/**
+ * Safely PAUSES or RESUMES a season by shifting all unplayed games to a new date.
+ * Preserves the exact time gaps between games!
+ */
+export async function shiftRemainingSchedule(
+  seasonId: string,
+  action: 'pause' | 'resume',
+  resumeDateIso?: string // Only required when resuming
+): Promise<{ success: boolean; error?: string; matchesShifted?: number }> {
+  const supabase = await createServerClient();
+
+  try {
+    // 1. Verify Admin
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+    
+    const { data: userData } = await supabase.from("users").select("is_admin").eq("id", user.id).single();
+    if (!userData?.is_admin) return { success: false, error: "Unauthorized" };
+
+    if (action === 'pause') {
+        // Find all scheduled games and put them in a custom 'paused' state
+        const { data, error } = await supabase
+            .from('schedule')
+            .update({ status: 'paused' })
+            .eq('season_id', seasonId)
+            .eq('status', 'scheduled')
+            .select('id');
+            
+        if (error) throw error;
+        return { success: true, matchesShifted: data?.length || 0 };
+    } 
+    
+    if (action === 'resume' && resumeDateIso) {
+        // 1. Fetch all paused games
+        const { data: pausedGames, error: fetchErr } = await supabase
+            .from('schedule')
+            .select('id, match_date')
+            .eq('season_id', seasonId)
+            .eq('status', 'paused')
+            .order('match_date', { ascending: true });
+            
+        if (fetchErr) throw fetchErr;
+        if (!pausedGames || pausedGames.length === 0) return { success: true, matchesShifted: 0 };
+
+        // 2. Calculate the exact time gap between the first paused game and the NEW resume date
+        const originalFirstDate = new Date(pausedGames[0].match_date).getTime();
+        const newFirstDate = new Date(resumeDateIso).getTime();
+        const timeShiftMs = newFirstDate - originalFirstDate;
+
+        // 3. Shift every single game by that exact gap to preserve the structure!
+        let successCount = 0;
+        for (const game of pausedGames) {
+            const originalTime = new Date(game.match_date).getTime();
+            const shiftedTime = new Date(originalTime + timeShiftMs);
+            
+            const { error: updateErr } = await supabase
+                .from('schedule')
+                .update({ 
+                    status: 'scheduled', 
+                    match_date: shiftedTime.toISOString() 
+                })
+                .eq('id', game.id);
+                
+            if (!updateErr) successCount++;
+        }
+        
+        // 4. Update the schedule_weeks boundaries so the UI still looks correct
+        const { data: activeWeeks } = await supabase.from('schedule_weeks').select('*').eq('season_id', seasonId);
+        if (activeWeeks) {
+            for (const week of activeWeeks) {
+                // If a week's end_date is in the past compared to the shifted games, push the week boundary forward
+                if (new Date(week.end_date).getTime() < newFirstDate) {
+                    const shiftedStart = new Date(new Date(week.start_date).getTime() + timeShiftMs);
+                    const shiftedEnd = new Date(new Date(week.end_date).getTime() + timeShiftMs);
+                    
+                    await supabase.from('schedule_weeks').update({
+                        start_date: shiftedStart.toISOString(),
+                        end_date: shiftedEnd.toISOString(),
+                        match_completion_deadline: shiftedEnd.toISOString()
+                    }).eq('id', week.id);
+                }
+            }
+        }
+
+        return { success: true, matchesShifted: successCount };
+    }
+
+    return { success: false, error: "Invalid action" };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    console.error("Error shifting schedule:", msg);
+    return { success: false, error: msg };
+  }
+}
+
+
 export async function getWeekIdByNumber(
     seasonNumber: number,
     weekNumber: number
