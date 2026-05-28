@@ -53,11 +53,9 @@ export default function NewsPage() {
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-4xl font-bold tracking-tight mb-2">
-          Community News
+          League News
         </h1>
-        <p className="text-lg text-muted-foreground">
-          Stay updated with the latest announcements from The Dynasty Cube
-        </p>
+        
       </div>
 
       {/* Error Message */}

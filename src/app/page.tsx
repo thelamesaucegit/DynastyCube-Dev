@@ -268,7 +268,7 @@ let streamStatus = 'replay';
         </section>
       )}
 
-      {/* Latest News (Full Width natively) */}
+     {/* Latest News (Full Width natively) */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">Latest News</h2>
@@ -276,27 +276,54 @@ let streamStatus = 'replay';
             <Link href="/news">View All</Link>
           </Button>
         </div>
+
         {adminNews.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {adminNews.map((item) => (
-              <Card key={item.id} className="hover:shadow-lg transition-shadow">
-                <CardHeader>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="outline">News</Badge>
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(item.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <CardTitle className="text-lg">{item.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground line-clamp-3">
-                    {item.content}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-2">{item.author_name}</p>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="space-y-6">
+            {/* Featured Post (first item, full width!) */}
+            <Card className="overflow-hidden hover:shadow-lg transition-shadow">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Badge>Latest</Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(adminNews[0].created_at).toLocaleDateString()}
+                  </span>
+                </div>
+                <CardTitle className="text-2xl md:text-3xl">
+                  {adminNews[0].title}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="leading-relaxed whitespace-pre-line text-muted-foreground line-clamp-3">
+                  {adminNews[0].content}
+                </p>
+                <p className="text-xs text-muted-foreground mt-4 font-medium">{adminNews[0].author_name}</p>
+              </CardContent>
+            </Card>
+
+            {/* Remaining posts in grid */}
+            {adminNews.length > 1 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {adminNews.slice(1).map((item) => (
+                  <Card key={item.id} className="hover:shadow-md transition-shadow">
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge variant="outline">News</Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(item.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <CardTitle className="text-lg line-clamp-2">{item.title}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-muted-foreground line-clamp-2">
+                        {item.content}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-3">{item.author_name}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           <Card>
