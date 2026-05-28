@@ -57,21 +57,24 @@ const DraftCard: FC<{ pick: DraftPick; isNewest: boolean; size: 'large' | 'small
     );
   }
 
-  // Small card for team view
+   // Small card for team view
   return (
-    <div className={`rounded-md w-full ${isNewest ? "ring-2 ring-green-400" : ""}`}>
-      <CardPreview card={cardPreviewData} className="w-full block">
-        <ColorIdentityGlow colors={pick.color_identity} className="!p-1 !rounded-md w-full">
-            <div className={`bg-gray-800/80 rounded-sm p-1 flex flex-col justify-center min-h-[3.5rem] w-full`}>
-                <p className="text-[11px] xl:text-xs text-center text-gray-200 font-semibold leading-tight line-clamp-2" title={pick.card_name}>
-                    {pick.card_name}
-                </p>
-                <p className="text-[9px] xl:text-[10px] text-center text-gray-400 mt-0.5">P: {pick.pick_number}</p>
-            </div>
-        </ColorIdentityGlow>
+    <div className={`rounded-md w-full flex flex-col items-stretch [&>*]:w-full [&>*]:block ${isNewest ? "ring-2 ring-green-400" : ""}`}>
+      <CardPreview card={cardPreviewData}>
+        <div className="w-full block">
+          <ColorIdentityGlow colors={pick.color_identity}>
+              <div className="bg-gray-800/80 rounded-sm p-1 flex flex-col items-center justify-center h-[3.5rem] w-full overflow-hidden">
+                  <p className="text-[11px] xl:text-xs text-center text-gray-200 font-semibold leading-tight line-clamp-2 w-full break-words whitespace-normal" title={pick.card_name}>
+                      {pick.card_name}
+                  </p>
+                  <p className="text-[9px] xl:text-[10px] text-center text-gray-400 mt-0.5 shrink-0">P: {pick.pick_number}</p>
+              </div>
+          </ColorIdentityGlow>
+        </div>
       </CardPreview>
     </div>
   );
+
 }; 
 // MODIFIED: ListView now has corrected responsive grid classes
 const ListView: FC<{ picks: DraftPick[], newestPickId: string | number | null }> = ({ picks, newestPickId }) => {
