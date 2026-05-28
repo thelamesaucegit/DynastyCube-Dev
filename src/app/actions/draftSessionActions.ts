@@ -752,8 +752,10 @@ export async function completeDraft(
                              // Interleave matchups to prevent back-to-back games
                              const counts = new Map();
                              matchupRecords.forEach(m => counts.set(m.recordId, requiredGames));
-                             const finalSchedule = [];
-                             let lastRecordId = null;
+
+                             const finalSchedule: typeof matchupRecords = [];
+                             let lastRecordId: string | null = null;
+
                              
                              for (let i = 0; i < weekTotalGames; i++) {
                                  const available = matchupRecords.filter(m => counts.get(m.recordId) > 0 && m.recordId !== lastRecordId);
