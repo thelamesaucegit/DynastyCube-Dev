@@ -711,11 +711,13 @@ export async function completeDraft(
                          const matchupRecords = [];
 
                          // 1. Create all matchups for the week first
-                         for (const matchup of weekMatchups) {
-                             // Force the TypeScript return signature to expect an ID string
-                             const { data: matchupRecord, error: mError } = await supabase.from('weekly_matchups').insert({
+                          for (const matchup of weekMatchups) {
+                             const result = await supabase.from('weekly_matchups').insert({
                                  season_id: sessionData.season_id, week_number: week, team1_id: matchup.teamAId, team2_id: matchup.teamBId, is_playoff: false
-                             }).select('id').single<{ id: string }>();
+                             }).select('id').single();
+                             
+                             const mError = result.error;
+                             const matchupRecord = result.data as { id: string } | null;
                              
                              if (mError) {
                                  await logSystemEvent("TestScheduleGen", "error", `W${week} Matchup failed: ${mError.message}`);
@@ -730,13 +732,13 @@ export async function completeDraft(
                              // Rapid 30-min sequential layout
                              for (const matchup of matchupRecords) {
                                  for (let i = 0; i < 3; i++) {
-                                     await supabase.from('schedule').insert({
+                                     const insertRes = await supabase.from('schedule').insert({
                                          season_id: sessionData.season_id, season_number: testSeasonNumber, week_id: weekData.id, week_number: week,
                                          team1_id: matchup.teamAId, team2_id: matchup.teamBId, weekly_matchup_id: matchup.recordId,
                                          match_date: currentMatchCursor.toISOString(), status: 'scheduled',
                                          team1_ai_profile: 'default', team2_ai_profile: 'default'
                                      });
-                                     totalGames++;
+                                     if (!insertRes.error) totalGames++;
                                      currentMatchCursor = new Date(currentMatchCursor.getTime() + 30 * 60000);
                                  }
                              }
@@ -776,13 +778,13 @@ export async function completeDraft(
                                  const streamTime = new Date(firstSlotTimeCT.getTime() + shuffledSlots[i] * 3600000);
                                  const simTime = new Date(streamTime.getTime() - 30 * 60000); 
                                  
-                                 await supabase.from('schedule').insert({
+                                 const prodInsert = await supabase.from('schedule').insert({
                                      season_id: sessionData.season_id, season_number: testSeasonNumber, week_id: weekData.id, week_number: week,
                                      team1_id: matchup.teamAId, team2_id: matchup.teamBId, weekly_matchup_id: matchup.recordId,
                                      match_date: simTime.toISOString(), status: 'scheduled',
                                      team1_ai_profile: 'default', team2_ai_profile: 'default'
                                  });
-                                 totalGames++;
+                                 if (!prodInsert.error) totalGames++;
                              }
                          }
                      }
