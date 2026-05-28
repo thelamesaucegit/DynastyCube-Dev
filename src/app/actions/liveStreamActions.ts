@@ -3,7 +3,6 @@
 "use server";
 
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { createServerClient } from "@/lib/supabase";
 
 export interface StreamMatch {
     id: string;
@@ -89,7 +88,12 @@ export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | nul
 
     const t1 = (Array.isArray(targetMatch.team1) ? targetMatch.team1[0] : targetMatch.team1) as unknown as DbTeam;
     const t2 = (Array.isArray(targetMatch.team2) ? targetMatch.team2[0] : targetMatch.team2) as unknown as DbTeam;
-    const matchupRaw = (Array.isArray(targetMatch.weekly_matchup) ? targetMatch.weekly_matchup[0] : targetMatch.weekly_matchup) as any;
+    const matchupRaw = (Array.isArray(targetMatch.weekly_matchup) ? targetMatch.weekly_matchup[0] : targetMatch.weekly_matchup) as {
+        sim_team1_wins?: number;
+        sim_team2_wins?: number;
+        sim_completed_games?: number;
+        is_playoff?: boolean;
+    } | undefined;
 
     const { data: records } = await supabase
         .from('team_records_view')
