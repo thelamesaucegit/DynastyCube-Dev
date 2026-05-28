@@ -56,11 +56,12 @@ const DraftCard: FC<{ pick: DraftPick; size: 'large' | 'small' }> = ({ pick, siz
     );
   }
 
+   // Small card for team view
   return (
-    <div className="rounded-md">
-      <CardPreview card={cardPreviewData}>
-        <ColorIdentityGlow colors={pick.color_identity} className="!p-1 !rounded-md">
-            <div className="bg-gray-800/80 rounded-sm p-1 flex flex-col justify-center min-h-[3rem]">
+    <div className={`rounded-md w-full ${isNewest ? "ring-2 ring-green-400" : ""}`}>
+      <CardPreview card={cardPreviewData} className="w-full block">
+        <ColorIdentityGlow colors={pick.color_identity} className="!p-1 !rounded-md w-full">
+            <div className={`bg-gray-800/80 rounded-sm p-1 flex flex-col justify-center min-h-[3.5rem] w-full`}>
                 <p className="text-[11px] xl:text-xs text-center text-gray-200 font-semibold leading-tight line-clamp-2" title={pick.card_name}>
                     {pick.card_name}
                 </p>
@@ -70,6 +71,7 @@ const DraftCard: FC<{ pick: DraftPick; size: 'large' | 'small' }> = ({ pick, siz
       </CardPreview>
     </div>
   );
+
 };
 
 const ListView: FC<{ picks: DraftPick[] }> = ({ picks }) => {
