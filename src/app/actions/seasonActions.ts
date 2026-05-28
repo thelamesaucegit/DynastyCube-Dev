@@ -69,9 +69,9 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
             start_time: startTime,
             started_by: null,
         });
+        // Clear the countdown timer permanently
+        await supabase.from('countdown_timers').delete().eq('is_active', true);
 
-        // Clear the countdown timer
-        await supabase.from('countdown_timers').update({ is_active: false }).eq('is_active', true);
 
         console.log("[SeasonRollover] ✅ Rollover complete! New draft scheduled.");
         return { success: true };
