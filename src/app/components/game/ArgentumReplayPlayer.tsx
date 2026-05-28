@@ -60,7 +60,7 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap }: Argentu
     const { turnNumber, currentPhase } = currentSnapshot.gameState;
 
     return (
-        <div className="flex flex-col h-screen w-full bg-background">
+        <div className="flex flex-col h-[calc(100vh-2rem)] w-full bg-background">
             <div className="flex-grow overflow-hidden relative">
                 <GameBoard
                     spectatorMode={true}

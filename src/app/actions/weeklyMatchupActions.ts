@@ -186,9 +186,14 @@ export async function recordSimGameResult(
             .eq('status', 'scheduled');
     }
 
-    let requiredGames = isTestSeason ? 3 : 5;
+  let requiredGames = isTestSeason ? 3 : 5; // Regular Season: BO5
     if (matchup.is_playoff) {
-        requiredGames = isTestSeason ? 3 : 9;
+        // Championship week vs Standard Playoff Week
+        if (matchup.season?.phase === 'playoffs' && matchup.week_number > 100) {
+            requiredGames = isTestSeason ? 3 : 9; // Championship: BO9
+        } else {
+            requiredGames = isTestSeason ? 3 : 7; // Playoffs (Round 1 & 2): BO7
+        }
     }
 
     let finalized = false;
@@ -796,16 +801,24 @@ async function advancePlayoffBracket(seasonId: string, isTestSeason: boolean) {
 
     const advancingTeams = currentMatchups?.map(m => m.winner_team_id).filter(Boolean) || [];
 
-     if (advancingTeams.length <= 1) {
+        if (advancingTeams.length <= 1) {
         console.log(`[PLAYOFFS] 👑 Championship complete! Winner: ${advancingTeams[0]}`);
         await logSystemEvent("Playoffs", "info", `Championship complete! Winner: ${advancingTeams[0]}`);
         await supabase.from('seasons').update({ phase: 'offseason' }).eq('id', seasonId);
         
-        // Set 2 Hour Offseason Timer (or 5 minutes if it's a Test Season!)
-        const offSeasonDurationMs = isTestSeason ? (5 * 60000) : (2 * 60 * 60 * 1000);
-        const offSeasonEnd = new Date(Date.now() + offSeasonDurationMs);
+        let offSeasonEnd: Date;
+        if (isTestSeason) {
+            offSeasonEnd = new Date(Date.now() + 5 * 60000);
+        } else {
+            // Find NEXT Thursday + 1 week (11 days if today is Sunday) at 12 PM CT
+            const d = new Date();
+            let daysToThu = (4 - d.getUTCDay() + 7) % 7;
+            if (daysToThu === 0) daysToThu = 7; // Forces *next* Thursday
+            const targetDate = new Date(d.getTime() + (daysToThu + 7) * 86400000);
+            offSeasonEnd = getTargetDateCT(targetDate, 0, 12); // Sets absolute UTC to hit 12 PM CT
+        }
         
-        await supabase.from('countdown_timers').update({ is_active: false }).eq('is_active', true); // Clear old timers
+        await supabase.from('countdown_timers').update({ is_active: false }).eq('is_active', true);
         await supabase.from('countdown_timers').insert({
             title: 'Offseason Curation & Next Draft',
             end_time: offSeasonEnd.toISOString(),
@@ -816,6 +829,7 @@ async function advancePlayoffBracket(seasonId: string, isTestSeason: boolean) {
 
         return;
     }
+
 
     const nextRoundNum = currentRoundNum + 1;
     
@@ -894,7 +908,7 @@ async function buildSequentialAlternatingSchedule(
     const seasonNumber = seasonData?.season_number || null;
     console.log(`[PlayoffGen] Season Number: ${seasonNumber}`);
     
-    const requiredGames = isTestSeason ? 3 : 9; 
+    const requiredGames = isTestSeason ? 3 : (isChampionship ? 9 : 7); 
     const totalGames = matchups.length * requiredGames;
     const timeSlots: Date[] = [];
     

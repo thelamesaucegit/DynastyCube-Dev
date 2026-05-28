@@ -114,7 +114,7 @@ interface ReplayBattlefieldProps {
 }
 
 export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldestArt }: ReplayBattlefieldProps) {
-    const { groupedFrontRow, groupedBackRow } = useMemo(() => {
+        const { groupedFrontRow, groupedBackRow } = useMemo(() => {
         const playerId = isOpponent ? snapshot.player2Id : snapshot.player1Id;
         
         if (!playerId) return { groupedFrontRow: [], groupedBackRow: [] };
@@ -132,15 +132,56 @@ export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldest
         }).filter((c): c is ClientCard => c !== null) : [];
         
         const independentCards = allCardsInZone.filter(c => !c.attachedTo);
-
         const frontRowCards = independentCards.filter(c => c.cardTypes.includes('Creature') || c.cardTypes.includes('Planeswalker'));
         const backRowCards = independentCards.filter(c => !c.cardTypes.includes('Creature') && !c.cardTypes.includes('Planeswalker'));
+        
+        // Extract Combat Data to identify Attackers and Blockers
+        const combat = snapshot.gameState.combat || snapshot.combat;
+        const attackers = combat?.attackers?.map(a => a.attackerId) || [];
+        const blockers = combat?.attackers?.flatMap(a => a.blockers.map(b => b.blockerId)) || [];
+
+         // SORT FRONT ROW: Attackers -> Blockers -> Planeswalkers -> Untapped Creatures -> Tapped Creatures
+        frontRowCards.sort((a, b) => {
+            const getFrontRank = (c: ClientCard) => {
+                if (attackers.includes(c.id)) return 1; // Attackers first
+                if (blockers.includes(c.id)) return 2;  // Blockers second
+                if (c.cardTypes.includes('Planeswalker')) return 3; // Planeswalkers neatly grouped
+                if (!c.isTapped) return 4;              // Untapped Creatures
+                return 5;                               // Tapped/Summoning Sickness Creatures
+            };
+            const rankA = getFrontRank(a);
+            const rankB = getFrontRank(b);
+            if (rankA !== rankB) return rankA - rankB;
+            
+            // If they are the same rank, group them alphabetically
+            return a.name.localeCompare(b.name);
+        });
+
+
+        // SORT BACKROW BY TYPE: Lands -> Enchantments -> Artifacts -> Everything else
+        backRowCards.sort((a, b) => {
+            const getBackRank = (c: ClientCard) => {
+                if (c.cardTypes.includes('Land')) return 1;
+                if (c.cardTypes.includes('Enchantment')) return 2;
+                if (c.cardTypes.includes('Artifact')) return 3;
+                return 4;
+            };
+            const rankA = getBackRank(a);
+            const rankB = getBackRank(b);
+            if (rankA !== rankB) return rankA - rankB;
+            
+            // If they are the same type, group tapped/untapped
+            if (a.isTapped !== b.isTapped) return a.isTapped ? 1 : -1;
+            
+            return a.name.localeCompare(b.name);
+        });
         
         return {
             groupedFrontRow: groupCards(frontRowCards, snapshot),
             groupedBackRow: groupCards(backRowCards, snapshot),
         };
     }, [snapshot, isOpponent]);
+
 
     return (
         <div style={{

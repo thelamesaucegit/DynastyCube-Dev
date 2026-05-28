@@ -17,7 +17,9 @@ import {
   deleteFullSeason,
   type CardCostChange,
 } from "@/app/actions/seasonActions";
-import { SeasonPhaseManager } from "./SeasonPhaseManager";
+
+// Notice: Removed SeasonPhaseManager import completely
+import { SeasonPauseControl } from "./SeasonPauseControl"; // Added the new control
 import { WeekCreator } from "./WeekCreator";
 import { MatchScheduler } from "./MatchScheduler";
 import { ScheduleOverview } from "./ScheduleOverview";
@@ -71,12 +73,12 @@ export const SeasonManagement: React.FC = () => {
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
   const [draftStartTime, setDraftStartTime] = useState("12:00"); 
   const [showPlanner, setShowPlanner] = useState(false);
   const [newSeasonNumber, setNewSeasonNumber] = useState("");
   const [newSeasonName, setNewSeasonName] = useState("");
   const [cubucksAllocation, setCubucksAllocation] = useState("100");
-
   const [scheduleParams, setScheduleParams] = useState<Omit<SeasonScheduleParams, 'draft_start_time'>>({
       draft_start_date: '',
       draft_duration_days: 7,
@@ -107,6 +109,7 @@ export const SeasonManagement: React.FC = () => {
 
   const handleDeleteSeason = async (seasonId: string, seasonName: string) => {
     if (!confirm(`ARE YOU ABSOLUTELY SURE?\n\nThis will permanently delete "${seasonName}" and all of its associated data.`)) return;
+
     const result = await deleteFullSeason(seasonId);
     if (result.success) {
         setMessage({ type: "success", text: `Successfully deleted season "${seasonName}".` });
@@ -195,9 +198,11 @@ export const SeasonManagement: React.FC = () => {
       if (result.success && result.changes) {
         setRolloverChanges(result.changes);
         setShowRolloverDetails(true);
+        
         const increased = result.changes.filter((c) => c.new_cost > c.old_cost).length;
         const decreased = result.changes.filter((c) => c.new_cost < c.old_cost).length;
         const unchanged = result.changes.filter((c) => c.new_cost === c.old_cost).length;
+        
         setMessage({ type: "success", text: `Rollover complete! ${increased} increased, ${decreased} decreased, ${unchanged} unchanged` });
       } else {
         setMessage({ type: "error", text: result.error || "Rollover failed" });
@@ -254,10 +259,12 @@ export const SeasonManagement: React.FC = () => {
 
       {activeSubTab === "management" && (
         <>
-          <div className="mb-8">
-            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Season Phase Control</h3>
-            <SeasonPhaseManager />
-          </div>
+          {activeSeason && (
+            <div className="mb-8">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Season Flow Control</h3>
+              <SeasonPauseControl seasonId={activeSeason.id} seasonName={activeSeason.season_name} />
+            </div>
+          )}
 
           {message && (
             <div className={`mb-6 p-4 rounded-lg border ${message.type === "success" ? "bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 text-green-800 dark:text-green-200" : "bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 text-red-800 dark:text-red-200"}`}>
@@ -315,7 +322,7 @@ export const SeasonManagement: React.FC = () => {
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">New Season Planner</h3>
                   <button onClick={() => setShowPlanner(false)} className="text-gray-500 hover:text-gray-700">&times;</button>
                 </div>
-
+                
                 <div className="grid md:grid-cols-3 gap-4 mb-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Season Number</label>
@@ -363,7 +370,6 @@ export const SeasonManagement: React.FC = () => {
                       <input type="checkbox" checked={scheduleParams.include_rivals_week} onChange={(e) => setScheduleParams(p => ({ ...p, include_rivals_week: e.target.checked }))} className="w-full px-4 py-2 border rounded-lg" />
                     </div>
                   </div>
-
                   <button onClick={handleCreateSeason} disabled={creating} className="admin-btn admin-btn-primary w-full mt-4">
                     {creating ? "Creating Season..." : "Create & Schedule Season"}
                   </button>
@@ -426,6 +432,7 @@ const ScheduleTabContent: React.FC<ScheduleTabContentProps> = ({ seasonId, activ
       <div className="p-6 border-b border-gray-200 dark:border-gray-700">
         <FullSeasonScheduler seasonId={seasonId} />
       </div>
+
       <div className="flex border-b border-gray-200 dark:border-gray-700">
         <button onClick={() => setScheduleTab("overview")} className={`flex-1 px-6 py-3 text-sm font-medium transition-colors ${scheduleTab === "overview" ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-b-2 border-blue-600" : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"}`}>
           📋 Schedule Overview
@@ -440,6 +447,7 @@ const ScheduleTabContent: React.FC<ScheduleTabContentProps> = ({ seasonId, activ
           ⏰ Extensions
         </button>
       </div>
+
       <div className="p-6">
         {scheduleTab === "overview" && <ScheduleOverview seasonId={seasonId} />}
         {scheduleTab === "create-week" && activeSeason && (
