@@ -1,5 +1,4 @@
-// /src/components/game/card/ReplayCardStack.tsx
-
+// src/components/game/card/ReplayCardStack.tsx
 "use client";
 
 import type { GroupedCard } from '@/components/game/board/Battlefield'; // Use the local type
@@ -25,6 +24,7 @@ export function ReplayCardStack({
     return (
       <CardPreview card={{ card_name: group.card.name, image_url: cardImageData.image_url, oldest_image_url: cardImageData.oldest_image_url }}>
         <ReplayGameCard
+          id={group.card.id} // <-- NEW: Passes the exact entity ID down to the DOM
           cardData={{ name: group.card.name, card_type: cardImageData.card_type, image_url: cardImageData.image_url, oldest_image_url: cardImageData.oldest_image_url }}
           isTapped={group.card.isTapped}
           useOldestArt={useOldestArt}
@@ -44,10 +44,12 @@ export function ReplayCardStack({
       {group.cards.map((card, index) => {
         const individualCardImageData = cardDataMap[card.name];
         if (!individualCardImageData) return null;
+
         return (
           <div key={card.id} style={{ position: 'absolute', left: index * stackOffset, top: 0, bottom: 0, display: 'flex', alignItems: 'flex-end', zIndex: index }}>
             <CardPreview card={{ card_name: card.name, image_url: individualCardImageData.image_url, oldest_image_url: individualCardImageData.oldest_image_url }}>
               <ReplayGameCard
+                id={card.id} // <-- NEW: Passes the exact entity ID down to the DOM
                 cardData={{ name: card.name, card_type: individualCardImageData.card_type, image_url: individualCardImageData.image_url, oldest_image_url: individualCardImageData.oldest_image_url }}
                 isTapped={card.isTapped}
                 useOldestArt={useOldestArt}
