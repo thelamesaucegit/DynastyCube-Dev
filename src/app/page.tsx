@@ -230,7 +230,7 @@ let streamStatus = 'replay';
                 
                 <h3 className="text-2xl font-bold mb-1">Live Game Stream</h3>
                 <p className="text-muted-foreground text-sm">
-                  {streamStatus === 'upcoming' ? `Stream begins exactly at ${formattedStreamTime}` : 'Synchronized global broadcast'}
+                  {streamStatus === 'upcoming' ? `Stream begins exactly at ${formattedStreamTime}` : ''}
                 </p>
                 
                 {/* NEW: Matchup Context */}
