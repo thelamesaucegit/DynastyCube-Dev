@@ -18,9 +18,15 @@ export interface CardCostChange {
  * Fires when the Offseason Timer hits zero!
  */
 export async function executeSeasonRollover(): Promise<{ success: boolean; error?: string }> {
-    const supabase = await createServerClient();
+    // FIX: Force God-Mode because Cron jobs don't have browser cookies!
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_KEY!
+    );
+    
     console.log("[SeasonRollover] 🔄 Starting full season rollover...");
-
+    
     try {
         // 1. Run the Curation Economy
         const curationResult = await executeOffseasonCuration();
