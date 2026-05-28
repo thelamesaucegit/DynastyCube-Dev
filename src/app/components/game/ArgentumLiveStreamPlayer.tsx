@@ -81,7 +81,7 @@ export function ArgentumLiveStreamPlayer({ matchId, initialGameStates, cardDataM
                     </div>
                 </div>
                 <h1 className="text-4xl font-extrabold tracking-widest uppercase text-gray-300 mb-2">Live Broadcast</h1>
-                <p className="text-xl text-gray-500 mb-8">Match simulation complete. Preparing stream...</p>
+                <p className="text-xl text-gray-500 mb-8">Match will begin shortly...</p>
                 <div className="text-7xl font-mono tabular-nums font-bold text-blue-500 drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]">
                     {minutes.toString().padStart(2, '0')}:{seconds.toString().padStart(2, '0')}
                 </div>
