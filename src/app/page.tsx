@@ -105,8 +105,14 @@ export default function HomePage() {
       const now = Date.now();
       const diff = now - broadcastTime;
       
-      if (diff > 0) {
-        const ticksPassed = Math.floor(diff / 3000);
+            if (diff > 0) {
+        const ticksPassed = Math.floor(diff / 3000); // 100% Synced with Stream!
+        
+        // Auto-refresh the widget immediately after the stream naturally concludes!
+        if (ticksPassed > liveMatch.total_steps + 1) {
+             loadData();
+        }
+
         
         if (ticksPassed < liveMatch.life_timeline.length) {
            const [t1, t2] = liveMatch.life_timeline[ticksPassed];
