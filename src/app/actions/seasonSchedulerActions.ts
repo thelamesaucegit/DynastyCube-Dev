@@ -154,7 +154,8 @@ export async function generateFullSeasonSchedule(
     }
 
     const teamIds = teams.map(t => t.id);
-    const allMatchups = generateSeasonMatchups(teamIds, totalRegularSeasonWeeks, hasRivalsWeek);
+// src/app/actions/seasonSchedulerActions.ts
+    const allMatchups = await generateSeasonMatchups(teamIds, totalRegularSeasonWeeks, hasRivalsWeek);
     const { data: weeks } = await supabase.from('schedule_weeks').select('id, week_number').eq('season_id', seasonId);
     
     if (!weeks || weeks.length === 0) {
