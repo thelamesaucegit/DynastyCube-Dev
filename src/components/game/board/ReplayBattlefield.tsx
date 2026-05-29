@@ -180,9 +180,14 @@ export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldest
             return a.name.localeCompare(b.name);
         });
         
+         const backRowSplitIndex = Math.ceil(backRowCards.length / 2);
+        const backRowTop = backRowCards.slice(0, backRowSplitIndex);
+        const backRowBottom = backRowCards.slice(backRowSplitIndex);
+
         return {
             groupedFrontRow: groupCards(frontRowCards, snapshot),
-            groupedBackRow: groupCards(backRowCards, snapshot),
+            groupedBackRowTop: groupCards(backRowTop, snapshot),
+            groupedBackRowBottom: groupCards(backRowBottom, snapshot),
         };
     }, [snapshot, isOpponent]);
 
@@ -191,41 +196,37 @@ export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldest
         <div style={{
             display: 'flex',
             flexDirection: 'column',
-            gap: '12px', 
+            gap: '8px', // Reduced gap for mobile
             padding: '8px',
             width: '100%',
             alignItems: 'center',
         }}>
-            {/* FRONT ROW: Creatures & Planeswalkers */}
+            {/* FRONT ROW: Creatures & Planeswalkers (Will still wrap if needed) */}
             <div
                 data-row="front"
-                style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: '8px',
-                    justifyContent: 'center',
-                    width: '100%',
-                    order: isOpponent ? 1 : 0 
-                }}
+                style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', width: '100%', order: isOpponent ? 2 : 1 }}
             >
                 {groupedFrontRow.map((group) => (
                     <ReplayGroupWithAttachments key={group.cardIds[0]} group={group} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
                 ))}
             </div>
             
-            {/* BACK ROW: Lands, Artifacts, Enchantments, etc. */}
+            {/* BACK ROW - TOP HALF */}
             <div
-                data-row="back"
-                style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: '8px',
-                    justifyContent: 'center',
-                    width: '100%',
-                    order: isOpponent ? 0 : 1
-                }}
+                data-row="back-top"
+                style={{ display: 'flex', flexWrap: 'nowrap', gap: '8px', justifyContent: 'center', width: '100%', order: isOpponent ? 1 : 2 }}
             >
-                {groupedBackRow.map((group) => (
+                {groupedBackRowTop.map((group) => (
+                    <ReplayGroupWithAttachments key={group.cardIds[0]} group={group} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
+                ))}
+            </div>
+
+            {/* BACK ROW - BOTTOM HALF */}
+            <div
+                data-row="back-bottom"
+                style={{ display: 'flex', flexWrap: 'nowrap', gap: '8px', justifyContent: 'center', width: '100%', order: isOpponent ? 0 : 3 }}
+            >
+                {groupedBackRowBottom.map((group) => (
                     <ReplayGroupWithAttachments key={group.cardIds[0]} group={group} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
                 ))}
             </div>
