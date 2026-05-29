@@ -1,4 +1,4 @@
-//web-client/src/components/ui/StepStrip.tsx
+//src/components/ui/StepStrip.tsx
 
 import { useState, useCallback } from 'react'
 import { Phase, Step, StepShortNames } from '@/types'
