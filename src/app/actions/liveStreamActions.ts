@@ -65,15 +65,19 @@ export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | nul
     if (error || !data || data.length === 0) return { match: null };
 
     const now = Date.now();
-    const BROADCAST_DELAY_MS = 30 * 60000; 
-    const LIVE_WINDOW_MS = 15 * 60000;     
+        const BROADCAST_DELAY_MS = 30 * 60000; 
+    const STEP_DURATION_MS = 3000; // NEW 3-second stream steps!
 
     const chronologicalMatches = [...data].sort((a, b) => new Date(a.match_date).getTime() - new Date(b.match_date).getTime());
     let targetMatch = data[0]; 
 
     const liveMatch = chronologicalMatches.find(m => {
-        const broadcastTime = new Date(m.match_date).getTime() + BROADCAST_DELAY_MS;
-        return now >= broadcastTime && now <= (broadcastTime + LIVE_WINDOW_MS);
+        const broadcastStartTime = new Date(m.match_date).getTime() + BROADCAST_DELAY_MS;
+        // Dynamically calculate the exact end time based on the step count
+        const broadcastDuration = (m.total_steps || 300) * STEP_DURATION_MS;
+        const broadcastEndTime = broadcastStartTime + broadcastDuration;
+        
+        return now >= broadcastStartTime && now <= broadcastEndTime;
     });
 
     if (liveMatch) {
