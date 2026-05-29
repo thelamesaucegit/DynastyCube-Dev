@@ -1,12 +1,13 @@
-//src/components/game/card/GameCard.tsx
-
-import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { useGameStore } from '@/store/gameStore'
-import { useHasLegalActions } from '@/store/selectors'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { useGameStore } from '@/store/gameStore.ts'
+import { useHasLegalActions } from '@/store/selectors.ts'
 import type { ClientCard, EntityId } from '@/types'
-import { entityId } from '@/types'
-import { getCardImageUrl, getScryfallFallbackUrl, MORPH_FACE_DOWN_IMAGE_URL } from '@/utils/cardImages'
-import { useInteraction } from '@/hooks/useInteraction'
+import { Color, ColorSymbols, Keyword } from '@/types/enums'
+import { getCardImageUrl, getScryfallFallbackUrl, MORPH_FACE_DOWN_IMAGE_URL } from '@/utils/cardImages.ts'
+import { useInteraction } from '@/hooks/useInteraction.ts'
+import { ManaCost } from '@/components/ui/ManaSymbols.tsx'
+import { HoverCardPreview } from '@/components/ui/HoverCardPreview.tsx'
 import {
   useResponsiveContext,
   hasMultipleCastingOptions,
@@ -29,15 +30,27 @@ import {
   getSupplyCounters,
   getStashCounters,
   getFlyingCounters,
+  getFirstStrikeCounters,
+  getLifelinkCounters,
   getBlightCounters,
+  getFloodCounters,
+  getCoinCounters,
+  getChorusCounters,
+  getDreamCounters,
+  getQuestCounters,
+  getGrowthCounters,
+  getFeatherCounters,
+  getTimeCounters,
 } from '../board/shared'
-import { styles } from '../board/styles'
+import { styles, bandColorFor } from '../board/styles'
 import {
   TARGET_COLOR, TARGET_COLOR_BRIGHT, TARGET_GLOW, TARGET_GLOW_BRIGHT, TARGET_GLOW_OUTER, TARGET_SHADOW,
   SELECTED_COLOR, SELECTED_GLOW, SELECTED_SHADOW,
-} from '@/styles/targetingColors'
+} from '@/styles/targetingColors.ts'
 import { KeywordIcons, ActiveEffectBadges } from './CardOverlays'
-import { counterManaClass } from '@/assets/icons/keywords'
+import { counterManaClass, counterSvgIcon } from '@/assets/icons/keywords'
+import { SvgGlyph } from '@/assets/icons/SvgGlyph'
+import { RenderProfiler } from '@/utils/renderProfiler'
 
 interface GameCardProps {
   card: ClientCard
@@ -51,8 +64,21 @@ interface GameCardProps {
   inHand?: boolean
   /** Force tapped visual (e.g. for attachments of tapped permanents) */
   forceTapped?: boolean
+  /** Suppress the built-in tap rotation even when the card is tapped. Used when an outer
+   * wrapper is rotating the entire attachment stack so this card doesn't double-rotate. */
+  suppressTapRotation?: boolean
+  /** Hide the keyword-ability icon overlay. Used for peeking attachments where only a
+   * sliver of the card is visible and the icons just clutter the parent underneath. */
+  hideKeywordIcons?: boolean
   /** Ghost card from graveyard (translucent, purple glow) */
   isGhost?: boolean
+  /**
+   * Allow dragging this card to cast it even when it's not in hand. Used by the command zone
+   * widget so commanders can be cast with the same drag-to-play gesture as hand cards. Drop
+   * heuristic (above the hand top = cast) is unchanged — dragging the commander toward the
+   * battlefield casts it; dropping anywhere along the bottom cancels.
+   */
+  enableDragToCast?: boolean
 }
 
 /**
@@ -69,8 +95,14 @@ export function GameCard({
   isOpponentCard = false,
   inHand = false,
   forceTapped = false,
+  suppressTapRotation = false,
+  hideKeywordIcons = false,
   isGhost = false,
+  enableDragToCast = false,
 }: GameCardProps) {
+  const voidActive = useGameStore(
+    (state) => (state.spectatingState?.gameState ?? state.gameState)?.voidActive ?? false
+  )
   const selectCard = useGameStore((state) => state.selectCard)
   const selectedCardId = useGameStore((state) => state.selectedCardId)
   const hoverCard = useGameStore((state) => state.hoverCard)
@@ -88,6 +120,13 @@ export function GameCard({
   const startDraggingAttacker = useGameStore((state) => state.startDraggingAttacker)
   const stopDraggingAttacker = useGameStore((state) => state.stopDraggingAttacker)
   const draggingAttackerId = useGameStore((state) => state.draggingAttackerId)
+  const draggingAttackerHasBanding = useGameStore((state) => state.draggingAttackerHasBanding)
+  const linkBand = useGameStore((state) => state.linkBand)
+  // Server-side combat attackers (carry bandId) so band grouping stays visible after
+  // attacks are declared — during the defender's blocks and combat, not just declare-attackers.
+  const serverCombatAttackers = useGameStore(
+    (state) => (state.spectatingState?.gameState ?? state.gameState)?.combat?.attackers ?? null
+  )
   const setAttackTarget = useGameStore((state) => state.setAttackTarget)
   const startDraggingCard = useGameStore((state) => state.startDraggingCard)
   const stopDraggingCard = useGameStore((state) => state.stopDraggingCard)
@@ -105,7 +144,9 @@ export function GameCard({
   const manaSelectionState = useGameStore((state) => state.manaSelectionState)
   const toggleManaSource = useGameStore((state) => state.toggleManaSource)
   const toggleCrewCreature = useGameStore((state) => state.toggleCrewCreature)
+  const toggleConvokeCreature = useGameStore((state) => state.toggleConvokeCreature)
   const submitYesNoDecision = useGameStore((state) => state.submitYesNoDecision)
+  const isBeheldPulsing = useGameStore((state) => state.beholdPulses.some((p) => p.cardId === card.id))
   const responsive = useResponsiveContext()
   const { handleCardClick, handleDoubleClick, executeAction } = useInteraction()
   const dragStartPos = useRef<{ x: number; y: number } | null>(null)
@@ -113,10 +154,16 @@ export function GameCard({
   /** Whether the attacker was already selected when drag started (to know if short press = select or deselect) */
   const attackerWasSelected = useRef(false)
 
-  // Hover handlers for card preview
-  const handleMouseEnter = useCallback(() => {
-    hoverCard(card.id)
+  // Hover handlers for card preview — track position via onMouseMove like the deckbuilder
+  const updateHoverPosition = useGameStore((s) => s.updateHoverPosition)
+
+  const handleMouseEnter = useCallback((e: React.MouseEvent) => {
+    hoverCard(card.id, { x: e.clientX, y: e.clientY })
   }, [card.id, hoverCard])
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    updateHoverPosition({ x: e.clientX, y: e.clientY })
+  }, [updateHoverPosition])
 
   const handleMouseLeave = useCallback(() => {
     hoverCard(null)
@@ -125,6 +172,10 @@ export function GameCard({
   // Long-press handler for mobile card preview
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [longPressActive, setLongPressActive] = useState(false)
+
+  // Hover state for the copy-of badge — shows the *original* card preview
+  // (e.g. Mockingbird) instead of the copied card's preview (e.g. Glory Seeker).
+  const [copyBadgeHoverPos, setCopyBadgeHoverPos] = useState<{ x: number; y: number } | null>(null)
 
   const handleTouchStartPreview = useCallback((_e: React.TouchEvent) => {
     longPressTimer.current = setTimeout(() => {
@@ -163,13 +214,23 @@ export function GameCard({
   const hoveredCardId = useGameStore((state) => state.hoveredCardId)
   const autoTapPreview = useGameStore((state) => state.autoTapPreview)
 
-  const isTapped = card.isTapped || forceTapped
+  const isTapped = suppressTapRotation ? false : (card.isTapped || forceTapped)
+  const isPhasedOut = card.isPhasedOut === true
+  // Rooms (CR 709.5) are printed landscape; rotate the permanent +90° on the battlefield
+  // so the image reads landscape (the source orientation matches "tilt head right").
+  // Tap state stacks an additional +90° on top (= 180° upside-down portrait), preserving
+  // the standard "tap = +90° from current" semantic.
+  const isRoomLandscape = !faceDown && !!battlefield && card.isRoom === true
+  const totalRotateDeg = (isRoomLandscape ? 90 : 0) + (isTapped ? 90 : 0)
+  const needsLandscapeContainer = Math.abs(totalRotateDeg) % 180 === 90
   const isSelected = selectedCardId === card.id
   const isInAutoTapPreview = autoTapPreview?.includes(card.id) ?? false
   const isHovered = hoveredCardId === card.id
   const isInTargetingMode = targetingState !== null
   const isValidTarget = targetingState?.validTargets.includes(card.id) ?? false
   const isSelectedTarget = targetingState?.selectedTargets.includes(card.id) ?? false
+  const isBeingCast = isInTargetingMode && targetingState?.action != null &&
+    'cardId' in targetingState.action && targetingState.action.cardId === card.id
 
   // Check if this card is a valid target in a pending ChooseTargetsDecision (single-requirement only)
   const isChooseTargetsDecision = pendingDecision?.type === 'ChooseTargetsDecision'
@@ -181,11 +242,32 @@ export function GameCard({
   const isValidDecisionSelection = decisionSelectionState?.validOptions.includes(card.id) ?? false
   const isSelectedDecisionOption = decisionSelectionState?.selectedOptions.includes(card.id) ?? false
 
-  // Inline counter distribution checks (for RemoveXPlusOnePlusOneCounters cost)
+  // Inline counter distribution checks (for RemoveXPlusOnePlusOneCounters cost
+  // and Dawnhand Dissident's `RemoveCountersFromYourCreatures` cost). The slice
+  // tracks allocation per (entityId, counterType); we render one +/- row per
+  // type, so build the row list here from `availableCountersByType`. Single-type
+  // creatures get one row; multi-type creatures (e.g. +1/+1 + stun) get one row
+  // per type with independent caps.
   const counterCreature = counterDistributionState?.creatures.find((c) => c.entityId === card.id)
   const isCounterDistTarget = counterCreature != null
-  const counterAllocated = isCounterDistTarget ? (counterDistributionState?.distribution[card.id] ?? 0) : 0
-  const counterAtMax = counterCreature != null && counterAllocated >= counterCreature.availableCounters
+  const counterDistInner: Record<string, number> | undefined = isCounterDistTarget
+    ? counterDistributionState?.distribution[card.id]
+    : undefined
+  const counterRows: ReadonlyArray<{ counterType: string; available: number; allocated: number }> =
+    isCounterDistTarget && counterCreature
+      ? (() => {
+          const byType = counterCreature.availableCountersByType
+          const types =
+            byType && Object.keys(byType).length > 0 ? Object.keys(byType) : ['+1/+1']
+          return types
+            .map((t) => ({
+              counterType: t,
+              available: byType?.[t] ?? counterCreature.availableCounters,
+              allocated: counterDistInner?.[t] ?? 0,
+            }))
+            .filter((r) => r.available > 0)
+        })()
+      : []
 
   // Inline damage distribution checks
   const isDistributeTarget = distributeState?.targets.includes(card.id) ?? false
@@ -208,6 +290,12 @@ export function GameCard({
   const isValidCrewCreature = crewSelectionState?.validCreatures.some((c) => c.entityId === card.id) ?? false
   const isSelectedCrewCreature = crewSelectionState?.selectedCreatures.includes(card.id) ?? false
 
+  // Convoke selection checks
+  const convokeSelectionState = useGameStore((state) => state.convokeSelectionState)
+  const isInConvokeMode = convokeSelectionState !== null
+  const isValidConvokeCreature = convokeSelectionState?.validCreatures.some((c) => c.entityId === card.id) ?? false
+  const isSelectedConvokeCreature = convokeSelectionState?.selectedCreatures.some((c) => c.entityId === card.id) ?? false
+
   // Trigger YesNo check (inline buttons on triggering entity card, only when inlineOnTrigger is set)
   const isTriggerYesNo = pendingDecision?.type === 'YesNoDecision'
     && pendingDecision.context.inlineOnTrigger
@@ -222,6 +310,40 @@ export function GameCard({
   const isOwnCreature = !isOpponentCard && card.cardTypes.includes('CREATURE')
   const isValidAttacker = isInAttackerMode && isOwnCreature && !card.isTapped && combatState.validCreatures.includes(card.id)
   const isSelectedAsAttacker = isInAttackerMode && combatState.selectedAttackers.includes(card.id)
+
+  // Banding (CR 702.22): which declared band (if any) this creature belongs to. Drives the
+  // colored ring + corner badge so the player can see which creatures attack — and are blocked —
+  // as a group. During the viewing player's own declare-attackers this comes from the client-side
+  // bands being assembled; afterwards (the defender's blocks, combat) it comes from the server's
+  // per-attacker bandId so the grouping persists.
+  const cardHasBanding = card.keywords.includes(Keyword.BANDING)
+  const bandIndex = (() => {
+    if (isInAttackerMode && combatState) {
+      const localIdx = combatState.bands.findIndex((band) => band.includes(card.id))
+      if (localIdx !== -1) return localIdx
+    }
+    const serverBandId = serverCombatAttackers?.find((a) => a.creatureId === card.id)?.bandId
+    if (!serverBandId) return -1
+    // Order bands by first appearance of each unique bandId in attacker order, so the color
+    // assignment is stable and matches what the attacker submitted.
+    const seen: string[] = []
+    for (const att of serverCombatAttackers ?? []) {
+      if (att.bandId && !seen.includes(att.bandId)) seen.push(att.bandId)
+    }
+    return seen.indexOf(serverBandId)
+  })()
+  const isBanded = bandIndex >= 0
+  const bandColor = isBanded ? bandColorFor(bandIndex) : null
+
+  // Banding drag-and-drop: while one of your attackers is being dragged, this card is a
+  // legal band drop target iff it's a valid attacker (other than the dragged one) and at
+  // least one of (drag source, this card) has BANDING. Used to highlight the drop target.
+  const isBandDropTarget =
+    isInAttackerMode &&
+    !!draggingAttackerId &&
+    draggingAttackerId !== card.id &&
+    combatState.validCreatures.includes(card.id) &&
+    (cardHasBanding || draggingAttackerHasBanding === true)
 
   // For blocker mode: check if this is a valid blocker or an attacking creature to block
   const isValidBlocker = isInBlockerMode && isOwnCreature && !card.isTapped && combatState.validCreatures.includes(card.id)
@@ -253,15 +375,17 @@ export function GameCard({
   const cardRatio = 1.4
   const height = Math.round(width * cardRatio)
 
-  // Check if this card can be played/cast (for drag-to-play)
-  // Get all playable actions (including morph, cycling, etc.)
-  const playableActions = legalActions.filter((a) => {
+  // Check if this card can be played/cast (for drag-to-play).
+  // Memoized so the filter only runs when legalActions actually changes —
+  // otherwise re-runs on every unrelated GameCard re-render (hover, etc.).
+  const playableActions = useMemo(() => legalActions.filter((a) => {
     const action = a.action
     return (action.type === 'PlayLand' && action.cardId === card.id) ||
            (action.type === 'CastSpell' && action.cardId === card.id) ||
            (action.type === 'CycleCard' && action.cardId === card.id) ||
-           (action.type === 'TypecycleCard' && action.cardId === card.id)
-  })
+           (action.type === 'TypecycleCard' && action.cardId === card.id) ||
+           (action.type === 'PlotCard' && action.cardId === card.id)
+  }), [legalActions, card.id])
   const playableAction = playableActions[0]
   // Show modal if multiple legal actions OR if card has multiple potential options (e.g., morph + normal cast)
   const hasMultiplePotentialOptions = hasMultipleCastingOptions(playableActions)
@@ -269,7 +393,42 @@ export function GameCard({
   const isCyclingLandWithoutPlayLand = card.cardTypes.includes('LAND') &&
     playableActions.length === 1 && (playableActions[0]?.action.type === 'CycleCard' || playableActions[0]?.action.type === 'TypecycleCard')
   const shouldShowCastModal = playableActions.length > 1 || (hasMultiplePotentialOptions && playableActions.length > 0) || isCyclingLandWithoutPlayLand
-  const canDragToPlay = inHand && playableAction && !isInCombatMode && !isInTargetingMode
+  const canDragToPlay = (inHand || enableDragToCast) && playableAction && !isInCombatMode && !isInTargetingMode
+
+  // Determine mana cost display for cards the player can cast directly from a face-up zone
+  // (hand or, for Commander, the command zone). Commander tax (CR 903.8) folds in here for free
+  // because the server's `enumerateCommandZone` enumerator already builds CastSpell actions with
+  // the post-tax `manaCostString` — we just have to read whichever cost the active action carries.
+  const showCastCostOverlay = inHand || enableDragToCast
+  const handCostInfo = useMemo(() => {
+    if (!showCastCostOverlay || faceDown || !card.manaCost) return null
+    // Find the normal CastSpell action (not morph, not kicked, not mode)
+    const castAction = playableActions.find((a) =>
+      a.action.type === 'CastSpell' && a.actionType !== 'CastFaceDown' && a.actionType !== 'CastWithKicker' && a.actionType !== 'CastSpellMode'
+    )
+    const effectiveCost = castAction?.manaCostString
+    // If no cast action available, show base cost as-is
+    if (effectiveCost == null) return { cost: card.manaCost, isReduced: false, isIncreased: false }
+    // Compare with the card's base mana cost
+    if (effectiveCost === card.manaCost) return { cost: card.manaCost, isReduced: false, isIncreased: false }
+    // Count total mana symbols to determine if cost went up or down
+    const countSymbols = (cost: string) => {
+      const symbols = cost.match(/\{([^}]+)\}/g) ?? []
+      return symbols.reduce((total, s) => {
+        const inner = s.slice(1, -1)
+        const num = parseInt(inner, 10)
+        return total + (isNaN(num) ? 1 : num)
+      }, 0)
+    }
+    const baseMV = countSymbols(card.manaCost)
+    const effectiveMV = countSymbols(effectiveCost)
+    const displayCost = effectiveCost === '' ? '{0}' : effectiveCost
+    return {
+      cost: displayCost,
+      isReduced: effectiveMV < baseMV,
+      isIncreased: effectiveMV > baseMV,
+    }
+  }, [showCastCostOverlay, faceDown, playableActions, card.manaCost])
 
   // Handle mouse/touch down - start dragging for attackers, blockers, or hand cards
   const handlePointerDown = useCallback((e: React.MouseEvent | React.TouchEvent) => {
@@ -285,7 +444,7 @@ export function GameCard({
       if (!isSelectedAsAttacker) {
         toggleAttacker(card.id) // Select it immediately so the arrow shows
       }
-      startDraggingAttacker(card.id)
+      startDraggingAttacker(card.id, card.keywords.includes(Keyword.BANDING))
       return
     }
 
@@ -409,8 +568,8 @@ export function GameCard({
           const cardEl = elementAtPoint.closest('[data-card-id]')
           if (cardEl) {
             const targetCardId = cardEl.getAttribute('data-card-id')
-            if (targetCardId && combatState?.attackingCreatures.includes(entityId(targetCardId))) {
-              assignBlocker(draggingBlockerId, entityId(targetCardId))
+            if (targetCardId && combatState?.attackingCreatures.includes(targetCardId as any)) {
+              assignBlocker(draggingBlockerId, targetCardId as any)
             }
           }
         }
@@ -438,10 +597,50 @@ export function GameCard({
       // Check if dropped on an opponent planeswalker
       const cardEl = elementAtPoint.closest('[data-card-id]')
       if (cardEl) {
-        const targetCardId = cardEl.getAttribute('data-card-id')
-        if (targetCardId && combatState?.validAttackTargets.includes(targetCardId as EntityId)) {
-          setAttackTarget(draggingAttackerId, targetCardId as EntityId)
+        const targetCardId = cardEl.getAttribute('data-card-id') as EntityId | null
+        if (targetCardId && combatState?.validAttackTargets.includes(targetCardId)) {
+          setAttackTarget(draggingAttackerId, targetCardId)
           return
+        }
+        // CR 702.22: drop on another of your valid attackers → form/extend a band.
+        // validCreatures is the canonical set of creatures the viewing player can
+        // attack with, so checking membership keeps this path scoped to legal targets.
+        if (
+          targetCardId &&
+          targetCardId !== draggingAttackerId &&
+          combatState?.mode === 'declareAttackers' &&
+          combatState.validCreatures.includes(targetCardId)
+        ) {
+          const sourceHasBanding = card.keywords.includes(Keyword.BANDING)
+          const targetHasBanding = cardEl.getAttribute('data-banding') === 'true'
+          if (sourceHasBanding || targetHasBanding) {
+            // CR 702.22c: a band may contain at most one creature without banding.
+            // Reject the link client-side when the resulting band would exceed that;
+            // banding status of existing members is read off each card's data-banding
+            // attribute (missing attribute = no banding). Server re-checks regardless.
+            const hasBandingFor = (memberId: EntityId): boolean => {
+              if (memberId === draggingAttackerId) return sourceHasBanding
+              if (memberId === targetCardId) return targetHasBanding
+              const el = document.querySelector(`[data-card-id="${memberId}"]`)
+              return el?.getAttribute('data-banding') === 'true'
+            }
+            const bands = combatState.bands
+            const sourceBand = bands.find((b) => b.includes(draggingAttackerId)) ?? []
+            const targetBand = bands.find((b) => b.includes(targetCardId)) ?? []
+            const merged = new Set<EntityId>([
+              draggingAttackerId,
+              targetCardId,
+              ...sourceBand,
+              ...targetBand,
+            ])
+            const nonBandingCount = Array.from(merged).filter((id) => !hasBandingFor(id)).length
+            if (nonBandingCount > 1) {
+              // Illegal band — silently no-op.
+              return
+            }
+            linkBand(draggingAttackerId, targetCardId, sourceHasBanding, targetHasBanding)
+            return
+          }
         }
       }
 
@@ -505,7 +704,7 @@ export function GameCard({
       window.removeEventListener('mouseup', handleMouseUp)
       window.removeEventListener('touchend', handleTouchEnd)
     }
-  }, [draggingAttackerId, card.id, stopDraggingAttacker, toggleAttacker, combatState, setAttackTarget])
+  }, [draggingAttackerId, card.id, card.keywords, stopDraggingAttacker, toggleAttacker, combatState, setAttackTarget, linkBand])
 
   const handleClick = () => {
     // If the drag handler already processed this interaction, skip
@@ -526,6 +725,64 @@ export function GameCard({
     // Handle crew selection mode - click to toggle creature
     if (isInCrewMode && isValidCrewCreature) {
       toggleCrewCreature(card.id)
+      return
+    }
+
+    // Handle convoke selection mode - click to toggle creature
+    if (isInConvokeMode && isValidConvokeCreature) {
+      // If already selected, deselect (payingColor doesn't matter for deselect)
+      if (isSelectedConvokeCreature) {
+        toggleConvokeCreature(card.id, card.name, null)
+      } else {
+        // Determine best color payment based on creature colors and remaining cost.
+        // The backend sends creature colors as Color enum names ("WHITE", "BLUE"...)
+        // but mana costs parse as pip letters ("W", "U"...), so we normalise to pip
+        // letters for comparison. payingColor submitted back to the server stays as
+        // the Color enum name so kotlinx serialization can deserialize it.
+        const creatureInfo = convokeSelectionState.validCreatures.find((c) => c.entityId === card.id)
+        const colorNames = creatureInfo?.colors ?? []
+        const colorPips = colorNames.map(c => ColorSymbols[c as Color] ?? c)
+        // Parse remaining cost to find colored symbols still needed
+        const manaCost = convokeSelectionState.manaCost
+        const symbols: string[] = []
+        const regex = /\{([^}]+)\}/g
+        let m
+        while ((m = regex.exec(manaCost)) !== null) symbols.push(m[1]!)
+        // Remove symbols already covered by existing selections. Hybrid pips (CR 107.4e)
+        // are colored symbols of both halves, so a previous W selection can consume a
+        // {W/U} pip. Prefer exact colored matches before hybrids to avoid wasting pips.
+        const hybridCovers = (sym: string, pip: string): boolean =>
+          sym.includes('/') && sym.split('/').includes(pip)
+        const remaining = [...symbols]
+        for (const sel of convokeSelectionState.selectedCreatures) {
+          if (sel.payingColor) {
+            const pip = ColorSymbols[sel.payingColor as Color] ?? sel.payingColor
+            const idx = remaining.indexOf(pip)
+            if (idx >= 0) { remaining.splice(idx, 1); continue }
+            const hIdx = remaining.findIndex(s => hybridCovers(s, pip))
+            if (hIdx >= 0) remaining.splice(hIdx, 1)
+          } else {
+            const gIdx = remaining.findIndex(s => /^\d+$/.test(s))
+            if (gIdx >= 0) {
+              const val = parseInt(remaining[gIdx]!, 10)
+              if (val > 1) remaining[gIdx] = String(val - 1)
+              else remaining.splice(gIdx, 1)
+            }
+          }
+        }
+        // Pick a color this creature can pay that's still needed. Exact colored pips
+        // first, then hybrid pips where one half matches.
+        let payingColor: string | null = null
+        for (let i = 0; i < colorPips.length; i++) {
+          if (remaining.includes(colorPips[i]!)) { payingColor = colorNames[i]!; break }
+        }
+        if (!payingColor) {
+          for (let i = 0; i < colorPips.length; i++) {
+            if (remaining.some(s => hybridCovers(s, colorPips[i]!))) { payingColor = colorNames[i]!; break }
+          }
+        }
+        toggleConvokeCreature(card.id, card.name, payingColor)
+      }
       return
     }
 
@@ -689,6 +946,18 @@ export function GameCard({
     // Blue highlight for valid crew creatures
     borderStyle = `2px solid ${TARGET_COLOR}`
     boxShadow = `0 0 12px ${TARGET_GLOW}, 0 0 24px ${TARGET_SHADOW}`
+  } else if (isSelectedConvokeCreature) {
+    // Green highlight for selected convoke creatures
+    borderStyle = `3px solid ${SELECTED_COLOR}`
+    boxShadow = `0 0 20px ${SELECTED_GLOW}, 0 0 40px ${SELECTED_SHADOW}`
+  } else if (isValidConvokeCreature && isHovered) {
+    // Bright blue highlight when hovering over a valid convoke creature
+    borderStyle = `3px solid ${TARGET_COLOR_BRIGHT}`
+    boxShadow = `0 0 20px ${TARGET_GLOW_BRIGHT}, 0 0 40px ${TARGET_GLOW_OUTER}`
+  } else if (isValidConvokeCreature) {
+    // Blue highlight for valid convoke creatures
+    borderStyle = `2px solid ${TARGET_COLOR}`
+    boxShadow = `0 0 12px ${TARGET_GLOW}, 0 0 24px ${TARGET_SHADOW}`
   } else if (isSelected && (!isInCombatMode || !isCombatRoleCard)) {
     borderStyle = '3px solid #ffff00'
     boxShadow = '0 8px 20px rgba(255, 255, 0, 0.4)'
@@ -728,6 +997,10 @@ export function GameCard({
     // Dim purple border for ghost cards that aren't playable
     borderStyle = '2px solid #6644aa'
     boxShadow = '0 0 8px rgba(102, 68, 170, 0.4), 0 0 16px rgba(102, 68, 170, 0.2)'
+  } else if (isBeingCast) {
+    // Amber border for the card currently being cast (not selectable as a cost target)
+    borderStyle = '2px solid #d4a017'
+    boxShadow = '0 0 12px rgba(212, 160, 23, 0.5), 0 0 24px rgba(212, 160, 23, 0.3)'
   } else if (isPlayable && isHovered) {
     // Bright cyan highlight when hovering over a playable card
     borderStyle = `3px solid ${TARGET_COLOR_BRIGHT}`
@@ -742,22 +1015,44 @@ export function GameCard({
     boxShadow = `0 0 12px ${TARGET_GLOW}, 0 0 24px ${TARGET_SHADOW}`
   }
 
+  // Void ability word (Edge of Eternities): when the global void condition is satisfied this
+  // turn and this card has a "Void —" ability, render an eerie cosmic halo — a tight dark
+  // indigo rim with a soft violet/starlight bloom layered on top of any other state glow.
+  // The em dash check covers both U+2014 ("—") and the ASCII fallback "--".
+  const hasVoidAbility =
+    card.oracleText.includes('Void —') || card.oracleText.includes('Void --')
+  const voidEligible = inHand && !faceDown && voidActive && hasVoidAbility
+  if (voidEligible) {
+    // Inner: razor-thin near-black ring (the "edge of nothing").
+    // Mid:   cool violet bloom.
+    // Outer: faint cyan-purple starlight diffused into the dark.
+    const voidHalo = [
+      '0 0 0 1px rgba(8, 4, 20, 0.95)',
+      '0 0 8px rgba(60, 22, 120, 0.7)',
+      '0 0 22px rgba(96, 44, 180, 0.55)',
+      '0 0 44px rgba(150, 100, 230, 0.28)',
+      '0 0 72px rgba(80, 60, 200, 0.18)',
+    ].join(', ')
+    boxShadow = boxShadow ? `${boxShadow}, ${voidHalo}` : voidHalo
+  }
+
   // Determine cursor
-  const canInteract = interactive || isValidTarget || isValidDecisionTarget || isValidDecisionSelection || isValidAttacker || isValidBlocker || isAttackingInBlockerMode || isValidPlaneswalkerTarget || canDragToPlay || isDistributeTarget || isManaValidSource || isValidCrewCreature
+  const canInteract = interactive || isValidTarget || isValidDecisionTarget || isValidDecisionSelection || isValidAttacker || isValidBlocker || isAttackingInBlockerMode || isValidPlaneswalkerTarget || canDragToPlay || isDistributeTarget || isManaValidSource || isValidCrewCreature || isValidConvokeCreature
   const baseCursor = canInteract ? 'pointer' : 'default'
   const cursor = isValidBlocker || isValidAttacker || isSelectedAsAttacker || canDragToPlay ? 'grab' : baseCursor
 
   // Check if currently being dragged (attacker, blocker, or hand card)
   const isBeingDragged = draggingBlockerId === card.id || draggingAttackerId === card.id || draggingCardId === card.id
 
-  // Container dimensions - expand width when tapped to prevent overlap
-  // Tapped cards rotate 90deg, so they need width = height to not overlap
-  const containerWidth = isTapped && battlefield ? height + 8 : width
+  // Container dimensions - expand width when the card sits sideways (tapped permanents
+  // and Rooms always-landscape) to prevent overlap with neighbours.
+  const containerWidth = needsLandscapeContainer && battlefield ? height + 8 : width
   const containerHeight = height
 
   const cardElement = (
     <div
       data-card-id={card.id}
+      {...(cardHasBanding ? { 'data-banding': 'true' } : {})}
       {...(isGhost ? { 'data-ghost': 'true' } : {})}
       onClick={handleClick}
       onDoubleClick={handleDoubleClickEvent}
@@ -767,6 +1062,7 @@ export function GameCard({
       onTouchEnd={() => { handleTouchEndPreview(); handlePointerUp() }}
       onTouchMove={handleTouchMovePreview}
       onMouseEnter={handleMouseEnter}
+      onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       style={{
         ...styles.card,
@@ -774,13 +1070,34 @@ export function GameCard({
         height,
         borderRadius: responsive.isMobile ? 4 : 8,
         cursor,
-        border: borderStyle,
+        border: isBeheldPulsing ? '3px solid #eab308' : borderStyle,
         pointerEvents: 'auto',
-        transform: `${isTapped ? 'rotate(90deg)' : ''} ${isSelected && (!isInCombatMode || !isCombatRoleCard) ? 'translateY(-8px)' : ''}`,
+        transform: `${totalRotateDeg ? `rotate(${totalRotateDeg}deg)` : ''} ${isSelected && (!isInCombatMode || !isCombatRoleCard) ? 'translateY(-8px)' : ''}`,
         transformOrigin: 'center',
-        boxShadow,
-        opacity: isBeingDragged ? 0.6 : isGhost ? 0.55 : 1,
+        // Commander gold *glow* — soft halo, deliberately no hard 1–2px rim so it doesn't read
+        // like the playable-action outline. Inner halo sits close to the card for readable
+        // intensity; outer halo gives the glow some reach without bleeding too far.
+        boxShadow: card.isCommander && !faceDown
+          ? `${boxShadow}, 0 0 6px 2px rgba(212, 175, 55, 0.6), 0 0 14px 4px rgba(212, 175, 55, 0.3)`
+          : boxShadow,
+        opacity: isPhasedOut ? 0.4 : isBeingDragged ? 0.6 : isGhost ? 0.55 : (inHand && isInTargetingMode && !isValidTarget && !isBeingCast) ? 0.35 : 1,
+        // Phased-out permanents (Rule 702.26) are treated as though they don't exist —
+        // desaturate so they read as "not really there" while still showing the board slot.
+        ...(isPhasedOut ? { filter: 'grayscale(0.7)' } : {}),
         userSelect: 'none',
+        ...(voidEligible ? { outline: '1px solid rgba(140, 90, 220, 0.55)', outlineOffset: '2px' } : {}),
+        ...(isBeheldPulsing ? { animation: 'beholdPulse 1.1s ease-in-out infinite alternate' } : {}),
+        // Banding: colored ring + glow on every member of a declared band (CR 702.22).
+        ...(isBanded && bandColor ? {
+          outline: `2px solid ${bandColor.border}`,
+          outlineOffset: '1px',
+          boxShadow: `${boxShadow}, 0 0 9px 2px ${bandColor.glow}`,
+        } : {}),
+        // Highlight a legal band drop target while an attacker is being dragged over it.
+        ...(isBandDropTarget ? {
+          outline: '2px dashed #ffd54f',
+          outlineOffset: '2px',
+        } : {}),
       }}
     >
       {/* Token with art_crop image — render a custom card frame */}
@@ -792,7 +1109,7 @@ export function GameCard({
           <div style={{
             ...styles.tokenNameBar,
             color: getTokenFrameTextColor(card.colors),
-            fontSize: responsive.isMobile ? 7 : 9,
+            fontSize: responsive.badges.smallLabelFontSize,
           }}>
             {card.name}
           </div>
@@ -873,7 +1190,7 @@ export function GameCard({
       {/* Summoning sickness indicator */}
       {battlefield && card.hasSummoningSickness && card.cardTypes.includes('CREATURE') && (
         <div style={styles.summoningSicknessOverlay}>
-          <div style={{ ...styles.summoningSicknessIcon, fontSize: responsive.isMobile ? 16 : 24 }}>💤</div>
+          <div style={{ ...styles.summoningSicknessIcon, fontSize: responsive.badges.sicknessIconSize }}>💤</div>
         </div>
       )}
 
@@ -890,7 +1207,7 @@ export function GameCard({
           <span style={{
             color: faceDown ? 'white' : getPTColor(card.power, card.toughness, card.basePower, card.baseToughness),
             fontWeight: 700,
-            fontSize: responsive.isMobile ? 10 : 12,
+            fontSize: responsive.badges.ptFontSize,
           }}>
             {card.power}/
           </span>
@@ -901,7 +1218,7 @@ export function GameCard({
                 ? '#ff4444'
                 : getPTColor(card.power, card.toughness, card.basePower, card.baseToughness),
             fontWeight: 700,
-            fontSize: responsive.isMobile ? 10 : 12,
+            fontSize: responsive.badges.ptFontSize,
           }}>
             {card.damage != null && card.damage > 0
               ? card.toughness - card.damage
@@ -917,11 +1234,11 @@ export function GameCard({
           backgroundColor: 'rgba(60, 60, 60, 0.9)',
           border: '1px solid rgba(200, 160, 60, 0.6)',
         }}>
-          <i className={`ms ms-${counterManaClass.LOYALTY}`} style={{ fontSize: responsive.isMobile ? 8 : 10, color: '#e0c060', marginRight: 2 }} />
+          <i className={`ms ms-${counterManaClass.LOYALTY}`} style={{ fontSize: responsive.badges.counterIconFontSize, color: '#e0c060', marginRight: 2 }} />
           <span style={{
             color: '#e0c060',
             fontWeight: 700,
-            fontSize: responsive.isMobile ? 10 : 12,
+            fontSize: responsive.badges.ptFontSize,
           }}>
             {getLoyaltyCounters(card)}
           </span>
@@ -936,10 +1253,53 @@ export function GameCard({
           border: '1px solid rgba(200, 160, 60, 0.6)',
           color: '#e0c060',
         }}>
-          <i className={`ms ms-${counterManaClass.LOYALTY}`} style={{ fontSize: responsive.isMobile ? 8 : 10 }} />
+          <i className={`ms ms-${counterManaClass.LOYALTY}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
           <span style={{ fontWeight: 700 }}>
             {getLoyaltyCounters(card)}
           </span>
+        </div>
+      )}
+
+      {/* Threshold progress badge (graveyard-gated static abilities) */}
+      {card.thresholdInfo && (
+        <div
+          title={`Graveyard threshold: ${card.thresholdInfo.current}/${card.thresholdInfo.required}${card.thresholdInfo.active ? ' (active)' : ''}`}
+          style={{
+            position: 'absolute',
+            bottom: 2,
+            left: 2,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            padding: responsive.badges.badgePadding,
+            borderRadius: 8,
+            fontSize: responsive.badges.counterTextFontSize,
+            fontWeight: 700,
+            background: card.thresholdInfo.active
+              ? 'linear-gradient(135deg, #c9a227, #f5d76e)'
+              : 'rgba(20, 20, 20, 0.78)',
+            color: card.thresholdInfo.active ? '#1a1200' : '#e6e6e6',
+            border: card.thresholdInfo.active
+              ? '1px solid #fff3b0'
+              : '1px solid rgba(255,255,255,0.25)',
+            boxShadow: card.thresholdInfo.active
+              ? '0 0 6px rgba(245, 215, 110, 0.85)'
+              : '0 1px 2px rgba(0,0,0,0.5)',
+            pointerEvents: 'none',
+            zIndex: 3,
+          }}
+        >
+          <i className="ms ms-counter-graveyard" style={{ fontSize: responsive.badges.counterIconFontSize }} />
+          <span>
+            {Math.min(card.thresholdInfo.current, card.thresholdInfo.required)}/{card.thresholdInfo.required}
+          </span>
+        </div>
+      )}
+
+      {/* Banding (CR 702.22): band-membership badge, color-coded per band */}
+      {isBanded && bandColor && (
+        <div style={{ ...styles.bandBadge, backgroundColor: bandColor.base }}>
+          Band {bandIndex + 1}
         </div>
       )}
 
@@ -947,10 +1307,10 @@ export function GameCard({
       {battlefield && hasStatCounters(card) && (
         <div style={{
           ...styles.counterBadge,
-          fontSize: responsive.isMobile ? 9 : 11,
-          padding: responsive.isMobile ? '1px 4px' : '2px 6px',
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
         }}>
-          <i className={`ms ms-${getCounterStatModifier(card) >= 0 ? counterManaClass.PLUS_ONE_PLUS_ONE : counterManaClass.MINUS_ONE_MINUS_ONE}`} style={{ fontSize: responsive.isMobile ? 8 : 10 }} />
+          <i className={`ms ms-${getCounterStatModifier(card) >= 0 ? counterManaClass.PLUS_ONE_PLUS_ONE : counterManaClass.MINUS_ONE_MINUS_ONE}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
           <span style={styles.counterBadgeText}>
             {getCounterStatModifier(card) >= 0 ? '+' : ''}{getCounterStatModifier(card)}
           </span>
@@ -961,10 +1321,10 @@ export function GameCard({
       {battlefield && getGoldCounters(card) > 0 && (
         <div style={{
           ...styles.goldCounterBadge,
-          fontSize: responsive.isMobile ? 9 : 11,
-          padding: responsive.isMobile ? '1px 4px' : '2px 6px',
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
         }}>
-          <i className={`ms ms-${counterManaClass.GOLD}`} style={{ fontSize: responsive.isMobile ? 8 : 10 }} />
+          <i className={`ms ms-${counterManaClass.GOLD}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
           <span style={{ fontWeight: 700 }}>
             {getGoldCounters(card)}
           </span>
@@ -975,10 +1335,10 @@ export function GameCard({
       {battlefield && getPlagueCounters(card) > 0 && (
         <div style={{
           ...styles.plagueCounterBadge,
-          fontSize: responsive.isMobile ? 9 : 11,
-          padding: responsive.isMobile ? '1px 4px' : '2px 6px',
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
         }}>
-          <i className={`ms ms-${counterManaClass.PLAGUE}`} style={{ fontSize: responsive.isMobile ? 8 : 10 }} />
+          <i className={`ms ms-${counterManaClass.PLAGUE}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
           <span style={{ fontWeight: 700 }}>
             {getPlagueCounters(card)}
           </span>
@@ -989,10 +1349,10 @@ export function GameCard({
       {battlefield && getChargeCounters(card) > 0 && (
         <div style={{
           ...styles.chargeCounterBadge,
-          fontSize: responsive.isMobile ? 9 : 11,
-          padding: responsive.isMobile ? '1px 4px' : '2px 6px',
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
         }}>
-          <i className={`ms ms-${counterManaClass.CHARGE}`} style={{ fontSize: responsive.isMobile ? 8 : 10 }} />
+          <i className={`ms ms-${counterManaClass.CHARGE}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
           <span style={{ fontWeight: 700 }}>
             {getChargeCounters(card)}
           </span>
@@ -1003,10 +1363,10 @@ export function GameCard({
       {battlefield && getGemCounters(card) > 0 && (
         <div style={{
           ...styles.chargeCounterBadge,
-          fontSize: responsive.isMobile ? 9 : 11,
-          padding: responsive.isMobile ? '1px 4px' : '2px 6px',
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
         }}>
-          <i className={`ms ms-${counterManaClass.GEM}`} style={{ fontSize: responsive.isMobile ? 8 : 10 }} />
+          <i className={`ms ms-${counterManaClass.GEM}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
           <span style={{ fontWeight: 700 }}>
             {getGemCounters(card)}
           </span>
@@ -1017,10 +1377,10 @@ export function GameCard({
       {battlefield && getDepletionCounters(card) > 0 && (
         <div style={{
           ...styles.depletionCounterBadge,
-          fontSize: responsive.isMobile ? 9 : 11,
-          padding: responsive.isMobile ? '1px 4px' : '2px 6px',
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
         }}>
-          <i className={`ms ms-${counterManaClass.DEPLETION}`} style={{ fontSize: responsive.isMobile ? 8 : 10 }} />
+          <i className={`ms ms-${counterManaClass.DEPLETION}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
           <span style={{ fontWeight: 700 }}>
             {getDepletionCounters(card)}
           </span>
@@ -1031,10 +1391,10 @@ export function GameCard({
       {battlefield && getTrapCounters(card) > 0 && (
         <div style={{
           ...styles.trapCounterBadge,
-          fontSize: responsive.isMobile ? 9 : 11,
-          padding: responsive.isMobile ? '1px 4px' : '2px 6px',
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
         }}>
-          <i className={`ms ms-${counterManaClass.TRAP}`} style={{ fontSize: responsive.isMobile ? 8 : 10 }} />
+          <i className={`ms ms-${counterManaClass.TRAP}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
           <span style={{ fontWeight: 700 }}>
             {getTrapCounters(card)}
           </span>
@@ -1045,10 +1405,10 @@ export function GameCard({
       {battlefield && getStunCounters(card) > 0 && (
         <div style={{
           ...styles.stunCounterBadge,
-          fontSize: responsive.isMobile ? 9 : 11,
-          padding: responsive.isMobile ? '1px 4px' : '2px 6px',
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
         }}>
-          <i className={`ms ms-${counterManaClass.STUN}`} style={{ fontSize: responsive.isMobile ? 8 : 10 }} />
+          <i className={`ms ms-${counterManaClass.STUN}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
           <span style={{ fontWeight: 700 }}>
             {getStunCounters(card)}
           </span>
@@ -1059,10 +1419,10 @@ export function GameCard({
       {battlefield && getFinalityCounters(card) > 0 && (
         <div style={{
           ...styles.finalityCounterBadge,
-          fontSize: responsive.isMobile ? 9 : 11,
-          padding: responsive.isMobile ? '1px 4px' : '2px 6px',
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
         }}>
-          <i className={`ms ms-${counterManaClass.FINALITY}`} style={{ fontSize: responsive.isMobile ? 8 : 10 }} />
+          <i className={`ms ms-${counterManaClass.FINALITY}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
           <span style={{ fontWeight: 700 }}>
             {getFinalityCounters(card)}
           </span>
@@ -1073,10 +1433,10 @@ export function GameCard({
       {battlefield && getSupplyCounters(card) > 0 && (
         <div style={{
           ...styles.supplyCounterBadge,
-          fontSize: responsive.isMobile ? 9 : 11,
-          padding: responsive.isMobile ? '1px 4px' : '2px 6px',
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
         }}>
-          <i className={`ms ms-${counterManaClass.SUPPLY}`} style={{ fontSize: responsive.isMobile ? 8 : 10 }} />
+          <i className={`ms ms-${counterManaClass.SUPPLY}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
           <span style={{ fontWeight: 700 }}>
             {getSupplyCounters(card)}
           </span>
@@ -1087,10 +1447,10 @@ export function GameCard({
       {battlefield && getStashCounters(card) > 0 && (
         <div style={{
           ...styles.stashCounterBadge,
-          fontSize: responsive.isMobile ? 9 : 11,
-          padding: responsive.isMobile ? '1px 4px' : '2px 6px',
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
         }}>
-          <i className={`ms ms-${counterManaClass.STASH}`} style={{ fontSize: responsive.isMobile ? 8 : 10 }} />
+          <i className={`ms ms-${counterManaClass.STASH}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
           <span style={{ fontWeight: 700 }}>
             {getStashCounters(card)}
           </span>
@@ -1101,12 +1461,124 @@ export function GameCard({
       {battlefield && getBlightCounters(card) > 0 && (
         <div style={{
           ...styles.blightCounterBadge,
-          fontSize: responsive.isMobile ? 9 : 11,
-          padding: responsive.isMobile ? '1px 4px' : '2px 6px',
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
         }}>
-          <i className={`ms ms-${counterManaClass.BLIGHT}`} style={{ fontSize: responsive.isMobile ? 8 : 10 }} />
+          <i className={`ms ms-${counterManaClass.BLIGHT}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
           <span style={{ fontWeight: 700 }}>
             {getBlightCounters(card)}
+          </span>
+        </div>
+      )}
+
+      {/* Flood counter badge */}
+      {battlefield && getFloodCounters(card) > 0 && (
+        <div style={{
+          ...styles.floodCounterBadge,
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
+        }}>
+          <i className={`ms ms-${counterManaClass.FLOOD}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
+          <span style={{ fontWeight: 700 }}>
+            {getFloodCounters(card)}
+          </span>
+        </div>
+      )}
+
+      {/* Coin counter badge */}
+      {battlefield && getCoinCounters(card) > 0 && (
+        <div style={{
+          ...styles.coinCounterBadge,
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
+        }}>
+          <i className={`ms ms-${counterManaClass.COIN}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
+          <span style={{ fontWeight: 700 }}>
+            {getCoinCounters(card)}
+          </span>
+        </div>
+      )}
+
+      {/* Chorus counter badge */}
+      {battlefield && getChorusCounters(card) > 0 && (
+        <div style={{
+          ...styles.chorusCounterBadge,
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
+        }}>
+          <i className={`ms ms-${counterManaClass.CHORUS}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
+          <span style={{ fontWeight: 700 }}>
+            {getChorusCounters(card)}
+          </span>
+        </div>
+      )}
+
+      {/* Growth counter badge (Simic Ascendancy — 20 = win) */}
+      {battlefield && getGrowthCounters(card) > 0 && (
+        <div style={{
+          ...styles.growthCounterBadge,
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
+        }}>
+          <i className={`ms ms-${counterManaClass.GROWTH}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
+          <span style={{ fontWeight: 700 }}>
+            {getGrowthCounters(card)}
+          </span>
+        </div>
+      )}
+
+      {/* Time counter badge (Impending — counts down to becoming a creature) */}
+      {battlefield && getTimeCounters(card) > 0 && (
+        <div style={{
+          ...styles.timeCounterBadge,
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
+        }}>
+          <i className={`ms ms-${counterManaClass.TIME}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
+          <span style={{ fontWeight: 700 }}>
+            {getTimeCounters(card)}
+          </span>
+        </div>
+      )}
+
+      {/* Feather counter badge (Soulcatchers' Aerie) */}
+      {battlefield && getFeatherCounters(card) > 0 && (
+        <div style={{
+          ...styles.featherCounterBadge,
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
+        }}>
+          <i className={`ms ms-${counterManaClass.FEATHER}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
+          <span style={{ fontWeight: 700 }}>
+            {getFeatherCounters(card)}
+          </span>
+        </div>
+      )}
+
+      {/* Quest counter badge (Beastmaster Ascension etc.) */}
+      {battlefield && getQuestCounters(card) > 0 && (
+        <div style={{
+          ...styles.questCounterBadge,
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
+        }}>
+          <SvgGlyph url={counterSvgIcon.QUEST!} size={responsive.badges.counterIconFontSize} color="#d8e8a0" />
+          <span style={{ fontWeight: 700 }}>
+            {getQuestCounters(card)}
+          </span>
+        </div>
+      )}
+
+      {/* Dream counter badge — visible in exile too, since that's where dream-counter cards live */}
+      {getDreamCounters(card) > 0 && (
+        <div style={{
+          ...styles.dreamCounterBadge,
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
+        }}>
+          <i className={`ms ms-${counterManaClass.DREAM}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
+          <span style={{ fontWeight: 700 }}>
+            {getDreamCounters(card)}
           </span>
         </div>
       )}
@@ -1115,12 +1587,40 @@ export function GameCard({
       {battlefield && getFlyingCounters(card) > 0 && (
         <div style={{
           ...styles.flyingCounterBadge,
-          fontSize: responsive.isMobile ? 9 : 11,
-          padding: responsive.isMobile ? '1px 4px' : '2px 6px',
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
         }}>
-          <i className={`ms ms-${counterManaClass.FLYING}`} style={{ fontSize: responsive.isMobile ? 8 : 10 }} />
+          <i className={`ms ms-${counterManaClass.FLYING}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
           <span style={{ fontWeight: 700 }}>
             {getFlyingCounters(card)}
+          </span>
+        </div>
+      )}
+
+      {/* First strike counter badge */}
+      {battlefield && getFirstStrikeCounters(card) > 0 && (
+        <div style={{
+          ...styles.firstStrikeCounterBadge,
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
+        }}>
+          <i className={`ms ms-${counterManaClass.FIRST_STRIKE}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
+          <span style={{ fontWeight: 700 }}>
+            {getFirstStrikeCounters(card)}
+          </span>
+        </div>
+      )}
+
+      {/* Lifelink counter badge */}
+      {battlefield && getLifelinkCounters(card) > 0 && (
+        <div style={{
+          ...styles.lifelinkCounterBadge,
+          fontSize: responsive.badges.counterTextFontSize,
+          padding: responsive.badges.badgePadding,
+        }}>
+          <i className={`ms ms-${counterManaClass.LIFELINK}`} style={{ fontSize: responsive.badges.counterIconFontSize }} />
+          <span style={{ fontWeight: 700 }}>
+            {getLifelinkCounters(card)}
           </span>
         </div>
       )}
@@ -1145,9 +1645,9 @@ export function GameCard({
                     ...styles.sagaChapterMarker,
                     ...(isActive ? styles.sagaChapterActive : {}),
                     ...(isCompleted ? styles.sagaChapterCompleted : {}),
-                    width: responsive.isMobile ? 14 : 18,
-                    height: responsive.isMobile ? 14 : 18,
-                    fontSize: responsive.isMobile ? 7 : 9,
+                    width: responsive.badges.keywordIconSize,
+                    height: responsive.badges.keywordIconSize,
+                    fontSize: responsive.badges.smallLabelFontSize,
                   }}>
                     {toRoman(chapter)}
                   </div>
@@ -1158,8 +1658,8 @@ export function GameCard({
             {loreCount > 0 && (
               <div style={{
                 ...styles.sagaLoreBadge,
-                fontSize: responsive.isMobile ? 10 : 12,
-                padding: responsive.isMobile ? '1px 4px' : '2px 6px',
+                fontSize: responsive.badges.ptFontSize,
+                padding: responsive.badges.badgePadding,
               }}>
                 <span style={{ fontWeight: 700 }}>
                   {loreCount} / {totalChapters}
@@ -1189,9 +1689,9 @@ export function GameCard({
                     ...styles.classLevelMarker,
                     ...(isActive ? styles.classLevelActive : {}),
                     ...(isCompleted ? styles.classLevelCompleted : {}),
-                    width: responsive.isMobile ? 14 : 18,
-                    height: responsive.isMobile ? 14 : 18,
-                    fontSize: responsive.isMobile ? 7 : 9,
+                    width: responsive.badges.keywordIconSize,
+                    height: responsive.badges.keywordIconSize,
+                    fontSize: responsive.badges.smallLabelFontSize,
                   }}>
                     {level}
                   </div>
@@ -1201,8 +1701,8 @@ export function GameCard({
             {/* Level badge in P/T position */}
             <div style={{
               ...styles.classLevelBadge,
-              fontSize: responsive.isMobile ? 10 : 12,
-              padding: responsive.isMobile ? '1px 4px' : '2px 6px',
+              fontSize: responsive.badges.ptFontSize,
+              padding: responsive.badges.badgePadding,
             }}>
               <span style={{ fontWeight: 700 }}>
                 Lv.{currentLevel}
@@ -1213,20 +1713,20 @@ export function GameCard({
       })()}
 
       {/* Keyword ability icons (shown for face-up cards, and for face-down cards with granted keywords) */}
-      {battlefield && (card.keywords.length > 0 || (card.abilityFlags && card.abilityFlags.length > 0) || (card.protections && card.protections.length > 0)) && (
-        <KeywordIcons keywords={card.keywords} abilityFlags={card.abilityFlags ?? []} protections={card.protections ?? []} size={responsive.isMobile ? 14 : 18} />
+      {battlefield && !hideKeywordIcons && (card.keywords.length > 0 || (card.abilityFlags && card.abilityFlags.length > 0) || (card.protections && card.protections.length > 0) || (card.hexproofFromColors && card.hexproofFromColors.length > 0) || card.isSuspected) && (
+        <KeywordIcons keywords={card.keywords} abilityFlags={card.abilityFlags ?? []} protections={card.protections ?? []} hexproofFromColors={card.hexproofFromColors ?? []} isSuspected={card.isSuspected ?? false} size={responsive.badges.keywordIconSize} />
       )}
 
       {/* Revealed face-down eye icon (e.g., peeked via Spy Network) */}
       {faceDown && card.revealedName && (
         <div style={{
           position: 'absolute',
-          top: responsive.isMobile ? 2 : 4,
-          right: responsive.isMobile ? 2 : 4,
+          top: responsive.badges.badgeInset,
+          right: responsive.badges.badgeInset,
           backgroundColor: 'rgba(0, 0, 0, 0.75)',
           color: '#66ccff',
-          fontSize: responsive.isMobile ? 10 : 13,
-          padding: responsive.isMobile ? '1px 3px' : '2px 5px',
+          fontSize: responsive.badges.manaCostFontSize,
+          padding: responsive.badges.badgePaddingTight,
           borderRadius: 4,
           border: '1px solid rgba(102, 204, 255, 0.5)',
           pointerEvents: 'none',
@@ -1237,15 +1737,15 @@ export function GameCard({
         </div>
       )}
 
-      {/* Chosen creature type / color badge (e.g., Doom Cannon, Riptide Replicator) */}
-      {!faceDown && (card.chosenCreatureType ?? card.chosenColor) && (
+      {/* Chosen creature type / color / mode badge (e.g., Doom Cannon, Riptide Replicator, Outpost Siege) */}
+      {!faceDown && (card.chosenCreatureType ?? card.chosenColor ?? card.chosenMode) && (
         <div style={{
           position: 'absolute',
           bottom: card.power != null ? 22 : 4,
           left: 4,
           backgroundColor: 'rgba(80, 60, 30, 0.9)',
           color: '#f0d890',
-          fontSize: responsive.isMobile ? 8 : 10,
+          fontSize: responsive.badges.counterIconFontSize,
           padding: '1px 4px',
           borderRadius: 3,
           border: '1px solid rgba(200, 170, 80, 0.6)',
@@ -1253,28 +1753,122 @@ export function GameCard({
           pointerEvents: 'none',
           zIndex: 5,
         }}>
-          {[card.chosenColor, card.chosenCreatureType].filter(Boolean).join(' ')}
+          {[card.chosenColor, card.chosenCreatureType, card.chosenMode].filter(Boolean).join(' ')}
         </div>
       )}
 
-      {/* Copy indicator badge (e.g., Clever Impersonator copying Wind Drake) */}
-      {!faceDown && card.copyOf && (
+      {/* Room (CR 709.5) door indicators — dim the locked half of the source image and
+          drop an upright lock chip on top. Source image is portrait with face[1] on top
+          and face[0] on bottom (Scryfall's stored orientation for landscape-printed Rooms).
+          The chip counter-rotates the parent so the text stays readable when the card lies
+          sideways or upside-down. */}
+      {!faceDown && battlefield && card.isRoom && card.cardFaces && card.cardFaces.length === 2 && (
+        <>
+          {card.cardFaces.map((face, faceIdx) => {
+            if (face.isUnlocked) return null
+            const isTopHalf = faceIdx === 1
+            return (
+              <div key={face.faceId} style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                top: isTopHalf ? 0 : '50%',
+                height: '50%',
+                backgroundColor: 'rgba(0, 0, 0, 0.45)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                pointerEvents: 'none',
+                zIndex: 5,
+                borderRadius: isTopHalf ? '6px 6px 0 0' : '0 0 6px 6px',
+              }}>
+                <div style={{
+                  transform: totalRotateDeg ? `rotate(${-totalRotateDeg}deg)` : undefined,
+                  backgroundColor: 'rgba(40, 20, 20, 0.92)',
+                  color: '#e89b9b',
+                  fontSize: responsive.badges.manaCostFontSize,
+                  padding: '2px 5px',
+                  borderRadius: 4,
+                  border: '1px solid rgba(200, 100, 100, 0.6)',
+                  lineHeight: 1,
+                }}>
+                  🔒
+                </div>
+              </div>
+            )
+          })}
+        </>
+      )}
+
+      {/* DFC (double-faced card) indicator badge */}
+      {!faceDown && battlefield && card.isDoubleFaced && (
         <div style={{
           position: 'absolute',
-          top: 4,
-          left: 4,
-          backgroundColor: 'rgba(40, 40, 80, 0.9)',
-          color: '#a0b0e0',
-          fontSize: responsive.isMobile ? 7 : 9,
-          padding: '1px 4px',
-          borderRadius: 3,
-          border: '1px solid rgba(100, 120, 200, 0.6)',
-          whiteSpace: 'nowrap',
+          bottom: 4,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          backgroundColor: 'rgba(20, 20, 40, 0.9)',
+          color: card.currentFace === 'BACK' ? '#b0b8d0' : '#f0d060',
+          fontSize: responsive.badges.manaCostFontSize,
+          padding: responsive.badges.badgePaddingTight,
+          borderRadius: 4,
+          border: `1px solid ${card.currentFace === 'BACK' ? 'rgba(160, 170, 200, 0.5)' : 'rgba(240, 208, 96, 0.5)'}`,
           pointerEvents: 'none',
           zIndex: 5,
+          lineHeight: 1,
         }}>
+          <i className={`ms ms-dfc-${card.currentFace === 'BACK' ? 'night' : 'day'}`} />
+        </div>
+      )}
+
+      {/* Copy indicator badge (e.g., Clever Impersonator copying Wind Drake).
+          Hovering the badge previews the *original* card (the printed identity),
+          not the copy's current characteristics. */}
+      {!faceDown && card.copyOf && (
+        <div
+          onMouseEnter={(e) => {
+            e.stopPropagation()
+            hoverCard(null)
+            setCopyBadgeHoverPos({ x: e.clientX, y: e.clientY })
+          }}
+          onMouseMove={(e) => {
+            e.stopPropagation()
+            setCopyBadgeHoverPos({ x: e.clientX, y: e.clientY })
+          }}
+          onMouseLeave={(e) => {
+            e.stopPropagation()
+            setCopyBadgeHoverPos(null)
+            // Restore the regular card preview as the cursor moves back onto the card body.
+            hoverCard(card.id, { x: e.clientX, y: e.clientY })
+          }}
+          style={{
+            position: 'absolute',
+            top: 4,
+            left: 4,
+            backgroundColor: 'rgba(40, 40, 80, 0.9)',
+            color: '#a0b0e0',
+            fontSize: responsive.badges.smallLabelFontSize,
+            padding: '1px 4px',
+            borderRadius: 3,
+            border: '1px solid rgba(100, 120, 200, 0.6)',
+            whiteSpace: 'nowrap',
+            cursor: 'help',
+            zIndex: 5,
+          }}
+        >
           {card.copyOf}
         </div>
+      )}
+
+      {/* Original-card preview portalled to <body> so it escapes the card's
+          overflow:hidden / transform containing block (tapped cards rotate). */}
+      {!faceDown && card.copyOf && copyBadgeHoverPos && createPortal(
+        <HoverCardPreview
+          name={card.copyOf}
+          imageUri={null}
+          pos={copyBadgeHoverPos}
+        />,
+        document.body,
       )}
 
       {/* Active effect badges (evasion, etc.) */}
@@ -1287,21 +1881,50 @@ export function GameCard({
         <div style={styles.playableGlow} />
       )}
 
+      {/* Mana cost overlay for cards in hand — always shown, color-coded when modified */}
+      {handCostInfo && (
+        <div style={{
+          position: 'absolute',
+          top: responsive.badges.badgeInset,
+          right: responsive.badges.badgeInset,
+          backgroundColor: handCostInfo.isReduced || handCostInfo.isIncreased
+            ? 'rgba(0, 0, 0, 0.85)'
+            : 'rgba(0, 0, 0, 0.7)',
+          padding: responsive.badges.badgePaddingTight,
+          borderRadius: 4,
+          border: `1px solid ${
+            handCostInfo.isReduced ? 'rgba(0, 200, 80, 0.5)'
+            : handCostInfo.isIncreased ? 'rgba(255, 68, 68, 0.5)'
+            : 'rgba(255, 255, 255, 0.3)'
+          }`,
+          boxShadow: handCostInfo.isReduced ? '0 0 6px rgba(0, 200, 80, 0.3)'
+            : handCostInfo.isIncreased ? '0 0 6px rgba(255, 68, 68, 0.3)'
+            : 'none',
+          pointerEvents: 'none',
+          zIndex: 10,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+        }}>
+          <ManaCost cost={handCostInfo.cost} size={responsive.badges.manaCostFontSize} gap={1} />
+        </div>
+      )}
+
       {/* Count badge for grouped cards */}
       {count > 1 && !faceDown && (
         <div style={{
           position: 'absolute',
-          top: responsive.isMobile ? 2 : 4,
-          right: responsive.isMobile ? 2 : 4,
+          top: responsive.badges.badgeInset,
+          right: responsive.badges.badgeInset,
           backgroundColor: 'rgba(0, 0, 0, 0.85)',
           color: '#fff',
           borderRadius: '50%',
-          width: responsive.isMobile ? 18 : 22,
-          height: responsive.isMobile ? 18 : 22,
+          width: responsive.badges.countBadgeSize,
+          height: responsive.badges.countBadgeSize,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: responsive.isMobile ? 10 : 12,
+          fontSize: responsive.badges.ptFontSize,
           fontWeight: 700,
           border: '1px solid rgba(255, 255, 255, 0.3)',
           boxShadow: '0 2px 4px rgba(0,0,0,0.5)',
@@ -1315,18 +1938,18 @@ export function GameCard({
       {isDistributeTarget && distributeAllocated > 0 && (
         <div style={{
           position: 'absolute',
-          top: responsive.isMobile ? 2 : 4,
-          right: responsive.isMobile ? 2 : 4,
+          top: responsive.badges.badgeInset,
+          right: responsive.badges.badgeInset,
           backgroundColor: '#dc2626',
           color: 'white',
-          width: responsive.isMobile ? 20 : 26,
-          height: responsive.isMobile ? 20 : 26,
+          width: responsive.badges.distributeBadgeSize,
+          height: responsive.badges.distributeBadgeSize,
           borderRadius: '50%',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           fontWeight: 'bold',
-          fontSize: responsive.isMobile ? 11 : 14,
+          fontSize: responsive.badges.distributeBadgeFontSize,
           boxShadow: '0 2px 8px rgba(220, 38, 38, 0.6)',
           zIndex: 15,
         }}>
@@ -1362,7 +1985,7 @@ export function GameCard({
               border: 'none',
               backgroundColor: '#16a34a',
               color: 'white',
-              fontSize: responsive.isMobile ? 10 : 12,
+              fontSize: responsive.badges.ptFontSize,
               fontWeight: 700,
               cursor: 'pointer',
               padding: 0,
@@ -1379,7 +2002,7 @@ export function GameCard({
               border: 'none',
               backgroundColor: '#555',
               color: 'white',
-              fontSize: responsive.isMobile ? 10 : 12,
+              fontSize: responsive.badges.ptFontSize,
               fontWeight: 700,
               cursor: 'pointer',
               padding: 0,
@@ -1413,8 +2036,8 @@ export function GameCard({
             onClick={(e) => { e.stopPropagation(); decrementDistribute(card.id) }}
             disabled={distributeAllocated <= (distributeState?.minPerTarget ?? 0)}
             style={{
-              width: responsive.isMobile ? 20 : 26,
-              height: responsive.isMobile ? 20 : 26,
+              width: responsive.badges.distributeBadgeSize,
+              height: responsive.badges.distributeBadgeSize,
               borderRadius: 4,
               border: 'none',
               backgroundColor: distributeAllocated <= (distributeState?.minPerTarget ?? 0) ? '#333' : '#dc2626',
@@ -1443,8 +2066,8 @@ export function GameCard({
             onClick={(e) => { e.stopPropagation(); incrementDistribute(card.id) }}
             disabled={distributeRemaining <= 0 || distributeAtMax}
             style={{
-              width: responsive.isMobile ? 20 : 26,
-              height: responsive.isMobile ? 20 : 26,
+              width: responsive.badges.distributeBadgeSize,
+              height: responsive.badges.distributeBadgeSize,
               borderRadius: 4,
               border: 'none',
               backgroundColor: (distributeRemaining <= 0 || distributeAtMax) ? '#333' : '#16a34a',
@@ -1463,7 +2086,41 @@ export function GameCard({
         </div>
       )}
 
-      {/* Inline +/- control strip for counter removal (top, so counter badges stay visible) */}
+      {/* "Casting" badge for the spell being cast during cost selection */}
+      {isBeingCast && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: 'rgba(0, 0, 0, 0.45)',
+          borderRadius: 'inherit',
+          zIndex: 15,
+          pointerEvents: 'none',
+        }}>
+          <span style={{
+            backgroundColor: 'rgba(212, 160, 23, 0.9)',
+            color: '#fff',
+            fontSize: responsive.badges.manaCostFontSize,
+            fontWeight: 700,
+            padding: responsive.isMobile ? '2px 6px' : '3px 10px',
+            borderRadius: 4,
+            textTransform: 'uppercase',
+            letterSpacing: 1,
+          }}>
+            Casting
+          </span>
+        </div>
+      )}
+
+      {/* Inline +/- control strip for counter removal (top, so counter badges stay visible).
+       * One row per counter type: single-type creatures get one row; multi-type
+       * creatures (e.g. +1/+1 + stun) get a row per type so the player can pick
+       * exactly which to remove. */}
       {isCounterDistTarget && (
         <div
           onClick={(e) => e.stopPropagation()}
@@ -1473,74 +2130,249 @@ export function GameCard({
             left: 0,
             right: 0,
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 2,
+            flexDirection: 'column',
+            alignItems: 'stretch',
+            gap: 1,
             padding: responsive.isMobile ? '2px 1px' : '3px 2px',
             backgroundColor: 'rgba(0, 0, 0, 0.85)',
             borderBottom: '1px solid rgba(234, 179, 8, 0.5)',
             zIndex: 15,
           }}
         >
-          <button
-            onClick={(e) => { e.stopPropagation(); decrementCounterRemoval(card.id) }}
-            disabled={counterAllocated <= 0}
-            style={{
-              width: responsive.isMobile ? 20 : 26,
-              height: responsive.isMobile ? 20 : 26,
-              borderRadius: 4,
-              border: 'none',
-              backgroundColor: counterAllocated <= 0 ? '#333' : '#dc2626',
-              color: counterAllocated <= 0 ? '#666' : 'white',
-              fontSize: responsive.isMobile ? 14 : 16,
-              fontWeight: 'bold',
-              cursor: counterAllocated <= 0 ? 'not-allowed' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 0,
-            }}
-          >
-            -
-          </button>
-          <span style={{
-            color: '#eab308',
-            fontSize: responsive.isMobile ? 12 : 14,
-            fontWeight: 700,
-            minWidth: responsive.isMobile ? 18 : 24,
-            textAlign: 'center',
-          }}>
-            {counterAllocated}
-          </span>
-          <button
-            onClick={(e) => { e.stopPropagation(); incrementCounterRemoval(card.id) }}
-            disabled={counterAtMax}
-            style={{
-              width: responsive.isMobile ? 20 : 26,
-              height: responsive.isMobile ? 20 : 26,
-              borderRadius: 4,
-              border: 'none',
-              backgroundColor: (counterAtMax) ? '#333' : '#16a34a',
-              color: (counterAtMax) ? '#666' : 'white',
-              fontSize: responsive.isMobile ? 14 : 16,
-              fontWeight: 'bold',
-              cursor: (counterAtMax) ? 'not-allowed' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 0,
-            }}
-          >
-            +
-          </button>
+          {counterRows.map((row) => {
+            const atMax = row.allocated >= row.available
+            const showLabel = counterRows.length > 1
+            return (
+              <div
+                key={row.counterType}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 2,
+                }}
+              >
+                {showLabel && (
+                  <span
+                    style={{
+                      color: '#94a3b8',
+                      fontSize: responsive.isMobile ? 9 : 10,
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                      marginRight: 2,
+                      minWidth: responsive.isMobile ? 22 : 28,
+                      textAlign: 'right',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {row.counterType}
+                  </span>
+                )}
+                <button
+                  onClick={(e) => { e.stopPropagation(); decrementCounterRemoval(card.id, row.counterType) }}
+                  disabled={row.allocated <= 0}
+                  style={{
+                    width: responsive.badges.distributeBadgeSize,
+                    height: responsive.badges.distributeBadgeSize,
+                    borderRadius: 4,
+                    border: 'none',
+                    backgroundColor: row.allocated <= 0 ? '#333' : '#dc2626',
+                    color: row.allocated <= 0 ? '#666' : 'white',
+                    fontSize: responsive.isMobile ? 14 : 16,
+                    fontWeight: 'bold',
+                    cursor: row.allocated <= 0 ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 0,
+                  }}
+                >
+                  -
+                </button>
+                <span style={{
+                  color: '#eab308',
+                  fontSize: responsive.isMobile ? 12 : 14,
+                  fontWeight: 700,
+                  minWidth: responsive.isMobile ? 18 : 24,
+                  textAlign: 'center',
+                }}>
+                  {row.allocated}
+                </span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); incrementCounterRemoval(card.id, row.counterType) }}
+                  disabled={atMax}
+                  style={{
+                    width: responsive.badges.distributeBadgeSize,
+                    height: responsive.badges.distributeBadgeSize,
+                    borderRadius: 4,
+                    border: 'none',
+                    backgroundColor: atMax ? '#333' : '#16a34a',
+                    color: atMax ? '#666' : 'white',
+                    fontSize: responsive.isMobile ? 14 : 16,
+                    fontWeight: 'bold',
+                    cursor: atMax ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 0,
+                  }}
+                >
+                  +
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Behold label — gold ribbon fading in/out while this permanent is pulsing */}
+      {isBeheldPulsing && (
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          padding: '4px 10px',
+          borderRadius: 4,
+          backgroundColor: 'rgba(0, 0, 0, 0.78)',
+          color: '#eab308',
+          fontWeight: 800,
+          fontSize: responsive.isMobile ? 10 : 12,
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          border: '1px solid rgba(234, 179, 8, 0.7)',
+          boxShadow: '0 0 10px rgba(234, 179, 8, 0.6)',
+          pointerEvents: 'none',
+          zIndex: 5,
+          animation: 'beholdLabelFade 300ms ease-out forwards',
+          whiteSpace: 'nowrap',
+        }}>
+          Beheld
         </div>
       )}
     </div>
   )
 
-  // Wrap in container for tapped battlefield cards to prevent overlap
-  if (isTapped && battlefield) {
+  const profilerId = battlefield ? 'GameCard(battlefield)' : inHand ? 'GameCard(hand)' : 'GameCard(other)'
+
+  // Minimalist commander crown — three-point silhouette in a thin wrapper that sits *above* the
+  // card. Lives outside the cardElement because `styles.card` is `overflow: hidden`, which would
+  // clip anything positioned over the top edge. Sized relative to the card so it stays legible
+  // from the small command-zone peek up to a full-size battlefield card.
+  const showCommanderCrown = card.isCommander && !faceDown
+  const commanderCrown = showCommanderCrown ? (() => {
+    const crownWidth = Math.max(14, Math.round(width * 0.18))
+    const crownHeight = Math.round(crownWidth * 0.55)
     return (
+      <div
+        aria-label="Commander"
+        title="Commander"
+        style={{
+          position: 'absolute',
+          top: -crownHeight - 3,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: crownWidth,
+          height: crownHeight,
+          pointerEvents: 'none',
+          zIndex: 6,
+          opacity: 0.9,
+          filter: 'drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.55))',
+        }}
+      >
+        <svg
+          viewBox="0 0 24 13"
+          width="100%"
+          height="100%"
+          preserveAspectRatio="none"
+          fill="#d4af37"
+          stroke="rgba(0, 0, 0, 0.45)"
+          strokeWidth="0.5"
+          strokeLinejoin="round"
+        >
+          {/* Three-point coronet on a thin band: outer points at the corners, taller centre point */}
+          <path d="M1.5 12 L1.5 9 L4.5 5 L8 8 L12 2 L16 8 L19.5 5 L22.5 9 L22.5 12 Z" />
+        </svg>
+      </div>
+    )
+  })() : null
+
+  // "Not Legendary" chip — pinned to a copy whose printed card is legendary but whose
+  // projected type line had the supertype stripped ("except it isn't legendary" copy
+  // effects, e.g. Impostor Syndrome). The printed card art still shows the legendary
+  // frame, so without this chip a player can't tell the token copy isn't subject to
+  // the legend rule. The server sets `nonLegendaryCopy` after comparing the printed
+  // CardDefinition's supertypes to the live CardComponent's supertypes.
+  const showNonLegendaryChip = battlefield && !faceDown && card.nonLegendaryCopy === true
+  const nonLegendaryChip = showNonLegendaryChip ? (() => {
+    const chipHeight = Math.max(10, Math.round(width * 0.12))
+    const crownW = Math.round(chipHeight * 0.95)
+    const crownH = Math.round(chipHeight * 0.55)
+    return (
+      <div
+        aria-label="Not legendary"
+        title={`Not legendary — copy effect stripped the Legendary supertype (${card.typeLine})`}
+        style={{
+          position: 'absolute',
+          top: -Math.round(chipHeight * 0.55),
+          left: '50%',
+          transform: 'translateX(-50%)',
+          height: chipHeight,
+          padding: `0 ${Math.max(4, Math.round(chipHeight * 0.6))}px`,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+          background: 'linear-gradient(135deg, #4a4a4a 0%, #6b6b6b 50%, #4a4a4a 100%)',
+          color: '#f0f0f0',
+          fontSize: Math.max(8, Math.round(chipHeight * 0.62)),
+          fontWeight: 800,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          borderRadius: chipHeight,
+          border: '1px solid rgba(0, 0, 0, 0.55)',
+          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.18)',
+          pointerEvents: 'none',
+          zIndex: 6,
+          whiteSpace: 'nowrap',
+          lineHeight: 1,
+        }}
+      >
+        {/* Crown silhouette with a diagonal strike-through to read "no crown". */}
+        <span style={{ position: 'relative', width: crownW, height: crownH, display: 'inline-block' }} aria-hidden>
+          <svg
+            viewBox="0 0 24 13"
+            width={crownW}
+            height={crownH}
+            preserveAspectRatio="none"
+            fill="rgba(220, 220, 220, 0.55)"
+            stroke="rgba(0, 0, 0, 0.6)"
+            strokeWidth="0.5"
+            strokeLinejoin="round"
+            style={{ position: 'absolute', inset: 0 }}
+          >
+            <path d="M1.5 12 L1.5 9 L4.5 5 L8 8 L12 2 L16 8 L19.5 5 L22.5 9 L22.5 12 Z" />
+          </svg>
+          <svg
+            viewBox="0 0 24 13"
+            width={crownW}
+            height={crownH}
+            preserveAspectRatio="none"
+            style={{ position: 'absolute', inset: 0 }}
+          >
+            <line x1="2" y1="11.5" x2="22" y2="1.5" stroke="#ff6464" strokeWidth="1.4" strokeLinecap="round" />
+          </svg>
+        </span>
+        Not Legendary
+      </div>
+    )
+  })() : null
+
+  // Wrap in container for sideways battlefield cards (tapped permanents and Rooms) to
+  // prevent overlap with neighbours.
+  if (needsLandscapeContainer && battlefield) {
+    return (
+      <RenderProfiler id={profilerId}>
       <div style={{
         width: containerWidth,
         height: containerHeight,
@@ -1549,11 +2381,34 @@ export function GameCard({
         justifyContent: 'center',
         transition: 'width 0.15s, height 0.15s',
         pointerEvents: 'none',
+        position: 'relative',
       }}>
+        {commanderCrown}
+        {nonLegendaryChip}
         {cardElement}
       </div>
+      </RenderProfiler>
     )
   }
 
-  return cardElement
+  // Commander OR non-legendary-copy permanents need a relative-positioned wrapper so the chip
+  // can float above the card without being clipped by the card's `overflow: hidden`.
+  if (showCommanderCrown || nonLegendaryChip) {
+    return (
+      <RenderProfiler id={profilerId}>
+        <div style={{
+          position: 'relative',
+          width,
+          height,
+          pointerEvents: 'none',
+        }}>
+          {commanderCrown}
+          {nonLegendaryChip}
+          {cardElement}
+        </div>
+      </RenderProfiler>
+    )
+  }
+
+  return <RenderProfiler id={profilerId}>{cardElement}</RenderProfiler>
 }
