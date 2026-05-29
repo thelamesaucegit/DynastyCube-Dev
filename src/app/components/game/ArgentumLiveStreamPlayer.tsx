@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { GameBoard } from '@/components/game/GameBoard';
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types';
 import { ResponsiveContext } from '@/components/game/board/shared';
-import { useResponsive } from '@/hooks/useResponsive';
+import { useResponsive, ResponsiveContext } from '@/hooks/useResponsive'; 
 import { SettingsProvider } from '@/contexts/SettingsContext';
 
 interface ArgentumLiveStreamPlayerProps {
@@ -23,7 +23,6 @@ const STREAM_DELAY_MINUTES = 30;
 
 export function ArgentumLiveStreamPlayer({ matchId, initialGameStates, cardDataMap, scheduledMatchDate }: ArgentumLiveStreamPlayerProps) {
     const router = useRouter();
-    const responsiveSizes = useResponsive();
     
     const [currentIndex, setCurrentIndex] = useState(0);
     const [streamStatus, setStreamStatus] = useState<StreamStatus>('waiting');
@@ -90,6 +89,8 @@ export function ArgentumLiveStreamPlayer({ matchId, initialGameStates, cardDataM
     }
 
     const currentSnapshot = initialGameStates[currentIndex];
+        const responsiveSizes = useResponsive(currentSnapshot, 0); 
+
     if (!currentSnapshot || !currentSnapshot.gameState) return null;
 
     const { turnNumber, currentPhase } = currentSnapshot.gameState;
