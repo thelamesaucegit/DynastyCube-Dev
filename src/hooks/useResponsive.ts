@@ -108,7 +108,7 @@ export function useViewportSize(): ViewportSize {
  *
  * @param topOffset - Optional offset to subtract from available height (e.g., spectator header)
  */
-export function useResponsive(snapshot: SpectatorStateUpdate | null, topOffset: number = 0): ResponsiveSizes {
+export function useResponsive(snapshot: SpectatorStateUpdate | null = null, topOffset: number = 0): ResponsiveSizes {
   const { width, height } = useViewportSize();
   
   // Connect to the live game store for card counts if no snapshot is provided
