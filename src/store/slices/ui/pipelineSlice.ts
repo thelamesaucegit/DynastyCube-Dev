@@ -7,17 +7,25 @@
  * current subscriptions.
  */
 import type { SliceCreator, ActionPipelineState, PhaseResult } from '../types'
-import type { CastSpellAction, LegalActionInfo } from '@/types'
+import type { CastSpellAction, EntityId, LegalActionInfo } from '@/types'
 import { computePhases, mergeResult, enterPhase } from './pipelinePhases'
 import type { PipelineStoreMethods } from './pipelinePhases'
-import { parseManaCost as parseManaCostUtil, getRemainingCostSymbols } from '@/utils/manaCost'
+import {
+  parseManaCost as parseManaCostUtil,
+  getRemainingCostSymbols,
+  getRemainingCostAfterConvoke,
+  trimAutoTapPreview,
+} from '@/utils/manaCost'
 
 export interface PipelineSliceState {
   pipelineState: ActionPipelineState | null
 }
 
 export interface PipelineSliceActions {
-  startPipeline: (actionInfo: LegalActionInfo) => void
+  startPipeline: (
+    actionInfo: LegalActionInfo,
+    options?: { forceManualTap?: boolean },
+  ) => void
   advancePipeline: (result: PhaseResult) => void
   cancelPipeline: () => void
 }
@@ -27,8 +35,8 @@ export type PipelineSlice = PipelineSliceState & PipelineSliceActions
 export const createPipelineSlice: SliceCreator<PipelineSlice> = (set, get) => ({
   pipelineState: null,
 
-  startPipeline: (actionInfo) => {
-    const { autoTapEnabled } = get()
+  startPipeline: (actionInfo, options) => {
+    const autoTapEnabled = options?.forceManualTap ? false : get().autoTapEnabled
     const phases = computePhases(actionInfo, { autoTapEnabled })
 
     if (phases.length === 0) {
@@ -69,7 +77,14 @@ export const createPipelineSlice: SliceCreator<PipelineSlice> = (set, get) => ({
     })
 
     const firstPhase = phases[0]!
-    enterPhase(firstPhase, actionInfo, accumulatedAction, getStoreMethods(get))
+    const gameStateForPhase = get().gameState
+    enterPhase(
+      firstPhase,
+      actionInfo,
+      accumulatedAction,
+      getStoreMethods(get),
+      gameStateForPhase ?? undefined,
+    )
     get().selectCard(null)
   },
 
@@ -83,26 +98,76 @@ export const createPipelineSlice: SliceCreator<PipelineSlice> = (set, get) => ({
     // Merge result into accumulated action
     const mergedAction = mergeResult(accumulatedAction, actionInfo, result, gameState)
 
-    // If delve modified the mana cost, update actionInfo for subsequent phases
+    // If delve modified the mana cost, update actionInfo for subsequent phases.
+    // Also trim the server's full-cost autoTapPreview down to the subset needed for
+    // the reduced cost — the engine will re-solve on submit, but this keeps the UI
+    // pre-selection honest about what will actually tap.
     if (result.type === 'delve') {
       const originalSymbols = parseManaCostUtil(actionInfo.manaCostString ?? '')
-      const remainingSymbols = getRemainingCostSymbols(originalSymbols, result.delvedCards.length)
+      // If X was resolved earlier, expand each {X} symbol to its numeric value so
+      // getRemainingCostSymbols can reduce that generic via delve.
+      const xValue =
+        mergedAction.type === 'CastSpell' ? mergedAction.xValue ?? 0 : 0
+      const resolvedSymbols =
+        xValue > 0
+          ? originalSymbols.map((s) => (s === 'X' ? String(xValue) : s))
+          : originalSymbols
+      const remainingSymbols = getRemainingCostSymbols(resolvedSymbols, result.delvedCards.length)
       const modifiedManaCost = remainingSymbols.map((s) => `{${s}}`).join('')
+      const trimmedPreview: readonly EntityId[] | undefined =
+        actionInfo.autoTapPreview && actionInfo.availableManaSources
+          ? trimAutoTapPreview(actionInfo.autoTapPreview, actionInfo.availableManaSources, remainingSymbols)
+          : actionInfo.autoTapPreview
       const {
         hasDelve: _,
         validDelveCards: _2,
         minDelveNeeded: _3,
+        autoTapPreview: _4,
         ...restActionInfo
       } = actionInfo
       actionInfo = {
         ...restActionInfo,
         manaCostString: modifiedManaCost,
+        ...(trimmedPreview !== undefined ? { autoTapPreview: trimmedPreview } : {}),
+        action: mergedAction,
+      }
+    }
+
+    // If convoke modified the mana cost, update actionInfo for subsequent phases.
+    // Trim the preview similarly so the manaSource phase pre-selection reflects the
+    // reduced cost rather than over-selecting based on the original full cost.
+    if (result.type === 'convoke') {
+      const originalSymbols = parseManaCostUtil(actionInfo.manaCostString ?? '')
+      const remainingSymbols = getRemainingCostAfterConvoke(originalSymbols, result.convokedCreatures)
+      const modifiedManaCost = remainingSymbols.map((s) => `{${s}}`).join('')
+      const trimmedPreview: readonly EntityId[] | undefined =
+        actionInfo.autoTapPreview && actionInfo.availableManaSources
+          ? trimAutoTapPreview(actionInfo.autoTapPreview, actionInfo.availableManaSources, remainingSymbols)
+          : actionInfo.autoTapPreview
+      const {
+        hasConvoke: _,
+        validConvokeCreatures: _2,
+        autoTapPreview: _3,
+        ...restActionInfo
+      } = actionInfo
+      actionInfo = {
+        ...restActionInfo,
+        manaCostString: modifiedManaCost,
+        ...(trimmedPreview !== undefined ? { autoTapPreview: trimmedPreview } : {}),
         action: mergedAction,
       }
     }
 
     // Pop current phase
-    const nextPhases = remainingPhases.slice(1)
+    let nextPhases = remainingPhases.slice(1)
+
+    // Dynamic phase injection: when BlightVariable is paid with X > 0, we need
+    // a follow-up battlefield-target step so the player picks which of their
+    // creatures receives the X -1/-1 counters. Inject a costPayment phase that
+    // reuses the existing `Blight`/`BlightVariable` targeting flow.
+    if (result.type === 'blightVariable' && result.blightAmount > 0) {
+      nextPhases = [{ type: 'costPayment' }, ...nextPhases]
+    }
 
     // Dynamic phase injection: damage distribution after targeting with >1 targets
     if (
@@ -155,7 +220,7 @@ export const createPipelineSlice: SliceCreator<PipelineSlice> = (set, get) => ({
     })
 
     const nextPhase = nextPhases[0]!
-    enterPhase(nextPhase, actionInfo, mergedAction, getStoreMethods(get))
+    enterPhase(nextPhase, actionInfo, mergedAction, getStoreMethods(get), gameState)
   },
 
   cancelPipeline: () => {
@@ -163,6 +228,7 @@ export const createPipelineSlice: SliceCreator<PipelineSlice> = (set, get) => ({
       pipelineState: null,
       targetingState: null,
       xSelectionState: null,
+      blightVariableSelectionState: null,
       convokeSelectionState: null,
       delveSelectionState: null,
       manaSelectionState: null,
@@ -177,6 +243,7 @@ function getStoreMethods(get: () => import('../types').GameStore): PipelineStore
   const state = get()
   return {
     startXSelection: state.startXSelection,
+    startBlightVariableSelection: state.startBlightVariableSelection,
     startConvokeSelection: state.startConvokeSelection,
     startDelveSelection: state.startDelveSelection,
     startCounterDistribution: state.startCounterDistribution,
