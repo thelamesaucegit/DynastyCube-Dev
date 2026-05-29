@@ -72,7 +72,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
 export default function ReplayPage() {
     const params = useParams();
     const matchId = params.matchId as string;
-    const responsiveSizes = useResponsive();
+   // const responsiveSizes = useResponsive();
 
    const [data, setData] = useState<{
         gameStates: SpectatorStateUpdate[] | null;
@@ -128,7 +128,7 @@ export default function ReplayPage() {
 
     return (
         <main className="w-full h-screen bg-gray-800">
-            <ResponsiveContext.Provider value={responsiveSizes}>
+            <ResponsiveContext.Provider value={null}>
                 <SettingsProvider>
                     <ArgentumReplayPlayer
                         initialGameStates={data.gameStates}
