@@ -824,7 +824,7 @@ async function triggerOffseason(seasonId: string, isTestSeason: boolean, supabas
 /**
  * Evaluates winners of the current playoff round and builds the next round (or ends season).
  */
-async function advancePlayoffBracket(seasonId: string, isTestSeason: boolean) {
+export async function advancePlayoffBracket(seasonId: string, isTestSeason: boolean) {
     console.log(`[PlayoffGen] 🔄 ADVANCING PLAYOFF BRACKET for Season: ${seasonId}`);
     const supabase = createServiceClient();
     
