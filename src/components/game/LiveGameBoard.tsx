@@ -29,7 +29,7 @@ interface LiveGameBoardProps {
 }
 
 export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
-  const responsive = useResponsive(topOffset);
+const responsive = useResponsive({ topOffset });
   
   const store = useGameStore((state) => state);
   const {
