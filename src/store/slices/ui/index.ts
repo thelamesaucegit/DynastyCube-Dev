@@ -1,3 +1,5 @@
+//src/store/slices/ui/index.ts
+
 /**
  * UI slice composer — merges all UI sub-slices into a single createUISlice.
  *
