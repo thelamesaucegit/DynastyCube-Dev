@@ -192,42 +192,33 @@ export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldest
     }, [snapshot, isOpponent]);
 
 
-    return (
+   return (
         <div style={{
             display: 'flex',
             flexDirection: 'column',
-            gap: '8px', // Reduced gap for mobile
+            gap: '8px',
             padding: '8px',
             width: '100%',
             alignItems: 'center',
         }}>
-            {/* FRONT ROW: Creatures & Planeswalkers (Will still wrap if needed) */}
-            <div
-                data-row="front"
-                style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', width: '100%', order: isOpponent ? 2 : 1 }}
-            >
-                {groupedFrontRow.map((group) => (
-                    <ReplayGroupWithAttachments key={group.cardIds[0]} group={group} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
+            {/* FRONT ROW */}
+            <div data-row="front" style={{ ... }}>
+                {groupedFrontRow?.map((group) => (
+                    <ReplayGroupWithAttachments key={group.cardIds[0]} {...} />
                 ))}
             </div>
             
             {/* BACK ROW - TOP HALF */}
-            <div
-                data-row="back-top"
-                style={{ display: 'flex', flexWrap: 'nowrap', gap: '8px', justifyContent: 'center', width: '100%', order: isOpponent ? 1 : 2 }}
-            >
-                {groupedBackRowTop.map((group) => (
-                    <ReplayGroupWithAttachments key={group.cardIds[0]} group={group} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
+            <div data-row="back-top" style={{ ... }}>
+                {groupedBackRowTop?.map((group) => ( // <-- FIX HERE
+                    <ReplayGroupWithAttachments key={group.cardIds[0]} {...} />
                 ))}
             </div>
 
             {/* BACK ROW - BOTTOM HALF */}
-            <div
-                data-row="back-bottom"
-                style={{ display: 'flex', flexWrap: 'nowrap', gap: '8px', justifyContent: 'center', width: '100%', order: isOpponent ? 0 : 3 }}
-            >
-                {groupedBackRowBottom.map((group) => (
-                    <ReplayGroupWithAttachments key={group.cardIds[0]} group={group} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
+            <div data-row="back-bottom" style={{ ... }}>
+                {groupedBackRowBottom?.map((group) => ( // <-- AND FIX HERE
+                    <ReplayGroupWithAttachments key={group.cardIds[0]} {...} />
                 ))}
             </div>
         </div>
