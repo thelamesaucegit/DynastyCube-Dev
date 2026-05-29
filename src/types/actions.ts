@@ -15,20 +15,20 @@ export type GameAction =
   | ActivateAbilityAction
   | CycleCardAction
   | TypecycleCardAction
+  | PlotCardAction
   | CrewVehicleAction
   | PlayLandAction
   | TurnFaceUpAction
   | DeclareAttackersAction
   | DeclareBlockersAction
   | OrderBlockersAction
-  | MakeChoiceAction
-  | SelectTargetsAction
   | ChooseManaColorAction
   | SubmitDecisionAction
   | TakeMulliganAction
   | KeepHandAction
   | BottomCardsAction
   | ConcedeAction
+  | UnlockRoomDoorAction
 
 // =============================================================================
 // Priority Actions
