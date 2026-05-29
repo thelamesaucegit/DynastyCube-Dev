@@ -108,6 +108,9 @@ export interface ClientCard {
   /** Protection colors (for colored protection shield icons) */
   readonly protections?: readonly Color[]
 
+  /** Hexproof-from-color colors (for colored hexproof shield icons) */
+  readonly hexproofFromColors?: readonly Color[]
+
   /** Counters on the card */
   readonly counters: Partial<Record<CounterType, number>>
 
@@ -115,6 +118,21 @@ export interface ClientCard {
   readonly isTapped: boolean
   readonly hasSummoningSickness: boolean
   readonly isTransformed: boolean
+  /** Phased out (Rule 702.26) — treated as though it doesn't exist; rendered translucent. */
+  readonly isPhasedOut?: boolean
+
+  /** True when this card is a double-faced card (DFC). */
+  readonly isDoubleFaced?: boolean
+  /** For DFCs currently on the battlefield: 'FRONT' or 'BACK'. Null otherwise. */
+  readonly currentFace?: 'FRONT' | 'BACK' | null
+  /** Back face display name for DFCs. */
+  readonly backFaceName?: string | null
+  /** Back face type line for DFCs. */
+  readonly backFaceTypeLine?: string | null
+  /** Back face oracle text for DFCs. */
+  readonly backFaceOracleText?: string | null
+  /** Back face image URI for DFCs. */
+  readonly backFaceImageUri?: string | null
 
   /** Combat state (if in combat) */
   readonly isAttacking: boolean
@@ -131,6 +149,13 @@ export interface ClientCard {
   /** Whether this is a token */
   readonly isToken: boolean
 
+  /**
+   * True when this card is a designated commander (Commander format). Set in every zone — hand,
+   * stack, battlefield, command — so the UI can keep the crown / gold border on the card after
+   * it's cast. Token copies of a commander never carry this (CR 903.10a).
+   */
+  readonly isCommander?: boolean
+
   /** Zone this card is currently in */
   readonly zone: ZoneId | null
 
@@ -145,6 +170,9 @@ export interface ClientCard {
 
   /** Whether this card is face-down (for morph, manifest, hidden info) */
   readonly isFaceDown: boolean
+
+  /** Whether this permanent is suspected (CR 701.60 — has menace and can't block). Battlefield only. */
+  readonly isSuspected?: boolean
 
   /** Morph cost for face-down creatures (only visible to controller) */
   readonly morphCost?: string | null
@@ -164,14 +192,32 @@ export interface ClientCard {
   /** Whether this spell was kicked (only present on stack) */
   readonly wasKicked?: boolean
 
+  /** Whether this spell promised a gift (Bloomburrow gift mechanic — only present on stack) */
+  readonly giftPromised?: boolean
+
+  /** Whether this spell's optional Blight additional cost was paid (Lorwyn Eclipsed — only present on stack) */
+  readonly wasBlightPaid?: boolean
+
   /** Chosen X value for spells with X in their cost (only present on stack) */
   readonly chosenX?: number | null
+
+  /** Copy index for storm/copy effects on the stack (1, 2, 3...) */
+  readonly copyIndex?: number | null
+
+  /** Total number of copies for storm/copy effects on the stack */
+  readonly copyTotal?: number | null
 
   /** Chosen creature type for "as enters, choose a creature type" permanents (e.g., Doom Cannon) */
   readonly chosenCreatureType?: string | null
 
   /** Chosen color for "as enters, choose a color" permanents (e.g., Riptide Replicator) */
   readonly chosenColor?: string | null
+
+  /**
+   * Chosen mode label for "as enters, choose X or Y" permanents (e.g., the Siege cycle).
+   * Rendered as a badge on the permanent so the player can see which mode is active.
+   */
+  readonly chosenMode?: string | null
 
   /** Triggering entity ID for triggered abilities on the stack (for source arrows) */
   readonly triggeringEntityId?: EntityId | null
@@ -185,6 +231,19 @@ export interface ClientCard {
   /** Specific ability text when on the stack (e.g., spell effect description, not full oracle text) */
   readonly stackText?: string | null
 
+  /**
+   * Runtime descriptions of each chosen mode, in the order they were picked (rule 700.2).
+   * Empty for non-modal spells and for modal spells whose mode hasn't been selected yet.
+   * For opponent visibility of choose-N commands (Brigid's Command, Sygg's Command, etc.).
+   */
+  readonly chosenModeDescriptions?: readonly string[]
+
+  /**
+   * Per-mode target groups for modal spells on the stack, aligned 1:1 with `chosenModeDescriptions`.
+   * Each group carries the mode description, chosen targets (for arrows), and human-readable target names.
+   */
+  readonly perModeTargets?: readonly ClientPerModeTargetGroup[]
+
   /** Revealed name for face-down creatures that this player has peeked at (e.g., via Spy Network) */
   readonly revealedName?: string | null
 
@@ -197,6 +256,14 @@ export interface ClientCard {
   /** Original card name when this permanent is a copy (e.g., "Clever Impersonator") */
   readonly copyOf?: string | null
 
+  /**
+   * True when the printed card is legendary but this permanent's projected type line is not —
+   * a copy effect explicitly stripped legendariness ("except it isn't legendary" /
+   * Impostor Syndrome). The UI badges this so a non-legendary token copy of a legendary
+   * creature is visually distinguishable from the original.
+   */
+  readonly nonLegendaryCopy?: boolean
+
   /** Damage distribution for DividedDamageEffect spells on the stack (target entity ID -> damage amount) */
   readonly damageDistribution?: Record<EntityId, number> | null
 
@@ -208,6 +275,36 @@ export interface ClientCard {
 
   /** For Class enchantments: the maximum class level (e.g., 3). Null for non-Classes. */
   readonly classMaxLevel?: number | null
+
+  /**
+   * Threshold-style progress: present on cards whose static ability turns on at a
+   * graveyard-size milestone (e.g. classic Threshold = 7+). Lets the UI render a badge
+   * showing current/required graveyard count for the card's controller.
+   */
+  readonly thresholdInfo?: {
+    readonly current: number
+    readonly required: number
+    readonly active: boolean
+  } | null
+
+  /**
+   * For planeswalkers on the battlefield: the complete set of loyalty abilities,
+   * in declaration order. The UI renders the full list and grays out any ability
+   * whose `abilityId` isn't present in the legal actions for this card.
+   */
+  readonly planeswalkerAbilities?: readonly ClientPlaneswalkerAbility[] | null
+
+  /** True if this is a split-layout Room (CR 709.5). Drives split-card rendering + lock UI. */
+  readonly isRoom?: boolean
+
+  /**
+   * For split-layout cards (currently Rooms): one entry per face. `isUnlocked` reflects the live
+   * door state on the battlefield; in other zones it's always false.
+   */
+  readonly cardFaces?: readonly ClientCardFace[]
+
+  /** For Rooms on the stack: index into `cardFaces` of the face that was cast. */
+  readonly castFaceIndex?: number | null
 }
 
 /**
