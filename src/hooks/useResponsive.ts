@@ -1,8 +1,10 @@
 //src/hooks/useResponsive.ts
 
 import React, { useState, useEffect, useMemo, createContext } from 'react';
-import type { SpectatorStateUpdate, ClientCard } from '@/types'; // <-- Add this line
-import { battlefield, entityId, zoneIdEquals } from '@/types';     // <-- Add this line
+import type { SpectatorStateUpdate, ClientCard } from '@/types'; 
+import { battlefield, entityId, zoneIdEquals } from '@/types';    
+import { useGameStore } from '@/store/gameStore'; 
+import { ZoneType } from '@/types/enums';  
 
 export interface ViewportSize {
   width: number
@@ -107,7 +109,13 @@ export function useViewportSize(): ViewportSize {
  * @param topOffset - Optional offset to subtract from available height (e.g., spectator header)
  */
 export function useResponsive(snapshot: SpectatorStateUpdate | null, topOffset: number = 0): ResponsiveSizes {
-  const { width, height } = useViewportSize()
+  const { width, height } = useViewportSize();
+  
+  // Connect to the live game store for card counts if no snapshot is provided
+  const liveZones = useGameStore((state) => state.zones);
+  const liveCards = useGameStore((state) => state.cards);
+  const myId = useGameStore((state) => state.myId);
+  const opponentId = useGameStore((state) => state.opponentId);
 
   return useMemo(() => {
     // =========================================================================
@@ -145,28 +153,33 @@ export function useResponsive(snapshot: SpectatorStateUpdate | null, topOffset: 
     const heightScale = Math.min(1, maxBattlefieldWidthFromHeight / baseBattlefieldCardWidth)
 
     // =========================================================================
-    // NEW: Width Scale Calculation (Horizontal Scaling)
+    // UNIVERSAL Width Scale Calculation (Works for Live & Replay)
     // =========================================================================
     let widthScale = 1;
-    if (snapshot && isMobile) { // Only apply dynamic width scaling on mobile for now
+    if (isMobile) {
         const getPlayerCardCounts = (playerId: EntityId) => {
-            const targetZoneId = battlefield(entityId(playerId));
-            const zone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, targetZoneId));
-            const allCards = zone ? zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) as ClientCard[] : [];
-            const independent = allCards.filter(c => !c.attachedTo);
-            
-            const front = independent.filter(c => c.cardTypes.includes('Creature') || c.cardTypes.includes('Planeswalker'));
-            const back = independent.filter(c => !c.cardTypes.includes('Creature') && !c.cardTypes.includes('Planeswalker'));
-            
-            return {
-                frontRow: front.length,
-                backRowTop: Math.ceil(back.length / 2),
-                backRowBottom: Math.floor(back.length / 2),
-            };
+            if (snapshot) {
+                // --- REPLAY MODE ---
+                const targetZoneId = battlefield(entityId(playerId));
+                const zone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, targetZoneId));
+                const allCards = zone ? zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) as ClientCard[] : [];
+                const independent = allCards.filter(c => !c.attachedTo);
+                const front = independent.filter(c => c.cardTypes.includes('Creature') || c.cardTypes.includes('Planeswalker'));
+                const back = independent.filter(c => !c.cardTypes.includes('Creature') && !c.cardTypes.includes('Planeswalker'));
+                return { frontRow: front.length, backRowTop: Math.ceil(back.length / 2), backRowBottom: Math.floor(back.length / 2) };
+            } else {
+                // --- LIVE GAME MODE ---
+                const zone = liveZones.find(z => z.zoneId.zoneType === ZoneType.Battlefield && z.zoneId.ownerId === playerId);
+                const allCards = zone ? zone.cardIds.map(id => liveCards[id]).filter(Boolean) : [];
+                const independent = allCards.filter(c => !c.attachedTo);
+                const front = independent.filter(c => c.cardTypes.includes('Creature') || c.cardTypes.includes('Planeswalker'));
+                const back = independent.filter(c => !c.cardTypes.includes('Creature') && !c.cardTypes.includes('Planeswalker'));
+                return { frontRow: front.length, backRowTop: Math.ceil(back.length / 2), backRowBottom: Math.floor(back.length / 2) };
+            }
         };
 
-        const p1Counts = getPlayerCardCounts(snapshot.player1Id);
-        const p2Counts = getPlayerCardCounts(snapshot.player2Id);
+        const p1Counts = getPlayerCardCounts(snapshot ? snapshot.player1Id : myId);
+        const p2Counts = getPlayerCardCounts(snapshot ? snapshot.player2Id : opponentId);
         
         const maxCardsInAnyRow = Math.max(
             p1Counts.frontRow, p1Counts.backRowTop, p1Counts.backRowBottom,
@@ -178,10 +191,7 @@ export function useResponsive(snapshot: SpectatorStateUpdate | null, topOffset: 
         const calculatedWidth = calculateFittingCardWidth(maxCardsInAnyRow, availableWidth, cardGap, baseBattlefieldCardWidth, 40);
         widthScale = calculatedWidth / baseBattlefieldCardWidth;
     }
-
-    // =========================================================================
-    // Final Scale Factor (Take the smaller of the two scales)
-    // =========================================================================
+    
     const finalScale = Math.min(heightScale, widthScale);
 
     // =========================================================================
