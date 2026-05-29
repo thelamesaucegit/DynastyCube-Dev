@@ -1,4 +1,4 @@
-// web-client/src/components/ui/ActionMenu.tsx
+//src/components/ui/ActionMenu.tsx
 
 import { useEffect, useCallback, useMemo, useState } from 'react'
 import { useGameStore } from '@/store/gameStore.ts'
