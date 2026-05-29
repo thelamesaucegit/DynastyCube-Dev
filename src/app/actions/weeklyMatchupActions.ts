@@ -2,8 +2,7 @@
 
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
-import { createServerClient } from "@/lib/supabase";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js"; // <-- ADD SupabaseClient
 import { logSystemEvent } from "@/lib/systemLogger"; 
 
 
@@ -577,7 +576,7 @@ export async function getSeasonStandingsFromStats(
 export async function getHeadToHeadHistory(
     teamId: string,
     opponentId: string,
-    options?: { seasonId?: string; includePlayoffs?: boolean }
+    options?: { seasonId?: string}
 ): Promise<{
     records: (HeadToHeadRecord & { week_number: number; season_id: string })[];
     totals: {
@@ -602,9 +601,9 @@ export async function getHeadToHeadHistory(
     if (options?.seasonId) {
         query = query.eq('season_id', options.seasonId);
     }
-    if (!options?.includePlayoffs) {
-        query = query.eq('is_playoff', false);
-    }
+   // if (!options?.includePlayoffs) {
+   //     query = query.eq('is_playoff', false);
+ //   }
 
     const { data, error } = await query;
     if (error) return { records: [], totals: { sim_wins: 0, sim_losses: 0, sim_draws: 0, pvp_wins: 0, pvp_losses: 0, pvp_draws: 0, weekly_wins: 0, weekly_losses: 0, weekly_draws: 0 }, error: error.message };
@@ -791,7 +790,7 @@ async function generateInitialPlayoffBracket(seasonId: string, isTestSeason: boo
 }
 
 
-async function triggerOffseason(seasonId: string, isTestSeason: boolean, supabase: any) {
+async function triggerOffseason(seasonId: string, isTestSeason: boolean, supabase: SupabaseClient) {
     console.log(`[AUTOMATION] 👑 Championship Concluded! Triggering Offseason for Season: ${seasonId}`);
     await logSystemEvent("SeasonEnd", "info", `Championship concluded. Starting offseason timer for season ${seasonId}.`);
 
