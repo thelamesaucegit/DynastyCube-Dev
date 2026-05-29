@@ -106,7 +106,7 @@ export default function HomePage() {
       const diff = now - broadcastTime;
       
       if (diff > 0) {
-        const ticksPassed = Math.floor(diff / 750);
+        const ticksPassed = Math.floor(diff / 3000);
         
         if (ticksPassed < liveMatch.life_timeline.length) {
            const [t1, t2] = liveMatch.life_timeline[ticksPassed];
