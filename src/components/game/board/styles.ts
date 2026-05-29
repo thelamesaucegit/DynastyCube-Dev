@@ -1,5 +1,3 @@
-//src/components/game/board/styles.ts
-
 import React from 'react'
 import { TARGET_COLOR, TARGET_COLOR_BRIGHT } from '../../../styles/targetingColors'
 
@@ -10,33 +8,40 @@ export const styles: Record<string, React.CSSProperties> = {
     left: 0,
     right: 0,
     bottom: 0,
-    display: 'flex',
-    flexDirection: 'column',
+    // Five-row grid (template provided inline in GameBoard.tsx since rows 1
+    // and 5 are sized from responsive values):
+    //   1. opp-hand reservation     (px — keeps battlefield clear of fixed hand)
+    //   2. opp-board                (1fr — equal to row 4)
+    //   3. center HUD               (auto — uncrossable partition)
+    //   4. player-board             (1fr — equal to row 2)
+    //   5. player-hand reservation  (px — keeps battlefield clear of fixed hand)
+    // Equal 1fr battlefield rows mean both players get the same card size
+    // via useSlotSizedResponsive, regardless of asymmetric hand sizes.
+    display: 'grid',
+    gridTemplateColumns: '100%',
     backgroundColor: '#0a0a15',
     overflow: 'hidden',
   },
   opponentArea: {
+    gridRow: 2,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    flexShrink: 1,
-    flexGrow: 0,
     minHeight: 0,
-    maxHeight: '36vh',
-    marginBottom: 8,
-    paddingBottom: 8,
-    position: 'relative', 
-    width: '100%', // Ensure it takes full width to center the hand correctly
- 
+    overflow: 'hidden',
   },
   centerArea: {
-    display: 'flex',
-    justifyContent: 'center',
+    // 3-column grid so the step strip stays anchored to the viewport center
+    // regardless of how wide each player's name label is. Without this, an
+    // asymmetric name (e.g. long opponent name, short own name) pushes the
+    // strip off-center because flex + justify-content: center centers the
+    // combined bounding box, not the middle item.
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
     alignItems: 'center',
     padding: '2px 8px',
-    flex: 1,
-    gap: 16,
+    columnGap: 16,
     width: '100%',
     overflow: 'hidden',
   },
@@ -44,6 +49,13 @@ export const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: 6,
+    minWidth: 0,
+  },
+  centerLifeSectionLeft: {
+    justifyContent: 'flex-end',
+  },
+  centerLifeSectionRight: {
+    justifyContent: 'flex-start',
   },
   playerNameWithLabel: {
     display: 'flex',
@@ -76,24 +88,6 @@ export const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1,
     border: '1px solid #555',
   },
-   restoreButtonStyle: { 
-    position: 'fixed', 
-    bottom: 70, 
-    left: '50%', 
-    transform: 'translateX(-50%)', 
-    padding: '12px 24px', 
-    fontSize: 14, 
-    color: 'white', 
-    border: 'none', 
-    borderRadius: 8, 
-    cursor: 'pointer', 
-    fontWeight: 600, 
-    boxShadow: '0 4px 12px rgba(0,0,0,0.4)', 
-    zIndex: 100, 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: 8 
-  },
   combatButtonContainer: {
     position: 'fixed',
     bottom: 16,
@@ -122,27 +116,22 @@ export const styles: Record<string, React.CSSProperties> = {
   },
 
   playerArea: {
+    gridRow: 4,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    flexShrink: 1,
-    flexGrow: 0,
     minHeight: 0,
-    maxHeight: '46vh',
-    marginTop: 'auto',
-    paddingBottom: 0,
-    position: 'relative', 
-    width: '100%', // Ensure it takes full width to center the hand correctly
- 
+    overflow: 'hidden',
   },
   playerRowWithZones: {
     display: 'flex',
     alignItems: 'center',
-    gap: 8,
+    gap: 32,
     width: '100%',
     justifyContent: 'center',
     minHeight: 0,
+    flex: 1,
   },
   playerMainArea: {
     display: 'flex',
@@ -153,6 +142,7 @@ export const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     minWidth: 0,
     minHeight: 0,
+    alignSelf: 'stretch',
   },
   zonePile: {
     display: 'flex',
@@ -304,6 +294,52 @@ export const styles: Record<string, React.CSSProperties> = {
     overflowY: 'auto',
     justifyContent: 'center',
   } as React.CSSProperties,
+  libraryOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 10, 30, 0.9)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2000,
+  } as React.CSSProperties,
+  libraryBrowserContent: {
+    maxWidth: '90vw',
+    maxHeight: '80vh',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 16,
+  } as React.CSSProperties,
+  libraryBrowserHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  } as React.CSSProperties,
+  libraryBrowserTitle: {
+    color: '#bfdbfe',
+    margin: 0,
+    fontSize: 18,
+    fontWeight: 600,
+  } as React.CSSProperties,
+  libraryCloseButton: {
+    background: 'none',
+    border: '1px solid #1e40af',
+    color: '#bfdbfe',
+    fontSize: 18,
+    cursor: 'pointer',
+    padding: '4px 10px',
+    borderRadius: 4,
+  } as React.CSSProperties,
+  libraryCardGrid: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 10,
+    overflowY: 'auto',
+    justifyContent: 'center',
+  } as React.CSSProperties,
   playerInfo: {
     display: 'flex',
     alignItems: 'center',
@@ -363,7 +399,7 @@ export const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     alignItems: 'center',
     width: '100%',
-    flexShrink: 1,
+    flex: 1,
     minHeight: 0,
   },
   battlefieldRow: {
@@ -705,7 +741,7 @@ export const styles: Record<string, React.CSSProperties> = {
   stackItemName: {
     color: '#ccc',
     marginTop: 4,
-    maxWidth: 80,
+    maxWidth: 100,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -729,6 +765,54 @@ export const styles: Record<string, React.CSSProperties> = {
     top: 4,
     left: 4,
     backgroundColor: 'rgba(200, 120, 0, 0.95)',
+    color: 'white',
+    padding: '2px 5px',
+    borderRadius: 4,
+    fontSize: 9,
+    fontWeight: 700,
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.5)',
+    zIndex: 10,
+    letterSpacing: 0.5,
+  } as React.CSSProperties,
+  stackGiftBadge: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(190, 60, 140, 0.95)',
+    color: 'white',
+    padding: '2px 6px',
+    borderRadius: 4,
+    fontSize: 9,
+    fontWeight: 700,
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.5)',
+    zIndex: 10,
+    letterSpacing: 0.5,
+  } as React.CSSProperties,
+  stackBlightPaidBadge: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(120, 30, 30, 0.95)',
+    color: 'white',
+    padding: '2px 6px',
+    borderRadius: 4,
+    fontSize: 9,
+    fontWeight: 700,
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.5)',
+    zIndex: 10,
+    letterSpacing: 0.5,
+  } as React.CSSProperties,
+  stackCopyBadge: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    backgroundColor: 'rgba(30, 100, 220, 0.95)',
     color: 'white',
     padding: '2px 5px',
     borderRadius: 4,
@@ -1028,6 +1112,130 @@ export const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     zIndex: 5,
   } as React.CSSProperties,
+  // Flood counter badge (for Eluge, the Shoreless Sea etc.)
+  floodCounterBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(20, 60, 100, 0.95)',
+    borderRadius: 4,
+    border: '1px solid rgba(80, 160, 220, 0.6)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 2,
+    color: '#60b8e0',
+    fontWeight: 700,
+    zIndex: 5,
+  } as React.CSSProperties,
+  // Coin counter badge (for Wishing Well etc.)
+  coinCounterBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(80, 60, 10, 0.95)',
+    borderRadius: 4,
+    border: '1px solid rgba(220, 180, 60, 0.7)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 2,
+    color: '#ffd966',
+    fontWeight: 700,
+    zIndex: 5,
+  } as React.CSSProperties,
+  // Chorus counter badge (for Malcolm, Alluring Scoundrel etc.)
+  chorusCounterBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(70, 30, 90, 0.95)',
+    borderRadius: 4,
+    border: '1px solid rgba(190, 120, 220, 0.6)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 2,
+    color: '#e0b8ff',
+    fontWeight: 700,
+    zIndex: 5,
+  } as React.CSSProperties,
+  // Growth counter badge (for Simic Ascendancy — 20 = win)
+  growthCounterBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(20, 60, 50, 0.95)',
+    borderRadius: 4,
+    border: '1px solid rgba(120, 220, 180, 0.7)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 2,
+    color: '#a0e8c8',
+    fontWeight: 700,
+    zIndex: 5,
+    textShadow: '0 0 4px rgba(120, 220, 180, 0.8)',
+  } as React.CSSProperties,
+  // Time counter badge (Impending — counts down to becoming a creature)
+  timeCounterBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(40, 30, 70, 0.95)',
+    borderRadius: 4,
+    border: '1px solid rgba(170, 140, 230, 0.7)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 2,
+    color: '#cbb6f0',
+    fontWeight: 700,
+    zIndex: 5,
+    textShadow: '0 0 4px rgba(170, 140, 230, 0.8)',
+  } as React.CSSProperties,
+  // Feather counter badge (Soulcatchers' Aerie)
+  featherCounterBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(45, 50, 65, 0.95)',
+    borderRadius: 4,
+    border: '1px solid rgba(200, 210, 230, 0.7)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 2,
+    color: '#dfe6f0',
+    fontWeight: 700,
+    zIndex: 5,
+    textShadow: '0 0 4px rgba(200, 210, 230, 0.8)',
+  } as React.CSSProperties,
+  // Quest counter badge (for Beastmaster Ascension etc.)
+  questCounterBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(50, 70, 30, 0.95)',
+    borderRadius: 4,
+    border: '1px solid rgba(180, 200, 100, 0.6)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 2,
+    color: '#d8e8a0',
+    fontWeight: 700,
+    zIndex: 5,
+  } as React.CSSProperties,
+  // Dream counter badge (for Goliath Daydreamer's exiled instants/sorceries)
+  dreamCounterBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(40, 20, 80, 0.95)',
+    borderRadius: 4,
+    border: '1px solid rgba(160, 140, 240, 0.7)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 2,
+    color: '#c8b8ff',
+    fontWeight: 700,
+    zIndex: 5,
+    textShadow: '0 0 4px rgba(160, 140, 240, 0.8)',
+  } as React.CSSProperties,
   // Blight counter badge (for Rottenmouth Viper etc.)
   blightCounterBadge: {
     position: 'absolute',
@@ -1054,6 +1262,34 @@ export const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: 2,
     color: '#80c8ff',
+    fontWeight: 700,
+    zIndex: 5,
+  } as React.CSSProperties,
+  firstStrikeCounterBadge: {
+    position: 'absolute',
+    top: 32,
+    right: 4,
+    backgroundColor: 'rgba(120, 40, 30, 0.95)',
+    borderRadius: 4,
+    border: '1px solid rgba(220, 160, 90, 0.6)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 2,
+    color: '#f0c080',
+    fontWeight: 700,
+    zIndex: 5,
+  } as React.CSSProperties,
+  lifelinkCounterBadge: {
+    position: 'absolute',
+    top: 60,
+    right: 4,
+    backgroundColor: 'rgba(110, 70, 30, 0.95)',
+    borderRadius: 4,
+    border: '1px solid rgba(240, 220, 160, 0.6)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 2,
+    color: '#ffe8a0',
     fontWeight: 700,
     zIndex: 5,
   } as React.CSSProperties,
@@ -1201,4 +1437,87 @@ export const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     fontFamily: 'monospace',
   } as React.CSSProperties,
+  cardPreviewOracleText: {
+    backgroundColor: 'rgba(0, 0, 0, 0.88)',
+    padding: '10px 12px',
+    borderRadius: 8,
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    color: '#dddddd',
+    fontSize: 13,
+    lineHeight: 1.5,
+    maxHeight: 160,
+    overflowY: 'auto',
+    whiteSpace: 'pre-wrap',
+  } as React.CSSProperties,
+  cardPreviewManaCost: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    padding: '6px 12px',
+    borderRadius: 8,
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    fontSize: 16,
+  } as React.CSSProperties,
+  cardPreviewTypeLine: {
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    padding: '5px 12px',
+    borderRadius: 8,
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    color: '#bbbbbb',
+    fontSize: 12,
+    textAlign: 'center',
+    fontWeight: 500,
+  } as React.CSSProperties,
+  cardPreviewDamageRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    fontSize: 12,
+    color: '#ff4444',
+  } as React.CSSProperties,
+  // Banding (CR 702.22): band-membership badge rendered top-left of attackers that
+  // are part of a declared band. Color comes from BAND_COLORS, indexed by the band's
+  // position in CombatState.bands. Pointer-events disabled so it doesn't interfere
+  // with card interactions; the band is cleared by deselecting a member attacker.
+  bandBadge: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    borderRadius: 4,
+    padding: '1px 5px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 3,
+    fontWeight: 700,
+    fontSize: 10,
+    color: '#fff',
+    textShadow: '0 1px 2px rgba(0, 0, 0, 0.8)',
+    pointerEvents: 'none',
+    zIndex: 6,
+  } as React.CSSProperties,
+}
+
+/**
+ * Per-band visual color palette. Each band declared in declare-attackers mode picks
+ * the next color in order; the ring + badge on every banded creature use the same
+ * shade so the grouping is obvious at a glance.
+ */
+export const BAND_COLORS: ReadonlyArray<{
+  readonly base: string
+  readonly border: string
+  readonly glow: string
+  readonly chipBg: string
+}> = [
+  { base: '#7b1fa2', border: '#ce93d8', glow: 'rgba(186, 104, 200, 0.7)', chipBg: '#6a1b9a' }, // purple
+  { base: '#00838f', border: '#80deea', glow: 'rgba(38, 198, 218, 0.7)',  chipBg: '#006064' }, // teal
+  { base: '#ef6c00', border: '#ffb74d', glow: 'rgba(255, 152, 0, 0.7)',   chipBg: '#e65100' }, // orange
+  { base: '#558b2f', border: '#aed581', glow: 'rgba(124, 179, 66, 0.7)',  chipBg: '#33691e' }, // green
+  { base: '#ad1457', border: '#f48fb1', glow: 'rgba(236, 64, 122, 0.7)',  chipBg: '#880e4f' }, // pink
+  { base: '#283593', border: '#9fa8da', glow: 'rgba(92, 107, 192, 0.7)',  chipBg: '#1a237e' }, // indigo
+]
+
+export function bandColorFor(index: number): typeof BAND_COLORS[number] {
+  return BAND_COLORS[index % BAND_COLORS.length]!
 }
