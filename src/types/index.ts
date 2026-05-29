@@ -1,5 +1,3 @@
-//src/types/index.ts
-
 // Enums
 export {
   Phase,
@@ -52,15 +50,17 @@ export type {
   ClientZone,
   ClientPlayer,
   ClientPlayerEffect,
+  ClientCommanderDamage,
   ClientCardEffect,
   ClientRuling,
   ClientManaPool,
+  ClientRestrictedManaEntry,
   ClientCombatState,
   ClientAttacker,
   ClientCombatTarget,
   ClientBlocker,
   ClientChosenTarget,
-  PlayerTheme
+  ClientPerModeTargetGroup,
 } from './gameState'
 export {
   totalMana,
@@ -127,8 +127,6 @@ export type {
   DeclareAttackersAction,
   DeclareBlockersAction,
   OrderBlockersAction,
-  MakeChoiceAction,
-  SelectTargetsAction,
   ChooseManaColorAction,
   SubmitDecisionAction,
   TakeMulliganAction,
@@ -168,6 +166,8 @@ export type {
   ConnectMessage,
   CreateGameMessage,
   JoinGameMessage,
+  DeckEntry,
+  PrintingRef,
   SubmitActionMessage,
   KeepHandMessage,
   MulliganMessage,
@@ -191,14 +191,25 @@ export type {
   OrderObjectsDecision,
   ChooseNumberDecision,
   ChooseOptionDecision,
+  ChooseReplacementDecision,
+  OptionMetadata,
   BudgetModalDecision,
   BudgetModeOption,
   DistributeDecision,
   AssignDamageDecision,
+  CombatResolutionDecision,
+  DamageEdge,
+  DamageEdgeDirection,
+  ResolutionAttacker,
+  ResolutionBlocker,
+  ResolutionDefender,
+  ResolutionTargetKind,
   ChooseColorDecision,
   ManaSourceOption,
   SelectManaSourcesDecision,
   SplitPilesDecision,
+  // Set types
+  AvailableSet,
   // Sealed Draft types
   SealedCardInfo,
   SealedGameCreatedMessage,
@@ -212,6 +223,8 @@ export type {
   // Reconnect types
   ReconnectedMessage,
   // Lobby types
+  TournamentFormat,
+  CommanderPreset,
   LobbyPlayerInfo,
   LobbySettings,
   LobbyCreatedMessage,
@@ -258,6 +271,7 @@ export type {
   SpectatorDecisionStatus,
   SpectatingStartedMessage,
   SpectatingStoppedMessage,
+  SpectatorCountChangedMessage,
   SpectateGameMessage,
   StopSpectatingMessage,
   // Combat UI types
@@ -278,6 +292,20 @@ export type {
   SetStopOverridesMessage,
   StopOverrideInfo,
   PriorityModeValue,
+  // Quick Game Lobby types
+  QuickGameLobbyPlayerView,
+  QuickGameLobbyStateMessage,
+  QuickGameLobbyClosedMessage,
+  CreateQuickGameLobbyMessage,
+  JoinQuickGameLobbyMessage,
+  LeaveQuickGameLobbyMessage,
+  SubmitQuickGameLobbyDeckMessage,
+  SetQuickGameLobbyReadyMessage,
+  SetQuickGameLobbySetCodeMessage,
+  SetQuickGameLobbyPublicMessage,
+  SetQuickGameLobbyFormatMessage,
+  OnlinePlayersCountMessage,
+  DeckFormat,
 } from './messages'
 export {
   isConnectedMessage,
@@ -369,12 +397,15 @@ export {
   createSetStopOverridesMessage,
   createRequestUndoMessage,
   createRequestResyncMessage,
+  // Quick Game Lobby factories & guards
+  createCreateQuickGameLobbyMessage,
+  createJoinQuickGameLobbyMessage,
+  createLeaveQuickGameLobbyMessage,
+  createSubmitQuickGameLobbyDeckMessage,
+  createSetQuickGameLobbyReadyMessage,
+  createSetQuickGameLobbySetCodeMessage,
+  createSetQuickGameLobbyPublicMessage,
+  createSetQuickGameLobbyFormatMessage,
+  isQuickGameLobbyStateMessage,
+  isQuickGameLobbyClosedMessage,
 } from './messages'
-
-export type {
-  SpectatorStateUpdate,
-  Team,
-  ReplayCardData,
-  SpectatorStateDiff,
-  ReplayStateItem,
-} from './replay-types'
