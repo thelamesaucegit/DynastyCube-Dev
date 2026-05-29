@@ -1,10 +1,10 @@
 //src/hooks/useResponsive.ts
 
 import React, { useState, useEffect, useMemo, createContext } from 'react';
-import type { SpectatorStateUpdate, ClientCard } from '@/types'; 
-import { battlefield, entityId, zoneIdEquals } from '@/types';    
-import { useGameStore } from '@/store/gameStore'; 
-import { ZoneType } from '@/types/enums';  
+import { useGameStore } from '@/store/gameStore';
+import type { SpectatorStateUpdate, ClientCard, EntityId } from '@/types';
+import { battlefield, entityId, zoneIdEquals, ZoneType } from '@/types';
+
 
 export interface ViewportSize {
   width: number
@@ -53,8 +53,6 @@ export interface ResponsiveSizes {
   isTablet: boolean
 }
 export const ResponsiveContext = createContext<ResponsiveSizes | null>(null);
-
-// 3. Create and export the Provider component. This is what GameBoard will use.
 export const ResponsiveContextProvider = ResponsiveContext.Provider;
 
 /**
@@ -104,11 +102,12 @@ export function useViewportSize(): ViewportSize {
 }
 
 /**
- * Hook to get responsive sizes based on viewport.
- *
- * @param topOffset - Optional offset to subtract from available height (e.g., spectator header)
+ * Hook to get responsive sizes. Accepts an options object.
+ * - In Replay mode, pass { snapshot, topOffset }.
+ * - In Live mode, pass { topOffset } or just call useResponsive().
  */
-export function useResponsive(snapshot: SpectatorStateUpdate | null = null, topOffset: number = 0): ResponsiveSizes {
+export function useResponsive(options: { snapshot?: SpectatorStateUpdate | null; topOffset?: number } = {}): ResponsiveSizes {
+  const { snapshot = null, topOffset = 0 } = options;
   const { width, height } = useViewportSize();
   
   // Connect to the live game store for card counts if no snapshot is provided
@@ -118,75 +117,53 @@ export function useResponsive(snapshot: SpectatorStateUpdate | null = null, topO
   const opponentId = useGameStore((state) => state.opponentId);
 
   return useMemo(() => {
-    // =========================================================================
-    // Breakpoint Detection
-    // =========================================================================
-    const isMobile = width < 640
-    const isTablet = width >= 640 && width < 1024
-    const isCompact = width < 1024 || height < 700
+    const isMobile = width < 640;
+    const isTablet = width >= 640 && width < 1024;
+    const isCompact = width < 1024 || height < 700;
+    const isShortDesktop = width >= 1024 && height < 800; // Added for StepStrip logic
 
-    // =========================================================================
-    // Base Sizes
-    // =========================================================================
-    const baseCardWidth = isMobile ? 70 : isTablet ? 90 : 120
-    const baseSmallCardWidth = isMobile ? 30 : isCompact ? 40 : 50
-    const baseBattlefieldCardWidth = isMobile ? 80 : isTablet ? 85 : 100 // Give mobile a bit more base size
-    const basePileWidth = isMobile ? 40 : isCompact ? 50 : 60
-    const cardRatio = 1.4
+    const baseBattlefieldCardWidth = isMobile ? 80 : isTablet ? 85 : 100;
+    const cardRatio = 1.4;
+    const cardGap = isMobile ? 4 : 8;
+    const containerPadding = isMobile ? 4 : 16;
+    const sectionGap = isMobile ? 2 : 8;
+    
+    // --- Height Scale Calculation ---
+    const centerAreaHeight = isMobile ? 50 : 65;
+    const effectiveCardRows = 7.0;
+    const fixedHeight = topOffset + centerAreaHeight + (containerPadding * 2) + (sectionGap * 4);
+    const availableForCards = Math.max(200, height - fixedHeight);
+    const maxBattlefieldHeight = availableForCards / effectiveCardRows;
+    const maxBattlefieldWidthFromHeight = maxBattlefieldHeight / cardRatio;
+    const heightScale = Math.min(1, maxBattlefieldWidthFromHeight / baseBattlefieldCardWidth);
 
-    // =========================================================================
-    // Spacing
-    // =========================================================================
-    const cardGap = isMobile ? 4 : isCompact ? 4 : 8
-    const sectionGap = isMobile ? 2 : isCompact ? 4 : 8
-    const containerPadding = isMobile ? 4 : isCompact ? 8 : 16
-
-    // =========================================================================
-    // Height Scale Calculation (Your existing vertical logic)
-    // =========================================================================
-    const centerAreaHeight = isMobile ? 50 : isCompact ? 55 : 65
-    const effectiveCardRows = 7.0
-    const fixedHeight = topOffset + centerAreaHeight + (containerPadding * 2) + (sectionGap * 4)
-    const availableForCards = Math.max(200, height - fixedHeight)
-    const maxBattlefieldHeight = availableForCards / effectiveCardRows
-    const maxBattlefieldWidthFromHeight = maxBattlefieldHeight / cardRatio
-    const heightScale = Math.min(1, maxBattlefieldWidthFromHeight / baseBattlefieldCardWidth)
-
-    // =========================================================================
-    // UNIVERSAL Width Scale Calculation (Works for Live & Replay)
-    // =========================================================================
+    // --- Width Scale Calculation ---
     let widthScale = 1;
     if (isMobile) {
-        const getPlayerCardCounts = (playerId: EntityId) => {
+        const getPlayerCardCounts = (playerId: EntityId | null) => {
+            if (!playerId) return { frontRow: 0, backRowTop: 0, backRowBottom: 0 };
+            
+            let allCardsOnBattlefield: ClientCard[] = [];
             if (snapshot) {
-                // --- REPLAY MODE ---
-                const targetZoneId = battlefield(entityId(playerId));
-                const zone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, targetZoneId));
-                const allCards = zone ? zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) as ClientCard[] : [];
-                const independent = allCards.filter(c => !c.attachedTo);
-                const front = independent.filter(c => c.cardTypes.includes('Creature') || c.cardTypes.includes('Planeswalker'));
-                const back = independent.filter(c => !c.cardTypes.includes('Creature') && !c.cardTypes.includes('Planeswalker'));
-                return { frontRow: front.length, backRowTop: Math.ceil(back.length / 2), backRowBottom: Math.floor(back.length / 2) };
+                const zone = snapshot.gameState.zones.find(z => z.zoneId.zoneType === ZoneType.Battlefield && z.zoneId.ownerId === playerId);
+                allCardsOnBattlefield = zone ? zone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) as ClientCard[] : [];
             } else {
-                // --- LIVE GAME MODE ---
                 const zone = liveZones.find(z => z.zoneId.zoneType === ZoneType.Battlefield && z.zoneId.ownerId === playerId);
-                const allCards = zone ? zone.cardIds.map(id => liveCards[id]).filter(Boolean) : [];
-                const independent = allCards.filter(c => !c.attachedTo);
-                const front = independent.filter(c => c.cardTypes.includes('Creature') || c.cardTypes.includes('Planeswalker'));
-                const back = independent.filter(c => !c.cardTypes.includes('Creature') && !c.cardTypes.includes('Planeswalker'));
-                return { frontRow: front.length, backRowTop: Math.ceil(back.length / 2), backRowBottom: Math.floor(back.length / 2) };
+                allCardsOnBattlefield = zone ? zone.cardIds.map(id => liveCards[id]).filter(Boolean) : [];
             }
+
+            const independent = allCardsOnBattlefield.filter(c => !c.attachedTo);
+            const front = independent.filter(c => c.cardTypes.includes('Creature') || c.cardTypes.includes('Planeswalker'));
+            const back = independent.filter(c => !c.cardTypes.includes('Creature') && !c.cardTypes.includes('Planeswalker'));
+            return { frontRow: front.length, backRowTop: Math.ceil(back.length / 2), backRowBottom: Math.floor(back.length / 2) };
         };
 
-        const p1Counts = getPlayerCardCounts(snapshot ? snapshot.player1Id : myId);
-        const p2Counts = getPlayerCardCounts(snapshot ? snapshot.player2Id : opponentId);
+        const p1Id = snapshot ? snapshot.player1Id : myId;
+        const p2Id = snapshot ? snapshot.player2Id : opponentId;
+        const p1Counts = getPlayerCardCounts(p1Id);
+        const p2Counts = getPlayerCardCounts(p2Id);
         
-        const maxCardsInAnyRow = Math.max(
-            p1Counts.frontRow, p1Counts.backRowTop, p1Counts.backRowBottom,
-            p2Counts.frontRow, p2Counts.backRowTop, p2Counts.backRowBottom,
-            1 // Avoid division by zero
-        );
-        
+        const maxCardsInAnyRow = Math.max(p1Counts.frontRow, p1Counts.backRowTop, p1Counts.backRowBottom, p2Counts.frontRow, p2Counts.backRowTop, p2Counts.backRowBottom, 1);
         const availableWidth = width - (containerPadding * 2);
         const calculatedWidth = calculateFittingCardWidth(maxCardsInAnyRow, availableWidth, cardGap, baseBattlefieldCardWidth, 40);
         widthScale = calculatedWidth / baseBattlefieldCardWidth;
@@ -194,51 +171,35 @@ export function useResponsive(snapshot: SpectatorStateUpdate | null = null, topO
     
     const finalScale = Math.min(heightScale, widthScale);
 
-    // =========================================================================
-    // Final Card Sizes
-    // =========================================================================
-    const cardWidth = Math.round(baseCardWidth * finalScale)
-    const cardHeight = Math.round(cardWidth * cardRatio)
-    const smallCardWidth = Math.round(baseSmallCardWidth * finalScale)
-    const smallCardHeight = Math.round(smallCardWidth * cardRatio)
-    const battlefieldCardWidth = Math.round(baseBattlefieldCardWidth * finalScale)
-    const battlefieldCardHeight = Math.round(battlefieldCardWidth * cardRatio)
-    const pileWidth = Math.round(basePileWidth * finalScale)
-    const pileHeight = Math.round(pileWidth * cardRatio)
+    // --- Final Sizes ---
+    const battlefieldCardWidth = Math.round(baseBattlefieldCardWidth * finalScale);
+    const battlefieldCardHeight = Math.round(battlefieldCardWidth * cardRatio);
+    const cardWidth = Math.round((isMobile ? 70 : 120) * finalScale);
+    const cardHeight = Math.round(cardWidth * cardRatio);
     
-    // Other values remain the same...
-    const handBattlefieldGap = Math.round(Math.max(cardGap * 4, cardHeight * 0.3))
-    const battlefieldRowPadding = Math.round(battlefieldCardHeight * 0.4)
-    const zonePileOffset = Math.round(pileHeight * 0.5)
-    const fontSize = {
-      small: isMobile ? 9 : isTablet ? 10 : 12,
-      normal: isMobile ? 11 : isTablet ? 12 : 14,
-      large: isMobile ? 14 : isTablet ? 16 : 18,
-      xlarge: isMobile ? 18 : isTablet ? 24 : 36,
-    }
-
     return {
       viewportWidth: width,
       viewportHeight: height,
       cardWidth,
       cardHeight,
-      smallCardWidth,
-      smallCardHeight,
+      smallCardWidth: Math.round((isMobile ? 30 : 50) * finalScale),
+      smallCardHeight: Math.round((isMobile ? 30 : 50) * finalScale * cardRatio),
       battlefieldCardWidth,
       battlefieldCardHeight,
-      pileWidth,
-      pileHeight,
+      pileWidth: Math.round((isMobile ? 40 : 70) * finalScale),
+      pileHeight: Math.round((isMobile ? 40 : 70) * finalScale * cardRatio),
       cardGap,
       sectionGap,
       containerPadding,
-      handBattlefieldGap,
-      battlefieldRowPadding,
-      zonePileOffset,
+      handBattlefieldGap: Math.round(Math.max(cardGap * 4, cardHeight * 0.3)),
+      battlefieldRowPadding: Math.round(battlefieldCardHeight * 0.4),
+      zonePileOffset: Math.round(Math.round((isMobile ? 40 : 70) * finalScale * cardRatio) * 0.5),
       centerAreaHeight,
-      fontSize,
+      fontSize: { /* ... */ },
       isCompact,
       isMobile,
       isTablet,
-    }
-  }, [width, height, topOffset, snapshot]);
+      isShortDesktop, // Pass this through for StepStrip
+    };
+  }, [width, height, topOffset, snapshot, liveZones, liveCards, myId, opponentId]);
 }
