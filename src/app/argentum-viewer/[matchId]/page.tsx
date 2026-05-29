@@ -74,7 +74,6 @@ interface PageProps {
 export default function ReplayPage(props: PageProps) {
     const unwrappedParams = use(props.params);
     const matchId = unwrappedParams?.matchId;
-    const responsiveSizes = useResponsive();
     const router = useRouter();
     
     const [data, setData] = useState<{
@@ -155,7 +154,7 @@ export default function ReplayPage(props: PageProps) {
 
     return (
         <main className="w-full h-screen bg-gray-900">
-            <ResponsiveContext.Provider value={responsiveSizes}>
+            <ResponsiveContext.Provider value={null}>
                 <SettingsProvider>
                     <ArgentumReplayPlayer initialGameStates={data.gameStates} cardDataMap={data.cardDataMap!} />
                 </SettingsProvider>
