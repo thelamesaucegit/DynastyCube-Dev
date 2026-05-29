@@ -144,7 +144,7 @@ let streamStatus = 'replay';
       const broadcastStartTime = new Date(liveMatch.match_date).getTime() + (30 * 60000);
       
       // Stream ends exactly when (steps * 2 seconds) has elapsed
-      const broadcastDurationMs = liveMatch.total_steps * 2000;
+      const broadcastDurationMs = liveMatch.total_steps * 3000;
       const broadcastEndTime = broadcastStartTime + broadcastDurationMs;
       
       const now = Date.now();
