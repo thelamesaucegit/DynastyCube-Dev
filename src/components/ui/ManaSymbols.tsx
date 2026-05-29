@@ -17,10 +17,6 @@ for (const [path, url] of Object.entries({ ...manaModules, ...actionModules })) 
   }
 }
 
-// Debug: log available symbols (remove in production)
-if (import.meta.env.DEV) {
-  console.log('Available mana symbols:', Object.keys(SYMBOL_URLS))
-}
 
 /**
  * Renders a single mana symbol as an SVG icon.
