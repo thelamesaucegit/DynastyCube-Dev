@@ -8,6 +8,8 @@ import type { SpectatorStateUpdate, ReplayCardData, ClientPlayer } from '@/types
 import { Button } from '@/app/components/ui/button';
 import { Slider } from '@/app/components/ui/slider';
 import { Play, Pause, SkipBack, SkipForward, FastForward} from 'lucide-react';
+import { useResponsive, ResponsiveContext } from '@/hooks/useResponsive';
+
 
 interface ArgentumReplayPlayerProps {
     initialGameStates: SpectatorStateUpdate[];
@@ -29,6 +31,9 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap }: Argentu
         return initialGameStates[currentIndex];
     }, [currentIndex, initialGameStates]);
 
+    const responsiveSizes = useResponsive(currentSnapshot, 0); 
+
+    
     useEffect(() => {
         if (!isPlaying) return;
                 const baseDelay = 750;
@@ -60,6 +65,7 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap }: Argentu
     const { turnNumber, currentPhase } = currentSnapshot.gameState;
 
     return (
+       <ResponsiveContext.Provider value={responsiveSizes}> 
         <div className="flex flex-col h-[calc(100vh-2rem)] w-full bg-background">
             <div className="flex-grow overflow-hidden relative">
                 <GameBoard
@@ -112,5 +118,6 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap }: Argentu
                 </div>
             </footer>
         </div>
+            </ResponsiveContext.Provider>
     );
 }
