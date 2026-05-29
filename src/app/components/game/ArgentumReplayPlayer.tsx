@@ -31,7 +31,7 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap }: Argentu
         return initialGameStates[currentIndex];
     }, [currentIndex, initialGameStates]);
 
-    const responsiveSizes = useResponsive(currentSnapshot, 0); 
+    const responsiveSizes = useResponsive({ snapshot: currentSnapshot, topOffset: 0 }); 
 
     
     useEffect(() => {
