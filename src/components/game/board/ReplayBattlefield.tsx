@@ -114,7 +114,7 @@ interface ReplayBattlefieldProps {
 }
 
 export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldestArt }: ReplayBattlefieldProps) {
-        const { groupedFrontRow, groupedBackRow } = useMemo(() => {
+    const { groupedFrontRow, groupedBackRowTop, groupedBackRowBottom } = useMemo(() => { 
         const playerId = isOpponent ? snapshot.player2Id : snapshot.player1Id;
         
         if (!playerId) return { groupedFrontRow: [], groupedBackRow: [] };
@@ -180,7 +180,7 @@ export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldest
             return a.name.localeCompare(b.name);
         });
         
-         const backRowSplitIndex = Math.ceil(backRowCards.length / 2);
+        const backRowSplitIndex = Math.ceil(backRowCards.length / 2);
         const backRowTop = backRowCards.slice(0, backRowSplitIndex);
         const backRowBottom = backRowCards.slice(backRowSplitIndex);
 
