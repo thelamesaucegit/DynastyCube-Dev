@@ -245,6 +245,7 @@ const responsive = useResponsive({ topOffset });
             hasPriority={hasPriority}
             priorityMode={computedPriorityMode}
             activePlayerName={spectatingState ? gameState.players.find(p => p.playerId === gameState.activePlayerId)?.name : undefined}
+            activeSide={isMyTurn ? 'bottom' : 'top'}
             stopOverrides={stopOverrides}
             onToggleStop={toggleStopOverride}
             isSpectator={spectatingState !== null}
