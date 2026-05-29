@@ -1,16 +1,10 @@
-//src/store/slices/ui/index.ts
+// src/store/slices/ui/index.ts
 
 /**
  * UI slice composer — merges all UI sub-slices into a single createUISlice.
- *
- * Sub-slices:
- * - targetingSlice: Target selection for spells/abilities
- * - combatSlice: Attacker/blocker declarations
- * - selectionSlice: X cost, convoke, crew, delve, mana color, decision, mana source
- * - distributionSlice: Damage distribution, distribute decisions, counter distribution
- * - animationSlice: Card selection, hover, animations, reveals, match intro
- * - pipelineSlice: Action pipeline coordinator (multi-phase action flow)
+ * ... (comments)
  */
+
 import { createTargetingSlice } from './targetingSlice'
 import { createCombatSlice } from './combatSlice'
 import { createSelectionSlice } from './selectionSlice'
@@ -19,10 +13,12 @@ import { createAnimationSlice } from './animationSlice'
 import { createPipelineSlice } from './pipelineSlice'
 import type { SliceCreator } from '../types'
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface UISliceState {
   // Re-exported from sub-slices for backward compatibility
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface UISliceActions {
   // Re-exported from sub-slices for backward compatibility
 }
@@ -44,3 +40,4 @@ export const createUISlice: SliceCreator<UISlice> = (...args) => ({
   ...createAnimationSlice(...args),
   ...createPipelineSlice(...args),
 })
+
