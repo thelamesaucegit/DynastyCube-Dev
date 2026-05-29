@@ -30,7 +30,7 @@ export function ArgentumLiveStreamPlayer({ matchId, initialGameStates, cardDataM
 
     // --- HOOKS CALLED UNCONDITIONALLY AT THE TOP ---
     const currentSnapshot = initialGameStates[currentIndex] ?? null;
-    const responsiveSizes = useResponsive(currentSnapshot, 0); // Pass current snapshot, or null if not ready
+    const responsiveSizes = useResponsive({ currentSnapshot, 0 }); 
     // ---------------------------------------------
 
     const streamStartTime = useMemo(() => {
