@@ -1,15 +1,15 @@
 //src/components/ui/ActionMenu.tsx
 
 import { useEffect, useCallback, useMemo, useState } from 'react'
-import { useGameStore } from '@/store/gameStore.ts'
-import { useCardActions } from '@/hooks/useLegalActions.ts'
-import { useInteraction } from '@/hooks/useInteraction.ts'
+import { useGameStore } from '@/store/gameStore'
+import { useCardActions } from '@/hooks/useLegalActions'
+import { useInteraction } from '@/hooks/useInteraction'
 import type { LegalActionInfo, ClientCard } from '@/types'
 import { ManaCost, AbilityText } from './ManaSymbols'
 import { ManaCostProgress } from './ManaCostProgress'
-import { useViewingPlayer } from '@/store/selectors.ts'
+import { useViewingPlayer } from '@/store/selectors'
 import { isManaPoolEmpty } from '@/types'
-import { getCardImageUrl } from '@/utils/cardImages.ts'
+import { getCardImageUrl } from '@/utils/cardImages'
 import styles from './ActionMenu.module.css'
 
 /**
