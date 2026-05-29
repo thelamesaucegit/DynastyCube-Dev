@@ -28,13 +28,15 @@ const responsive = useResponsive({ snapshot, topOffset });
     const { useOldestArt } = useSettings();
 
     // --- THIS IS THE FIX: Define player1 and player2 from the snapshot ---
-    const { player1, player2, activePlayer } = useMemo(() => {
-        // Player 1 in the snapshot is our "viewing player"
+      const { player1, player2, activePlayer, isPlayer1Active } = useMemo(() => { // <-- Add isPlayer1Active
         const p1 = snapshot.gameState.players.find(p => p.playerId === snapshot.player1Id);
-        // Player 2 is the opponent
         const p2 = snapshot.gameState.players.find(p => p.playerId === snapshot.player2Id);
         const ap = snapshot.gameState.players.find(p => p.playerId === snapshot.gameState.activePlayerId);
-        return { player1: p1, player2: p2, activePlayer: ap };
+        
+        // The viewing player (player1) is always on the bottom.
+        const isP1Active = ap?.playerId === p1?.playerId;
+
+        return { player1: p1, player2: p2, activePlayer: ap, isPlayer1Active: isP1Active }; // <-- Return it
     }, [snapshot]);
     
     if (!player1 || !player2) {
@@ -75,11 +77,11 @@ const responsive = useResponsive({ snapshot, topOffset });
                         phase={snapshot.gameState.currentPhase}
                         step={snapshot.gameState.currentStep}
                         turnNumber={snapshot.gameState.turnNumber}
-                        isActivePlayer={false}
+                        isActivePlayer={false} // This prop is for the live game controls, not relevant here
                         isSpectator={true}
                         hasPriority={false}
                         priorityMode={'ownTurn'}
-                      activeSide={isMyTurn ? 'bottom' : 'top'}
+                        activeSide={isPlayer1Active ? 'bottom' : 'top'} 
                         stopOverrides={{ myTurnStops: [], opponentTurnStops: [] }}
                         onToggleStop={() => {}}
                         activePlayerName={activePlayer?.name}
