@@ -1,4 +1,4 @@
-//web-client/src/components/ui/ManaPool.tsx
+//src/components/ui/ManaPool.tsx
 
 import type { ClientManaPool, ClientRestrictedManaEntry } from '@/types'
 import { totalMana, isManaPoolEmpty } from '@/types'
