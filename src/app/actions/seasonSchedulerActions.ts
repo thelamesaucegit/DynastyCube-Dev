@@ -5,6 +5,7 @@ import { getTeamsWithDetails, type TeamWithDetails } from "./teamActions";
 import { getScheduleWeeks } from "./scheduleActions";
 import { createScheduledSimMatch } from "./simScheduleActions";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { createServerClient, type AnySupabaseClient } from '@/lib/supabase';
 
 // ==================================
 // TYPES
