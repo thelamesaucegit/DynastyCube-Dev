@@ -24,7 +24,7 @@ interface ReplayGameBoardProps {
 }
 
 export function ReplayGameBoard({ topOffset = 0, snapshot, cardDataMap }: ReplayGameBoardProps) {
-    const responsive = useResponsive(snapshot, topOffset);
+const responsive = useResponsive({ snapshot, topOffset });
     const { useOldestArt } = useSettings();
 
     // --- THIS IS THE FIX: Define player1 and player2 from the snapshot ---
