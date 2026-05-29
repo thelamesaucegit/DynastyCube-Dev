@@ -79,6 +79,7 @@ const responsive = useResponsive({ snapshot, topOffset });
                         isSpectator={true}
                         hasPriority={false}
                         priorityMode={'ownTurn'}
+                      activeSide={isMyTurn ? 'bottom' : 'top'}
                         stopOverrides={{ myTurnStops: [], opponentTurnStops: [] }}
                         onToggleStop={() => {}}
                         activePlayerName={activePlayer?.name}
