@@ -318,16 +318,7 @@ export function ActionMenu() {
   // Show the nice modal for any actionable card click
   const shouldShowModal = hasMultiplePotentialOptions || hasSingleAction
 
-  // Debug logging - always log when card is selected
-  if (import.meta.env.DEV && selectedCardId) {
-    console.log('ActionMenu render:', {
-      selectedCardId,
-      cardActionsCount: cardActions.length,
-      cardActionTypes: cardActions.map(a => a.action.type),
-      actionOptionsCount: actionOptions.length,
-      actionOptionKeys: actionOptions.map(o => o.key),
-    })
-  }
+  
 
   // Handle Escape key to cancel
   const handleKeyDown = useCallback(
