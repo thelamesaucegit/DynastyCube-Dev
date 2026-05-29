@@ -71,7 +71,16 @@ const responsive = useResponsive({ topOffset });
   const ghostCards = useGhostCards(playerId ?? null);
   const opponentRevealedTopCard = useRevealedLibraryTopCard(opponent?.playerId ?? null);
   const computedPriorityMode = useGameStore(selectPriorityMode);
-  
+  const counterTotalAllocated = useMemo(() => {
+    if (!counterDistributionState) return 0;
+    let sum = 0;
+    for (const byType of Object.values(counterDistributionState.distribution)) {
+      for (const v of Object.values(byType)) {
+        sum += v;
+      }
+    }
+    return sum;
+  }, [counterDistributionState]);
   const opponentGhostCards = useMemo(() => (opponentRevealedTopCard ? [opponentRevealedTopCard] : []), [opponentRevealedTopCard]);
 
   const effectiveViewingPlayer = useMemo(() => {
@@ -185,16 +194,7 @@ const responsive = useResponsive({ topOffset });
   const distributeRemaining = distributeState ? distributeState.totalAmount - distributeTotalAllocated : 0;
   const isInCounterDistMode = counterDistributionState !== null;
   const isInManaSelectionMode = manaSelectionState !== null;
- const counterTotalAllocated = useMemo(() => {
-    if (!counterDistributionState) return 0;
-    let sum = 0;
-    for (const byType of Object.values(counterDistributionState.distribution)) {
-      for (const v of Object.values(byType)) {
-        sum += v;
-      }
-    }
-    return sum;
-  }, [counterDistributionState]);
+ 
   const getPassButtonLabel = () => {
     if (nextStopPoint) return nextStopPoint;
     if (stackCards.length > 0) return 'Resolve';
