@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { GameBoard } from '@/components/game/GameBoard';
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types';
 import { ResponsiveContext } from '@/components/game/board/shared';
-import { useResponsive, ResponsiveContext } from '@/hooks/useResponsive'; 
+import { useResponsive } from '@/hooks/useResponsive'; 
 import { SettingsProvider } from '@/contexts/SettingsContext';
 
 interface ArgentumLiveStreamPlayerProps {
