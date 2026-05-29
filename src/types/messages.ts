@@ -1,10 +1,8 @@
-//src/types/messages.ts
-
 import { ErrorCode, GameOverReason } from './enums'
 import { EntityId } from './entities'
 import { GameAction } from './actions'
 import { ClientEvent } from './events'
-import { ClientGameState, ClientCard, ClientZone, ClientPlayer, ClientCombatState } from './gameState'
+import { ClientGameState, ClientCard, ClientZone, ClientPlayer, ClientCombatState, ClientCommanderDamage } from './gameState'
 
 // ============================================================================
 // Server Messages (received from server)
@@ -62,6 +60,7 @@ export type ServerMessage =
   | SpectatorStateUpdateMessage
   | SpectatingStartedMessage
   | SpectatingStoppedMessage
+  | SpectatorCountChangedMessage
   // Combat UI Messages
   | OpponentAttackerTargetsMessage
   | OpponentBlockerAssignmentsMessage
@@ -70,6 +69,11 @@ export type ServerMessage =
   | OpponentReconnectedMessage
   | TournamentPlayerDisconnectedMessage
   | TournamentPlayerReconnectedMessage
+  // Quick Game Lobby Messages
+  | QuickGameLobbyStateMessage
+  | QuickGameLobbyClosedMessage
+  // Presence
+  | OnlinePlayersCountMessage
 
 /**
  * Connection confirmed with assigned player ID.
@@ -79,6 +83,7 @@ export interface ConnectedMessage {
   readonly playerId: string
   readonly token: string
   readonly aiEnabled?: boolean
+  readonly availableSets?: readonly AvailableSet[]
 }
 
 /**
@@ -91,6 +96,7 @@ export interface ReconnectedMessage {
   readonly context: 'lobby' | 'drafting' | 'deckBuilding' | 'game' | 'tournament' | null
   readonly contextId: string | null
   readonly aiEnabled?: boolean
+  readonly availableSets?: readonly AvailableSet[]
 }
 
 /**
@@ -201,6 +207,9 @@ export interface StateDelta {
   readonly combatCleared?: boolean | null
   /** New game log entries (append to existing) */
   readonly newLogEntries?: readonly import('./events').ClientEvent[] | null
+  /** Hijack indicators — always overwritten on apply (Mindslaver-style) */
+  readonly youAreHijacking?: EntityId | null
+  readonly youAreHijackedBy?: EntityId | null
 }
 
 /**
@@ -246,6 +255,8 @@ export interface DecisionContext {
   readonly triggeringEntityId?: EntityId
   /** If true, render yes/no inline on the triggering entity card (e.g., Dragon auras) */
   readonly inlineOnTrigger?: boolean
+  /** Resolved effect description (e.g., "-6/-6 until end of turn") */
+  readonly effectHint?: string
 }
 
 /**
@@ -280,6 +291,26 @@ export interface SelectCardsDecision extends PendingDecisionBase {
   readonly remainderLabel?: string | null
   /** Cards shown to the player but not selectable (used for "look at" effects) */
   readonly nonSelectableOptions?: readonly EntityId[]
+  /** When true, at most one card of each card type may be selected */
+  readonly onePerCardType?: boolean
+  /** When true, at most one card of each colour may be selected (colourless unconstrained) */
+  readonly onePerColor?: boolean
+  /**
+   * When true, at most one land of each basic land type may be selected (a kept land claims
+   * every basic type it has); a land with no basic land type can't be selected (Global Ruin).
+   */
+  readonly onePerBasicLandType?: boolean
+  /**
+   * The colour budget for [onePerColor] when restricted to the chooser's permanent colours
+   * (e.g., Sanar's Vivid trigger). One pip per colour name (e.g., ["WHITE","BLUE"]). When
+   * undefined or empty, the UI shows the generic five-colour list.
+   */
+  readonly availableColors?: readonly string[] | null
+  /**
+   * Maximum total mana value across selected cards (Scout for Survivors). When set, the
+   * UI tracks the running total and disables cards whose mana value would push it over.
+   */
+  readonly maxTotalManaValue?: number | null
 }
 
 /**
@@ -319,6 +350,8 @@ export interface SearchCardInfo {
   readonly manaCost: string
   readonly typeLine: string
   readonly imageUri: string | null
+  /** Colour names for cards backed by hidden zone info (e.g. ["WHITE","BLUE"]); empty for colourless. */
+  readonly colors?: readonly string[]
 }
 
 /**
@@ -374,12 +407,49 @@ export interface ChooseNumberDecision extends PendingDecisionBase {
  * Player must choose from a list of string options (e.g., creature types).
  * Used by effects like Artificial Evolution.
  */
+/**
+ * Optional per-option metadata aligned positionally with the options list.
+ * The frontend uses `iconKey` to render visual choices and `description` to
+ * show reminder text alongside the label. `id` is a stable machine-readable
+ * identifier the engine assigns when relevant (e.g. named-mode entry choices).
+ */
+export interface OptionMetadata {
+  readonly id?: string | null
+  readonly description?: string | null
+  readonly iconKey?: string | null
+}
+
 export interface ChooseOptionDecision extends PendingDecisionBase {
   readonly type: 'ChooseOptionDecision'
   readonly options: readonly string[]
   readonly defaultSearch?: string | null
   /** Maps option index to entity IDs of cards associated with that option (for preview) */
   readonly optionCardIds?: Record<number, readonly EntityId[]> | null
+  /**
+   * Optional per-option metadata, aligned positionally with `options`. Empty
+   * means no metadata; otherwise the same length as `options`.
+   */
+  readonly optionMetadata?: readonly OptionMetadata[]
+  /** Whether the player may abort this decision (e.g., cast-time modal mode pick before any cost is paid). */
+  readonly canCancel?: boolean
+}
+
+/**
+ * Pick a text-change replacement in one screen: a FROM word and a TO word shown as "from → to".
+ * Used by Crystal Spray / Artificial Evolution.
+ */
+export interface ChooseReplacementDecision extends PendingDecisionBase {
+  readonly type: 'ChooseReplacementDecision'
+  readonly fromOptions: readonly string[]
+  readonly toOptions: readonly string[]
+  readonly fromMetadata?: readonly OptionMetadata[]
+  readonly toMetadata?: readonly OptionMetadata[]
+  /**
+   * Index-aligned to `fromOptions`: entry i lists the `toOptions` indices allowed when FROM option i
+   * is chosen. Empty outer list => every TO allowed for any FROM (Artificial Evolution).
+   */
+  readonly allowedToByFrom?: readonly (readonly number[])[]
+  readonly defaultFromIndex?: number | null
 }
 
 /**
@@ -411,6 +481,12 @@ export interface ManaSourceOption {
   readonly name: string
   readonly producesColors: readonly string[]
   readonly producesColorless: boolean
+  /**
+   * Selecting this source sacrifices the permanent in addition to tapping it
+   * (e.g. Treasure tokens — "{T}, Sacrifice this artifact: Add one mana of any color").
+   * Auto-pay never picks these; manual selection performs the sacrifice explicitly.
+   */
+  readonly requiresSacrifice?: boolean
 }
 
 /**
@@ -439,6 +515,91 @@ export interface AssignDamageDecision extends PendingDecisionBase {
   readonly defaultAssignments: Record<EntityId, number>
   readonly hasTrample: boolean
   readonly hasDeathtouch: boolean
+}
+
+/**
+ * Direction of a {@link DamageEdge} on the combat resolution board.
+ */
+export type DamageEdgeDirection =
+  | 'ATTACKER_TO_BLOCKER'
+  | 'BLOCKER_TO_ATTACKER'
+  | 'ATTACKER_TO_PLAYER'
+  | 'ATTACKER_TO_PLANESWALKER'
+  | 'ATTACKER_TO_BATTLE'
+
+/**
+ * One directed damage assignment on the combat resolution board. Pre-filled with the
+ * engine-computed default {@link amount}; editable within `[0, maximum]` by {@link editableBy}.
+ */
+export interface DamageEdge {
+  readonly id: string
+  readonly sourceId: EntityId
+  readonly targetId: EntityId
+  readonly direction: DamageEdgeDirection
+  readonly amount: number
+  readonly maximum: number
+  /** True lethal need for the target from this source (deathtouch -> 1, else toughness - marked). */
+  readonly lethal: number
+  /** Whether this edge participates in CR 510.1c assignment-order gating (banding lifts it). */
+  readonly orderConstrained: boolean
+  /** Trample overflow edge to a player / planeswalker / battle (CR 702.19b lethal-first). */
+  readonly isTrampleDrain: boolean
+  /** Which player may modify this edge (banding flips it to the opponent). */
+  readonly editableBy: EntityId
+}
+
+export interface ResolutionAttacker {
+  readonly id: EntityId
+  readonly name: string
+  readonly power: number
+  readonly toughness: number
+  readonly hasTrample: boolean
+  readonly hasDeathtouch: boolean
+  readonly hasFirstStrike: boolean
+  readonly hasDoubleStrike: boolean
+  readonly dealsDamageThisStep: boolean
+  readonly bandId: string | null
+  readonly attackedDefenderId: EntityId
+  readonly blockedByIds: readonly EntityId[]
+  readonly markedDamage: number
+}
+
+export interface ResolutionBlocker {
+  readonly id: EntityId
+  readonly name: string
+  readonly power: number
+  readonly toughness: number
+  readonly hasDeathtouch: boolean
+  readonly hasFirstStrike: boolean
+  readonly hasDoubleStrike: boolean
+  readonly dealsDamageThisStep: boolean
+  readonly blockedAttackerIds: readonly EntityId[]
+  readonly orderedAttackers: readonly EntityId[]
+  readonly markedDamage: number
+}
+
+export type ResolutionTargetKind = 'PLAYER' | 'PLANESWALKER' | 'BATTLE'
+
+export interface ResolutionDefender {
+  readonly id: EntityId
+  readonly kind: ResolutionTargetKind
+  readonly name: string
+  readonly lifeOrLoyaltyOrDefense: number | null
+}
+
+/**
+ * The combat-damage resolution board (CR 510 / 702.22) — a bipartite damage graph the chooser
+ * confirms or re-divides. Replaces the per-attacker AssignDamageDecision + blocker-ordering pre-step.
+ */
+export interface CombatResolutionDecision extends PendingDecisionBase {
+  readonly type: 'CombatResolutionDecision'
+  readonly firstStrike: boolean
+  readonly attackers: readonly ResolutionAttacker[]
+  readonly blockers: readonly ResolutionBlocker[]
+  readonly defenders: readonly ResolutionDefender[]
+  readonly edges: readonly DamageEdge[]
+  /** For the two-actor banding case: the other player who owns the inverted edges. */
+  readonly coChooserId?: EntityId | null
 }
 
 /**
@@ -484,11 +645,13 @@ export type PendingDecision =
   | OrderObjectsDecision
   | ChooseNumberDecision
   | ChooseOptionDecision
+  | ChooseReplacementDecision
   | BudgetModalDecision
   | DistributeDecision
   | ChooseColorDecision
   | SelectManaSourcesDecision
   | AssignDamageDecision
+  | CombatResolutionDecision
   | SplitPilesDecision
 
 /**
@@ -503,6 +666,18 @@ export interface LegalActionTargetInfo {
   readonly validTargets: readonly EntityId[]
   /** The zone these targets are in (e.g., "Graveyard" for graveyard targets). Null for battlefield targets. */
   readonly targetZone?: string
+  /**
+   * True when this requirement filters by "mana value X or less" — the client must
+   * intersect [validTargets] with `card.manaValue <= chosenX` after X selection,
+   * since the server enumerates targets permissively before X is bound.
+   */
+  readonly xConstrainsManaValue?: boolean
+  /**
+   * True when this requirement's max-count scales with the chosen X
+   * (TargetObject.dynamicMaxCount == XValue server-side). The client must clamp
+   * selectable targets to the X chosen at cast time.
+   */
+  readonly xConstrainsCount?: boolean
 }
 
 /**
@@ -524,6 +699,20 @@ export interface LegalActionInfo {
   readonly targetDescription?: string
   /** Multiple target requirements for spells with multiple distinct targets */
   readonly targetRequirements?: readonly LegalActionTargetInfo[]
+  /**
+   * True when the (single) target requirement filters by "mana value X or less".
+   * For multi-requirement spells, see the per-requirement
+   * [LegalActionTargetInfo.xConstrainsManaValue]. The client must re-filter
+   * [validTargets] by the chosen X after X selection.
+   */
+  readonly xConstrainsTargetManaValue?: boolean
+  /**
+   * True when the (single) target requirement's max-count scales with the chosen X
+   * (e.g. Builder's Bane: "Destroy X target artifacts"). The client must clamp the
+   * targeting overlay's max selection to the X chosen at cast time. For multi-
+   * requirement spells, see the per-requirement [LegalActionTargetInfo.xConstrainsCount].
+   */
+  readonly xConstrainsTargetCount?: boolean
   /** Valid attacker IDs for DeclareAttackers action */
   readonly validAttackers?: readonly EntityId[]
   /** Creature IDs that must attack this combat (from MustAttack, Taunt, etc.) */
@@ -568,6 +757,13 @@ export interface LegalActionInfo {
   readonly availableManaSources?: readonly ManaSourceInfo[]
   /** Whether this ability produces mana of any color and needs a color choice from the player */
   readonly requiresManaColorChoice?: boolean
+  /**
+   * Restricted set of producible color names ("WHITE", "BLUE", "BLACK", "RED", "GREEN")
+   * for color-constrained abilities (Mox Amber, Fellwar Stone, Reflecting Pool).
+   * Undefined means all five colors are valid (Gilded Lotus, Birds of Paradise).
+   * The picker must hide colors not present in this list.
+   */
+  readonly availableManaColors?: readonly string[]
   /** Source zone if this action is from a non-hand zone (e.g., "LIBRARY" for Future Sight) */
   readonly sourceZone?: string
   /** Max block counts for blockers that can block more than one attacker */
@@ -630,13 +826,30 @@ export interface AdditionalCostInfo {
   readonly validExileTargets?: readonly EntityId[]
   readonly exileMinCount?: number
   readonly exileMaxCount?: number
+  readonly validBeholdTargets?: readonly EntityId[]
+  readonly beholdCount?: number
   readonly counterRemovalCreatures?: readonly CounterRemovalCreatureInfo[]
+  readonly validBlightTargets?: readonly EntityId[]
+  readonly blightAmount?: number
+  /** For BlightVariable: cap on X (greatest toughness among creatures you control). */
+  readonly blightVariableMaxX?: number
+  /**
+   * Fixed total counters to remove across creatures you control for
+   * `RemoveCountersFromYourCreatures` costs (e.g. Dawnhand Dissident's cast cost).
+   */
+  readonly distributedCounterRemovalTotal?: number
 }
 
 export interface CounterRemovalCreatureInfo {
   readonly entityId: EntityId
   readonly name: string
   readonly availableCounters: number
+  /**
+   * Counter-type breakdown so the UI can render per-type +/- rows when a
+   * creature carries more than one type. Keys are canonical counter-type
+   * symbols (e.g. "+1/+1", "-1/-1", "stun"); values sum to `availableCounters`.
+   */
+  readonly availableCountersByType?: Readonly<Record<string, number>>
   readonly imageUri?: string | null
 }
 
@@ -729,6 +942,17 @@ export interface SealedCardInfo {
   readonly toughness?: number | null
   readonly oracleText?: string | null
   readonly rulings?: readonly SealedRuling[]
+  readonly isDoubleFaced?: boolean
+  readonly backFaceName?: string | null
+  readonly backFaceTypeLine?: string | null
+  readonly backFaceOracleText?: string | null
+  readonly backFaceImageUri?: string | null
+  /**
+   * Color identity (CR 903.4) — uppercase color names ("WHITE", "BLUE", …). Drives the
+   * sealed/draft deckbuilder's color filter chips and archetype matcher. The server stamps
+   * this from the authoritative Scryfall override when one exists.
+   */
+  readonly colorIdentity?: readonly string[]
 }
 
 /**
@@ -793,21 +1017,42 @@ export interface AvailableSet {
   readonly incomplete?: boolean
   readonly block?: string
   readonly implementedCount?: number
-  readonly totalCount?: number
 }
 
 export interface LobbySettings {
   readonly setCodes: readonly string[]
   readonly setNames: readonly string[]
   readonly availableSets: readonly AvailableSet[]
-  readonly format: 'SEALED' | 'DRAFT' | 'WINSTON_DRAFT' | 'GRID_DRAFT'
+  readonly format: TournamentFormat
   readonly boosterCount: number
   readonly boosterDistribution: Readonly<Record<string, number>>  // Per-set booster counts
   readonly maxPlayers: number
   readonly pickTimeSeconds: number
   readonly picksPerRound: number  // Draft only: 1 or 2 (Pick 2 mode)
   readonly gamesPerMatch: number
+  readonly isPublic: boolean
+  /** Optional deck-construction format restriction (Standard/Modern/Commander/...). */
+  readonly deckFormat?: DeckFormat | null
+  /** Commander Draft/Sealed only — minimum deck size enforced by the validator (default 60). */
+  readonly deckSizeMin: number
+  /** Commander Draft/Sealed only — when true, drafted/sealed decks may include duplicates. */
+  readonly allowDuplicates: boolean
+  /** Commander Draft/Sealed only — preset shape ('BRAWL' = 25 life / 16 cmdr damage; 'COMMANDER' = 30/21). */
+  readonly commanderPreset: CommanderPreset
+  /** When true, each booster mixes cards from the union of all selected sets. */
+  readonly chaosBoosters: boolean
 }
+
+export type TournamentFormat =
+  | 'SEALED'
+  | 'DRAFT'
+  | 'WINSTON_DRAFT'
+  | 'GRID_DRAFT'
+  | 'COMMANDER_DRAFT'
+  | 'COMMANDER_SEALED'
+  | 'PREMADE_DECKS'
+
+export type CommanderPreset = 'BRAWL' | 'COMMANDER'
 
 export interface LobbyCreatedMessage {
   readonly type: 'lobbyCreated'
@@ -846,6 +1091,7 @@ export interface DraftPackReceivedMessage {
   readonly passDirection: 'LEFT' | 'RIGHT'
   readonly picksPerRound: number  // Cards to pick this round (1 or 2)
   readonly pickedCards?: readonly SealedCardInfo[]  // Cards already picked (for reconnect)
+  readonly queuedPacks?: number  // Number of additional packs queued behind this one
 }
 
 /**
@@ -855,7 +1101,7 @@ export interface DraftPickMadeMessage {
   readonly type: 'draftPickMade'
   readonly playerId: string
   readonly playerName: string
-  readonly waitingForPlayers: readonly string[]
+  readonly playerPackCounts: Readonly<Record<string, number>>  // playerName → total packs held
 }
 
 /**
@@ -1098,11 +1344,14 @@ export interface SpectatorPlayerState {
   readonly playerId: string
   readonly playerName: string
   readonly life: number
+  readonly poisonCounters: number
   readonly handSize: number
   readonly librarySize: number
   readonly battlefield: readonly SpectatorCardInfo[]
   readonly graveyard: readonly SpectatorCardInfo[]
   readonly stack: readonly SpectatorCardInfo[]
+  /** Per-commander commander-damage tallies; empty outside Commander format. */
+  readonly commanderDamage?: readonly ClientCommanderDamage[]
 }
 
 /**
@@ -1150,6 +1399,18 @@ export interface SpectatingStartedMessage {
 
 export interface SpectatingStoppedMessage {
   readonly type: 'spectatingStopped'
+}
+
+/**
+ * Number of active spectators on a game session has changed.
+ * Sent to both players in the game (not to spectators themselves).
+ */
+export interface SpectatorCountChangedMessage {
+  readonly type: 'spectatorCountChanged'
+  readonly gameSessionId: string
+  readonly count: number
+  /** Names of currently-active spectators, for hover/tooltip display. */
+  readonly spectatorNames?: readonly string[]
 }
 
 // ============================================================================
@@ -1267,6 +1528,15 @@ export type ClientMessage =
   | RequestUndoMessage
   // Resync
   | RequestResyncMessage
+  // Quick Game Lobby Messages
+  | CreateQuickGameLobbyMessage
+  | JoinQuickGameLobbyMessage
+  | LeaveQuickGameLobbyMessage
+  | SubmitQuickGameLobbyDeckMessage
+  | SetQuickGameLobbyReadyMessage
+  | SetQuickGameLobbySetCodeMessage
+  | SetQuickGameLobbyPublicMessage
+  | SetQuickGameLobbyFormatMessage
 
 /**
  * Connect to the server with a player name.
@@ -1278,12 +1548,38 @@ export interface ConnectMessage {
 }
 
 /**
+ * Reference to a specific printing of a card. Pairs `(setCode, collectorNumber)`,
+ * which Scryfall guarantees as unique. Used by the deckbuilder picker to pin a
+ * specific print's art when multiple printings of the same card exist. Mirrors
+ * `com.wingedsheep.sdk.model.PrintingRef` on the server.
+ */
+export interface PrintingRef {
+  readonly setCode: string
+  readonly collectorNumber: string
+}
+
+/**
+ * One card in a deck-submission payload, optionally pinned to a specific [PrintingRef].
+ * Mirrors `com.wingedsheep.gameserver.protocol.DeckEntryDTO`. When the rich `cardEntries`
+ * list is non-empty on a deck-carrying message, the server treats it as authoritative
+ * over `deckList`. When `printing` is undefined the server resolves the card's default
+ * printing — identical to the legacy name-only path.
+ */
+export interface DeckEntry {
+  readonly name: string
+  readonly printing?: PrintingRef
+}
+
+/**
  * Create a new game with a deck list.
  */
 export interface CreateGameMessage {
   readonly type: 'createGame'
   readonly deckList: Record<string, number>
   readonly vsAi?: boolean
+  readonly setCode?: string
+  /** Rich entries with optional pinned printings. See [DeckEntry]. */
+  readonly cardEntries?: readonly DeckEntry[]
 }
 
 /**
@@ -1293,6 +1589,7 @@ export interface JoinGameMessage {
   readonly type: 'joinGame'
   readonly sessionId: string
   readonly deckList: Record<string, number>
+  readonly cardEntries?: readonly DeckEntry[]
 }
 
 /**
@@ -1360,11 +1657,19 @@ export interface JoinSealedGameMessage {
 }
 
 /**
- * Submit the built deck for a sealed game.
+ * Submit the built deck for a sealed game or a tournament lobby (Premade Decks format).
+ * `commander` is honored only when the tournament lobby's deckFormat is commander-shape;
+ * for non-commander formats it's ignored. The card name MUST appear in `deckList` — the
+ * server validator and engine both rely on this invariant.
  */
 export interface SubmitSealedDeckMessage {
   readonly type: 'submitSealedDeck'
   readonly deckList: Record<string, number>
+  readonly commander?: string | null
+  /** Rich entries with optional pinned printings. See [DeckEntry]. */
+  readonly cardEntries?: readonly DeckEntry[]
+  /** Optional pinned printing for the commander. Ignored when `commander` is null. */
+  readonly commanderPrinting?: PrintingRef
 }
 
 // ============================================================================
@@ -1448,12 +1753,33 @@ export function createConnectMessage(playerName: string, token?: string): Connec
   return token ? { type: 'connect', playerName, token } : { type: 'connect', playerName }
 }
 
-export function createCreateGameMessage(deckList: Record<string, number>, vsAi?: boolean): CreateGameMessage {
-  return vsAi ? { type: 'createGame', deckList, vsAi } : { type: 'createGame', deckList }
+export function createCreateGameMessage(
+  deckList: Record<string, number>,
+  vsAi?: boolean,
+  setCode?: string,
+  cardEntries?: readonly DeckEntry[],
+): CreateGameMessage {
+  const msg: CreateGameMessage = {
+    type: 'createGame',
+    deckList,
+    ...(vsAi ? { vsAi } : {}),
+    ...(setCode ? { setCode } : {}),
+    ...(cardEntries && cardEntries.length > 0 ? { cardEntries } : {}),
+  }
+  return msg
 }
 
-export function createJoinGameMessage(sessionId: string, deckList: Record<string, number>): JoinGameMessage {
-  return { type: 'joinGame', sessionId, deckList }
+export function createJoinGameMessage(
+  sessionId: string,
+  deckList: Record<string, number>,
+  cardEntries?: readonly DeckEntry[],
+): JoinGameMessage {
+  return {
+    type: 'joinGame',
+    sessionId,
+    deckList,
+    ...(cardEntries && cardEntries.length > 0 ? { cardEntries } : {}),
+  }
 }
 
 export function createSubmitActionMessage(action: GameAction): SubmitActionMessage {
@@ -1489,8 +1815,19 @@ export function createJoinSealedGameMessage(sessionId: string): JoinSealedGameMe
   return { type: 'joinSealedGame', sessionId }
 }
 
-export function createSubmitSealedDeckMessage(deckList: Record<string, number>): SubmitSealedDeckMessage {
-  return { type: 'submitSealedDeck', deckList }
+export function createSubmitSealedDeckMessage(
+  deckList: Record<string, number>,
+  commander?: string | null,
+  cardEntries?: readonly DeckEntry[],
+  commanderPrinting?: PrintingRef,
+): SubmitSealedDeckMessage {
+  return {
+    type: 'submitSealedDeck',
+    deckList,
+    ...(commander ? { commander } : {}),
+    ...(cardEntries && cardEntries.length > 0 ? { cardEntries } : {}),
+    ...(commanderPrinting ? { commanderPrinting } : {}),
+  }
 }
 
 // ============================================================================
@@ -1500,10 +1837,11 @@ export function createSubmitSealedDeckMessage(deckList: Record<string, number>):
 export interface CreateTournamentLobbyMessage {
   readonly type: 'createTournamentLobby'
   readonly setCodes: readonly string[]
-  readonly format: 'SEALED' | 'DRAFT' | 'WINSTON_DRAFT' | 'GRID_DRAFT'
+  readonly format: TournamentFormat
   readonly boosterCount: number
   readonly maxPlayers: number
   readonly pickTimeSeconds: number
+  readonly isPublic: boolean
 }
 
 export interface JoinLobbyMessage {
@@ -1557,13 +1895,24 @@ export interface UnsubmitDeckMessage {
 export interface UpdateLobbySettingsMessage {
   readonly type: 'updateLobbySettings'
   readonly setCodes?: readonly string[]
-  readonly format?: 'SEALED' | 'DRAFT' | 'WINSTON_DRAFT' | 'GRID_DRAFT'
+  readonly format?: TournamentFormat
   readonly boosterCount?: number
   readonly boosterDistribution?: Readonly<Record<string, number>>
   readonly maxPlayers?: number
   readonly gamesPerMatch?: number
   readonly pickTimeSeconds?: number
   readonly picksPerRound?: number
+  readonly isPublic?: boolean
+  /** Deck-construction format. Empty string (or 'NONE') clears the restriction. */
+  readonly deckFormat?: DeckFormat | '' | null
+  /** Commander Draft/Sealed only — minimum deck size (default 60). */
+  readonly deckSizeMin?: number
+  /** Commander Draft/Sealed only — singleton toggle (default true = duplicates allowed). */
+  readonly allowDuplicates?: boolean
+  /** Commander Draft/Sealed only — 'BRAWL' or 'COMMANDER'. */
+  readonly commanderPreset?: CommanderPreset
+  /** Toggle Chaos boosters: each pack pulls from the union of selected sets. */
+  readonly chaosBoosters?: boolean
 }
 
 // Tournament Client Messages
@@ -1667,12 +2016,13 @@ export interface RequestResyncMessage {
 // Lobby Message Factories
 export function createCreateTournamentLobbyMessage(
   setCodes: readonly string[],
-  format: 'SEALED' | 'DRAFT' | 'WINSTON_DRAFT' | 'GRID_DRAFT' = 'SEALED',
+  format: TournamentFormat = 'SEALED',
   boosterCount: number = 6,
   maxPlayers: number = 8,
-  pickTimeSeconds: number = 45
+  pickTimeSeconds: number = 45,
+  isPublic: boolean = false
 ): CreateTournamentLobbyMessage {
-  return { type: 'createTournamentLobby', setCodes, format, boosterCount, maxPlayers, pickTimeSeconds }
+  return { type: 'createTournamentLobby', setCodes, format, boosterCount, maxPlayers, pickTimeSeconds, isPublic }
 }
 
 // Backwards compatibility alias
@@ -1736,13 +2086,16 @@ export function createUnsubmitDeckMessage(): UnsubmitDeckMessage {
 export function createUpdateLobbySettingsMessage(
   settings: {
     setCodes?: readonly string[]
-    format?: 'SEALED' | 'DRAFT' | 'WINSTON_DRAFT' | 'GRID_DRAFT'
+    format?: TournamentFormat
     boosterCount?: number
     boosterDistribution?: Readonly<Record<string, number>>
     maxPlayers?: number
     gamesPerMatch?: number
     pickTimeSeconds?: number
     picksPerRound?: number
+    isPublic?: boolean
+    deckFormat?: DeckFormat | '' | null
+    chaosBoosters?: boolean
   }
 ): UpdateLobbySettingsMessage {
   return { type: 'updateLobbySettings', ...settings }
@@ -1898,4 +2251,157 @@ export function isSpectatingStartedMessage(msg: ServerMessage): msg is Spectatin
 
 export function isSpectatingStoppedMessage(msg: ServerMessage): msg is SpectatingStoppedMessage {
   return msg.type === 'spectatingStopped'
+}
+
+// ============================================================================
+// Quick Game Lobby
+// ============================================================================
+
+export interface QuickGameLobbyPlayerView {
+  readonly playerId: string
+  readonly playerName: string
+  readonly isAi: boolean
+  readonly ready: boolean
+  readonly deckSelected: boolean
+  readonly deckCardCount: number
+  /** Display label only — opponent's actual deck list is never sent. */
+  readonly deckLabel: string
+  /** Per-player set choice for Random pools; null = "any set". */
+  readonly setCode: string | null
+}
+
+export type DeckFormat =
+  | 'STANDARD'
+  | 'PIONEER'
+  | 'MODERN'
+  | 'LEGACY'
+  | 'VINTAGE'
+  | 'COMMANDER'
+  | 'BRAWL'
+  | 'STANDARD_BRAWL'
+  | 'PAUPER'
+  | 'PREMODERN'
+
+export interface QuickGameLobbyStateMessage {
+  readonly type: 'quickGameLobbyState'
+  readonly lobbyId: string
+  readonly vsAi: boolean
+  readonly setCode: string | null
+  readonly players: readonly QuickGameLobbyPlayerView[]
+  readonly youPlayerId: string
+  readonly canStart: boolean
+  readonly isPublic: boolean
+  readonly format?: DeckFormat | null
+}
+
+export interface QuickGameLobbyClosedMessage {
+  readonly type: 'quickGameLobbyClosed'
+  readonly reason: string
+}
+
+export interface OnlinePlayersCountMessage {
+  readonly type: 'onlinePlayersCount'
+  readonly count: number
+}
+
+export interface CreateQuickGameLobbyMessage {
+  readonly type: 'createQuickGameLobby'
+  readonly vsAi?: boolean
+  readonly setCode?: string
+  readonly isPublic?: boolean
+  readonly format?: DeckFormat
+}
+
+export interface JoinQuickGameLobbyMessage {
+  readonly type: 'joinQuickGameLobby'
+  readonly lobbyId: string
+}
+
+export interface LeaveQuickGameLobbyMessage {
+  readonly type: 'leaveQuickGameLobby'
+}
+
+export interface SubmitQuickGameLobbyDeckMessage {
+  readonly type: 'submitQuickGameLobbyDeck'
+  readonly deckList: Record<string, number>
+  /** Designated commander card name for commander-shape lobby formats. */
+  readonly commander?: string
+  /** Rich entries with optional pinned printings. See [DeckEntry]. */
+  readonly cardEntries?: readonly DeckEntry[]
+  /** Optional pinned printing for the commander. Ignored when `commander` is null. */
+  readonly commanderPrinting?: PrintingRef
+}
+
+export interface SetQuickGameLobbyReadyMessage {
+  readonly type: 'setQuickGameLobbyReady'
+  readonly ready: boolean
+}
+
+export interface SetQuickGameLobbySetCodeMessage {
+  readonly type: 'setQuickGameLobbySetCode'
+  readonly setCode: string | null
+}
+
+export interface SetQuickGameLobbyPublicMessage {
+  readonly type: 'setQuickGameLobbyPublic'
+  readonly isPublic: boolean
+}
+
+export interface SetQuickGameLobbyFormatMessage {
+  readonly type: 'setQuickGameLobbyFormat'
+  readonly format: DeckFormat | null
+}
+
+export function createCreateQuickGameLobbyMessage(
+  vsAi?: boolean,
+  setCode?: string,
+  isPublic?: boolean,
+  format?: DeckFormat,
+): CreateQuickGameLobbyMessage {
+  return {
+    type: 'createQuickGameLobby',
+    ...(vsAi ? { vsAi } : {}),
+    ...(setCode ? { setCode } : {}),
+    ...(isPublic ? { isPublic } : {}),
+    ...(format ? { format } : {}),
+  }
+}
+export function createJoinQuickGameLobbyMessage(lobbyId: string): JoinQuickGameLobbyMessage {
+  return { type: 'joinQuickGameLobby', lobbyId }
+}
+export function createLeaveQuickGameLobbyMessage(): LeaveQuickGameLobbyMessage {
+  return { type: 'leaveQuickGameLobby' }
+}
+export function createSubmitQuickGameLobbyDeckMessage(
+  deckList: Record<string, number>,
+  commander?: string | null,
+  cardEntries?: readonly DeckEntry[],
+  commanderPrinting?: PrintingRef,
+): SubmitQuickGameLobbyDeckMessage {
+  return {
+    type: 'submitQuickGameLobbyDeck',
+    deckList,
+    ...(commander ? { commander } : {}),
+    ...(cardEntries && cardEntries.length > 0 ? { cardEntries } : {}),
+    ...(commanderPrinting ? { commanderPrinting } : {}),
+  }
+}
+export function createSetQuickGameLobbyReadyMessage(ready: boolean): SetQuickGameLobbyReadyMessage {
+  return { type: 'setQuickGameLobbyReady', ready }
+}
+export function createSetQuickGameLobbySetCodeMessage(setCode: string | null): SetQuickGameLobbySetCodeMessage {
+  return { type: 'setQuickGameLobbySetCode', setCode }
+}
+export function createSetQuickGameLobbyPublicMessage(isPublic: boolean): SetQuickGameLobbyPublicMessage {
+  return { type: 'setQuickGameLobbyPublic', isPublic }
+}
+export function createSetQuickGameLobbyFormatMessage(format: DeckFormat | null): SetQuickGameLobbyFormatMessage {
+  return { type: 'setQuickGameLobbyFormat', format }
+}
+
+export function isQuickGameLobbyStateMessage(msg: ServerMessage): msg is QuickGameLobbyStateMessage {
+  return msg.type === 'quickGameLobbyState'
+}
+export function isQuickGameLobbyClosedMessage(msg: ServerMessage): msg is QuickGameLobbyClosedMessage {
+  return msg.type === 'quickGameLobbyClosed'
 }
