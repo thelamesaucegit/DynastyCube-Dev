@@ -1,4 +1,4 @@
-//src/app/components/game/ArgentumLiveStreamPlayer.tsx
+// src/app/components/game/ArgentumLiveStreamPlayer.tsx
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { GameBoard } from '@/components/game/GameBoard';
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types';
 import { ResponsiveContext } from '@/components/game/board/shared';
-import { useResponsive, ResponsiveContext } from '@/hooks/useResponsive'; 
+import { useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
 
 interface ArgentumLiveStreamPlayerProps {
@@ -18,17 +18,20 @@ interface ArgentumLiveStreamPlayerProps {
 
 type StreamStatus = 'waiting' | 'live' | 'ended';
 
-const STEP_DURATION_MS = 3000; 
-const STREAM_DELAY_MINUTES = 30; 
+const STEP_DURATION_MS = 3000;
+const STREAM_DELAY_MINUTES = 30;
 
 export function ArgentumLiveStreamPlayer({ matchId, initialGameStates, cardDataMap, scheduledMatchDate }: ArgentumLiveStreamPlayerProps) {
     const router = useRouter();
-    
     const [currentIndex, setCurrentIndex] = useState(0);
     const [streamStatus, setStreamStatus] = useState<StreamStatus>('waiting');
     const [timeUntilStart, setTimeUntilStart] = useState(0);
-
     const totalStates = initialGameStates.length;
+
+    // --- HOOKS CALLED UNCONDITIONALLY AT THE TOP ---
+    const currentSnapshot = initialGameStates[currentIndex] ?? null;
+    const responsiveSizes = useResponsive(currentSnapshot, 0); // Pass current snapshot, or null if not ready
+    // ---------------------------------------------
 
     const streamStartTime = useMemo(() => {
         const date = new Date(scheduledMatchDate);
@@ -40,19 +43,15 @@ export function ArgentumLiveStreamPlayer({ matchId, initialGameStates, cardDataM
 
         const interval = setInterval(() => {
             const now = Date.now();
-
             if (now < streamStartTime) {
                 setStreamStatus('waiting');
                 setTimeUntilStart(streamStartTime - now);
             } else {
                 const ticksPassed = Math.floor((now - streamStartTime) / STEP_DURATION_MS);
-
                 if (ticksPassed >= totalStates - 1) {
                     setStreamStatus('ended');
                     setCurrentIndex(totalStates - 1);
                     clearInterval(interval);
-                    
-                    // The broadcast has officially concluded. Redirect to the replay viewer!
                     router.push(`/match/${matchId}/summary`);
                 } else {
                     setStreamStatus('live');
@@ -64,6 +63,7 @@ export function ArgentumLiveStreamPlayer({ matchId, initialGameStates, cardDataM
         return () => clearInterval(interval);
     }, [streamStartTime, totalStates, matchId, router]);
 
+    // --- EARLY RETURNS ---
     if (totalStates === 0) {
         return <div className="flex h-screen items-center justify-center text-white bg-black">No game data found.</div>;
     }
@@ -87,14 +87,12 @@ export function ArgentumLiveStreamPlayer({ matchId, initialGameStates, cardDataM
             </div>
         );
     }
+    
+    if (!currentSnapshot || !currentSnapshot.gameState) return null; // Final guard before render
 
-    const currentSnapshot = initialGameStates[currentIndex];
-        const responsiveSizes = useResponsive(currentSnapshot, 0); 
-
-    if (!currentSnapshot || !currentSnapshot.gameState) return null;
-
+    // --- RENDER LOGIC ---
     const { turnNumber, currentPhase } = currentSnapshot.gameState;
-
+    
     return (
         <main className="w-full h-screen bg-gray-900 flex flex-col">
             <ResponsiveContext.Provider value={responsiveSizes}>
@@ -106,10 +104,8 @@ export function ArgentumLiveStreamPlayer({ matchId, initialGameStates, cardDataM
                             cardDataMap={cardDataMap}
                         />
                     </div>
-
                     <footer className="flex-shrink-0 bg-gray-900/90 backdrop-blur-md border-t border-gray-800 p-4 shadow-2xl z-50">
                         <div className="max-w-5xl mx-auto flex items-center justify-between text-white">
-                            
                             <div className="flex items-center gap-4">
                                 {streamStatus === 'live' ? (
                                     <div className="flex items-center gap-2 bg-red-500/20 text-red-500 px-3 py-1.5 rounded-md border border-red-500/30">
@@ -122,8 +118,6 @@ export function ArgentumLiveStreamPlayer({ matchId, initialGameStates, cardDataM
                                     </div>
                                 )}
                             </div>
-
-                            {/* Progress & Info Section */}
                             <div className="flex items-center text-sm font-semibold gap-6">
                                 <div className="hidden md:block text-gray-500 font-mono tabular-nums">
                                     {currentIndex + 1} / {totalStates}
@@ -134,7 +128,6 @@ export function ArgentumLiveStreamPlayer({ matchId, initialGameStates, cardDataM
                                     <span className="text-blue-400 capitalize">{currentPhase?.toLowerCase().replace(/_/g, ' ')}</span>
                                 </div>
                             </div>
-                            
                         </div>
                     </footer>
                 </SettingsProvider>
