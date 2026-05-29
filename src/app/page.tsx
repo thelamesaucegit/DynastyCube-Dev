@@ -105,8 +105,14 @@ export default function HomePage() {
       const now = Date.now();
       const diff = now - broadcastTime;
       
-      if (diff > 0) {
-        const ticksPassed = Math.floor(diff / 750);
+            if (diff > 0) {
+        const ticksPassed = Math.floor(diff / 3000); // 100% Synced with Stream!
+        
+        // Auto-refresh the widget immediately after the stream naturally concludes!
+        if (ticksPassed > liveMatch.total_steps + 1) {
+             loadData();
+        }
+
         
         if (ticksPassed < liveMatch.life_timeline.length) {
            const [t1, t2] = liveMatch.life_timeline[ticksPassed];
@@ -138,7 +144,7 @@ let streamStatus = 'replay';
       const broadcastStartTime = new Date(liveMatch.match_date).getTime() + (30 * 60000);
       
       // Stream ends exactly when (steps * 2 seconds) has elapsed
-      const broadcastDurationMs = liveMatch.total_steps * 2000;
+      const broadcastDurationMs = liveMatch.total_steps * 3000;
       const broadcastEndTime = broadcastStartTime + broadcastDurationMs;
       
       const now = Date.now();
@@ -255,9 +261,10 @@ let streamStatus = 'replay';
 
                 <div className="flex flex-col items-center justify-center">
                   <div className="text-2xl font-black text-muted-foreground/30 px-4 italic mb-1">VS</div>
-                  <span className="text-[10px] text-muted-foreground">
-                    {new Date(liveMatch.match_date).toLocaleDateString([], { month: 'numeric', day: 'numeric'})}
-                  </span>
+                  <div className="flex flex-col items-center text-[10px] text-muted-foreground bg-muted/80 px-2 py-1 rounded border border-border/50">
+                    <span className="font-semibold text-foreground/80">{new Date(liveMatch.match_date).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric'})}</span>
+                    <span>{formattedStreamTime || new Date(new Date(liveMatch.match_date).getTime() + (30 * 60000)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+                  </div>
                 </div>
 
                 <div className="text-center">
