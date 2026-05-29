@@ -1,5 +1,3 @@
-//src/store/slices/types.ts
-
 /**
  * Shared types for store slices.
  */
@@ -20,15 +18,20 @@ import type {
   OpponentDecisionStatus,
   LobbyPlayerInfo,
   LobbySettings,
+  TournamentFormat,
+  CommanderPreset,
   PlayerStandingInfo,
   MatchResultInfo,
   ActiveMatchInfo,
   SpectatorPlayerState,
   SealedCardInfo,
   Step,
+  AvailableSet,
+  QuickGameLobbyStateMessage,
+  DeckFormat,
 } from '@/types'
-import type { ConnectionStatus } from '@/network/websocket'
-import type { CounterRemovalCreatureInfo, SpectatorCombatState, SpectatorDecisionStatus } from '@/types/messages'
+import type { ConnectionStatus } from '@/network/websocket.ts'
+import type { CounterRemovalCreatureInfo, SpectatorCombatState, SpectatorDecisionStatus } from '@/types/messages.ts'
 
 // Re-export for convenience
 export type { EntityId, ConnectionStatus }
@@ -73,6 +76,8 @@ export interface TargetingState {
   isRevealSelection?: boolean
   /** If set, this targeting phase is for returning permanents to hand as a cost */
   isBounceSelection?: boolean
+  /** If set, this targeting phase is for beholding (choosing from battlefield or hand) */
+  isBeholdSelection?: boolean
   /** The original action info, used to chain sacrifice -> spell targeting -> damage distribution */
   pendingActionInfo?: LegalActionInfo
   /** Current target requirement index for multi-target spells (0-indexed) */
@@ -91,6 +96,9 @@ export interface TargetingState {
   totalRequirements?: number
   /** Name of the card that initiated this targeting (shown in overlay header) */
   sourceCardName?: string
+  /** Transient warning shown when the user tries an illegal toggle (e.g. clicking past max
+   * on a multi-target step). Cleared on the next successful add/remove. */
+  warning?: string | null
 }
 
 /**
@@ -116,6 +124,12 @@ export interface CombatState {
   mustBeBlockedAttackers: readonly EntityId[]
   /** Max block counts for blockers that can block more than one attacker (blocker ID -> max attackers) */
   blockerMaxBlockCounts: Readonly<Record<EntityId, number>>
+  /**
+   * Banding bands declared during declare-attackers (CR 702.21): each entry is the set of
+   * attacker IDs grouped into one band. Assembled client-side by dragging an attacker onto
+   * another (see `linkBand`); legality is re-checked server-side on confirm. Empty otherwise.
+   */
+  bands: readonly (readonly EntityId[])[]
 }
 
 /**
@@ -145,6 +159,9 @@ export interface DecisionSelectionState {
   maxSelections: number
   /** Prompt to display */
   prompt: string
+  /** Transient warning shown when the user tries an illegal toggle (e.g. clicking past max
+   * on a multi-select step). Cleared on the next successful toggle. */
+  warning?: string | null
 }
 
 /**
@@ -177,6 +194,18 @@ export interface ManaSelectionState {
   sourceColors: Readonly<Record<EntityId, readonly string[]>>
   /** Mana amount per source: entityId -> amount (e.g., 3 for Gilded Lotus) */
   sourceManaAmounts: Readonly<Record<EntityId, number>>
+}
+
+/**
+ * Variable-blight (`AdditionalCost.BlightVariable`) X-amount selection state.
+ * Only handles the numeric X chooser; the creature target (when X > 0) is
+ * picked inline on the battlefield via the standard targeting overlay.
+ */
+export interface BlightVariableSelectionState {
+  actionInfo: LegalActionInfo
+  cardName: string
+  maxX: number
+  selectedX: number
 }
 
 /**
@@ -228,15 +257,28 @@ export interface DistributeState {
 }
 
 /**
- * Counter distribution state for RemoveXPlusOnePlusOneCounters cost.
- * Shown after X selection to let the player choose which creatures to remove counters from.
+ * Counter distribution state for counter-removal costs.
+ *
+ * Two flavours:
+ * - X cost (e.g., `Remove X +1/+1 counters`): `requiredTotal` is null, any positive total confirms.
+ * - Fixed cost (e.g., Dawnhand Dissident's "remove three counters from among creatures you control"):
+ *   `requiredTotal` is set; confirm only enables at exactly that total.
  */
 export interface CounterDistributionState {
   actionInfo: LegalActionInfo
   cardName: string
   xValue: number
   creatures: readonly CounterRemovalCreatureInfo[]
-  distribution: Record<EntityId, number>
+  /**
+   * Per-creature, per-type allocation. Outer key is entity id; inner key is the
+   * counter-type symbol (e.g. "+1/+1", "stun"). For creatures that carry only one
+   * type, the inner record has a single entry.
+   */
+  distribution: Record<EntityId, Record<string, number>>
+  /** When set, total allocated counters must equal this to confirm (fixed-cost mode). */
+  requiredTotal?: number
+  /** Label shown to the player (e.g., "Remove +1/+1 counters" vs. "Remove counters"). */
+  description?: string
 }
 
 /**
@@ -255,6 +297,10 @@ export interface ConvokeCreatureSelection {
 export interface ManaColorSelectionState {
   /** The action ready to submit (with costPayment already set) */
   action: GameAction
+  /**
+   * Restricted set of producible colors for this ability ("WHITE", ...). Undefined = all five.
+   */
+  availableColors?: readonly string[]
 }
 
 /**
@@ -317,6 +363,17 @@ export interface DeckBuildingState {
   /** Basic land counts by land name */
   landCounts: Record<string, number>
   opponentReady: boolean
+  /**
+   * Card names highlighted by the LLM deckbuilding assistant. When non-null,
+   * these replace any archetype-driven highlights in the pool view.
+   */
+  llmHighlightedCards: readonly string[] | null
+  /**
+   * Selected commander name for Commander Draft / Sealed lobbies. Null when no commander
+   * is chosen yet, or when the lobby format isn't commander-shape. The card MUST exist in
+   * [cardPool] (the deckbuilder UI gates the picker to eligible pool cards).
+   */
+  commander: string | null
 }
 
 /**
@@ -330,7 +387,8 @@ export interface DraftState {
   timeRemaining: number
   passDirection: 'LEFT' | 'RIGHT'
   picksPerRound: number
-  waitingForPlayers: readonly string[]
+  queuedPacks: number
+  playerPackCounts: Readonly<Record<string, number>>
 }
 
 /**
@@ -531,6 +589,7 @@ export type PipelinePhase =
   | { type: 'convoke' }
   | { type: 'manaSource' }
   | { type: 'costPayment' }
+  | { type: 'blightVariable' }
   | { type: 'manaColorChoice' }
   | { type: 'targeting' }
   | { type: 'damageDistribution' }
@@ -539,12 +598,18 @@ export type PipelinePhase =
  * Result reported by a phase's confirm handler.
  */
 export type PhaseResult =
-  | { type: 'counterDistribution'; xValue: number; counterRemovals: Record<string, number> }
+  | {
+      type: 'counterDistribution'
+      xValue: number
+      /** Typed distribution: each entry removes `count` counters of `counterType` from `entityId`. */
+      distributedCounterRemovals: ReadonlyArray<{ entityId: EntityId; counterType: string; count: number }>
+    }
   | { type: 'xSelection'; xValue: number; isRepeatCount?: boolean }
   | { type: 'delve'; delvedCards: EntityId[]; modifiedManaCost: string }
   | { type: 'convoke'; convokedCreatures: Record<string, { color: string | null }> }
   | { type: 'manaSource'; selectedSources: EntityId[] }
   | { type: 'costPayment'; costType: string; selectedTargets: EntityId[] }
+  | { type: 'blightVariable'; blightAmount: number }
   | { type: 'manaColorChoice'; color: string }
   | { type: 'targeting'; selectedTargets: EntityId[] }
   | { type: 'damageDistribution'; distribution: Record<EntityId, number> }
@@ -574,10 +639,14 @@ export type GameStore = {
   playerId: EntityId | null
   sessionId: string | null
   pendingTournamentId: string | null
+  pendingSpectateGameId: string | null
   aiEnabled: boolean
+  availableSets: readonly AvailableSet[]
+  onlinePlayers: number | null
   connect: (playerName: string) => void
   disconnect: () => void
   setPendingTournamentId: (lobbyId: string | null) => void
+  setPendingSpectateGameId: (gameSessionId: string | null) => void
 
   // Gameplay slice
   gameState: ClientGameState | null
@@ -599,8 +668,12 @@ export type GameStore = {
   /** Seconds remaining on opponent's disconnect countdown (null = connected) */
   opponentDisconnectCountdown: number | null
   autoTapEnabled: boolean
-  createGame: (deckList: Record<string, number>) => void
-  createAiGame: (deckList: Record<string, number>) => void
+  /** Number of spectators currently watching this player's game (0 if none). */
+  spectatorCount: number
+  /** Names of currently-active spectators (for hover display on the badge). */
+  spectatorNames: readonly string[]
+  createGame: (deckList: Record<string, number>, setCode?: string) => void
+  createAiGame: (deckList: Record<string, number>, setCode?: string) => void
   joinGame: (sessionId: string, deckList: Record<string, number>) => void
   submitAction: (action: GameAction) => void
   submitDecision: (selectedCards: readonly EntityId[]) => void
@@ -609,9 +682,11 @@ export type GameStore = {
   submitYesNoDecision: (choice: boolean) => void
   submitNumberDecision: (number: number) => void
   submitOptionDecision: (optionIndex: number) => void
+  submitReplacementDecision: (fromIndex: number, toIndex: number) => void
   submitBudgetModalDecision: (selectedModeIndices: readonly number[]) => void
   submitDistributeDecision: (distribution: Record<EntityId, number>) => void
   submitDamageAssignmentDecision: (assignments: Record<EntityId, number>) => void
+  submitCombatResolutionDecision: (edges: ReadonlyArray<{ edgeId: string; amount: number }>) => void
   submitColorDecision: (color: string) => void
   submitManaSourcesDecision: (selectedSources: readonly EntityId[], autoPay: boolean) => void
   submitCancelDecision: () => void
@@ -635,14 +710,14 @@ export type GameStore = {
   lobbyState: LobbyState | null
   tournamentState: TournamentState | null
   spectatingState: SpectatingState | null
-  createTournamentLobby: (setCodes: string[], format?: 'SEALED' | 'DRAFT' | 'WINSTON_DRAFT' | 'GRID_DRAFT', boosterCount?: number, maxPlayers?: number, pickTimeSeconds?: number) => void
+  createTournamentLobby: (setCodes: string[], format?: TournamentFormat, boosterCount?: number, maxPlayers?: number, pickTimeSeconds?: number, isPublic?: boolean) => void
   joinLobby: (lobbyId: string) => void
   startLobby: () => void
   leaveLobby: () => void
   addAiToLobby: () => void
   removeAiFromLobby: (playerId: string) => void
   stopLobby: () => void
-  updateLobbySettings: (settings: { setCodes?: string[]; format?: 'SEALED' | 'DRAFT' | 'WINSTON_DRAFT' | 'GRID_DRAFT'; boosterCount?: number; boosterDistribution?: Record<string, number>; maxPlayers?: number; gamesPerMatch?: number; pickTimeSeconds?: number; picksPerRound?: number }) => void
+  updateLobbySettings: (settings: { setCodes?: string[]; format?: TournamentFormat; boosterCount?: number; boosterDistribution?: Record<string, number>; maxPlayers?: number; gamesPerMatch?: number; pickTimeSeconds?: number; picksPerRound?: number; isPublic?: boolean; deckFormat?: DeckFormat | '' | null; deckSizeMin?: number; allowDuplicates?: boolean; commanderPreset?: CommanderPreset; chaosBoosters?: boolean }) => void
   /** Disconnected tournament players: playerId -> info */
   disconnectedPlayers: Record<string, { playerName: string; secondsRemaining: number; disconnectedAt: number }>
   readyForNextRound: () => void
@@ -653,6 +728,20 @@ export type GameStore = {
   addDisconnectTime: (playerId: string) => void
   kickPlayer: (playerId: string) => void
   leaveTournament: () => void
+  /** Submit a deck directly from the lobby (Premade Decks tournament format). */
+  submitLobbyDeck: (deckList: Record<string, number>, commander?: string | null) => void
+  unsubmitLobbyDeck: () => void
+
+  // Quick Game Lobby slice
+  quickGameLobbyState: QuickGameLobbyStateMessage | null
+  createQuickGameLobby: (vsAi?: boolean, setCode?: string, isPublic?: boolean, format?: DeckFormat) => void
+  joinQuickGameLobby: (lobbyId: string) => void
+  leaveQuickGameLobby: () => void
+  submitQuickGameLobbyDeck: (deckList: Record<string, number>, commander?: string | null) => void
+  setQuickGameLobbyReady: (ready: boolean) => void
+  setQuickGameLobbySetCode: (setCode: string | null) => void
+  setQuickGameLobbyPublic: (isPublic: boolean) => void
+  setQuickGameLobbyFormat: (format: DeckFormat | null) => void
 
   // Draft slice
   deckBuildingState: DeckBuildingState | null
@@ -662,6 +751,12 @@ export type GameStore = {
   removeCardFromDeck: (cardName: string) => void
   clearDeck: () => void
   setLandCount: (landType: string, count: number) => void
+  /** Replace the entire deck (non-basic cards as a flat list) and basic land counts. */
+  setDeck: (deck: readonly string[], landCounts: Record<string, number>) => void
+  /** Set or clear the commander for Commander Draft / Sealed lobbies. */
+  setCommander: (cardName: string | null) => void
+  /** Set the LLM-driven highlight set. Pass null to clear. */
+  setLlmHighlights: (cardNames: readonly string[] | null) => void
   submitSealedDeck: () => void
   unsubmitDeck: () => void
   makePick: (cardNames: string[]) => void
@@ -671,7 +766,10 @@ export type GameStore = {
 
   // Pipeline slice
   pipelineState: ActionPipelineState | null
-  startPipeline: (actionInfo: import('../../types').LegalActionInfo) => void
+  startPipeline: (
+    actionInfo: import('../../types').LegalActionInfo,
+    options?: { forceManualTap?: boolean },
+  ) => void
   advancePipeline: (result: PhaseResult) => void
   cancelPipeline: () => void
 
@@ -691,9 +789,11 @@ export type GameStore = {
   counterDistributionState: CounterDistributionState | null
   manaSelectionState: ManaSelectionState | null
   hoveredCardId: EntityId | null
+  hoverPosition: { x: number; y: number } | null
   autoTapPreview: readonly EntityId[] | null
   draggingBlockerId: EntityId | null
   draggingAttackerId: EntityId | null
+  draggingAttackerHasBanding: boolean | null
   draggingCardId: EntityId | null
   revealedHandCardIds: readonly EntityId[] | null
   revealedCardsInfo: {
@@ -702,6 +802,16 @@ export type GameStore = {
     imageUris: readonly (string | null)[]
     source: string | null
     isYourReveal: boolean
+    /**
+     * Per-card revealer attribution (parallel to cardIds), present when one effect reveals cards
+     * from more than one player at once (e.g. Psychic Battle). `true` = the viewing player,
+     * `false` = an opponent. Absent for single-player reveals (use [isYourReveal]).
+     */
+    cardOwnerIsYours?: readonly boolean[]
+    /** Zone the card came from (e.g., 'Graveyard', 'Exile') when this reveal is a zone transition. */
+    fromZone?: string | null
+    /** Zone the card moved to (e.g., 'Hand', 'Library') when this reveal is a zone transition. */
+    toZone?: string | null
   } | null
   opponentAttackerTargets: { selectedAttackers: readonly EntityId[]; attackerTargets: Record<EntityId, EntityId> } | null
   opponentBlockerAssignments: Record<EntityId, EntityId[]> | null
@@ -710,8 +820,18 @@ export type GameStore = {
   revealAnimations: readonly RevealAnimation[]
   coinFlipAnimations: readonly CoinFlipAnimation[]
   targetReselectedAnimations: readonly TargetReselectedAnimation[]
+  /**
+   * Battlefield card ids currently pulsing after being beheld, along with the
+   * name of the spell/ability that beheld them. A pulse persists until the
+   * stack no longer contains an item with that source name (i.e. the beholding
+   * spell has resolved, been countered, or otherwise left the stack). Each
+   * pulse also has a minimum floor duration so it stays visible briefly even
+   * when the beholding spell auto-resolves without any response.
+   */
+  beholdPulses: readonly { cardId: EntityId; sourceName: string; floorUntil: number }[]
   selectCard: (cardId: EntityId | null) => void
-  hoverCard: (cardId: EntityId | null) => void
+  hoverCard: (cardId: EntityId | null, position?: { x: number; y: number }) => void
+  updateHoverPosition: (position: { x: number; y: number }) => void
   startTargeting: (state: TargetingState) => void
   addTarget: (targetId: EntityId) => void
   removeTarget: (targetId: EntityId) => void
@@ -724,7 +844,7 @@ export type GameStore = {
   clearBlockerAssignments: () => void
   startDraggingBlocker: (blockerId: EntityId) => void
   stopDraggingBlocker: () => void
-  startDraggingAttacker: (attackerId: EntityId) => void
+  startDraggingAttacker: (attackerId: EntityId, hasBanding?: boolean) => void
   stopDraggingAttacker: () => void
   setAttackTarget: (attackerId: EntityId, targetId: EntityId) => void
   startDraggingCard: (cardId: EntityId) => void
@@ -734,10 +854,18 @@ export type GameStore = {
   attackWithAll: () => void
   clearAttackers: () => void
   clearCombat: () => void
+  removeBand: (bandIndex: number) => void
+  clearBands: () => void
+  linkBand: (sourceId: EntityId, targetId: EntityId, sourceHasBanding: boolean, targetHasBanding: boolean) => void
   startXSelection: (state: XSelectionState) => void
   updateXValue: (x: number) => void
   cancelXSelection: () => void
   confirmXSelection: () => void
+  blightVariableSelectionState: BlightVariableSelectionState | null
+  startBlightVariableSelection: (state: BlightVariableSelectionState) => void
+  updateBlightVariableX: (x: number) => void
+  cancelBlightVariableSelection: () => void
+  confirmBlightVariableSelection: () => void
   startConvokeSelection: (state: ConvokeSelectionState) => void
   toggleConvokeCreature: (entityId: EntityId, name: string, payingColor: string | null) => void
   cancelConvokeSelection: () => void
@@ -767,8 +895,8 @@ export type GameStore = {
   confirmDistribute: () => void
   clearDistribute: () => void
   startCounterDistribution: (state: CounterDistributionState) => void
-  incrementCounterRemoval: (entityId: EntityId) => void
-  decrementCounterRemoval: (entityId: EntityId) => void
+  incrementCounterRemoval: (entityId: EntityId, counterType: string) => void
+  decrementCounterRemoval: (entityId: EntityId, counterType: string) => void
   cancelCounterDistribution: () => void
   confirmCounterDistribution: () => void
   startManaSelection: (actionInfo: LegalActionInfo) => void
@@ -789,6 +917,8 @@ export type GameStore = {
   removeCoinFlipAnimation: (id: string) => void
   addTargetReselectedAnimation: (animation: TargetReselectedAnimation) => void
   removeTargetReselectedAnimation: (id: string) => void
+  addBeholdPulse: (cardId: EntityId, sourceName: string) => void
+  reconcileBeholdPulses: (stackItemNames: readonly string[]) => void
   setAutoTapPreview: (preview: readonly EntityId[] | null) => void
   matchIntro: MatchIntro | null
   setMatchIntro: (intro: MatchIntro) => void
