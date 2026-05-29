@@ -46,15 +46,7 @@ function buildActionOptions(
   const options: ActionOption[] = []
   if (!cardInfo) return options
 
-  // Debug: log all action types received
-  if (import.meta.env.DEV) {
-    console.log('buildActionOptions - legalActions:', legalActions.map(a => ({
-      actionType: a.actionType,
-      'action.type': a.action.type,
-      description: a.description,
-      isAffordable: a.isAffordable
-    })))
-  }
+
 
   // Find each type of action - server sends all potential actions with isAffordable flag
   const castActions = legalActions.filter(
@@ -68,15 +60,7 @@ function buildActionOptions(
   const plotAction = legalActions.find((a) => a.action.type === 'PlotCard')
   const playLandAction = legalActions.find((a) => a.action.type === 'PlayLand')
 
-  // Debug: log found actions
-  if (import.meta.env.DEV) {
-    console.log('buildActionOptions - found:', { castAction: !!castAction, castActions: castActions.length, morphAction: !!morphAction, cycleAction: !!cycleAction, playLandAction: !!playLandAction })
-    // Extra debug for cycling
-    legalActions.forEach((a, i) => {
-      console.log(`  action[${i}]: action.type=${a.action.type}, actionType=${a.actionType}, isCycleCard=${a.action.type === 'CycleCard'}`)
-    })
-  }
-
+ 
   // 1. Modal spell modes — show one button per mode instead of a single "Cast" button
   const modeActions = legalActions.filter((a) => a.actionType === 'CastSpellMode')
   // Sibling CastSpellModal actions (e.g., Pyrrhic Strike's blight path forces every mode)
