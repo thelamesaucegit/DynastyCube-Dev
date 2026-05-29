@@ -217,11 +217,34 @@ export async function recordSimGameResult(
             .eq('is_outcome_final', false)
             .limit(1);
 
+       // src/app/actions/weeklyMatchupActions.ts
+
         if (!unfinishedThisWeek || unfinishedThisWeek.length === 0) {
             console.log(`[AUTOMATION] Week ${matchup.week_number} is completely finished!`);
-            if (matchup.is_playoff) {
+
+            // Check the properties of the week that just ended
+            const { data: endedWeek, error: weekCheckError } = await supabase
+                .from('schedule_weeks')
+                .select('is_championship_week, is_playoff_week')
+                .eq('season_id', matchup.season_id)
+                .eq('week_number', matchup.week_number)
+                .single();
+
+            if (weekCheckError) {
+                await logSystemEvent("AutomationError", "error", `Could not verify properties of ended week ${matchup.week_number}`, { error: weekCheckError.message });
+                return;
+            }
+
+            // If the week that just ended was the championship, trigger the offseason.
+            if (endedWeek?.is_championship_week) {
+                await triggerOffseason(matchup.season_id, isTestSeason, supabase);
+            } 
+            // If it was just a regular playoff week, advance the bracket.
+            else if (endedWeek?.is_playoff_week) {
                 await advancePlayoffBracket(matchup.season_id, isTestSeason);
-            } else {
+            } 
+            // Otherwise, handle regular season advancement.
+            else {
                 const { data: nextWeek } = await supabase
                     .from('schedule_weeks')
                     .select('id, week_number')
@@ -236,6 +259,14 @@ export async function recordSimGameResult(
                         await scheduleNextWeekJIT(matchup.season_id, nextWeek.week_number);
                     }
                 } else {
+                    console.log(`[AUTOMATION] Regular season complete! Generating Playoff Bracket.`);
+                    await generateInitialPlayoffBracket(matchup.season_id, isTestSeason);
+                }
+            }
+        } else {
+            console.log(`[Action/recordSimGame] Week ${matchup.week_number} still has ongoing matches.`);
+        }
+
                     console.log(`[AUTOMATION] Regular season complete! Generating Playoff Bracket.`);
                     await generateInitialPlayoffBracket(matchup.season_id, isTestSeason);
                 }
