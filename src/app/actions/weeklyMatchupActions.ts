@@ -777,6 +777,38 @@ async function generateInitialPlayoffBracket(seasonId: string, isTestSeason: boo
     await buildSequentialAlternatingSchedule(seasonId, playoffWeek.id, roundNumber, matchupsToSchedule, isTestSeason, false);
 }
 
+
+async function triggerOffseason(seasonId: string, isTestSeason: boolean, supabase: any) {
+    console.log(`[AUTOMATION] 👑 Championship Concluded! Triggering Offseason for Season: ${seasonId}`);
+    await logSystemEvent("SeasonEnd", "info", `Championship concluded. Starting offseason timer for season ${seasonId}.`);
+
+    await supabase.from('seasons').update({ phase: 'offseason' }).eq('id', seasonId);
+
+    let offSeasonEnd: Date;
+    if (isTestSeason) {
+        offSeasonEnd = new Date(Date.now() + 2 * 60000); // 2 minute offseason for testing
+    } else {
+        const d = new Date();
+        // Logic to find the second Thursday from now at 12:00 PM CT
+        let daysToThu = (4 - d.getUTCDay() + 7) % 7;
+        if (daysToThu <= 1) { // If today is Wed or Thu, go to *next* week's Thu
+            daysToThu += 7;
+        }
+        const targetDate = new Date(d.getTime() + (daysToThu + 7) * 86400000);
+        offSeasonEnd = getTargetDateCT(targetDate, 0, 12);
+    }
+
+    // Clear any old active timers and insert the new one
+    await supabase.from('countdown_timers').update({ is_active: false }).eq('is_active', true);
+    await supabase.from('countdown_timers').insert({
+        title: 'Offseason & Next Draft',
+        end_time: offSeasonEnd.toISOString(),
+        link_text: 'View Final Standings',
+        link_url: '/teams',
+        is_active: true
+    });
+}
+
 /**
  * Evaluates winners of the current playoff round and builds the next round (or ends season).
  */
