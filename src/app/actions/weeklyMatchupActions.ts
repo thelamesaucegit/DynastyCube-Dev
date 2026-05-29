@@ -207,8 +207,9 @@ export async function recordSimGameResult(
     }
 
     // --- AUTOMATION: Schedule Progression ---
-    if (finalized) {
+     if (finalized) {
         console.log(`[Action/recordSimGame] Checking if entire week ${matchup.week_number} is finished...`);
+
         const { data: unfinishedThisWeek } = await supabase
             .from('weekly_matchups')
             .select('id')
@@ -217,40 +218,29 @@ export async function recordSimGameResult(
             .eq('is_outcome_final', false)
             .limit(1);
 
-       // src/app/actions/weeklyMatchupActions.ts
-
         if (!unfinishedThisWeek || unfinishedThisWeek.length === 0) {
             console.log(`[AUTOMATION] Week ${matchup.week_number} is completely finished!`);
 
-            // Check the properties of the week that just ended
-            const { data: endedWeek, error: weekCheckError } = await supabase
+            const { data: endedWeek } = await supabase
                 .from('schedule_weeks')
                 .select('is_championship_week, is_playoff_week')
-                .eq('season_id', matchup.season_id)
-                .eq('week_number', matchup.week_number)
+                .eq('id', matchup.week_id) // Use the week_id from the matchup for precision
                 .single();
 
-            if (weekCheckError) {
-                await logSystemEvent("AutomationError", "error", `Could not verify properties of ended week ${matchup.week_number}`, { error: weekCheckError.message });
-                return;
-            }
-
-            // If the week that just ended was the championship, trigger the offseason.
             if (endedWeek?.is_championship_week) {
                 await triggerOffseason(matchup.season_id, isTestSeason, supabase);
-            } 
-            // If it was just a regular playoff week, advance the bracket.
-            else if (endedWeek?.is_playoff_week) {
+            } else if (endedWeek?.is_playoff_week) {
                 await advancePlayoffBracket(matchup.season_id, isTestSeason);
-            } 
-            // Otherwise, handle regular season advancement.
-            else {
+            } else {
+                // Regular season week is over, check for next week or start playoffs
                 const { data: nextWeek } = await supabase
                     .from('schedule_weeks')
                     .select('id, week_number')
                     .eq('season_id', matchup.season_id)
-                    .eq('week_number', matchup.week_number + 1)
-                    .eq('is_playoff_week', false)
+                    .gt('week_number', matchup.week_number)
+                    .lt('week_number', 100) // Ensure it's not a playoff week
+                    .order('week_number', { ascending: true })
+                    .limit(1)
                     .single();
 
                 if (nextWeek) {
@@ -259,14 +249,6 @@ export async function recordSimGameResult(
                         await scheduleNextWeekJIT(matchup.season_id, nextWeek.week_number);
                     }
                 } else {
-                    console.log(`[AUTOMATION] Regular season complete! Generating Playoff Bracket.`);
-                    await generateInitialPlayoffBracket(matchup.season_id, isTestSeason);
-                }
-            }
-        } else {
-            console.log(`[Action/recordSimGame] Week ${matchup.week_number} still has ongoing matches.`);
-        }
-
                     console.log(`[AUTOMATION] Regular season complete! Generating Playoff Bracket.`);
                     await generateInitialPlayoffBracket(matchup.season_id, isTestSeason);
                 }
