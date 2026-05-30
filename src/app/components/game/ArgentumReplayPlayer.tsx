@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { GameBoard } from '@/components/game/GameBoard';
 import type { SpectatorStateUpdate, ReplayCardData, ClientPlayer, ClientCard } from '@/types';
+import { ZoneType } from '@/types/enums';
 import { Button } from '@/app/components/ui/button';
 import { Slider } from '@/app/components/ui/slider';
 import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
@@ -25,7 +26,7 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap }: Argentu
         if (!currentSnapshot) return [0, 0, 0, 0];
         const { gameState, player1Id, player2Id } = currentSnapshot;
         const getRowCount = (playerId: ClientPlayer['playerId'], isCreatureRow: boolean) => {
-            const zone = gameState.zones.find(z => z.zoneId.ownerId === playerId && z.zoneId.zoneType === 'BATTLEFIELD');
+            const zone = gameState.zones.find(z => z.zoneId.ownerId === playerId && z.zoneId.zoneType === ZoneType.BATTLEFIELD);
             if (!zone) return 0;
             return zone.cardIds
                 .map(id => gameState.cards[id])
