@@ -343,7 +343,7 @@ function GameOverlay() {
   const lastError = useGameStore((state) => state.lastError)
   const clearError = useGameStore((state) => state.clearError)
   const returnToMenu = useGameStore((state) => state.returnToMenu)
-  const navigate = useNavigate()
+const router = useRouter()
 
   useEffect(() => {
     if (!lastError) return
@@ -381,7 +381,7 @@ function GameOverlay() {
               <button
                 onClick={() => {
                   returnToMenu()
-                  navigate(`/replay/${gameOverState.gameId}`)
+                  router.push(`/replay/${gameOverState.gameId}`)
                 }}
                 style={overlayStyles.replayButton}
               >
