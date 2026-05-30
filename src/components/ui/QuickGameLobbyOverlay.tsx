@@ -248,7 +248,7 @@ export function QuickGameLobbyOverlay() {
               disabled={!deckValid || !you?.deckSelected}
               title={!you?.deckSelected ? 'Pick a deck first' : ''}
             >
-              I'm ready
+              I&apos;m ready
             </button>
           )}
           <button onClick={leave} className={styles.leaveButton} type="button">
