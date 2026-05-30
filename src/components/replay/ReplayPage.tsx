@@ -1,7 +1,7 @@
 //src/components/replay/ReplayPage.tsx
 
 import { useState, useEffect, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { useGameStore } from '@/store/gameStore'
 import { SpectatorContext } from '../../contexts/SpectatorContext'
 import { GameBoard } from '../game/GameBoard'
@@ -14,7 +14,7 @@ const HEADER_HEIGHT = 55
 
 export function ReplayPage() {
   const { gameId } = useParams<{ gameId: string }>()
-  const navigate = useNavigate()
+const router = useRouter()
 
   const [snapshots, setSnapshots] = useState<SpectatorStateUpdate[]>([])
   const [metadata, setMetadata] = useState<PublicReplayData['metadata'] | null>(null)
@@ -125,11 +125,11 @@ export function ReplayPage() {
       if (e.key === 'ArrowLeft') { e.preventDefault(); goToStep(currentStep - 1) }
       else if (e.key === 'ArrowRight') { e.preventDefault(); goToStep(currentStep + 1) }
       else if (e.key === ' ') { e.preventDefault(); setAutoPlay((p) => !p) }
-      else if (e.key === 'Escape') { navigate('/') }
+      else if (e.key === 'Escape') { router.push('/') }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [goToStep, currentStep, navigate])
+  }, [goToStep, currentStep, router.push])
 
   const handleShare = async () => {
     try {
@@ -155,7 +155,7 @@ export function ReplayPage() {
     return (
       <div style={styles.centered}>
         <p style={styles.errorText}>{error}</p>
-        <button onClick={() => navigate('/')} style={styles.backButton}>
+        <button onClick={() => router.push('/')} style={styles.backButton}>
           Go to Home
         </button>
       </div>
@@ -177,7 +177,7 @@ export function ReplayPage() {
     >
       <div style={styles.replayContainer}>
         <div style={styles.replayHeader}>
-          <button onClick={() => navigate('/')} style={styles.backButton}>
+          <button onClick={() => router.push('/')} style={styles.backButton}>
             Back
           </button>
           <div style={styles.replayControls}>
