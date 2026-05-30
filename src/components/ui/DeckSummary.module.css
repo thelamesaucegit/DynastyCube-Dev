@@ -1,0 +1,109 @@
+/* Shared deck-stats panel: card count + legality + colour pips + stacked-colour mana curve.
+ * Used by the deckbuilder right rail (DeckSummary) and the DeckPicker (quick game / tournament). */
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: 0.75rem;
+}
+
+.summaryRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.statusOk { color: #6cc04a; font-weight: 600; }
+.statusBad { color: #ff8888; font-weight: 600; }
+.statusEmpty { color: var(--text-muted); }
+
+.issues {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 0.7rem;
+  color: #ff8888;
+  max-height: 80px;
+  overflow-y: auto;
+}
+
+.colorPips {
+  display: flex;
+  gap: 4px;
+}
+
+.colorPip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.colorDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.4);
+}
+
+.curveContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.curveBars {
+  display: flex;
+  gap: 4px;
+  align-items: flex-end;
+}
+
+.curveBarColumn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.curveBarCount {
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  height: 12px;
+  line-height: 12px;
+}
+
+.curveBarTrack {
+  width: 100%;
+  height: 36px;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 2px;
+}
+
+.curveBarStack {
+  width: 100%;
+  display: flex;
+  flex-direction: column-reverse;
+  border-radius: 2px;
+  overflow: hidden;
+  min-height: 0;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.curveBarSegment {
+  flex: 1;
+  min-height: 1px;
+}
+
+.curveLabel {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
