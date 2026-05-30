@@ -1,5 +1,5 @@
 import type { EntityId } from '@/types'
-import { getCardImageUrl } from '@/utils/cardImages.ts'
+import { getCardImageUrl } from '@/utils/cardImages'
 import styles from './DecisionUI.module.css'
 
 /**
