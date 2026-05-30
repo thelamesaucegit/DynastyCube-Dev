@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { useGameStore } from '@/store/gameStore'
 
 /**
@@ -13,7 +13,7 @@ import { useGameStore } from '@/store/gameStore'
  */
 export function TournamentEntryPage() {
   const { lobbyId } = useParams<{ lobbyId: string }>()
-  const navigate = useNavigate()
+const router = useRouter()
 
   const connectionStatus = useGameStore((state) => state.connectionStatus)
   const connect = useGameStore((state) => state.connect)
@@ -63,7 +63,7 @@ export function TournamentEntryPage() {
   // Navigate to "/" once lobby or tournament state is received
   useEffect(() => {
     if (lobbyState || tournamentState) {
-      navigate('/', { replace: true })
+      router.push('/', { replace: true })
     }
   }, [lobbyState, tournamentState, navigate])
 
