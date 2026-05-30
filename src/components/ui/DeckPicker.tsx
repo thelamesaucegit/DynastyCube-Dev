@@ -444,7 +444,7 @@ export function DeckPicker({
               className={styles.textarea}
               placeholder={'4 Lightning Bolt\n4 Goblin Guide\n12 Mountain\n…'}
             />
-            <p className={styles.helperText}>One card per line. Format: "4 Card Name" or "Card Name x4".</p>
+            <p className={styles.helperText}>One card per line. Format: &quot;4 Card Name&quot; or &quot;Card Name x4&quot;.</p>
             <div className={styles.actionsRow}>
               <input
                 value={pendingName}
