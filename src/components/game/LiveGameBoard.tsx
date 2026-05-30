@@ -8,7 +8,7 @@ import { useInteraction } from '@/hooks/useInteraction';
 import { useViewingPlayer, useOpponent, useStackCards, selectPriorityMode, useGhostCards, useRevealedLibraryTopCard } from '@/store/selectors';
 import { hand, getNextStep, StepShortNames } from '@/types';
 import { useResponsive, ResponsiveContextProvider } from '@/hooks/useResponsive';
-
+import type { ClientCard, ClientPlayer } from '@/types';
 // Import all the original UI components it needs
 import { StepStrip } from '../ui/StepStrip';
 import { ManaPool } from '../ui/ManaPool';
@@ -29,9 +29,8 @@ interface LiveGameBoardProps {
 }
 
 export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
-const responsive = useResponsive({ topOffset });
-  
   const store = useGameStore((state) => state);
+  
   const {
     gameState: playerGameState,
     spectatingState,
@@ -65,8 +64,36 @@ const responsive = useResponsive({ topOffset });
   } = store;
   
   const { executeAction } = useInteraction();
-  const viewingPlayer = useViewingPlayer();
+ const viewingPlayer = useViewingPlayer();
   const opponent = useOpponent();
+
+  const zoneRowCounts = useMemo(() => {
+    const { zones, cards } = store.gameState ?? { zones: [], cards: {} };
+    
+    const getRowCount = (playerId: ClientPlayer['playerId'] | null, isCreatureRow: boolean) => {
+        if (!playerId) return 0;
+        const zone = zones.find(z => z.zoneId.ownerId === playerId && z.zoneId.zoneType === 'BATTLEFIELD');
+        if (!zone) return 0;
+        return zone.cardIds
+            .map(id => cards[id])
+            .filter((c): c is ClientCard => !!c)
+            .filter(c => !c.attachedTo)
+            .filter(c => {
+                const isCreatureOrPW = c.cardTypes.includes('CREATURE') || c.cardTypes.includes('PLANESWALKER');
+                return isCreatureRow ? isCreatureOrPW : !isCreatureOrPW;
+            }).length;
+    };
+
+    return [
+        getRowCount(viewingPlayer?.playerId ?? null, true),
+        getRowCount(viewingPlayer?.playerId ?? null, false),
+        getRowCount(opponent?.playerId ?? null, true),
+        getRowCount(opponent?.playerId ?? null, false),
+    ];
+  }, [store.gameState]);
+
+  const responsive = useResponsive(topOffset, zoneRowCounts);
+  
   const stackCards = useStackCards();
   const ghostCards = useGhostCards(playerId ?? null);
   const opponentRevealedTopCard = useRevealedLibraryTopCard(opponent?.playerId ?? null);
