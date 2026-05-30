@@ -23,29 +23,47 @@ interface ReplayGameBoardProps {
    useOldestArt: boolean;
 }
 
-export function ReplayGameBoard({ topOffset = 0, snapshot, cardDataMap }: ReplayGameBoardProps) {
-const responsive = useResponsive({ snapshot, topOffset });
-    const { useOldestArt } = useSettings();
-
-    // --- THIS IS THE FIX: Define player1 and player2 from the snapshot ---
-      const { player1, player2, activePlayer, isPlayer1Active } = useMemo(() => { // <-- Add isPlayer1Active
+export function ReplayGameBoard({ topOffset = 0, snapshot, cardDataMap, useOldestArt }: ReplayGameBoardProps) {
+    const { player1, player2, activePlayer, isPlayer1Active } = useMemo(() => {
         const p1 = snapshot.gameState.players.find(p => p.playerId === snapshot.player1Id);
         const p2 = snapshot.gameState.players.find(p => p.playerId === snapshot.player2Id);
         const ap = snapshot.gameState.players.find(p => p.playerId === snapshot.gameState.activePlayerId);
-        
-        // The viewing player (player1) is always on the bottom.
         const isP1Active = ap?.playerId === p1?.playerId;
-
-        return { player1: p1, player2: p2, activePlayer: ap, isPlayer1Active: isP1Active }; // <-- Return it
+        return { player1: p1, player2: p2, activePlayer: ap, isPlayer1Active: isP1Active };
     }, [snapshot]);
+
+    const zoneRowCounts = useMemo(() => {
+        if (!snapshot) return [0, 0, 0, 0];
+        const { gameState, player1Id, player2Id } = snapshot;
+        const getRowCount = (playerId: ClientPlayer['playerId'], isCreatureRow: boolean) => {
+            const zone = gameState.zones.find(z => z.zoneId.ownerId === playerId && z.zoneId.zoneType === 'BATTLEFIELD');
+            if (!zone) return 0;
+            return zone.cardIds
+                .map(id => gameState.cards[id])
+                .filter((c): c is ClientCard => !!c)
+                .filter(c => !c.attachedTo)
+                .filter(c => {
+                    const isCreatureOrPW = c.cardTypes.includes('CREATURE') || c.cardTypes.includes('PLANESWALKER');
+                    return isCreatureRow ? isCreatureOrPW : !isCreatureOrPW;
+                }).length;
+        };
+        return [
+            getRowCount(player1Id, true),
+            getRowCount(player1Id, false),
+            getRowCount(player2Id, true),
+            getRowCount(player2Id, false),
+        ];
+    }, [snapshot]);
+
+    const responsive = useResponsive(topOffset, zoneRowCounts);
+
     
     if (!player1 || !player2) {
         return <div style={{ color: 'white' }}>Waiting for player data in snapshot...</div>;
     }
 
     return (
-        <ResponsiveContextProvider value={responsive}>
-            <div style={{ ...styles.container, padding: `0 ${responsive.containerPadding}px`, gap: responsive.sectionGap }}>
+        <div style={{ ...styles.container, padding: `0 ${responsive.containerPadding}px`, gap: responsive.sectionGap }}>
                 <FullscreenButton />
                 
                 <div data-zone="opponent-hand" style={{ position: 'absolute', top: topOffset, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }}>
@@ -113,6 +131,5 @@ const responsive = useResponsive({ snapshot, topOffset });
                 <ReplayTargetingArrows snapshot={snapshot} />
                 <ReplayGameLog snapshot={snapshot} />
             </div>
-        </ResponsiveContextProvider>
     );
 }
