@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react'
-import { useGameStore } from '@/store/gameStore.ts'
+import { useGameStore } from '@/store/gameStore'
 import type { DecisionSelectionState } from '@/store/slices'
 import type { EntityId, ManaSourceOption, SelectManaSourcesDecision } from '@/types'
 import { parseManaCost } from '@/utils/manaCost'
