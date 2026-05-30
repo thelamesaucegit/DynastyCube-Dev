@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { useGameStore } from '@/store/gameStore.ts'
+import { useGameStore } from '@/store/gameStore'
 import type { EntityId } from '@/types'
-import { useResponsive } from '@/hooks/useResponsive.ts'
-import { getCardImageUrl } from '@/utils/cardImages.ts'
+import { useResponsive } from '@/hooks/useResponsive'
+import { getCardImageUrl } from '@/utils/cardImages'
 import { getPTColor } from '../game/board/shared'
 
 interface TargetCardInfo {
