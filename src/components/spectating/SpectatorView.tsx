@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useGameStore } from '@/store/gameStore.ts'
+import { useGameStore } from '@/store/gameStore'
 import type { SpectatorPlayerState, SpectatorCardInfo, SpectatorCombatState } from '../../types/messages'
 import type { ClientCommanderDamage } from '../../types/gameState'
-import { useResponsive } from '@/hooks/useResponsive.ts'
-import { getCardImageUrl, getScryfallFallbackUrl } from '@/utils/cardImages.ts'
+import { useResponsive } from '@/hooks/useResponsive'
+import { getCardImageUrl, getScryfallFallbackUrl } from '@/utils/cardImages'
 import { CommanderDamageBadges } from '../game/overlay'
 
 interface Point {
