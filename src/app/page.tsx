@@ -33,8 +33,7 @@ function getRelativeTime(dateString: string): string {
   if (diffInSeconds < 60) return "Just now";
   if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
   if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
-  return date.toLocaleDateString();
+  return `${Math.floor(diffInSeconds / 86400)}d ago`;
 }
 
 export default function HomePage() {
@@ -48,7 +47,8 @@ export default function HomePage() {
   const [bgPosition, setBgPosition] = useState({ x: 50, y: 50 });
 
   const loadData = useCallback(async () => {
-    setLoading(true);
+    // Only set loading to true on the initial load
+    setLoading(prev => !prev);
     try {
       const [teamsResult, seasonResult, newsResult, picksResult, timerResult, draftSessionResult, streamResult] = await Promise.all([
         getTeamsWithDetails(),
@@ -76,53 +76,14 @@ export default function HomePage() {
 
   useEffect(() => {
     loadData();
-
-    const moveBackground = () => {
-      setBgPosition({
-        x: Math.floor(Math.random() * 100),
-        y: Math.floor(Math.random() * 100),
-      });
-    };
+    const moveBackground = () => setBgPosition({ x: Math.floor(Math.random() * 100), y: Math.floor(Math.random() * 100) });
     const initialTimeout = setTimeout(moveBackground, 100);
     const panInterval = setInterval(moveBackground, 25000);
-
     return () => {
       clearTimeout(initialTimeout);
       clearInterval(panInterval);
     };
-  }, []);
-
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      // Fetch up to 20 picks initially, we will slice it down based on the actual team count
-      const [teamsResult, seasonResult, newsResult, picksResult, timerResult, draftSessionResult, streamResult] = await Promise.all([
-        getTeamsWithDetails(),
-        getCurrentSeason(),
-        getAdminNews(3),
-        getRecentDraftPicks(20), 
-        getActiveCountdownTimer(),
-        getActiveDraftSession(),
-        getLatestStreamMatch()
-      ]);
-
-      const activeTeamCount = teamsResult.teams?.filter(t => !t.is_hidden).length || 8;
-
-      setSeason(seasonResult.season);
-      setAdminNews(newsResult.news);
-      setRecentPicks(picksResult.picks.slice(0, activeTeamCount)); // Exactly 1 per active team!
-      setCountdownTimer(timerResult.timer);
-      setDraftSessionId(draftSessionResult.session?.id || null);
-      setLiveMatch(streamResult.match);
-
-    } catch (error) {
-      console.error("Error loading home page data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
- 
+  }, [loadData]);
 
   if (loading) {
     return (
@@ -176,7 +137,6 @@ export default function HomePage() {
             <p className="text-base md:text-lg text-zinc-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] font-medium leading-relaxed">
               A collaborative, living draft league where teams compete, evolve, and shape the fate of the multiverse.
             </p>
-            {liveMatch && <LiveStreamWidget initialMatch={liveMatch} onStreamEnd={loadData} />}
 
           </div>
           
@@ -197,81 +157,9 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+            {liveMatch && <LiveStreamWidget initialMatch={liveMatch} onStreamEnd={loadData} />}
 
-      {/* Live Stream Banner (Shrunk to max-w-5xl to be 80% width and centered) */}
-      {liveMatch && (
-        <section className="max-w-5xl mx-auto w-full">
-          <Card className={`overflow-hidden relative border ${streamStatus === 'live' ? 'border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.2)] bg-red-950/10' : 'border-blue-500/30 bg-blue-950/10'}`}>
-            {streamStatus === 'live' && <div className="absolute top-0 left-0 w-1 h-full bg-red-500 animate-pulse" />}
-                        <CardContent className="p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6">
-              
-              <div className="flex-1 text-center md:text-left">
-                {streamStatus === 'live' ? (
-                   <Badge className="bg-red-500 hover:bg-red-600 mb-3 animate-pulse px-3 py-1"><Radio className="size-3 mr-2 animate-ping" /> LIVE NOW</Badge>
-                ) : streamStatus === 'upcoming' ? (
-                   <Badge variant="secondary" className="mb-3 px-3 py-1 text-blue-400 border-blue-400/30">UPCOMING BROADCAST</Badge>
-                ) : (
-                   <Badge variant="outline" className="mb-3 px-3 py-1">NEXT SCHEDULED GAME</Badge>
-                )}
-                
-                <h3 className="text-2xl font-bold mb-1">Live Game Stream</h3>
-                <p className="text-muted-foreground text-sm">
-                  {streamStatus === 'upcoming' ? `Stream begins exactly at ${formattedStreamTime}` : ''}
-                </p>
-                
-                {/* NEW: Matchup Context */}
-                {liveMatch.matchup && (
-                  <p className="text-xs font-semibold uppercase tracking-wider mt-3 text-primary">
-                      Game {liveMatch.matchup.game_number} of {liveMatch.matchup.total_games} ({liveMatch.matchup.t1_wins}-{liveMatch.matchup.t2_wins})
-                  </p>
-                )}
-              </div>
-              
-              <div className="flex items-center gap-6 flex-1 justify-center bg-background/50 px-8 py-4 rounded-xl border border-border/50 shadow-inner">
-                <div className="text-center">
-                  <div className="text-4xl mb-1 drop-shadow-md">{liveMatch.team1.emoji}</div>
-                  <div className="font-bold text-sm truncate max-w-[100px]">{liveMatch.team1.name}</div>
-                  <div className="text-xs text-muted-foreground font-mono mt-1 mb-2">{liveMatch.team1_record.wins} - {liveMatch.team1_record.losses}</div>
-                  {streamStatus === 'live' && liveLife && (
-                    <Badge variant="outline" className="text-lg px-3 py-1 border-red-500/30 bg-red-950/20 text-red-400 shadow-sm">
-                       ♥ {liveLife.t1}
-                    </Badge>
-                  )}
-                </div>
-
-                <div className="flex flex-col items-center justify-center">
-                  <div className="text-2xl font-black text-muted-foreground/30 px-4 italic mb-1">VS</div>
-                  <div className="flex flex-col items-center text-[10px] text-muted-foreground bg-muted/80 px-2 py-1 rounded border border-border/50">
-                    <span className="font-semibold text-foreground/80">{new Date(liveMatch.match_date).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric'})}</span>
-                    <span>{formattedStreamTime || new Date(new Date(liveMatch.match_date).getTime() + (30 * 60000)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
-                  </div>
-                </div>
-
-                <div className="text-center">
-                  <div className="text-4xl mb-1 drop-shadow-md">{liveMatch.team2.emoji}</div>
-                  <div className="font-bold text-sm truncate max-w-[100px]">{liveMatch.team2.name}</div>
-                  <div className="text-xs text-muted-foreground font-mono mt-1 mb-2">{liveMatch.team2_record.wins} - {liveMatch.team2_record.losses}</div>
-                  {streamStatus === 'live' && liveLife && (
-                    <Badge variant="outline" className="text-lg px-3 py-1 border-red-500/30 bg-red-950/20 text-red-400 shadow-sm">
-                       ♥ {liveLife.t2}
-                    </Badge>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex-1 flex justify-center md:justify-end">
-                <Button asChild size="lg" className={`${streamStatus === 'live' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'} text-white font-bold w-full md:w-auto h-14 px-8 text-lg shadow-xl hover:scale-105 transition-transform`}>
-                  <Link href={`/stream/${liveMatch.sim_match_id}`}>
-                    Tune In <PlayCircle className="ml-2 size-5" />
-                  </Link>
-                </Button>
-              </div>
-
-            </CardContent>
-
-          </Card>
-        </section>
-      )}
+      
 
      {/* Latest News (Full Width natively) */}
       <section className="space-y-4">
