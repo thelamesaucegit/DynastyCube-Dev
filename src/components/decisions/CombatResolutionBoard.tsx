@@ -1,14 +1,14 @@
 import { useState } from 'react'
-import { useGameStore } from '@/store/gameStore.ts'
+import { useGameStore } from '@/store/gameStore'
 import type {
   CombatResolutionDecision,
   DamageEdge,
   EntityId,
 } from '@/types'
-import { useResponsive } from '@/hooks/useResponsive.ts'
-import { getCardImageUrl } from '@/utils/cardImages.ts'
-import { Keyword } from '@/types/enums.ts'
-import { GameCard } from '@/components/game/card/GameCard.tsx'
+import { useResponsive } from '@/hooks/useResponsive'
+import { getCardImageUrl } from '@/utils/cardImages'
+import { Keyword } from '@/types/enums'
+import { GameCard } from '@/components/game/card/GameCard'
 import { ResponsiveContext } from '@/components/game/board'
 
 /**
