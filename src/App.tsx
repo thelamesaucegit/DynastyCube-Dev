@@ -20,7 +20,7 @@ import { GridDraftOverlay } from './components/draft/GridDraftOverlay'
 import { SpectatorGameBoard } from './components/spectating/SpectatorGameBoard'
 import { trackPageView } from './utils/analytics'
 import { randomBackground } from './utils/background'
-import { useNavigate } from 'react-router-dom'
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { useGameStore } from './store/gameStore'
 import { useViewingPlayer, useBattlefieldCards } from './store/selectors'
 import type { EntityId } from './types'
