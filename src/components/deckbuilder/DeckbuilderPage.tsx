@@ -1323,6 +1323,21 @@ function DeckCentricView({
   )
 }
 
+
+
+// ---------------------------------------------------------------------------
+// Basic-lands quick-add panel (right rail)
+// ---------------------------------------------------------------------------
+
+const BASIC_LAND_ORDER = ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest']
+const BASIC_LAND_COLOR: Record<string, string> = {
+  Plains: 'W',
+  Island: 'U',
+  Swamp: 'B',
+  Mountain: 'R',
+  Forest: 'G',
+}
+
 // ---------------------------------------------------------------------------
 // Shared deck summary + action row — DeckSummary lives in @/components/ui so
 // the DeckPicker (quick-game / tournament lobbies) can reuse the same panel.
