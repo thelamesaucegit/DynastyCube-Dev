@@ -573,7 +573,7 @@ export function GameCard({
         }
       }
       stopDraggingBlocker();
-    }
+    };
 
     window.addEventListener('mouseup', handleGlobalMouseUp)
     window.addEventListener('touchend', handleGlobalTouchEnd)
