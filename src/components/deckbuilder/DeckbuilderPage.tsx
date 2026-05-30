@@ -1,3 +1,5 @@
+// src/components/deckbuilder/DeckbuilderPage.tsx
+
 /**
  * Standalone deckbuilder page.
  *
@@ -10,7 +12,7 @@
  * (localStorage). Server validation reuses POST /api/decks/validate.
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter, useParams, useSearchParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams, usePathname } from 'next/navigation';
 import {
   useDeckLibrary,
   mergeCommanderIntoCards,
@@ -157,6 +159,7 @@ function entriesFromCards(
 ): readonly SavedDeckEntry[] | undefined {
   const hasAnyPin = Object.keys(pinned).some((name) => name in cards)
   if (!hasAnyPin) return undefined
+
   const out: SavedDeckEntry[] = []
   for (const [name, count] of Object.entries(cards)) {
     if (count <= 0) continue
@@ -184,15 +187,14 @@ function pinnedPrintingsFromEntries(
   if (commanderName && commanderPrinting) out[commanderName] = commanderPrinting
   return out
 }
-
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
-
 export function DeckbuilderPage() {
-const router = useRouter()
+  const router = useRouter()
+  const pathname = usePathname()
   const { deckId } = useParams<{ deckId?: string }>()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const searchParams = useSearchParams()
 
   // Preserve the current filter querystring across deck-route navigations so
   // changing/loading a deck doesn't wipe the user's filters.
@@ -200,6 +202,19 @@ const router = useRouter()
     const s = searchParams.toString()
     return s ? `?${s}` : ''
   }, [searchParams])
+
+  // Helper to cleanly build a new query string from the existing one
+  const createQueryString = useCallback(
+    (updates: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParams.toString())
+      for (const [key, value] of Object.entries(updates)) {
+        if (value === null) params.delete(key)
+        else params.set(key, value)
+      }
+      return params.toString()
+    },
+    [searchParams]
+  )
 
   const decks = useDeckLibrary((s) => s.decks)
   const hydrate = useDeckLibrary((s) => s.hydrate)
@@ -256,6 +271,7 @@ const router = useRouter()
   const [deckName, setDeckName] = useState('Untitled deck')
   const [deckCards, setDeckCards] = useState<Record<string, number>>({})
   const [activeDeckId, setActiveDeckId] = useState<string | null>(null)
+
   // Pinned printings, keyed by card name. Empty unless the user opens the printing picker
   // and chooses a non-default printing for some row. Persisted via [SavedDeck.entries] (v2)
   // and round-tripped on load. Same-name-different-printing rows are not surfaced as separate
@@ -263,6 +279,7 @@ const router = useRouter()
   // splitting later without a v3 bump. Counts collapse on name regardless, so the singleton /
   // 4-of cap stays correct either way (CR 100.4).
   const [pinnedPrintings, setPinnedPrintings] = useState<Record<string, PrintingRef>>({})
+
   // Art for pinned printings, keyed by card name. Populated from two sources: (a) the
   // printing picker, which already has every printing's image URL on hand when the user
   // clicks a thumbnail, so a fresh pin populates here for free; (b) a batched
@@ -272,6 +289,7 @@ const router = useRouter()
   const [pinnedPrintingArt, setPinnedPrintingArt] = useState<
     Record<string, { imageUri: string | null; backFaceImageUri: string | null }>
   >({})
+
   // Designated commander for Commander/Brawl/Standard Brawl decks. Null when no commander has
   // been picked yet, or when the current format doesn't use a commander. The deckbuilder UI
   // exposes a crown toggle on each row to set/clear this — see DeckListPanel below.
@@ -281,15 +299,11 @@ const router = useRouter()
   // format into the URL — without it, `activeFormat` stays whatever was in the search
   // params (often `null`), and the "clear commander when not a commander format" effect
   // would immediately wipe a just-loaded commander designation.
-  //
-  // Guarded by a ref so the effect runs at most once per actual `deckId` change. Without
-  // this, react-router's `setSearchParams` reference changes on every URL update — which
-  // includes typing into the search filter. Each keystroke would otherwise re-trigger
-  // hydration and overwrite in-progress edits with whatever's persisted in localStorage.
   const lastHydratedDeckIdRef = useRef<string | null>(null)
   useEffect(() => {
     if (!hydrated || !deckId) return
     if (lastHydratedDeckIdRef.current === deckId) return
+
     lastHydratedDeckIdRef.current = deckId
     const existing = getDeck(deckId)
     if (existing) {
@@ -297,21 +311,13 @@ const router = useRouter()
       setDeckCards(mergeCommanderIntoCards(existing.cards, existing.commander ?? null))
       setCommander(existing.commander ?? null)
       setActiveDeckId(existing.id)
-      setPinnedPrintings(pinnedPrintingsFromEntries(existing.entries))
+      setPinnedPrintings(pinnedPrintingsFromEntries(existing.entries, existing.commander, existing.commanderPrinting))
+
       if (existing.format) {
-        setSearchParams(
-          (prev) => {
-            const params = new URLSearchParams(prev)
-            params.set('fmt', existing.format!.toUpperCase())
-            return params
-          },
-          { replace: true },
-        )
+        router.replace(`${pathname}?${createQueryString({ fmt: existing.format.toUpperCase() })}`)
       }
     }
-    // setSearchParams is intentionally excluded — see the comment above.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated, deckId, getDeck])
+  }, [hydrated, deckId, getDeck, pathname, router, createQueryString])
 
   // Import-from-text modal visibility.
   const [importOpen, setImportOpen] = useState(false)
@@ -347,50 +353,27 @@ const router = useRouter()
 
   const setQuery = useCallback(
     (next: string) => {
-      setSearchParams(
-        (prev) => {
-          const params = new URLSearchParams(prev)
-          if (next) params.set('q', next)
-          else params.delete('q')
-          return params
-        },
-        { replace: true }
-      )
+      router.push(`${pathname}?${createQueryString({ q: next || null })}`, { scroll: false })
     },
-    [setSearchParams]
+    [pathname, router, createQueryString]
   )
 
   const setSortMode = useCallback(
     (next: SortMode) => {
-      setSearchParams(
-        (prev) => {
-          const params = new URLSearchParams(prev)
-          if (next === 'name') params.delete('sort')
-          else params.set('sort', next)
-          return params
-        },
-        { replace: true }
-      )
+      router.push(`${pathname}?${createQueryString({ sort: next === 'name' ? null : next })}`, { scroll: false })
     },
-    [setSearchParams]
+    [pathname, router, createQueryString]
   )
 
   // View mode toggle — Moxfield-style "deck centric" layout vs. the original "cards to add"
   // layout. Persisted in the URL so refreshes / shared links keep the user's preference.
   const viewMode: ViewMode = searchParams.get('view') === 'deck' ? 'deck' : 'cards'
+
   const setViewMode = useCallback(
     (next: ViewMode) => {
-      setSearchParams(
-        (prev) => {
-          const params = new URLSearchParams(prev)
-          if (next === 'deck') params.set('view', 'deck')
-          else params.delete('view')
-          return params
-        },
-        { replace: true }
-      )
+      router.push(`${pathname}?${createQueryString({ view: next === 'cards' ? null : next })}`, { scroll: false })
     },
-    [setSearchParams]
+    [pathname, router, createQueryString]
   )
 
   // The deck's chosen format lives in its own URL param (`fmt`) so the search-bar query is
@@ -403,17 +386,9 @@ const router = useRouter()
 
   const setActiveFormat = useCallback(
     (next: string | null) => {
-      setSearchParams(
-        (prev) => {
-          const params = new URLSearchParams(prev)
-          if (next) params.set('fmt', next.toUpperCase())
-          else params.delete('fmt')
-          return params
-        },
-        { replace: true },
-      )
+      router.push(`${pathname}?${createQueryString({ fmt: next ? next.toUpperCase() : null })}`, { scroll: false })
     },
-    [setSearchParams],
+    [pathname, router, createQueryString]
   )
 
   // True when the active format uses a designated commander (CR 903.5b for Commander; same
@@ -431,6 +406,7 @@ const router = useRouter()
   useEffect(() => {
     if (!isCommanderFormat && commander !== null) setCommander(null)
   }, [isCommanderFormat, commander])
+
   useEffect(() => {
     if (commander && !(commander in deckCards)) setCommander(null)
   }, [commander, deckCards])
@@ -439,10 +415,12 @@ const router = useRouter()
   const predicate = parseResult.predicate
   const queryErrors = parseResult.errors
   const advanced = useMemo(() => isAdvancedQuery(query), [query])
+
   // Dominant set filter (`s:EOE`, `set:eoe`) extracted from the parsed AST. Drives the
   // catalog grid + hover preview to render the *reprint's* art when a card has a printing
   // in that set, instead of always showing the canonical CardDefinition's image.
   const activeSetFilter = useMemo(() => extractSetFilter(parseResult.ast), [parseResult.ast])
+
   // When a deck format is selected, scope the catalog to format-legal cards automatically so
   // the user only sees plays they can actually run. The `format:` query token still works as
   // an extra filter (intersected on top), but isn't required for this default behavior.
@@ -460,6 +438,7 @@ const router = useRouter()
   // Pager: cap rendered tiles so a 1000+ card catalogue doesn't melt the browser.
   // Reset whenever the result set changes (new query / filter / sort).
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+
   useEffect(() => {
     setVisibleCount(PAGE_SIZE)
   }, [query, sortMode, activeFormat])
@@ -479,19 +458,23 @@ const router = useRouter()
       backFaceImageUri: string | null
     }>
   >({})
+
   useEffect(() => {
     if (!activeSetFilter || filtered.length === 0) {
       setSetPrintingOverride({})
       return
     }
+
     let cancelled = false
     const params = new URLSearchParams()
+
     // De-dupe — `filtered` is already unique by name but be explicit; URLSearchParams
     // doesn't dedupe and we don't want to send the same name twice. Basic lands are
     // appended unconditionally so the sticky deck-list +/- and "Suggest basic lands"
     // can pin the active set's printing even though basics no longer appear in `filtered`.
     const names = Array.from(new Set([...filtered.map((c) => c.name), ...BASIC_LAND_ORDER]))
     names.forEach((n) => params.append('names', n))
+
     fetch(`/api/printings?${params.toString()}`)
       .then((r) => (r.ok ? r.json() : {}))
       .then((data: Record<string, Array<{
@@ -507,6 +490,7 @@ const router = useRouter()
           imageUri: string | null
           backFaceImageUri: string | null
         }> = {}
+
         for (const name of names) {
           const match = data[name]?.find((p) => p.setCode.toUpperCase() === activeSetFilter)
           if (match) {
@@ -523,6 +507,7 @@ const router = useRouter()
       .catch(() => {
         if (!cancelled) setSetPrintingOverride({})
       })
+
     return () => {
       cancelled = true
     }
@@ -533,9 +518,11 @@ const router = useRouter()
   // each component needing to know about the override.
   const filteredWithArt = useMemo<CardSummary[]>(() => {
     if (!activeSetFilter || Object.keys(setPrintingOverride).length === 0) return filtered
+
     return filtered.map((c) => {
       const override = setPrintingOverride[c.name]
       if (!override) return c
+
       // Only override fields that are actually set on the override; leaving the source
       // value untouched preserves CardSummary's exactOptionalPropertyTypes contract
       // (the optional fields can't be assigned `undefined` explicitly).
@@ -554,14 +541,17 @@ const router = useRouter()
   // Server-side validation (debounced via abort controllers, like DeckPicker).
   const [validation, setValidation] = useState<ValidationResult | null>(null)
   const validateAbortRef = useRef<AbortController | null>(null)
+
   useEffect(() => {
     if (Object.keys(deckCards).length === 0) {
       setValidation(null)
       return
     }
+
     validateAbortRef.current?.abort()
     const ctrl = new AbortController()
     validateAbortRef.current = ctrl
+
     const handle = window.setTimeout(() => {
       // The server's `Deck.cards` is documented as the library only — it does NOT include
       // the commander (CR 903.6a: the commander begins in the command zone). The validator
@@ -578,6 +568,7 @@ const router = useRouter()
             }),
           )
         : deckCards
+
       fetch('/api/decks/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -598,6 +589,7 @@ const router = useRouter()
         })
         .catch(() => {})
     }, 300)
+
     return () => {
       window.clearTimeout(handle)
       ctrl.abort()
@@ -632,6 +624,7 @@ const router = useRouter()
     if (!activeSetFilter) return
     const override = setPrintingOverride[name]
     if (!override || pinnedPrintings[name]) return
+
     setPinnedPrintings((prev) => ({
       ...prev,
       [name]: { setCode: override.setCode, collectorNumber: override.collectorNumber },
@@ -657,6 +650,7 @@ const router = useRouter()
       const current = prev[name] ?? 0
       if (current <= 0) return prev
       const next = { ...prev }
+
       if (current === 1) {
         delete next[name]
         // Drop the pin once no copies remain so it doesn't silently resurrect when
@@ -731,6 +725,7 @@ const router = useRouter()
     const cardsForSave = stripCommanderFromCards(deckCards, designated)
     const entries = entriesFromCards(cardsForSave, pinnedPrintings)
     const commanderPrintingForSave = designated ? pinnedPrintings[designated] : undefined
+
     const saved = saveDeck({
       ...(activeDeckId ? { id: activeDeckId } : {}),
       name: deckName.trim() || 'Untitled deck',
@@ -741,16 +736,21 @@ const router = useRouter()
       ...(entries ? { entries } : {}),
     })
     setActiveDeckId(saved.id)
-    if (saved.id !== deckId) router.push(`/deckbuilder/${saved.id}${searchSuffix()}`, { replace: true })
+
+    if (saved.id !== deckId) {
+      router.push(`/deckbuilder/${saved.id}${searchSuffix()}`)
+    }
   }
 
   const handleSaveAs = () => {
     const name = window.prompt('New deck name', `${deckName} (copy)`)
     if (!name) return
+
     const designated = isCommanderFormat ? commander : null
     const cardsForSave = stripCommanderFromCards(deckCards, designated)
     const entries = entriesFromCards(cardsForSave, pinnedPrintings)
     const commanderPrintingForSave = designated ? pinnedPrintings[designated] : undefined
+
     const saved = saveDeck({
       name: name.trim(),
       cards: cardsForSave,
@@ -759,9 +759,10 @@ const router = useRouter()
       ...(commanderPrintingForSave ? { commanderPrinting: commanderPrintingForSave } : {}),
       ...(entries ? { entries } : {}),
     })
+
     setDeckName(saved.name)
     setActiveDeckId(saved.id)
-    router.push(`/deckbuilder/${saved.id}${searchSuffix()}`, { replace: true })
+    router.push(`/deckbuilder/${saved.id}${searchSuffix()}`)
   }
 
   const handleDelete = () => {
@@ -777,14 +778,13 @@ const router = useRouter()
     setCommander(deck.commander ?? null)
     setActiveDeckId(deck.id)
     setPinnedPrintings(pinnedPrintingsFromEntries(deck.entries, deck.commander, deck.commanderPrinting))
+
     // Restore the deck's stamped format into the URL alongside the existing search
-    // params. Without this, `activeFormat` stays whatever was selected before, and
-    // the "clear commander when not a commander format" effect would immediately
-    // wipe a just-loaded commander designation. Done in one navigate call so we
-    // don't race against the async `setSearchParams` update.
-    const params = new URLSearchParams(searchParams)
+    // params.
+    const params = new URLSearchParams(searchParams.toString())
     if (deck.format) params.set('fmt', deck.format.toUpperCase())
     else params.delete('fmt')
+
     const suffix = params.toString()
     router.push(`/deckbuilder/${deck.id}${suffix ? `?${suffix}` : ''}`)
     setDecksBrowserOpen(false)
@@ -814,6 +814,7 @@ const router = useRouter()
     setCommander(importedCommander)
     setActiveDeckId(null)
     setPinnedPrintings({})
+
     if (suggestedName) setDeckName(suggestedName)
     router.push(`/deckbuilder${searchSuffix()}`)
     setImportOpen(false)
@@ -826,29 +827,27 @@ const router = useRouter()
     ) {
       return
     }
+
     setDeckCards({ ...ex.cards })
     setCommander(ex.commander ?? null)
     setActiveDeckId(null)
-    // Pre-fill pinned printings from the example. The commander's pin is keyed by name
-    // alongside the rest — same shape `pinnedPrintingsFromEntries` produces on saved-deck
-    // load, so the art-cache backfill below picks it up automatically.
+
+    // Pre-fill pinned printings from the example.
     const initialPins: Record<string, PrintingRef> = { ...(ex.printings ?? {}) }
     if (ex.commander && ex.commanderPrinting) initialPins[ex.commander] = ex.commanderPrinting
     setPinnedPrintings(initialPins)
+
     setDeckName(ex.name)
-    // Stamp the example's format into the URL inside the navigate call (rather than via
-    // a separate setActiveFormat) so it lands before render. Without this, the next
-    // render still sees the old `activeFormat`, the "clear commander when not a commander
-    // format" effect fires, and the just-set commander designation gets wiped. Same race
-    // and same fix as handleLoadSaved above.
-    const params = new URLSearchParams(searchParams)
+
+    const params = new URLSearchParams(searchParams.toString())
     if (ex.format) params.set('fmt', ex.format.toUpperCase())
+
     const suffix = params.toString()
     router.push(`/deckbuilder${suffix ? `?${suffix}` : ''}`)
     setExamplesOpen(false)
   }
 
-  // ----- Render -----
+  // ----- Render Helpers -----
 
   const totalCards = Object.values(deckCards).reduce((a, b) => a + b, 0)
   const stats = useMemo(() => computeStats(deckCards, catalogIndex), [deckCards, catalogIndex])
@@ -860,14 +859,17 @@ const router = useRouter()
   useEffect(() => {
     const missing = Object.keys(pinnedPrintings).filter((name) => !(name in pinnedPrintingArt))
     if (missing.length === 0) return
+
     let cancelled = false
     const params = new URLSearchParams()
     missing.forEach((n) => params.append('names', n))
+
     fetch(`/api/printings?${params.toString()}`)
       .then((r) => (r.ok ? r.json() : {}))
       .then((data: Record<string, PrintingDTO[]>) => {
         if (cancelled) return
         const updates: Record<string, { imageUri: string | null; backFaceImageUri: string | null }> = {}
+
         for (const name of missing) {
           const ref = pinnedPrintings[name]
           if (!ref) continue
@@ -876,11 +878,13 @@ const router = useRouter()
           )
           if (match) updates[name] = { imageUri: match.imageUri, backFaceImageUri: match.backFaceImageUri }
         }
+
         if (Object.keys(updates).length > 0) {
           setPinnedPrintingArt((prev) => ({ ...prev, ...updates }))
         }
       })
       .catch(() => {})
+
     return () => {
       cancelled = true
     }
@@ -891,16 +895,19 @@ const router = useRouter()
   // (a) the popover escapes the deck-list scroll container and (b) only one picker is
   // ever open at a time without each row needing to know about the others.
   const [pickerOpenFor, setPickerOpenFor] = useState<{ name: string; anchor: DOMRect } | null>(null)
+
   const handleOpenPicker = useCallback(
     (name: string, anchor: DOMRect) => setPickerOpenFor({ name, anchor }),
     [],
   )
+
   const handleClosePicker = useCallback(() => setPickerOpenFor(null), [])
 
   // Deck-mode left-rail card preview. Hover state is lifted out of DeckCentricView so the
   // (Moxfield-style) preview can live in the left rail instead of floating near the cursor.
   const [deckHoverName, setDeckHoverName] = useState<string | null>(null)
   const [deckHoverCard, setDeckHoverCard] = useState<CardSummary | null>(null)
+
   const deckHoverArtOverride = deckHoverName ? pinnedPrintingArt[deckHoverName] : undefined
   const effectiveDeckHoverCard = deckHoverCard
     ? deckHoverArtOverride
@@ -911,6 +918,7 @@ const router = useRouter()
         }
       : deckHoverCard
     : null
+
   const deckHoverDfc = useDfcHoverFlip(
     effectiveDeckHoverCard
       ? {
@@ -922,7 +930,9 @@ const router = useRouter()
         }
       : null,
   )
+
   const resetDeckHoverDfc = deckHoverDfc.resetFlip
+
   const handleDeckHoverEnter = useCallback(
     (entry: { name: string; card: CardSummary | undefined }) => {
       setDeckHoverName((prev) => {
@@ -933,10 +943,12 @@ const router = useRouter()
     },
     [resetDeckHoverDfc],
   )
+
   const handleDeckHoverLeave = useCallback(() => {
     setDeckHoverName(null)
     setDeckHoverCard(null)
   }, [])
+
   useEffect(() => {
     if (deckHoverName && !(deckHoverName in deckCards) && deckHoverName !== commander) {
       setDeckHoverName(null)
@@ -944,6 +956,7 @@ const router = useRouter()
     }
   }, [deckCards, commander, deckHoverName])
 
+  // --- Main Component Render ---
   return (
     <div className={`${styles.page} ${viewMode === 'deck' ? styles.pageDeckMode : ''}`}>
       <header className={styles.topbar}>
@@ -951,6 +964,7 @@ const router = useRouter()
           ← Back to menu
         </button>
         <h1 className={styles.title}>Deckbuilder</h1>
+
         <div className={styles.viewToggle} role="group" aria-label="View mode">
           <button
             type="button"
@@ -975,7 +989,9 @@ const router = useRouter()
             Deck
           </button>
         </div>
+
         <div className={styles.topbarSpacer} />
+
         <button
           className={styles.iconButton}
           onClick={() => setExamplesOpen(true)}
@@ -1113,7 +1129,6 @@ const router = useRouter()
                 onChange={setActiveFormat}
               />
             </div>
-
             <DeckListPanel
               deckCards={deckCards}
               catalog={catalogIndex}
@@ -1134,7 +1149,6 @@ const router = useRouter()
               pinnedPrintingArt={pinnedPrintingArt}
               onOpenPicker={handleOpenPicker}
             />
-
             <div className={styles.deckSummaryWrap}>
               <DeckSummary
                 validation={validation}
@@ -1142,7 +1156,6 @@ const router = useRouter()
                 stats={stats}
               />
             </div>
-
             <DeckActionRow
               activeDeckId={activeDeckId}
               isEmpty={Object.keys(deckCards).length === 0}
@@ -1208,6 +1221,7 @@ const router = useRouter()
           />
         </main>
       )}
+
       {pickerOpenFor && (
         <PrintingPicker
           cardName={pickerOpenFor.name}
@@ -1291,6 +1305,7 @@ function DeckCentricFooter({
   const showStats = totalCards > 0 && stats.colorCounts.length > 0
   const errors = validation?.errors ?? []
   const errorTooltip = errors.length > 0 ? errors.map((e) => `• ${e.message}`).join('\n') : undefined
+
   return (
     <div className={styles.deckCentricFooter}>
       <div className={styles.footerMeta}>
@@ -1366,6 +1381,7 @@ function ExampleDecksModal({
         <p className={styles.importHint}>
           Pick a starter list to load into the builder. This replaces the current deck contents.
         </p>
+
         {examples.length === 0 ? (
           <p className={styles.importHint}>No examples available.</p>
         ) : (
@@ -1390,6 +1406,7 @@ function ExampleDecksModal({
             })}
           </div>
         )}
+
         <div className={styles.importActions}>
           <button className={styles.secondaryButton} onClick={onCancel} type="button">
             Cancel
@@ -1448,16 +1465,19 @@ function ImportDeckModal({
 
   const handleConfirm = () => {
     if (!preview || !canImport) return
+
     if (
       hasExisting &&
       !window.confirm('Replace your current deck contents with the imported list?')
     ) {
       return
     }
+
     // Merge implemented cards with unimplemented ones so the imported deck
     // reflects the full intended list. Unknown cards render as placeholder
     // rows in the deck list and are flagged by the validator.
     const merged = { ...preview.resolved.deckCards, ...preview.resolved.unmatchedCards }
+
     // First entry under a `Commander` header becomes the designation. Use the
     // resolved/canonical card name when we matched it (so casing matches the
     // catalogue); fall back to the raw name otherwise.
@@ -1466,6 +1486,7 @@ function ImportDeckModal({
       ? catalog.find((c) => c.name.toLowerCase() === commanderEntry.name.toLowerCase())?.name
         ?? commanderEntry.name
       : null
+
     onImport(merged, null, commanderName)
   }
 
@@ -1487,6 +1508,7 @@ function ImportDeckModal({
           <code>Deck</code>, <code>Sideboard</code>, <code>Commander</code> are recognised; lines
           starting with &apos;double-forward-slash&apos; or &apos;hash&apos; are comments.
         </p>
+
         <textarea
           className={styles.importTextarea}
           value={text}
@@ -1495,7 +1517,9 @@ function ImportDeckModal({
           spellCheck={false}
           autoFocus
         />
+
         {preview && <ImportPreview preview={preview} />}
+
         <div className={styles.importActions}>
           <button className={styles.secondaryButton} onClick={onCancel} type="button">
             Cancel
@@ -1525,6 +1549,7 @@ function ImportPreview({
 }) {
   const { parsed, resolved } = preview
   const issueCount = parsed.errors.length + resolved.unmatched.length + resolved.truncated.length
+
   return (
     <div className={styles.importPreview}>
       <div className={styles.importSummary}>
@@ -1621,6 +1646,7 @@ function BulkEditDeckModal({
     () => formatDeck(deckCards, catalogIndex, format, commander),
     [deckCards, catalogIndex, format, commander]
   )
+
   const [text, setText] = useState(rendered.text)
   const [copied, setCopied] = useState(false)
 
@@ -1667,12 +1693,15 @@ function BulkEditDeckModal({
   const handleApply = () => {
     if (!preview || !canApply) return
     if (!window.confirm('Replace your current deck contents with this list?')) return
+
     const merged = { ...preview.resolved.deckCards, ...preview.resolved.unmatchedCards }
+
     const commanderEntry = preview.parsed.commander[0] ?? null
     const nextCommander = commanderEntry
       ? catalog.find((c) => c.name.toLowerCase() === commanderEntry.name.toLowerCase())?.name
         ?? commanderEntry.name
       : null
+
     onApply(merged, nextCommander)
   }
 
@@ -1688,6 +1717,7 @@ function BulkEditDeckModal({
             Close
           </button>
         </div>
+
         <div className={styles.formatSwitcher}>
           <span className={styles.formatSwitcherLabel}>Format</span>
           {EXPORT_FORMATS.map((f) => (
@@ -1704,11 +1734,13 @@ function BulkEditDeckModal({
             </button>
           ))}
         </div>
+
         <p className={styles.importHint}>
           {formatHint} Paste lists from any of the three formats — the parser detects them all.
           Edit the text and click <strong>Save changes</strong> to apply, or <strong>Copy</strong>{' '}
           to export.
         </p>
+
         <textarea
           className={styles.importTextarea}
           value={text}
@@ -1716,7 +1748,9 @@ function BulkEditDeckModal({
           spellCheck={false}
           autoFocus
         />
+
         {preview && <ImportPreview preview={preview} />}
+
         <div className={styles.importActions}>
           <button className={styles.secondaryButton} onClick={onClose} type="button">
             Cancel
@@ -1743,12 +1777,6 @@ function BulkEditDeckModal({
   )
 }
 
-/**
- * Render `deckCards` as MTG Arena deck-list text. Lands are placed in a
- * trailing block. Unknown (not-implemented) cards mix into the spell block
- * since we have no type info; their names are emitted plain so the text
- * round-trips through `parseArenaDeckList` without confusing the parser.
- */
 /**
  * Render `deckCards` as deck-list text in one of three formats:
  *   - `plain`:    `<count> <name>` only (most permissive importers).
@@ -1780,12 +1808,15 @@ function formatDeck(
   let commanderEntry: Entry | null = null
   let totalCards = 0
   let unknownCards = 0
+
   for (const [name, count] of Object.entries(deck)) {
     if (count <= 0) continue
     totalCards += count
     const card = catalog[name]
     if (!card) unknownCards += count
+
     const entry: Entry = { name, count, card }
+
     if (commander && name === commander) {
       // Lift the commander out of the main block so re-import doesn't double
       // it. We still keep its full count (typically 1) in the Commander
@@ -1794,13 +1825,16 @@ function formatDeck(
       commanderEntry = entry
       continue
     }
+
     if (card?.cardTypes.includes('LAND')) lands.push(entry)
     else spells.push(entry)
   }
+
   spells.sort((a, b) => a.name.localeCompare(b.name))
   lands.sort((a, b) => a.name.localeCompare(b.name))
 
   const includePrinting = format !== 'plain'
+
   const renderLine = (e: Entry): string => {
     const base = `${e.count} ${e.name}`
     if (!includePrinting || !e.card?.setCode) return base
@@ -1811,20 +1845,25 @@ function formatDeck(
   }
 
   const lines: string[] = []
+
   if (commanderEntry) {
     lines.push('Commander')
     lines.push(renderLine(commanderEntry))
     lines.push('')
   }
+
   // Plain text often omits headers; include `Deck` only for Arena/Moxfield
   // where the section marker is the convention. Either way the parser
   // accepts both shapes.
   if (format !== 'plain') lines.push('Deck')
+
   for (const e of spells) lines.push(renderLine(e))
+
   if (lands.length > 0) {
     if (lines.length > 0 && lines[lines.length - 1] !== '') lines.push('')
     for (const e of lands) lines.push(renderLine(e))
   }
+
   return { text: lines.join('\n') + '\n', totalCards, unknownCards }
 }
 
@@ -1842,12 +1881,14 @@ function SavedDecksSummary({
   onOpen: () => void
 }) {
   const active = useMemo(() => decks.find((d) => d.id === activeDeckId) ?? null, [decks, activeDeckId])
+
   const legalityInput = useMemo(
     () => (active ? { [active.id]: active.cards } : {}),
     [active]
   )
   const legalityMap = useDeckLegalFormats(legalityInput)
   const activeFormats = active ? (legalityMap[active.id] ?? []) : []
+
   return (
     <section className={styles.section}>
       <h2 className={styles.sectionLabel}>My decks</h2>
@@ -1868,6 +1909,7 @@ function SavedDecksSummary({
             </>
           )}
         </div>
+
         <button
           className={styles.savedBrowseButton}
           onClick={onOpen}
@@ -1891,11 +1933,13 @@ function SavedDecksSummary({
  */
 function FormatLegalityBadges({ formats }: { formats: string[] }) {
   if (formats.length === 0) return null
+
   // Order matches FORMAT_TOKENS so the badges always read in the same sequence.
   const order = new Map(FORMAT_TOKENS.map((f, i) => [f.value.toUpperCase(), i]))
   const sorted = [...formats].sort(
     (a, b) => (order.get(a) ?? 99) - (order.get(b) ?? 99)
   )
+
   return (
     <span className={styles.formatBadges}>
       {sorted.map((f) => (
@@ -1906,7 +1950,6 @@ function FormatLegalityBadges({ formats }: { formats: string[] }) {
     </span>
   )
 }
-
 
 type DecksBrowserSort = 'updated' | 'name' | 'size' | 'colors'
 
@@ -1952,6 +1995,7 @@ function SavedDecksBrowser({
     return out
   }, [decks])
   const legalityMap = useDeckLegalFormats(legalityInput)
+
   const heroArtMap = useDeckHeroArt(decks)
 
   // Pre-compute per-deck metadata once. Doing this up front keeps sort/filter
@@ -1973,16 +2017,19 @@ function SavedDecksBrowser({
   const filtered = useMemo(() => {
     const f = filter.trim().toLowerCase()
     let out = enriched
+
     if (f) out = out.filter((e) => e.deck.name.toLowerCase().includes(f))
     if (colorFilter.size > 0) {
       out = out.filter((e) => {
         const has = (k: string) =>
           k === 'COLORLESS' ? e.colors.length === 0 : e.colors.includes(k)
+
         // OR semantics: keep decks that match any selected colour bucket.
         for (const k of colorFilter) if (has(k)) return true
         return false
       })
     }
+
     return [...out].sort((a, b) => {
       switch (sort) {
         case 'name':
@@ -2034,6 +2081,7 @@ function SavedDecksBrowser({
             placeholder="Search decks by name…"
             autoFocus
           />
+
           <select
             className={styles.sortSelect}
             value={sort}
@@ -2045,6 +2093,7 @@ function SavedDecksBrowser({
             <option value="size">Card count</option>
             <option value="colors">Colour</option>
           </select>
+
           <div className={styles.browserColorChips} role="group" aria-label="Filter by colour">
             {COLOR_TOKENS.map(({ label, key }) => {
               const active = colorFilter.has(key)
@@ -2130,6 +2179,7 @@ function SavedDecksBrowser({
  */
 function useDeckHeroArt(decks: SavedDeck[]): Record<string, string> {
   const [art, setArt] = useState<Record<string, string>>({})
+
   // Per-deck "(name, printing)" representative — first pinned entry in the deck's order.
   // Recomputed when the decks change so renames / loads stay in sync. Memoised separately
   // from the fetch so we don't re-fire when the parent re-renders for unrelated reasons.
@@ -2147,9 +2197,11 @@ function useDeckHeroArt(decks: SavedDeck[]): Record<string, string> {
       setArt({})
       return
     }
+
     let cancelled = false
     const params = new URLSearchParams()
     new Set(reps.map((r) => r.name)).forEach((n) => params.append('names', n))
+
     fetch(`/api/printings?${params.toString()}`)
       .then((r) => (r.ok ? r.json() : {}))
       .then((data: Record<string, PrintingDTO[]>) => {
@@ -2166,6 +2218,7 @@ function useDeckHeroArt(decks: SavedDeck[]): Record<string, string> {
       .catch(() => {
         if (!cancelled) setArt({})
       })
+
     return () => {
       cancelled = true
     }
@@ -2196,9 +2249,11 @@ function DeckCard({
   onDelete: (d: SavedDeck) => void
 }) {
   const updated = useMemo(() => formatRelativeTime(deck.updatedAt), [deck.updatedAt])
+
   // Banner gradient derived from the deck's colour identity. Falls back to a
   // neutral gradient for colourless / empty decks.
   const banner = useMemo(() => deckBannerGradient(colors), [colors])
+
   // When the deck has at least one pinned printing, layer that printing's art
   // *under* the colour-identity gradient so the deck is recognisable by what the user
   // actually picked. The gradient stays — without it, art at this size is hard to read
@@ -2206,6 +2261,7 @@ function DeckCard({
   const bannerStyle = heroArt
     ? { background: `${banner}, url(${heroArt}) center/cover` }
     : { background: banner }
+
   const pinCount = useMemo(
     () => (deck.entries ?? []).filter((e) => e.printing).length,
     [deck.entries],
@@ -2243,6 +2299,7 @@ function DeckCard({
         )}
         <span className={styles.deckCardCount}>{total}</span>
       </div>
+
       <div className={styles.deckCardBody}>
         <div className={styles.deckCardName}>{deck.name}</div>
         <div className={styles.deckCardMeta}>
@@ -2272,6 +2329,7 @@ function DeckCard({
           </span>
         )}
       </div>
+
       <div className={styles.deckCardActions} onClick={(e) => e.stopPropagation()}>
         <button
           className={styles.savedIconButton}
@@ -2292,6 +2350,7 @@ function DeckCard({
           ✕
         </button>
       </div>
+
       {isActive && <span className={styles.deckCardActiveBadge}>Editing</span>}
     </button>
   )
@@ -2345,6 +2404,7 @@ function formatRelativeTime(ts: number): string {
   const now = Date.now()
   const diff = Math.max(0, now - ts)
   const sec = Math.floor(diff / 1000)
+
   if (sec < 60) return 'just now'
   const min = Math.floor(sec / 60)
   if (min < 60) return `${min}m ago`
@@ -2377,15 +2437,18 @@ function SearchBar({
 }) {
   const [helpOpen, setHelpOpen] = useState(false)
   const hasErrors = errors.length > 0
+
   // Local mirror of the URL-backed `query` so the input never has its DOM value reassigned by
   // the round-trip through `useSearchParams`. Without this, typing certain characters (e.g.
   // parentheses) caused the cursor to jump because React would briefly rerender the input
   // with the previous-tick query while the URL update was in flight, and the browser
   // re-anchored the caret.
   const [localQuery, setLocalQuery] = useState(query)
+
   useEffect(() => {
     setLocalQuery((prev) => (prev === query ? prev : query))
   }, [query])
+
   return (
     <div className={styles.searchBar}>
       <div className={styles.searchInputWrap}>
@@ -2411,6 +2474,7 @@ function SearchBar({
           </ul>
         )}
       </div>
+
       <button
         className={helpOpen ? styles.helpIconActive : styles.helpIcon}
         onClick={() => setHelpOpen((v) => !v)}
@@ -2420,6 +2484,7 @@ function SearchBar({
       >
         ?
       </button>
+
       <select
         className={styles.sortSelect}
         value={sortMode}
@@ -2430,10 +2495,13 @@ function SearchBar({
         <option value="color">Colour</option>
         <option value="rarity">Rarity</option>
       </select>
+
       <span className={styles.resultCount}>{resultLabel}</span>
+
       <span className={styles.cardActionHint}>
         <kbd>Click</kbd> add · <kbd>Right-click</kbd> remove
       </span>
+
       {helpOpen && <SearchHelp onClose={() => setHelpOpen(false)} onInsert={(t) => onQueryChange(t)} />}
     </div>
   )
@@ -2468,6 +2536,7 @@ function SearchHelp({ onClose, onInsert }: { onClose: () => void; onInsert: (t: 
     { syntax: '(c:u or c:b) t:creature', desc: 'grouping with parens' },
     { syntax: '"lord of"', desc: 'quote multi-word values' },
   ]
+
   return (
     <>
       <div className={styles.helpBackdrop} onClick={onClose} />
@@ -2483,6 +2552,7 @@ function SearchHelp({ onClose, onInsert }: { onClose: () => void; onInsert: (t: 
           parentheses for grouping, and <code>-</code> or <code>not</code> for negation.
           Click an example to drop it into the search box.
         </p>
+
         <ul className={styles.helpList}>
           {examples.map((ex) => (
             <li key={ex.syntax}>
@@ -2543,6 +2613,7 @@ function FilterSection({
   const availableSets = useMemo(() => {
     const codes = new Set<string>()
     for (const c of catalog) if (c.setCode) codes.add(c.setCode)
+
     const present = setInfos.filter((s) => codes.has(s.code))
     const known = new Set(present.map((s) => s.code))
     for (const code of codes) {
@@ -2584,12 +2655,14 @@ function FilterSection({
           Advanced query — chips disabled. Edit the search bar directly.
         </div>
       )}
+
       {availableSets.length > 0 && (
         <section className={`${styles.section} ${styles.setPickerSection}`}>
           <h2 className={styles.sectionLabel}>Set</h2>
           <SetCombobox sets={availableSets} value={activeSet} onChange={onSetChange} />
         </section>
       )}
+
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionLabel}>Colour</h2>
@@ -2770,6 +2843,7 @@ function SetCombobox({
     if (typeof window === 'undefined') return 'name'
     return (window.localStorage.getItem('deckbuilder.setSort') as 'name' | 'date') ?? 'name'
   })
+
   useEffect(() => {
     if (typeof window !== 'undefined') window.localStorage.setItem('deckbuilder.setSort', sortMode)
   }, [sortMode])
@@ -2907,6 +2981,7 @@ function SetCombobox({
           </button>
         )}
       </div>
+
       {open && (
         <div className={styles.setComboPanel}>
           <div className={styles.setComboPanelHeader}>
@@ -2967,6 +3042,7 @@ function SetCombobox({
               ]
                 .filter(Boolean)
                 .join(' ')
+
               return (
                 <li
                   key={s.code}
@@ -3149,6 +3225,7 @@ function ColorModeSegmented({
     { op: '=', label: 'Exactly', title: 'Cards whose colours are exactly the chosen set' },
     { op: '<=', label: 'At most', title: 'Cards whose colours are a subset of the chosen set' },
   ]
+
   return (
     <div className={styles.modeSegmented} role="group" aria-label="Colour comparison mode">
       {options.map((opt) => (
@@ -3188,7 +3265,9 @@ function rewriteColorTokens(query: string, op: ColorOp, letters: Set<string>): s
   // Strip every existing colour token regardless of operator so we don't
   // leave stale `c:X` behind when switching to exactly/at-most.
   const cleaned = query.replace(/(?:^|\s)c(?:<=|=|:)[wubrgWUBRG]+(?=\s|$)/g, '').trim()
+
   if (letters.size === 0) return cleaned
+
   const sorted = [...letters].sort().join('')
   if (op === ':') {
     // Per-letter tokens — "must contain each chosen colour" reads cleanly
@@ -3196,6 +3275,7 @@ function rewriteColorTokens(query: string, op: ColorOp, letters: Set<string>): s
     const tokens = [...sorted].map((l) => `c:${l}`).join(' ')
     return cleaned ? `${cleaned} ${tokens}` : tokens
   }
+
   return cleaned ? `${cleaned} c${op}${sorted}` : `c${op}${sorted}`
 }
 
@@ -3258,6 +3338,7 @@ function CardGrid({
   onShowMore: () => void
 }) {
   const [hoverCard, setHoverCard] = useState<CardSummary | null>(null)
+
   const dfc = useDfcHoverFlip(
     hoverCard
       ? {
@@ -3319,6 +3400,7 @@ function CardGrid({
           </div>
         )}
       </div>
+
       <HoverFollowPreview
         name={hoverCard ? (dfc.displayName ?? hoverCard.name) : null}
         imageUri={hoverCard ? (dfc.displayImageUri ?? hoverCard.imageUri ?? null) : null}
@@ -3349,6 +3431,7 @@ const CardTile = memo(function CardTile({
   // Lazy-load the image once the tile scrolls into view.
   const ref = useRef<HTMLDivElement | null>(null)
   const [visible, setVisible] = useState(false)
+
   useEffect(() => {
     if (!ref.current) return
     const obs = new IntersectionObserver(
@@ -3414,6 +3497,7 @@ function CardTextFallback({ card }: { card: CardSummary }) {
     .filter(Boolean)
     .map((t) => t[0]! + t.slice(1).toLowerCase())
     .join(' ')
+
   return (
     <div className={styles.cardTextFallback}>
       <span className={styles.cardFallbackName}>{card.name}</span>
@@ -3443,28 +3527,35 @@ function HoverFollowPreview({
   overlay?: React.ReactNode
 }) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+
   useEffect(() => {
     if (!name) {
       setPos(null)
       return
     }
+
     let pending: { x: number; y: number } | null = null
     let rafId: number | null = null
+
     const flush = () => {
       rafId = null
       if (pending) setPos(pending)
     }
+
     const onMove = (e: MouseEvent) => {
       pending = { x: e.clientX, y: e.clientY }
       if (rafId === null) rafId = requestAnimationFrame(flush)
     }
+
     window.addEventListener('mousemove', onMove)
     return () => {
       window.removeEventListener('mousemove', onMove)
       if (rafId !== null) cancelAnimationFrame(rafId)
     }
   }, [name])
+
   if (!name || !pos) return null
+
   return <HoverCardPreview name={name} imageUri={imageUri} pos={pos} overlay={overlay} />
 }
 
@@ -3489,6 +3580,7 @@ function DeckHoverPreview({
       </div>
     )
   }
+
   const imageUrl = getCardImageUrl(name, imageUri, 'large')
   return (
     <div className={styles.deckHoverPreview}>
@@ -3539,8 +3631,10 @@ function DeckListPanel({
     () => groupForDeckList(deckCards, catalog, commander),
     [deckCards, catalog, commander],
   )
+
   const [hoverCard, setHoverCard] = useState<CardSummary | null>(null)
   const [hoverName, setHoverName] = useState<string | null>(null)
+
   // Prefer the pinned printing's art when one exists for the hovered row; fall back to
   // the catalog default. Same fallback applies to the back face for DFCs — pinned printings
   // always carry both faces if applicable, so a missing field really does mean "no override".
@@ -3554,6 +3648,7 @@ function DeckListPanel({
         }
       : hoverCard
     : null
+
   const dfc = useDfcHoverFlip(
     effectiveHoverCard
       ? {
@@ -3580,6 +3675,7 @@ function DeckListPanel({
     },
     [resetDfcFlip],
   )
+
   const handleLeave = useCallback(() => {
     setHoverName(null)
     setHoverCard(null)
@@ -3634,11 +3730,13 @@ function DeckListPanel({
           ))}
         </div>
       ))}
+
       {grouped.length === 0 && (
         <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', textAlign: 'center', margin: 'var(--space-4) 0' }}>
           Click cards in the grid to add them.
         </p>
       )}
+
       <HoverFollowPreview
         name={hoverName ? (dfc.displayName ?? hoverName) : null}
         imageUri={hoverName ? (dfc.displayImageUri ?? effectiveHoverCard?.imageUri ?? null) : null}
@@ -3694,7 +3792,9 @@ const DeckRow = memo(function DeckRow({
     entry.card.legalFormats.length > 0 &&
     !entry.card.legalFormats.includes(activeFormat.toUpperCase())
   const unknown = !entry.card
+
   const isCommanderRow = showCommanderControls && commander === entry.name
+
   // Eligible commanders: legendary creatures or planeswalkers. The server's
   // CommanderEligibility is the authoritative gate (it also accepts the rare
   // "can be your commander" oracle override on non-legendary creatures and oddities
@@ -3705,6 +3805,7 @@ const DeckRow = memo(function DeckRow({
     (entry.card.supertypes.includes('LEGENDARY') && entry.card.cardTypes.includes('CREATURE')) ||
     entry.card.cardTypes.includes('PLANESWALKER')
   )
+
   // Pull this row's violations out of the validation response. We surface two of
   // them as inline visuals in the deck list (color identity outside the commander's;
   // exceeding the per-format copy cap); the rest are still listed in the right-rail
@@ -3716,7 +3817,9 @@ const DeckRow = memo(function DeckRow({
   const offIdentity = violationCodes?.has('COLOR_IDENTITY_VIOLATION') ?? false
   const tooManyCopies =
     !isCommanderRow && (violationCodes?.has('TOO_MANY_COPIES') ?? false)
+
   const violation = offIdentity || tooManyCopies
+
   // Cap-aware `+` button. effectiveCopyCap mirrors the server's per-format limit so
   // the user literally cannot exceed it; in commander-shape formats this is what
   // blocks adding a second copy of any non-basic non-override card.
@@ -3724,6 +3827,7 @@ const DeckRow = memo(function DeckRow({
     ? effectiveCopyCap(entry.card, isCommanderFormat)
     : Number.POSITIVE_INFINITY
   const atCap = entry.count >= cap
+
   const rowClasses = [
     styles.deckRow,
     // Commander format always renders the crown affordance on each row, which adds a 7th
@@ -3739,6 +3843,7 @@ const DeckRow = memo(function DeckRow({
   ]
     .filter(Boolean)
     .join(' ')
+
   const violationReasons: string[] = []
   if (offIdentity && commander) {
     violationReasons.push(`Outside ${commander}'s color identity`)
@@ -3750,6 +3855,7 @@ const DeckRow = memo(function DeckRow({
         : `Too many copies for ${activeFormat ?? 'this format'}`,
     )
   }
+
   const rowTitle = unknown
     ? 'Not implemented yet — placeholder only'
     : illegal
@@ -3798,6 +3904,7 @@ const DeckRow = memo(function DeckRow({
         {entry.name}
         {unknown && <span className={styles.deckRowUnknownTag}>not implemented</span>}
       </span>
+
       {showCommanderControls && (
         <button
           type="button"
@@ -3828,6 +3935,7 @@ const DeckRow = memo(function DeckRow({
           ♛
         </button>
       )}
+
       {entry.card && entry.count > 0 && (
         <button
           type="button"
@@ -3848,6 +3956,7 @@ const DeckRow = memo(function DeckRow({
           {pinnedPrinting ? pinnedPrinting.setCode : '◧'}
         </button>
       )}
+
       <span className={styles.deckRowCost}>
         <ManaCost cost={entry.card?.manaCost || null} size={11} />
       </span>
@@ -3882,8 +3991,10 @@ function AddCardSearch({
   const [text, setText] = useState('')
   const [open, setOpen] = useState(false)
   const [hoverCard, setHoverCard] = useState<CardSummary | null>(null)
+
   const containerRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
+
   const dfc = useDfcHoverFlip(
     hoverCard
       ? {
@@ -3900,25 +4011,27 @@ function AddCardSearch({
   const matches = useMemo(() => {
     const t = text.trim().toLowerCase()
     if (t.length < 1) return []
+
     const out: CardSummary[] = []
     for (const c of catalog) {
       if (c.basicLand) continue
       if (c.name.toLowerCase().includes(t)) out.push(c)
     }
+
     out.sort((a, b) => {
       const al = a.name.toLowerCase()
       const bl = b.name.toLowerCase()
       const aRank = al === t ? 0 : al.startsWith(t) ? 1 : 2
       const bRank = bl === t ? 0 : bl.startsWith(t) ? 1 : 2
+
       if (aRank !== bRank) return aRank - bRank
       return al.localeCompare(bl)
     })
+
     return out.slice(0, 14)
   }, [catalog, text])
 
-  // Close dropdown when the user clicks outside the search container — the dropdown is
-  // absolutely positioned over the deck columns, so without this it'd intercept hovers on
-  // the deck rows after the user finishes searching.
+  // Close dropdown when the user clicks outside the search container
   useEffect(() => {
     if (!open) return
     const onDoc = (e: MouseEvent) => {
@@ -3933,9 +4046,6 @@ function AddCardSearch({
   const handleAdd = (card: CardSummary) => {
     onAdd(card)
     setHoverCard(null)
-    // Keep the input focused but clear the dropdown so subsequent typing starts fresh — most
-    // users want to add one card at a time, then move on. They can still arrow back into the
-    // input or just keep typing.
     inputRef.current?.focus()
   }
 
@@ -3972,12 +4082,14 @@ function AddCardSearch({
       >
         Suggest basic lands
       </button>
+
       {open && matches.length > 0 && (
         <div className={styles.addCardDropdown} role="listbox">
           {matches.map((card) => {
             const cap = effectiveCopyCap(card, isCommanderFormat)
             const current = deckCards[card.name] ?? 0
             const atCap = current >= cap
+
             return (
               <button
                 key={card.name}
@@ -4004,6 +4116,7 @@ function AddCardSearch({
           })}
         </div>
       )}
+
       <HoverFollowPreview
         name={hoverCard ? (dfc.displayName ?? hoverCard.name) : null}
         imageUri={hoverCard ? (dfc.displayImageUri ?? hoverCard.imageUri ?? null) : null}
@@ -4014,108 +4127,9 @@ function AddCardSearch({
 }
 
 // ---------------------------------------------------------------------------
-// Deck-centric view (Moxfield-style).
-//
-// Renders the deck as multiple columns, one bucket per card type. Uses CSS
-// columns so the bucket count auto-fits the available width (3 columns on a
-// typical desktop, 2 on a narrow window). Each group is a self-contained block
-// with `break-inside: avoid` so a Creatures group doesn't get split mid-list.
-// ---------------------------------------------------------------------------
-
-function DeckCentricView({
-  deckCards,
-  catalog,
-  activeFormat,
-  onAdd,
-  onRemove,
-  commander,
-  showCommanderControls,
-  onToggleCommander,
-  rowViolations,
-  isCommanderFormat,
-  onHoverEnter,
-  onHoverLeave,
-  pinnedPrintings,
-  onOpenPicker,
-}: {
-  deckCards: Record<string, number>
-  catalog: Record<string, CardSummary>
-  activeFormat: string | null
-  onAdd: (card: CardSummary) => void
-  onRemove: (name: string) => void
-  commander: string | null
-  showCommanderControls: boolean
-  onToggleCommander: (name: string) => void
-  rowViolations: Map<string, Set<string>>
-  isCommanderFormat: boolean
-  onHoverEnter: (entry: { name: string; card: CardSummary | undefined }) => void
-  onHoverLeave: () => void
-  pinnedPrintings: Record<string, PrintingRef>
-  onOpenPicker: (name: string, anchor: DOMRect) => void
-}) {
-  const grouped = useMemo(
-    () => groupByCardType(deckCards, catalog, commander),
-    [deckCards, catalog, commander],
-  )
-
-  // Use the raw deck size (not the grouped-bucket count) because the Lands group now always
-  // synthesizes the 5 basic-land rows even at count 0 — so an empty deck would otherwise still
-  // produce one non-empty group and we'd never show the empty state.
-  const isEmpty = Object.keys(deckCards).length === 0 && commander === null
-  if (isEmpty) {
-    return (
-      <div className={styles.deckCentricEmpty}>
-        Your deck is empty. Type a card name in the search bar above, or switch to{' '}
-        <strong>Cards to add</strong> to browse the catalog.
-      </div>
-    )
-  }
-
-  return (
-    <div className={styles.deckCentric}>
-      <div className={styles.deckCentricColumns}>
-        {grouped.map((group) => (
-          <div key={group.label} className={styles.deckCentricGroup}>
-            <h3 className={styles.deckCentricGroupLabel}>
-              {group.label} ({group.entries.reduce((a, e) => a + e.count, 0)})
-            </h3>
-            {group.entries.map((entry) => (
-              <DeckRow
-                key={entry.name}
-                entry={entry}
-                activeFormat={activeFormat}
-                commander={commander}
-                showCommanderControls={showCommanderControls}
-                isCommanderFormat={isCommanderFormat}
-                rowViolations={rowViolations}
-                onAdd={onAdd}
-                onRemove={onRemove}
-                onToggleCommander={onToggleCommander}
-                onEnter={onHoverEnter}
-                onLeave={onHoverLeave}
-                pinnedPrinting={pinnedPrintings[entry.name]}
-                onOpenPicker={onOpenPicker}
-              />
-            ))}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Basic-lands quick-add panel (right rail)
 // ---------------------------------------------------------------------------
 
-const BASIC_LAND_ORDER = ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest']
-const BASIC_LAND_COLOR: Record<string, string> = {
-  Plains: 'W',
-  Island: 'U',
-  Swamp: 'B',
-  Mountain: 'R',
-  Forest: 'G',
-}
 /**
  * Per-card deck-size override parsed from oracle text. Mirrors `DeckValidator.parseDeckSizeOverride`
  * on the server so the client `+` button respects "A deck can have any number / up to N cards
@@ -4124,10 +4138,12 @@ const BASIC_LAND_COLOR: Record<string, string> = {
 function parseDeckSizeOverride(card: CardSummary): number | null {
   const text = card.oracleText ?? ''
   if (!text) return null
+
   const anyNumber = /A deck can have any number of cards named ([^.]+)\./i.exec(text)
   if (anyNumber && anyNumber[1]?.trim().toLowerCase() === card.name.toLowerCase()) {
     return Number.POSITIVE_INFINITY
   }
+
   const upTo = /A deck can have up to (one|two|three|four|five|six|seven|eight|nine|ten|\d+) cards named ([^.]+)\./i.exec(text)
   if (upTo && upTo[2]?.trim().toLowerCase() === card.name.toLowerCase()) {
     const word = upTo[1]!.toLowerCase()
@@ -4139,6 +4155,7 @@ function parseDeckSizeOverride(card: CardSummary): number | null {
     const parsed = Number.parseInt(word, 10)
     return Number.isFinite(parsed) ? parsed : null
   }
+
   return null
 }
 
@@ -4191,6 +4208,7 @@ function suggestLandsForDeck(
     if (count <= 0) continue
     const card = catalog[name]
     if (!card || card.basicLand) continue
+
     entries.push({
       name: card.name,
       manaCost: card.manaCost,
@@ -4230,37 +4248,42 @@ function groupForDeckList(
 ): DeckGroup[] {
   const spells: DeckGroup['entries'] = []
   const lands: DeckGroup['entries'] = []
-  // Commander row (if any). Pulled out of the spell/land buckets and rendered as its own
-  // group at the top of the list — even if the commander is technically a creature/planeswalker
-  // that would otherwise sort under Spells, it should always lead the deck list visually.
   let commanderEntry: DeckGroup['entries'][number] | null = null
+
   for (const [name, count] of Object.entries(deck)) {
     if (count <= 0) continue
     const card = catalog[name]
-    // Basics get appended below as sticky rows in canonical W/U/B/R/G order so 0-count basics
-    // still appear; skip them here to avoid double-listing the >0 ones.
+
     if (card?.basicLand) continue
+
     const entry = { name, count, card }
+
     if (commander !== null && name === commander) {
       commanderEntry = entry
       continue
     }
+
     if (card?.cardTypes.includes('LAND')) lands.push(entry)
     else spells.push(entry)
   }
+
   spells.sort(byCmcThenName)
   lands.sort(byCmcThenName)
+
   const basicEntries: DeckGroup['entries'] = []
   for (const basicName of BASIC_LAND_ORDER) {
     const card = catalog[basicName]
     if (!card) continue
     basicEntries.push({ name: basicName, count: deck[basicName] ?? 0, card })
   }
+
   const allLands = [...lands, ...basicEntries]
+
   const groups: DeckGroup[] = []
   if (commanderEntry) groups.push({ label: 'Commander', entries: [commanderEntry] })
   if (spells.length > 0) groups.push({ label: 'Spells', entries: spells })
   if (allLands.length > 0) groups.push({ label: 'Lands', entries: allLands })
+
   return groups
 }
 
@@ -4289,6 +4312,7 @@ function groupByCardType(
     | 'Enchantments'
     | 'Lands'
     | 'Other'
+
   const buckets: Record<BucketKey, DeckGroup['entries']> = {
     Creatures: [],
     Planeswalkers: [],
@@ -4300,22 +4324,29 @@ function groupByCardType(
     Lands: [],
     Other: [],
   }
+
   let commanderEntry: DeckGroup['entries'][number] | null = null
   const seenNames = new Set<string>()
+
   for (const [name, count] of Object.entries(deck)) {
     if (count <= 0) continue
     const card = catalog[name]
     seenNames.add(name)
+
     const entry = { name, count, card }
+
     if (commander !== null && name === commander) {
       commanderEntry = entry
       continue
     }
+
     if (!card) {
       buckets.Other.push(entry)
       continue
     }
+
     const t = card.cardTypes
+
     if (t.includes('CREATURE')) buckets.Creatures.push(entry)
     else if (t.includes('PLANESWALKER')) buckets.Planeswalkers.push(entry)
     else if (t.includes('BATTLE')) buckets.Battles.push(entry)
@@ -4326,6 +4357,7 @@ function groupByCardType(
     else if (t.includes('LAND')) buckets.Lands.push(entry)
     else buckets.Other.push(entry)
   }
+
   const order: BucketKey[] = [
     'Creatures',
     'Planeswalkers',
@@ -4337,14 +4369,10 @@ function groupByCardType(
     'Lands',
     'Other',
   ]
-  // Sort each bucket. Lands gets two-stage sort: non-basics by cmc/name, then basics in W/U/B/R/G
-  // order at the end — basics with count=0 still appear so the user can ramp them up directly
-  // from the deck list.
+
   for (const key of order) {
     if (key === 'Lands') {
       buckets.Lands.sort(byCmcThenName)
-      // Filter out basics that may have been collected above (count > 0 ones); we re-add them
-      // in canonical order from the catalog so 0-count basics sit alongside the >0 ones.
       const nonBasicLands = buckets.Lands.filter((e) => !e.card?.basicLand)
       const basicEntries: DeckGroup['entries'] = []
       for (const basicName of BASIC_LAND_ORDER) {
@@ -4357,13 +4385,16 @@ function groupByCardType(
       buckets[key].sort(byCmcThenName)
     }
   }
+
   const groups: DeckGroup[] = []
   if (commanderEntry) groups.push({ label: 'Commander', entries: [commanderEntry] })
+
   for (const key of order) {
     const entries = buckets[key]
     if (entries.length === 0) continue
     groups.push({ label: key, entries })
   }
+
   return groups
 }
 
@@ -4428,6 +4459,7 @@ function extractRange(query: string, key: string): [number | null, number | null
   const maxRe = new RegExp(`(?:^|\\s)${key}<=(\\d+)(?:\\s|$)`)
   const minMatch = query.match(minRe)
   const maxMatch = query.match(maxRe)
+
   return [
     minMatch ? parseInt(minMatch[1]!, 10) : null,
     maxMatch ? parseInt(maxMatch[1]!, 10) : null,
@@ -4442,10 +4474,14 @@ function setRange(
 ): string {
   const minRe = new RegExp(`(?:^|\\s)${key}>=\\d+(?=\\s|$)`, 'g')
   const maxRe = new RegExp(`(?:^|\\s)${key}<=\\d+(?=\\s|$)`, 'g')
+
   let next = query.replace(minRe, '').replace(maxRe, '').trim()
+
   const minN = typeof min === 'string' ? (min === '' ? null : parseInt(min, 10)) : min
   const maxN = typeof max === 'string' ? (max === '' ? null : parseInt(max, 10)) : max
+
   if (minN !== null && Number.isFinite(minN)) next = `${next} ${key}>=${minN}`.trim()
   if (maxN !== null && Number.isFinite(maxN)) next = `${next} ${key}<=${maxN}`.trim()
+
   return next
 }
