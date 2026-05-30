@@ -7,6 +7,7 @@ import { useGameStore } from '@/store/gameStore';
 import { useInteraction } from '@/hooks/useInteraction';
 import { useViewingPlayer, useOpponent, useStackCards, selectPriorityMode, useGhostCards, useRevealedLibraryTopCard } from '@/store/selectors';
 import { hand, getNextStep, StepShortNames } from '@/types';
+import { ZoneType } from '@/types/enums'; 
 import { useResponsive, ResponsiveContextProvider } from '@/hooks/useResponsive';
 import type { ClientCard, ClientPlayer } from '@/types';
 // Import all the original UI components it needs
@@ -72,7 +73,7 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
     
     const getRowCount = (playerId: ClientPlayer['playerId'] | null, isCreatureRow: boolean) => {
         if (!playerId) return 0;
-        const zone = zones.find(z => z.zoneId.ownerId === playerId && z.zoneId.zoneType === 'BATTLEFIELD');
+            const zone = gameState.zones.find(z => z.zoneId.ownerId === playerId && z.zoneId.zoneType === ZoneType.BATTLEFIELD);
         if (!zone) return 0;
         return zone.cardIds
             .map(id => cards[id])
