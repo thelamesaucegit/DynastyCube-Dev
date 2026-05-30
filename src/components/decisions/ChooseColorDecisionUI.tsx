@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { useGameStore } from '@/store/gameStore.ts'
+import { useGameStore } from '@/store/gameStore'
 import type { ChooseColorDecision } from '@/types'
 import { ColorDisplayNames } from '@/types'
-import { ManaSymbol } from '@/components/ui/ManaSymbols.tsx'
+import { ManaSymbol } from '@/components/ui/ManaSymbols'
 
 /**
  * Map color enum names to mana symbol keys (W, U, B, R, G).
