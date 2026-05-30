@@ -3,7 +3,7 @@ import { useGameStore } from '@/store/gameStore'
 import type { DecisionSelectionState } from '@/store/slices'
 import type { EntityId, ChooseTargetsDecision } from '@/types'
 import { useResponsive } from '@/hooks/useResponsive'
-import { getCardImageUrl } from '@/utils/cardImages.ts'
+import { getCardImageUrl } from '@/utils/cardImages'
 import { DecisionCardPreview } from './DecisionComponents'
 import styles from './DecisionUI.module.css'
 
