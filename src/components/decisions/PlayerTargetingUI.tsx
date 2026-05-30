@@ -1,4 +1,4 @@
-import { useGameStore } from '@/store/gameStore.ts'
+import { useGameStore } from '@/store/gameStore'
 import type { ChooseTargetsDecision } from '@/types'
 import styles from './DecisionUI.module.css'
 
