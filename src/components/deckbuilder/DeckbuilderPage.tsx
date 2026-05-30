@@ -1485,7 +1485,7 @@ function ImportDeckModal({
           <code>count name</code>, optionally followed by <code>(SET) NUM</code> and Moxfield
           decorations (<code>*F*</code>, <code>*A*</code>, <code>#tag</code>). Section headers like{' '}
           <code>Deck</code>, <code>Sideboard</code>, <code>Commander</code> are recognised; lines
-          starting with <code>//</code> or <code>#</code> are comments.
+          starting with &apos;double-forward-slash&apos; or &apos;hash&apos; are comments.
         </p>
         <textarea
           className={styles.importTextarea}
@@ -2990,7 +2990,7 @@ function SetCombobox({
               )
             })}
             {filtered.length === 0 && (
-              <li className={styles.setComboEmpty}>No sets match "{search}"</li>
+              <li className={styles.setComboEmpty}>No sets match &quot;{search}&quot</li>
             )}
           </ul>
         </div>
