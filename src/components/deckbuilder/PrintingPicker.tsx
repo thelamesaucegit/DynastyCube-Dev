@@ -123,7 +123,7 @@ export function PrintingPicker({
       </header>
       <div className={styles.body}>
         {printings === null && error === null && <div className={styles.muted}>Loading printings…</div>}
-        {error !== null && <div className={styles.error}>Couldn't load printings: {error}</div>}
+        {error !== null && <div className={styles.error}>Couldn&apos;t load printings: {error}</div>}
         {printings !== null && printings.length === 0 && (
           <div className={styles.muted}>No printings registered for this card yet.</div>
         )}
