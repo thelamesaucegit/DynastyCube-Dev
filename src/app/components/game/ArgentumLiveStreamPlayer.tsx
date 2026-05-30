@@ -4,9 +4,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { GameBoard } from '@/components/game/GameBoard';
-import type { SpectatorStateUpdate, ReplayCardData } from '@/types';
-import { ResponsiveContext } from '@/components/game/board/shared';
-import { useResponsive } from '@/hooks/useResponsive';
+import type { SpectatorStateUpdate, ReplayCardData, ClientPlayer, ClientCard } from '@/types';
+import { ResponsiveContext, useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
 
 interface ArgentumLiveStreamPlayerProps {
@@ -17,7 +16,6 @@ interface ArgentumLiveStreamPlayerProps {
 }
 
 type StreamStatus = 'waiting' | 'live' | 'ended';
-
 const STEP_DURATION_MS = 3000;
 const STREAM_DELAY_MINUTES = 30;
 
@@ -27,11 +25,32 @@ export function ArgentumLiveStreamPlayer({ matchId, initialGameStates, cardDataM
     const [streamStatus, setStreamStatus] = useState<StreamStatus>('waiting');
     const [timeUntilStart, setTimeUntilStart] = useState(0);
     const totalStates = initialGameStates.length;
-
-    // --- HOOKS CALLED UNCONDITIONALLY AT THE TOP ---
     const currentSnapshot = initialGameStates[currentIndex] ?? null;
-    const responsiveSizes = useResponsive({ snapshot: currentSnapshot, topOffset: 0 }); // Pass options object
-    // ---------------------------------------------
+
+    const zoneRowCounts = useMemo(() => {
+        if (!currentSnapshot) return [0, 0, 0, 0];
+        const { gameState, player1Id, player2Id } = currentSnapshot;
+        const getRowCount = (playerId: ClientPlayer['playerId'], isCreatureRow: boolean) => {
+            const zone = gameState.zones.find(z => z.zoneId.ownerId === playerId && z.zoneId.zoneType === 'BATTLEFIELD');
+            if (!zone) return 0;
+            return zone.cardIds
+                .map(id => gameState.cards[id])
+                .filter((c): c is ClientCard => !!c)
+                .filter(c => !c.attachedTo)
+                .filter(c => {
+                    const isCreatureOrPW = c.cardTypes.includes('CREATURE') || c.cardTypes.includes('PLANESWALKER');
+                    return isCreatureRow ? isCreatureOrPW : !isCreatureOrPW;
+                }).length;
+        };
+        return [
+            getRowCount(player1Id, true),
+            getRowCount(player1Id, false),
+            getRowCount(player2Id, true),
+            getRowCount(player2Id, false),
+        ];
+    }, [currentSnapshot]);
+
+    const responsiveSizes = useResponsive(0, zoneRowCounts);
 
     const streamStartTime = useMemo(() => {
         const date = new Date(scheduledMatchDate);
@@ -88,9 +107,7 @@ export function ArgentumLiveStreamPlayer({ matchId, initialGameStates, cardDataM
         );
     }
     
-    if (!currentSnapshot || !currentSnapshot.gameState) return null; // Final guard before render
-
-    // --- RENDER LOGIC ---
+      if (!currentSnapshot || !currentSnapshot.gameState) return null;
     const { turnNumber, currentPhase } = currentSnapshot.gameState;
     
     return (
