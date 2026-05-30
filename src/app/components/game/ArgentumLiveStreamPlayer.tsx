@@ -31,7 +31,7 @@ export function ArgentumLiveStreamPlayer({ matchId, initialGameStates, cardDataM
         if (!currentSnapshot) return [0, 0, 0, 0];
         const { gameState, player1Id, player2Id } = currentSnapshot;
         const getRowCount = (playerId: ClientPlayer['playerId'], isCreatureRow: boolean) => {
-            const zone = gameState.zones.find(z => z.zoneId.ownerId === playerId && z.zoneId.zoneType === 'BATTLEFIELD');
+            const zone = gameState.zones.find(z => z.zoneId.ownerId === playerId && z.zoneId.zoneType === ZoneType.BATTLEFIELD);
             if (!zone) return 0;
             return zone.cardIds
                 .map(id => gameState.cards[id])
