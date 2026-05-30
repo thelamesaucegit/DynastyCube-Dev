@@ -26,7 +26,7 @@ export function PlayerTargetingUI({
         {decision.prompt}
       </div>
       <div className={styles.hint}>
-        Click a player's life total
+        Click a player&apos;s life total
       </div>
       {decision.canCancel && (
         <div className={styles.buttonContainerSmall}>
