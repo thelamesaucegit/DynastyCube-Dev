@@ -73,7 +73,7 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
     
     const getRowCount = (playerId: ClientPlayer['playerId'] | null, isCreatureRow: boolean) => {
         if (!playerId) return 0;
-            const zone = gameState.zones.find(z => z.zoneId.ownerId === playerId && z.zoneId.zoneType === ZoneType.BATTLEFIELD);
+        const zone = zones.find(z => z.zoneId.ownerId === playerId && z.zoneId.zoneType === ZoneType.BATTLEFIELD);
         if (!zone) return 0;
         return zone.cardIds
             .map(id => cards[id])
