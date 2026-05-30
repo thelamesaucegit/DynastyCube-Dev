@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { useGameStore, type LobbyState, type TournamentState } from '@/store/gameStore.ts'
 import type { SealedCardInfo, TournamentFormat } from '@/types'
 import { getCardImageUrl } from '@/utils/cardImages.ts'
@@ -102,7 +102,7 @@ function ConnectionOverlay({
   sessionId: string | null
   error: string | undefined
 }) {
-  const navigate = useNavigate()
+const router = useRouter()
   const connect = useGameStore((state) => state.connect)
   const aiEnabled = useGameStore((state) => state.aiEnabled)
   const createTournamentLobby = useGameStore((state) => state.createTournamentLobby)
@@ -398,7 +398,7 @@ function ConnectionOverlay({
 
               <div className={styles.secondaryButtonRow}>
                 <button
-                  onClick={() => navigate('/deckbuilder')}
+                  onClick={() => router.push('/deckbuilder')}
                   className={styles.secondaryButton}
                 >
                   Deckbuilder
