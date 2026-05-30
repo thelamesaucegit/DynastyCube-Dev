@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useGameStore, type DeckBuildingState } from '@/store/gameStore.ts'
+import { useGameStore, type DeckBuildingState } from '@/store/gameStore'
 
 /**
  * Chat panel that talks to the deckbuilding LLM advisor on the server.
