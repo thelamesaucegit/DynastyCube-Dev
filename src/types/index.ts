@@ -1,3 +1,5 @@
+// src/types/index.ts
+
 // Enums
 export {
   Phase,
@@ -76,6 +78,16 @@ export {
   isMyTurn,
   hasPriority,
 } from './gameState'
+
+// --- NEW SECTION: Replay & Spectator Types ---
+export type {
+  SpectatorStateUpdate,
+  Team,
+  ReplayCardData,
+  SpectatorStateDiff,
+  ReplayStateItem,
+} from './replay-types';
+// -----------------------------------------
 
 // Events
 export type {
