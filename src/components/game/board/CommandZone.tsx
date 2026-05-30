@@ -1,4 +1,4 @@
-import { useZoneCards } from '@/store/selectors.ts'
+import { useZoneCards } from '@/store/selectors'
 import { command } from '@/types'
 import type { ClientPlayer } from '@/types'
 import { useResponsiveContext } from './shared'
