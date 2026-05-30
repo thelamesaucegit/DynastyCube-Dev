@@ -105,7 +105,7 @@ export function StepStrip({
   onToggleStop,
   isSpectator = false,
 }: StepStripProps) {
-const responsive = useResponsive({});
+const responsive = useResponsive();
   const colors = priorityMode === 'waiting' && isActivePlayer
     ? waitingMyTurn
     : modeColors[priorityMode]
