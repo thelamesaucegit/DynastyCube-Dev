@@ -306,7 +306,7 @@ export function CombatResolutionBoard({ decision }: { decision: CombatResolution
               {hasBanding(sourceId) && bandingPill()}
               {sourceBandingInverted(sourceId) && !hasBanding(sourceId) && (
                 <span style={{ color: '#c084fc', fontSize: responsive.fontSize.small, maxWidth: cardW + 30, textAlign: 'center', lineHeight: 1.2 }}>
-                  Banding: you assign this creature's damage
+                  Banding: you assign this creature&apos;s damage
                 </span>
               )}
             </div>
