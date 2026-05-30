@@ -161,6 +161,8 @@ export enum Keyword {
   VIGILANCE = 'VIGILANCE',
   REACH = 'REACH',
   PROVOKE = 'PROVOKE',
+  FLANKING = 'FLANKING',
+  BANDING = 'BANDING',
   // ETB modification
   AMPLIFY = 'AMPLIFY',
   // Defense
@@ -183,8 +185,23 @@ export enum Keyword {
   // Spell mechanics
   STORM = 'STORM',
   FLASHBACK = 'FLASHBACK',
+  EVOKE = 'EVOKE',
+  IMPENDING = 'IMPENDING',
+  CONSPIRE = 'CONSPIRE',
+  HIDEAWAY = 'HIDEAWAY',
+  CASCADE = 'CASCADE',
+  PLOT = 'PLOT',
   // Creature mechanics
   OFFSPRING = 'OFFSPRING',
+  // Damage modification
+  WITHER = 'WITHER',
+  TOXIC = 'TOXIC',
+  // Death replacement
+  PERSIST = 'PERSIST',
+  // Resolution-time city's blessing grant (Ixalan)
+  ASCEND = 'ASCEND',
+  // Ability words
+  EERIE = 'EERIE',
 }
 
 export const KeywordDisplayNames: Record<Keyword, string> = {
@@ -207,6 +224,8 @@ export const KeywordDisplayNames: Record<Keyword, string> = {
   [Keyword.VIGILANCE]: 'Vigilance',
   [Keyword.REACH]: 'Reach',
   [Keyword.PROVOKE]: 'Provoke',
+  [Keyword.FLANKING]: 'Flanking',
+  [Keyword.BANDING]: 'Banding',
   [Keyword.AMPLIFY]: 'Amplify',
   [Keyword.DEFENDER]: 'Defender',
   [Keyword.INDESTRUCTIBLE]: 'Indestructible',
@@ -223,7 +242,18 @@ export const KeywordDisplayNames: Record<Keyword, string> = {
   [Keyword.AFFINITY]: 'Affinity',
   [Keyword.STORM]: 'Storm',
   [Keyword.FLASHBACK]: 'Flashback',
+  [Keyword.EVOKE]: 'Evoke',
+  [Keyword.IMPENDING]: 'Impending',
+  [Keyword.CONSPIRE]: 'Conspire',
+  [Keyword.HIDEAWAY]: 'Hideaway',
+  [Keyword.CASCADE]: 'Cascade',
+  [Keyword.PLOT]: 'Plot',
   [Keyword.OFFSPRING]: 'Offspring',
+  [Keyword.WITHER]: 'Wither',
+  [Keyword.TOXIC]: 'Toxic',
+  [Keyword.PERSIST]: 'Persist',
+  [Keyword.ASCEND]: 'Ascend',
+  [Keyword.EERIE]: 'Eerie',
 }
 
 /**
@@ -235,6 +265,7 @@ export enum AbilityFlag {
   CANT_BE_BLOCKED_BY_MORE_THAN_ONE = 'CANT_BE_BLOCKED_BY_MORE_THAN_ONE',
   DOESNT_UNTAP = 'DOESNT_UNTAP',
   MAY_NOT_UNTAP = 'MAY_NOT_UNTAP',
+  CANT_RECEIVE_COUNTERS = 'CANT_RECEIVE_COUNTERS',
 }
 
 export const AbilityFlagDisplayNames: Record<AbilityFlag, string> = {
@@ -242,6 +273,7 @@ export const AbilityFlagDisplayNames: Record<AbilityFlag, string> = {
   [AbilityFlag.CANT_BE_BLOCKED_BY_MORE_THAN_ONE]: "Can't be blocked by more than one creature",
   [AbilityFlag.DOESNT_UNTAP]: "Doesn't untap during your untap step",
   [AbilityFlag.MAY_NOT_UNTAP]: 'You may choose not to untap',
+  [AbilityFlag.CANT_RECEIVE_COUNTERS]: "Can't have counters put on it",
 }
 
 /**
@@ -289,8 +321,19 @@ export enum CounterType {
   FINALITY = 'FINALITY',
   SUPPLY = 'SUPPLY',
   FLYING = 'FLYING',
+  FIRST_STRIKE = 'FIRST_STRIKE',
+  LIFELINK = 'LIFELINK',
+  INDESTRUCTIBLE = 'INDESTRUCTIBLE',
   STASH = 'STASH',
   BLIGHT = 'BLIGHT',
+  COIN = 'COIN',
+  FLOOD = 'FLOOD',
+  CHORUS = 'CHORUS',
+  DREAM = 'DREAM',
+  QUEST = 'QUEST',
+  GROWTH = 'GROWTH',
+  TIME = 'TIME',
+  FEATHER = 'FEATHER',
 }
 
 export const CounterTypeDisplayNames: Record<CounterType, string> = {
@@ -310,8 +353,19 @@ export const CounterTypeDisplayNames: Record<CounterType, string> = {
   [CounterType.FINALITY]: 'Finality',
   [CounterType.SUPPLY]: 'Supply',
   [CounterType.FLYING]: 'Flying',
+  [CounterType.FIRST_STRIKE]: 'First Strike',
+  [CounterType.LIFELINK]: 'Lifelink',
+  [CounterType.INDESTRUCTIBLE]: 'Indestructible',
   [CounterType.STASH]: 'Stash',
   [CounterType.BLIGHT]: 'Blight',
+  [CounterType.COIN]: 'Coin',
+  [CounterType.FLOOD]: 'Flood',
+  [CounterType.CHORUS]: 'Chorus',
+  [CounterType.DREAM]: 'Dream',
+  [CounterType.QUEST]: 'Quest',
+  [CounterType.GROWTH]: 'Growth',
+  [CounterType.TIME]: 'Time',
+  [CounterType.FEATHER]: 'Feather',
 }
 
 /**
