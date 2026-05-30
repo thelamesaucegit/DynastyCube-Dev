@@ -10,7 +10,7 @@
  * (localStorage). Server validation reuses POST /api/decks/validate.
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import {
   useDeckLibrary,
   mergeCommanderIntoCards,
@@ -190,7 +190,7 @@ function pinnedPrintingsFromEntries(
 // ---------------------------------------------------------------------------
 
 export function DeckbuilderPage() {
-  const navigate = useNavigate()
+const router = useRouter()
   const { deckId } = useParams<{ deckId?: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -720,7 +720,7 @@ export function DeckbuilderPage() {
     setCommander(null)
     setActiveDeckId(null)
     setPinnedPrintings({})
-    navigate(`/deckbuilder${searchSuffix()}`)
+    router.push(`/deckbuilder${searchSuffix()}`)
   }
 
   const handleSave = () => {
@@ -741,7 +741,7 @@ export function DeckbuilderPage() {
       ...(entries ? { entries } : {}),
     })
     setActiveDeckId(saved.id)
-    if (saved.id !== deckId) navigate(`/deckbuilder/${saved.id}${searchSuffix()}`, { replace: true })
+    if (saved.id !== deckId) router.push(`/deckbuilder/${saved.id}${searchSuffix()}`, { replace: true })
   }
 
   const handleSaveAs = () => {
@@ -761,7 +761,7 @@ export function DeckbuilderPage() {
     })
     setDeckName(saved.name)
     setActiveDeckId(saved.id)
-    navigate(`/deckbuilder/${saved.id}${searchSuffix()}`, { replace: true })
+    router.push(`/deckbuilder/${saved.id}${searchSuffix()}`, { replace: true })
   }
 
   const handleDelete = () => {
@@ -786,7 +786,7 @@ export function DeckbuilderPage() {
     if (deck.format) params.set('fmt', deck.format.toUpperCase())
     else params.delete('fmt')
     const suffix = params.toString()
-    navigate(`/deckbuilder/${deck.id}${suffix ? `?${suffix}` : ''}`)
+    router.push(`/deckbuilder/${deck.id}${suffix ? `?${suffix}` : ''}`)
     setDecksBrowserOpen(false)
   }
 
@@ -815,7 +815,7 @@ export function DeckbuilderPage() {
     setActiveDeckId(null)
     setPinnedPrintings({})
     if (suggestedName) setDeckName(suggestedName)
-    navigate(`/deckbuilder${searchSuffix()}`)
+    router.push(`/deckbuilder${searchSuffix()}`)
     setImportOpen(false)
   }
 
@@ -844,7 +844,7 @@ export function DeckbuilderPage() {
     const params = new URLSearchParams(searchParams)
     if (ex.format) params.set('fmt', ex.format.toUpperCase())
     const suffix = params.toString()
-    navigate(`/deckbuilder${suffix ? `?${suffix}` : ''}`)
+    router.push(`/deckbuilder${suffix ? `?${suffix}` : ''}`)
     setExamplesOpen(false)
   }
 
@@ -947,7 +947,7 @@ export function DeckbuilderPage() {
   return (
     <div className={`${styles.page} ${viewMode === 'deck' ? styles.pageDeckMode : ''}`}>
       <header className={styles.topbar}>
-        <button className={styles.iconButton} onClick={() => navigate('/')}>
+        <button className={styles.iconButton} onClick={() => router.push('/')}>
           ← Back to menu
         </button>
         <h1 className={styles.title}>Deckbuilder</h1>
