@@ -559,22 +559,20 @@ export function GameCard({
     }
 
     const handleGlobalTouchEnd = (e: TouchEvent) => {
-      const touch = e.changedTouches[0]
-      if (touch && isInBlockerMode) {
-        // Find the element under the touch point
-        const elementAtPoint = document.elementFromPoint(touch.clientX, touch.clientY)
+      const touch = e.changedTouches[0];
+      if (touch && isInBlockerMode && draggingBlockerId) {
+        const elementAtPoint = document.elementFromPoint(touch.clientX, touch.clientY);
         if (elementAtPoint) {
-          // Walk up the DOM to find a card element
-          const cardEl = elementAtPoint.closest('[data-card-id]')
+          const cardEl = elementAtPoint.closest('[data-card-id]');
           if (cardEl) {
-            const targetCardId = cardEl.getAttribute('data-card-id')
-            if (targetCardId && combatState?.attackingCreatures.includes(targetCardId as any)) {
-              assignBlocker(draggingBlockerId, targetCardId as any)
+            const targetCardId = cardEl.getAttribute('data-card-id') as EntityId | null;
+            if (targetCardId && combatState?.attackingCreatures.includes(targetCardId)) {
+              assignBlocker(draggingBlockerId, targetCardId);
             }
           }
         }
       }
-      stopDraggingBlocker()
+      stopDraggingBlocker();
     }
 
     window.addEventListener('mouseup', handleGlobalMouseUp)
