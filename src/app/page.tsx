@@ -1,16 +1,17 @@
 // src/app/page.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import Image from "next/image"; 
+import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { Badge } from "@/app/components/ui/badge";
-import { ArrowRight, Info, PlayCircle, Radio } from "lucide-react";
+import { ArrowRight, Info } from "lucide-react";
 import CountdownTimer from "@/app/components/CountdownTimer";
 import { DraftStatusWidget } from "@/app/components/DraftStatusWidget";
-import { CardPreview } from "@/app/components/CardPreview"; // <-- Added CardPreview
+import { CardPreview } from "@/app/components/CardPreview";
+import { LiveStreamWidget } from "@/app/components/LiveStreamWidget"; // <-- IMPORT NEW WIDGET
 import {
   getRecentDraftPicks,
   getCurrentSeason,
@@ -23,7 +24,7 @@ import {
   type CountdownTimer as CountdownTimerType,
 } from "@/app/actions/homeActions";
 import { getLatestStreamMatch, type StreamMatch } from "@/app/actions/liveStreamActions";
-import { getTeamsWithDetails } from "@/app/actions/teamActions"; // <-- Added to count active teams
+import { getTeamsWithDetails } from "@/app/actions/teamActions";
 
 function getRelativeTime(dateString: string): string {
   const date = new Date(dateString);
@@ -43,10 +44,35 @@ export default function HomePage() {
   const [countdownTimer, setCountdownTimer] = useState<CountdownTimerType | null>(null);
   const [draftSessionId, setDraftSessionId] = useState<string | null>(null);
   const [liveMatch, setLiveMatch] = useState<StreamMatch | null>(null);
-  const [liveLife, setLiveLife] = useState<{t1: number, t2: number} | null>(null);
   const [loading, setLoading] = useState(true);
-
   const [bgPosition, setBgPosition] = useState({ x: 50, y: 50 });
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [teamsResult, seasonResult, newsResult, picksResult, timerResult, draftSessionResult, streamResult] = await Promise.all([
+        getTeamsWithDetails(),
+        getCurrentSeason(),
+        getAdminNews(3),
+        getRecentDraftPicks(20),
+        getActiveCountdownTimer(),
+        getActiveDraftSession(),
+        getLatestStreamMatch(),
+      ]);
+      
+      const activeTeamCount = teamsResult.teams?.filter(t => !t.is_hidden).length || 8;
+      setSeason(seasonResult.season);
+      setAdminNews(newsResult.news);
+      setRecentPicks(picksResult.picks.slice(0, activeTeamCount));
+      setCountdownTimer(timerResult.timer);
+      setDraftSessionId(draftSessionResult.session?.id || null);
+      setLiveMatch(streamResult.match);
+    } catch (error) {
+      console.error("Error loading home page data:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -96,35 +122,7 @@ export default function HomePage() {
     }
   };
 
-  useEffect(() => {
-    if (!liveMatch || !liveMatch.life_timeline || liveMatch.life_timeline.length === 0) return;
-    
-    const broadcastTime = new Date(new Date(liveMatch.match_date).getTime() + (30 * 60000)).getTime();
-    
-    const interval = setInterval(() => {
-      const now = Date.now();
-      const diff = now - broadcastTime;
-      
-            if (diff > 0) {
-        const ticksPassed = Math.floor(diff / 3000); // 100% Synced with Stream!
-        
-        // Auto-refresh the widget immediately after the stream naturally concludes!
-        if (ticksPassed > liveMatch.total_steps + 1) {
-             loadData();
-        }
-
-        
-        if (ticksPassed < liveMatch.life_timeline.length) {
-           const [t1, t2] = liveMatch.life_timeline[ticksPassed];
-           setLiveLife({ t1, t2 });
-        } else {
-           const [t1, t2] = liveMatch.life_timeline[liveMatch.life_timeline.length - 1];
-           setLiveLife({ t1, t2 });
-        }
-      }
-    }, 100);
-    return () => clearInterval(interval);
-  }, [liveMatch]);
+ 
 
   if (loading) {
     return (
@@ -137,27 +135,7 @@ export default function HomePage() {
 
   const liveDraftLink = draftSessionId ? `/draft/${draftSessionId}/live` : "#";
 
-let streamStatus = 'replay';
-  let formattedStreamTime = '';
-  if (liveMatch) {
-      // Stream starts exactly 30 mins after scheduled time
-      const broadcastStartTime = new Date(liveMatch.match_date).getTime() + (30 * 60000);
-      
-      // Stream ends exactly when (steps * 2 seconds) has elapsed
-      const broadcastDurationMs = liveMatch.total_steps * 3000;
-      const broadcastEndTime = broadcastStartTime + broadcastDurationMs;
-      
-      const now = Date.now();
 
-      if (now < broadcastStartTime) {
-          streamStatus = 'upcoming';
-          formattedStreamTime = new Date(broadcastStartTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      } else if (now >= broadcastStartTime && now <= broadcastEndTime) { 
-          streamStatus = 'live';
-      } else {
-          streamStatus = 'replay';
-      }
-  }
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8 space-y-12">
       
@@ -198,6 +176,8 @@ let streamStatus = 'replay';
             <p className="text-base md:text-lg text-zinc-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] font-medium leading-relaxed">
               A collaborative, living draft league where teams compete, evolve, and shape the fate of the multiverse.
             </p>
+            {liveMatch && <LiveStreamWidget initialMatch={liveMatch} onStreamEnd={loadData} />}
+
           </div>
           
           {/* FIX: Side-by-side buttons with aligned icons */}
