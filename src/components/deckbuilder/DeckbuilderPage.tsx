@@ -1241,6 +1241,87 @@ export function DeckbuilderPage() {
     </div>
   )
 }
+// ---------------------------------------------------------------------------
+// Deck-centric view (Moxfield-style).  <-- THIS IS THE MISSING DEFINITION
+// ---------------------------------------------------------------------------
+function DeckCentricView({
+  deckCards,
+  catalog,
+  activeFormat,
+  onAdd,
+  onRemove,
+  commander,
+  showCommanderControls,
+  onToggleCommander,
+  rowViolations,
+  isCommanderFormat,
+  onHoverEnter,
+  onHoverLeave,
+  pinnedPrintings,
+  onOpenPicker,
+}: {
+  deckCards: Record<string, number>
+  catalog: Record<string, CardSummary>
+  activeFormat: string | null
+  onAdd: (card: CardSummary) => void
+  onRemove: (name: string) => void
+  commander: string | null
+  showCommanderControls: boolean
+  onToggleCommander: (name: string) => void
+  rowViolations: Map<string, Set<string>>
+  isCommanderFormat: boolean
+  onHoverEnter: (entry: { name: string; card: CardSummary | undefined }) => void
+  onHoverLeave: () => void
+  pinnedPrintings: Record<string, PrintingRef>
+  onOpenPicker: (name: string, anchor: DOMRect) => void
+}) {
+  const grouped = useMemo(
+    () => groupByCardType(deckCards, catalog, commander),
+    [deckCards, catalog, commander],
+  )
+  const isEmpty = Object.keys(deckCards).length === 0 && commander === null
+
+  if (isEmpty) {
+    return (
+      <div className={styles.deckCentricEmpty}>
+        Your deck is empty. Type a card name in the search bar above, or switch to{' '}
+        <strong>Cards to add</strong> to browse the catalog.
+      </div>
+    )
+  }
+
+  return (
+    <div className={styles.deckCentric}>
+      <div className={styles.deckCentricColumns}>
+        {grouped.map((group) => (
+          <div key={group.label} className={styles.deckCentricGroup}>
+            <h3 className={styles.deckCentricGroupLabel}>
+              {group.label} ({group.entries.reduce((a, e) => a + e.count, 0)})
+            </h3>
+            {group.entries.map((entry) => (
+              <DeckRow
+                key={entry.name}
+                entry={entry}
+                activeFormat={activeFormat}
+                commander={commander}
+                showCommanderControls={showCommanderControls}
+                isCommanderFormat={isCommanderFormat}
+                rowViolations={rowViolations}
+                onAdd={onAdd}
+                onRemove={onRemove}
+                onToggleCommander={onToggleCommander}
+                onEnter={onHoverEnter}
+                onLeave={onHoverLeave}
+                pinnedPrinting={pinnedPrintings[entry.name]}
+                onOpenPicker={onOpenPicker}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Shared deck summary + action row — DeckSummary lives in @/components/ui so
