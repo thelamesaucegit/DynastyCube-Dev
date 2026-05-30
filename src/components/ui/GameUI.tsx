@@ -1425,7 +1425,7 @@ function LobbyOverlay({
             </div>
             <div className={styles.deckViewerBody}>
               <p className={styles.incompleteSetsNote}>
-                These sets aren't fully implemented yet — some cards are missing, so boosters draw from a
+                These sets aren&apos;t fully implemented yet — some cards are missing, so boosters draw from a
                 combined pool of the cards that exist. Pick any number to mix into your pool.
               </p>
               <input
