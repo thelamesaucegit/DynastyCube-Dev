@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import './styles/variables.css'
 import './styles/responsive.css'
 import 'mana-font/css/mana.min.css'
