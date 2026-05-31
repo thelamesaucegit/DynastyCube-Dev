@@ -1,10 +1,9 @@
-//src/components/game/overlay/LifeDisplay.tsx
-
 import React from 'react'
-import { useGameStore } from '@/store/gameStore'
-import type { EntityId, ClientPlayerEffect, PlayerTheme } from '@/types'
+import { useGameStore } from '@/store/gameStore.ts'
+import type { EntityId, ClientPlayerEffect, ClientCommanderDamage } from '@/types'
 import { useResponsiveContext, getEffectIcon } from '../board/shared'
 import { styles } from '../board/styles'
+import { HoverCardPreview } from '../../ui/HoverCardPreview'
 
 /**
  * Life total display - interactive when in targeting mode or when a pending decision requires player targeting.
@@ -15,14 +14,16 @@ export function LifeDisplay({
   playerId,
   playerName,
   spectatorMode = false,
-  theme,
+  poisonCounters = 0,
+  commanderDamage,
 }: {
   life: number
   isPlayer?: boolean
   playerId: EntityId
   playerName?: string
   spectatorMode?: boolean
-   theme?: PlayerTheme 
+  poisonCounters?: number
+  commanderDamage?: readonly ClientCommanderDamage[]
 }) {
   const responsive = useResponsiveContext()
   const targetingState = useGameStore((state) => state.targetingState)
@@ -102,100 +103,158 @@ export function LifeDisplay({
     }
   }
 
-  const size = responsive.isMobile ? 36 : responsive.isTablet ? 42 : 48
+  const size = responsive.isMobile ? 36 : responsive.isTablet ? 42 : responsive.isShortDesktop ? 40 : 48
 
   // Dynamic styling based on targeting state
-  const bgColor = spectatorMode 
-    ? theme?.secondary ?? '#3a1a4a' // Use theme secondary color, fallback to purple
-    : isPlayer ? '#1a3a5a' : '#3a1a4a'; // Your original live-mode logic
+  const bgColor = isPlayer ? '#1a3a5a' : '#4a2812'
+  const borderColor = isDistributeTarget && distributeAllocated > 0
+    ? '#ff6b35' // Orange for distribute targets with allocation
+    : isDistributeTarget
+      ? '#ff8c42' // Dim orange for unallocated distribute targets
+      : isSelected
+        ? '#ffff00' // Yellow if selected as target
+        : isValidTarget
+          ? '#ff4444' // Red glow if valid target
+          : isAttackDropTarget
+            ? '#ff4444' // Red highlight when attacker being dragged
+            : isPlayer ? '#3a7aba' : '#e08038'
 
-  const borderColor = spectatorMode 
-    ? theme?.primary ?? '#7a3a9a' // Use theme primary color, fallback to purple
-    : isDistributeTarget && distributeAllocated > 0
-        ? '#ff6b35'
-        : isDistributeTarget
-            ? '#ff8c42'
-            : isSelected
-                ? '#ffff00'
-                : isValidTarget
-                    ? '#ff4444'
-                    : isAttackDropTarget
-                        ? '#ff4444'
-                        : isPlayer ? '#3a7aba' : '#7a3a9a';
-  
-  const cursor = spectatorMode ? 'default' : (isValidTarget || isDistributeTarget ? 'pointer' : 'default');
-  const boxShadow = spectatorMode ? 'none' : (isDistributeTarget && distributeAllocated > 0
+  const cursor = isValidTarget || isDistributeTarget ? 'pointer' : 'default'
+  const boxShadow = isDistributeTarget && distributeAllocated > 0
     ? '0 0 16px rgba(255, 107, 53, 0.7), 0 0 32px rgba(255, 107, 53, 0.4)'
-    : isDistributeTarget ? '0 0 12px rgba(255, 140, 66, 0.5)'
-    : isSelected ? '0 0 20px rgba(255, 255, 0, 0.8)'
-    : isValidTarget ? '0 0 15px rgba(255, 68, 68, 0.6)'
-    : isAttackDropTarget ? '0 0 16px rgba(255, 68, 68, 0.7), 0 0 32px rgba(255, 68, 68, 0.4)'
-    : 'none');
+    : isDistributeTarget
+      ? '0 0 12px rgba(255, 140, 66, 0.5)'
+      : isSelected
+        ? '0 0 20px rgba(255, 255, 0, 0.8)'
+        : isValidTarget
+          ? '0 0 15px rgba(255, 68, 68, 0.6)'
+          : isAttackDropTarget
+            ? '0 0 16px rgba(255, 68, 68, 0.7), 0 0 32px rgba(255, 68, 68, 0.4)'
+            : 'none'
 
-  return (
-   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-      <div
-       
-        data-player-id={playerId}
-        onClick={handleClick}
+  const nameText = playerName ? playerName.toUpperCase() : (isPlayer ? 'YOU' : 'OPPONENT')
+  // Only show the "YOU" / "OPPONENT" role tag when a custom name is rendered
+  // (otherwise the name itself already carries the same information) and when
+  // not spectating (there's no "you" in spectator mode).
+  const showRoleTag = !spectatorMode && !!playerName
+  const roleColor = isPlayer ? 'rgba(74, 154, 234, 0.7)' : 'rgba(255, 158, 70, 0.8)'
+  const roleBorder = isPlayer ? 'rgba(74, 154, 234, 0.35)' : 'rgba(255, 158, 70, 0.4)'
+
+  const nameLabel = (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: isPlayer ? 'flex-start' : 'flex-end',
+        gap: 2,
+        minWidth: 0,
+      }}
+    >
+      <span
         style={{
-          ...styles.lifeDisplay,
-          width: size,
-          height: size,
-          fontSize: responsive.fontSize.large,
-          backgroundColor: bgColor,
-          borderColor: borderColor,
-          cursor: cursor,
-          boxShadow: 'none',
-          transition: 'all 0.2s ease-in-out',
-          position: 'relative',
+          maxWidth: 220,
+          fontSize: 12,
+          fontWeight: 700,
+          letterSpacing: '0.5px',
+          color: isPlayer ? '#4a9aea' : '#ff9e46',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          textShadow: '0 1px 2px rgba(0, 0, 0, 0.6)',
         }}
+        title={playerName}
       >
+        {nameText}
+      </span>
+      {showRoleTag && (
         <span
           style={{
-            position: 'absolute',
-            top: -8,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            fontSize: 9,
-            fontWeight: 'bold',
-            color: borderColor,
-            backgroundColor: '#1a1a2e',
-            padding: '1px 4px',
+            fontSize: 8,
+            fontWeight: 600,
+            letterSpacing: '1.2px',
+            color: roleColor,
+            border: `1px solid ${roleBorder}`,
+            padding: '0 4px',
             borderRadius: 3,
-            whiteSpace: 'nowrap',
+            textTransform: 'uppercase',
+            lineHeight: '12px',
           }}
         >
-          {spectatorMode && playerName ? playerName.toUpperCase() : (isPlayer ? 'YOU' : 'OPPONENT')}
+          {isPlayer ? 'You' : 'Opponent'}
         </span>
-        <span style={{ color: life <= 5 ? '#ff4444' : '#ffffff' }}>{life}</span>
+      )}
+    </div>
+  )
 
-        {/* Damage allocation badge */}
-        {!spectatorMode && isDistributeTarget && distributeAllocated > 0 && (
-          <div style={{
-            position: 'absolute',
-            top: -4,
-            right: -4,
-            backgroundColor: '#dc2626',
-            color: 'white',
-            width: 18,
-            height: 18,
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontWeight: 'bold',
-            fontSize: 11,
-            boxShadow: '0 2px 6px rgba(220, 38, 38, 0.6)',
-            zIndex: 5,
-          }}>
-            {distributeAllocated}
-          </div>
-        )}
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: isDistributeTarget ? 4 : 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Name on outer side: left of opponent's orb, right of player's orb */}
+        {!isPlayer && nameLabel}
+        <div
+          data-player-id={playerId}
+          data-life-id={playerId}
+          data-life-display={playerId}
+          onClick={handleClick}
+          style={{
+            ...styles.lifeDisplay,
+            width: size,
+            height: size,
+            fontSize: responsive.fontSize.large,
+            backgroundColor: bgColor,
+            borderColor: borderColor,
+            cursor,
+            boxShadow,
+            transition: 'all 0.2s ease-in-out',
+            position: 'relative',
+          }}
+        >
+          <span
+            style={
+              life <= 5
+                ? { color: '#ff4444' }
+                : isPlayer
+                  ? {
+                      color: '#ffffff',
+                      textShadow: '0 0 6px rgba(80, 170, 240, 0.55), 0 1px 2px rgba(0, 0, 0, 0.75), 0 0 1px rgba(0, 0, 0, 0.9)',
+                    }
+                  : {
+                      color: '#ffffff',
+                      textShadow: '0 0 6px rgba(255, 130, 40, 0.55), 0 1px 2px rgba(0, 0, 0, 0.75), 0 0 1px rgba(0, 0, 0, 0.9)',
+                    }
+            }
+          >
+            {life}
+          </span>
+
+          {/* Damage allocation badge */}
+          {isDistributeTarget && distributeAllocated > 0 && (
+            <div style={{
+              position: 'absolute',
+              top: -4,
+              right: -4,
+              backgroundColor: '#dc2626',
+              color: 'white',
+              width: 18,
+              height: 18,
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 'bold',
+              fontSize: 11,
+              boxShadow: '0 2px 6px rgba(220, 38, 38, 0.6)',
+              zIndex: 5,
+            }}>
+              {distributeAllocated}
+            </div>
+          )}
+        </div>
+        {isPlayer && nameLabel}
       </div>
 
       {/* Inline +/- controls for distribute mode */}
-      {!spectatorMode && isDistributeTarget && (
+      {isDistributeTarget && (
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -254,6 +313,85 @@ export function LifeDisplay({
           </button>
         </div>
       )}
+
+      {poisonCounters > 0 && (
+        <div
+          title={`${poisonCounters} poison counter${poisonCounters === 1 ? '' : 's'}`}
+          style={{
+            marginTop: 4,
+            minHeight: 18,
+            padding: '2px 7px',
+            borderRadius: 4,
+            border: '1px solid rgba(55, 220, 125, 0.55)',
+            backgroundColor: 'rgba(8, 35, 22, 0.92)',
+            color: '#71f5a7',
+            fontSize: 11,
+            fontWeight: 800,
+            lineHeight: '14px',
+            fontVariantNumeric: 'tabular-nums',
+            boxShadow: '0 0 10px rgba(40, 210, 110, 0.25)',
+          }}
+        >
+          POISON {poisonCounters}/10
+        </div>
+      )}
+      <CommanderDamageBadges entries={commanderDamage ?? []} />
+    </div>
+  )
+}
+
+/**
+ * Per-commander damage progress badges shown under the life orb in Commander games.
+ * Visually mirrors the poison badge but tinted red (combat damage) and turns danger-red within
+ * 5 of the loss threshold — same threshold treatment as the life orb at ≤ 5.
+ */
+export function CommanderDamageBadges({ entries }: { entries: readonly ClientCommanderDamage[] }) {
+  if (entries.length === 0) return null
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, marginTop: 4 }}>
+      {entries.map((entry) => {
+        const remaining = entry.threshold - entry.amount
+        const danger = remaining <= 5
+        const borderColor = danger ? 'rgba(255, 68, 68, 0.7)' : 'rgba(230, 110, 60, 0.55)'
+        const bgColor = danger ? 'rgba(58, 14, 14, 0.92)' : 'rgba(40, 18, 10, 0.92)'
+        const textColor = danger ? '#ff6b6b' : '#ffae7a'
+        const glow = danger
+          ? '0 0 10px rgba(255, 68, 68, 0.35)'
+          : '0 0 8px rgba(230, 110, 60, 0.2)'
+        const displayName = entry.commanderName.length > 18
+          ? entry.commanderName.slice(0, 17) + '…'
+          : entry.commanderName
+        return (
+          <div
+            key={entry.commanderId}
+            data-commander-damage-badge={entry.commanderId}
+            title={`${entry.commanderName}: ${entry.amount} of ${entry.threshold} commander damage`}
+            style={{
+              minHeight: 18,
+              padding: '2px 7px',
+              borderRadius: 4,
+              border: `1px solid ${borderColor}`,
+              backgroundColor: bgColor,
+              color: textColor,
+              fontSize: 11,
+              fontWeight: 800,
+              lineHeight: '14px',
+              fontVariantNumeric: 'tabular-nums',
+              boxShadow: glow,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span aria-hidden style={{ fontSize: 10, opacity: 0.95 }}>⚔</span>
+            <span style={{ letterSpacing: '0.3px' }}>{displayName.toUpperCase()}</span>
+            <span style={{ opacity: 0.95 }}>
+              {entry.amount}/{entry.threshold}
+            </span>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -264,8 +402,14 @@ export function LifeDisplay({
 export function ActiveEffectsBadges({ effects }: { effects: readonly ClientPlayerEffect[] | undefined }) {
   const responsive = useResponsiveContext()
   const [hoveredEffect, setHoveredEffect] = React.useState<string | null>(null)
+  const [hoverPos, setHoverPos] = React.useState<{ x: number; y: number } | null>(null)
 
   if (!effects || effects.length === 0) return null
+
+  const hovered = effects.find(e => e.effectId === hoveredEffect)
+  // Image-backed effects (e.g. City's Blessing marker) get a full card preview on hover;
+  // plain-text effects keep the small tooltip below.
+  const showCardPreview = hovered?.imageUri && hoverPos
 
   return (
     <div style={styles.effectBadgesContainer}>
@@ -277,18 +421,34 @@ export function ActiveEffectsBadges({ effects }: { effects: readonly ClientPlaye
             padding: responsive.isMobile ? '2px 6px' : '4px 8px',
             fontSize: responsive.fontSize.small,
           }}
-          onMouseEnter={() => setHoveredEffect(effect.effectId)}
-          onMouseLeave={() => setHoveredEffect(null)}
+          onMouseEnter={(e) => {
+            setHoveredEffect(effect.effectId)
+            setHoverPos({ x: e.clientX, y: e.clientY })
+          }}
+          onMouseMove={(e) => {
+            if (effect.imageUri) setHoverPos({ x: e.clientX, y: e.clientY })
+          }}
+          onMouseLeave={() => {
+            setHoveredEffect(null)
+            setHoverPos(null)
+          }}
         >
           {effect.icon && <span style={styles.effectBadgeIcon}>{getEffectIcon(effect.icon)}</span>}
           <span style={styles.effectBadgeName}>{effect.name}</span>
-          {hoveredEffect === effect.effectId && effect.description && (
+          {hoveredEffect === effect.effectId && effect.description && !effect.imageUri && (
             <div style={styles.effectTooltip}>
               {effect.description}
             </div>
           )}
         </div>
       ))}
+      {showCardPreview && (
+        <HoverCardPreview
+          name={hovered!.name}
+          imageUri={hovered!.imageUri!}
+          pos={hoverPos}
+        />
+      )}
     </div>
   )
 }
