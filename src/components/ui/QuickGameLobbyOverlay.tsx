@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useGameStore } from '@/store/gameStore'
 import type { DeckFormat, QuickGameLobbyPlayerView } from '@/types'
-import { randomBackground } from '@/utils/background.ts'
+import { randomBackground } from '@/utils/background'
 import { DeckPicker } from './DeckPicker'
 import styles from './GameUI.module.css'
 
