@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useGameStore } from '@/store/gameStore.ts'
-import { useHasLegalActions } from '@/store/selectors.ts'
+import { useGameStore } from '@/store/gameStore'
+import { useHasLegalActions } from '@/store/selectors'
 import type { ClientCard, EntityId } from '@/types'
 import { Color, ColorSymbols, Keyword } from '@/types/enums'
-import { getCardImageUrl, getScryfallFallbackUrl, MORPH_FACE_DOWN_IMAGE_URL } from '@/utils/cardImages.ts'
-import { useInteraction } from '@/hooks/useInteraction.ts'
-import { ManaCost } from '@/components/ui/ManaSymbols.tsx'
-import { HoverCardPreview } from '@/components/ui/HoverCardPreview.tsx'
+import { getCardImageUrl, getScryfallFallbackUrl, MORPH_FACE_DOWN_IMAGE_URL } from '@/utils/cardImages'
+import { useInteraction } from '@/hooks/useInteraction'
+import { ManaCost } from '@/components/ui/ManaSymbols'
+import { HoverCardPreview } from '@/components/ui/HoverCardPreview'
 import {
   useResponsiveContext,
   hasMultipleCastingOptions,
