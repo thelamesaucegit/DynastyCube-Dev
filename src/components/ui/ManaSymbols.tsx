@@ -5,11 +5,13 @@
  */
 import React from 'react';
 
-// --- THIS IS THE FIX ---
-// Use Webpack's 'require.context' to dynamically import all SVG files from the directories.
-// This is the Next.js / Webpack equivalent of Vite's 'import.meta.glob'.
+interface WebpackRequireContext {
+  keys(): string[];
+  (id: string): any; // It's safe to use 'any' here as we process the result immediately
+}
 
-function requireAll(requireContext: __WebpackModuleApi.RequireContext) {
+
+function requireAll(requireContext: WebpackRequireContext) {
   return requireContext.keys().map(requireContext);
 }
 
@@ -20,11 +22,10 @@ const actionSvgs = requireAll(require.context('../../assets/symbols/actions/', f
 // Build a lookup map: symbol key -> resolved URL
 const SYMBOL_URLS: Record<string, string> = {};
 
-function processModules(modules: SvgModule[]) {
+// The 'modules' parameter is correctly typed as 'any[]' because requireAll returns 'any[]'
+function processModules(modules: any[]) {
     for (const mod of modules) {
-        // Handle modules that might be { default: 'path/to/svg' } or just 'path/to/svg'
-        const url = typeof mod === 'string' ? mod : mod.default;
-
+        const url = mod.default || mod; // Handle different module export structures
         if (typeof url === 'string') {
             const match = url.match(/\/(\w+)\.svg/);
             if (match?.[1]) {
