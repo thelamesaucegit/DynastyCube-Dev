@@ -6,7 +6,7 @@ import { useMemo, useCallback } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import { useInteraction } from '@/hooks/useInteraction';
 import { useViewingPlayer, useOpponent, useStackCards, selectPriorityMode, useGhostCards, useRevealedLibraryTopCard } from '@/store/selectors';
-import { hand, getNextStep, StepShortNames, type ClientCard, type ClientPlayer } from '@/types'; 
+import { hand, getNextStep, StepShortNames } from '@/types'; 
 import { ZoneType } from '@/types/enums'; 
 import { useResponsive, ResponsiveContextProvider } from '@/hooks/useResponsive';
 import type { ClientCard, ClientPlayer } from '@/types';
