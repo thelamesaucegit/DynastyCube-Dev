@@ -63,7 +63,13 @@ export type {
   ClientBlocker,
   ClientChosenTarget,
   ClientPerModeTargetGroup,
+  // --- ADDED MISSING EXPORTS ---
+  PlayerTheme,
+  ClientCardFace,
+  ClientPlaneswalkerAbility,
+  // -----------------------------
 } from './gameState'
+
 export {
   totalMana,
   isManaPoolEmpty,
@@ -79,7 +85,7 @@ export {
   hasPriority,
 } from './gameState'
 
-// --- NEW SECTION: Replay & Spectator Types ---
+// Replay & Spectator Types
 export type {
   SpectatorStateUpdate,
   Team,
@@ -87,7 +93,6 @@ export type {
   SpectatorStateDiff,
   ReplayStateItem,
 } from './replay-types';
-// -----------------------------------------
 
 // Events
 export type {
