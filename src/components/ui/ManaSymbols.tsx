@@ -14,8 +14,8 @@ function requireAll(requireContext: __WebpackModuleApi.RequireContext) {
 }
 
 // Dynamically import all SVGs from the mana and actions folders
-const manaSvgs = requireAll(require.context('../../../public/assets/symbols/mana', false, /\.svg$/));
-const actionSvgs = requireAll(require.context('../../../public/assets/symbols/actions', false, /\.svg$/));
+const manaSvgs = requireAll(require.context('../../assets/symbols/mana/', false, /\.svg$/));
+const actionSvgs = requireAll(require.context('../../assets/symbols/actions/', false, /\.svg$/));
 
 // Build a lookup map: symbol key -> resolved URL
 const SYMBOL_URLS: Record<string, string> = {};
