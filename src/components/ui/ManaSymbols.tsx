@@ -20,9 +20,11 @@ const actionSvgs = requireAll(require.context('../../assets/symbols/actions/', f
 // Build a lookup map: symbol key -> resolved URL
 const SYMBOL_URLS: Record<string, string> = {};
 
-function processModules(modules: any[]) {
+function processModules(modules: SvgModule[]) {
     for (const mod of modules) {
-        const url = mod.default || mod; // Handle different module export structures
+        // Handle modules that might be { default: 'path/to/svg' } or just 'path/to/svg'
+        const url = typeof mod === 'string' ? mod : mod.default;
+
         if (typeof url === 'string') {
             const match = url.match(/\/(\w+)\.svg/);
             if (match?.[1]) {
