@@ -6,7 +6,7 @@ import { useMemo, useCallback } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import { useInteraction } from '@/hooks/useInteraction';
 import { useViewingPlayer, useOpponent, useStackCards, selectPriorityMode, useGhostCards, useRevealedLibraryTopCard } from '@/store/selectors';
-import { hand, getNextStep, StepShortNames } from '@/types';
+import { hand, getNextStep, StepShortNames, type ClientCard, type ClientPlayer, ZoneType } from '@/types'; // Import ZoneType
 import { ZoneType } from '@/types/enums'; 
 import { useResponsive, ResponsiveContextProvider } from '@/hooks/useResponsive';
 import type { ClientCard, ClientPlayer } from '@/types';
@@ -76,7 +76,9 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
         const zone = zones.find(z => z.zoneId.ownerId === playerId && z.zoneId.zoneType === ZoneType.BATTLEFIELD);
         if (!zone) return 0;
         return zone.cardIds
-            .map(id => cards[id])
+            // --- THIS IS THE FIX ---
+            // The `cards` object is now guaranteed to be indexable
+            .map(id => cards[id]) 
             .filter((c): c is ClientCard => !!c)
             .filter(c => !c.attachedTo)
             .filter(c => {
@@ -84,7 +86,6 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
                 return isCreatureRow ? isCreatureOrPW : !isCreatureOrPW;
             }).length;
     };
-
     return [
         getRowCount(viewingPlayer?.playerId ?? null, true),
         getRowCount(viewingPlayer?.playerId ?? null, false),
