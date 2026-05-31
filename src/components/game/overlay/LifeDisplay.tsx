@@ -172,7 +172,7 @@ export function LifeDisplay({
   )
 }
 
-function CommanderDamageBadges({ entries }: { entries: readonly ClientCommanderDamage[] }) {
+export function CommanderDamageBadges({ entries }: { entries: readonly ClientCommanderDamage[] }) {
   if (entries.length === 0) return null
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, marginTop: 4 }}>
