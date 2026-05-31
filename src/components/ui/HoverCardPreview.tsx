@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactNode } from 'react'
-import { getCardImageUrl } from '@/utils/cardImages.ts'
+import { getCardImageUrl } from '@/utils/cardImages'
 
 const PREVIEW_WIDTH = 280
 const MARGIN = 40
