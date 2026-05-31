@@ -1,4 +1,4 @@
-import { useGameStore } from '@/store/gameStore.ts'
+import { useGameStore } from '@/store/gameStore'
 
 /**
  * Selector overlay for the Blight X variable additional cost.
