@@ -19,7 +19,7 @@ import {
 
 } from '@/types'
 import type { Step, PriorityModeValue } from '@/types'
-import { trackEvent } from '@/utils/analytics.ts'
+import { trackEvent } from '@/utils/analytics'
 import { getWebSocket } from './shared'
 
 export interface GameplaySliceState {
