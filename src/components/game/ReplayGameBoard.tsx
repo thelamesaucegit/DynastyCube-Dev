@@ -1,7 +1,7 @@
 // /src/components/game/ReplayGameBoard.tsx
 "use client";
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useContext } from 'react';
 import { ResponsiveContext } from '@/hooks/useResponsive'; // Only import context
 import type { SpectatorStateUpdate, ReplayCardData, ClientPlayer } from '@/types';
 import { hand, entityId } from '@/types';
