@@ -46,7 +46,7 @@ import { styles, bandColorFor } from '../board/styles'
 import {
   TARGET_COLOR, TARGET_COLOR_BRIGHT, TARGET_GLOW, TARGET_GLOW_BRIGHT, TARGET_GLOW_OUTER, TARGET_SHADOW,
   SELECTED_COLOR, SELECTED_GLOW, SELECTED_SHADOW,
-} from '@/styles/targetingColors.ts'
+} from '@/styles/targetingColors'
 import { KeywordIcons, ActiveEffectBadges } from './CardOverlays'
 import { counterManaClass, counterSvgIcon } from '@/assets/icons/keywords'
 import { SvgGlyph } from '@/assets/icons/SvgGlyph'
