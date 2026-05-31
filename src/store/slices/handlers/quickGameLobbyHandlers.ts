@@ -2,7 +2,7 @@
  * Server-message handlers for the Quick Game Lobby flow. Wires lobby state-snapshot updates
  * and lobby-closed notifications into the [quickGameLobbySlice].
  */
-import type { MessageHandlers } from '@/network/messageHandlers.ts'
+import type { MessageHandlers } from '@/network/messageHandlers'
 import { ErrorCode } from '@/types'
 import type { SetState, GetState } from './types'
 
