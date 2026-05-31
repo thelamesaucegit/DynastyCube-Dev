@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useGameStore, ConvokeCreatureSelection } from '@/store/gameStore.ts'
+import { useGameStore, ConvokeCreatureSelection } from '@/store/gameStore'
 import { Color, ColorSymbols } from '@/types/enums'
 import { useViewingPlayer } from '@/store/selectors'
 import type { ClientManaPool } from '@/types/gameState'
