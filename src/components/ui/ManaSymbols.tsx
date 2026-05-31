@@ -1,46 +1,52 @@
-//src/components/ui/ManaSymbols.tsx
+// src/components/ui/ManaSymbols.tsx
 
 /**
  * Mana symbol rendering using local SVG assets.
  */
+import React from 'react';
 
-// Import all symbol SVGs as static assets from both mana and actions folders
-const manaModules = import.meta.glob('../../assets/symbols/mana/*.svg', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
-const actionModules = import.meta.glob('../../assets/symbols/actions/*.svg', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
+// --- THIS IS THE FIX ---
+// Use Webpack's 'require.context' to dynamically import all SVG files from the directories.
+// This is the Next.js / Webpack equivalent of Vite's 'import.meta.glob'.
 
-// Build a lookup map: symbol key -> resolved URL
-const SYMBOL_URLS: Record<string, string> = {}
-for (const [path, url] of Object.entries({ ...manaModules, ...actionModules })) {
-  const match = path.match(/\/(\w+)\.svg$/)
-  if (match?.[1]) {
-    SYMBOL_URLS[match[1]] = url
-  }
+function requireAll(requireContext: __WebpackModuleApi.RequireContext) {
+  return requireContext.keys().map(requireContext);
 }
 
+// Dynamically import all SVGs from the mana and actions folders
+const manaSvgs = requireAll(require.context('../../../public/assets/symbols/mana', false, /\.svg$/));
+const actionSvgs = requireAll(require.context('../../../public/assets/symbols/actions', false, /\.svg$/));
+
+// Build a lookup map: symbol key -> resolved URL
+const SYMBOL_URLS: Record<string, string> = {};
+
+function processModules(modules: any[]) {
+    for (const mod of modules) {
+        const url = mod.default || mod; // Handle different module export structures
+        if (typeof url === 'string') {
+            const match = url.match(/\/(\w+)\.svg/);
+            if (match?.[1]) {
+                SYMBOL_URLS[match[1].toUpperCase()] = url;
+            }
+        }
+    }
+}
+
+processModules(manaSvgs);
+processModules(actionSvgs);
+// --------------------
 
 /**
  * Renders a single mana symbol as an SVG icon.
  */
 export function ManaSymbol({ symbol, size = 14 }: { symbol: string; size?: number }) {
-  const normalized = symbol.replace('/', '')
-  const url = SYMBOL_URLS[normalized]
+  const normalized = symbol.replace('/', '').toUpperCase();
+  const url = SYMBOL_URLS[normalized];
 
   if (!url) {
     // Fallback for symbols we don't have locally
     return (
-      <span style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: size,
-        height: size,
-        borderRadius: '50%',
-        backgroundColor: '#666',
-        color: '#fff',
-        fontSize: size * 0.6,
-        fontWeight: 700,
-        verticalAlign: 'middle',
-      }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: size, height: size, borderRadius: '50%', backgroundColor: '#666', color: '#fff', fontSize: size * 0.6, fontWeight: 700, verticalAlign: 'middle' }}>
         {symbol}
       </span>
     )
@@ -65,14 +71,13 @@ export function ManaSymbol({ symbol, size = 14 }: { symbol: string; size?: numbe
  */
 export function ManaCost({ cost, size = 14, gap = 1 }: { cost: string | null; size?: number; gap?: number }) {
   if (!cost) return null
-
-  const symbols = cost.match(/\{([^}]+)\}/g)
+  const symbols = cost.match(/\{([^}]+)\}/g);
   if (!symbols || symbols.length === 0) return null
 
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap }}>
       {symbols.map((match, i) => {
-        const inner = match.slice(1, -1)
+        const inner = match.slice(1, -1);
         return <ManaSymbol key={i} symbol={inner} size={size} />
       })}
     </span>
@@ -85,25 +90,20 @@ export function ManaCost({ cost, size = 14, gap = 1 }: { cost: string | null; si
  */
 export function AbilityText({ text, size = 14 }: { text: string; size?: number }) {
   if (!text) return null
-
-  // Check if text contains any symbols to parse
   if (!text.includes('{')) {
     return <span>{text}</span>
   }
 
-  // Split by mana symbol pattern, keeping the delimiters
-  const parts = text.split(/(\{[^}]+\})/g).filter(Boolean)
+  const parts = text.split(/(\{[^}]+\})/g).filter(Boolean);
 
   return (
     <span>
       {parts.map((part, i) => {
-        const match = part.match(/^\{([^}]+)\}$/)
+        const match = part.match(/^\{([^}]+)\}$/);
         if (match && match[1]) {
-          // This is a mana symbol
-          return <ManaSymbol key={i} symbol={match[1]} size={size} />
+          return <ManaSymbol key={i} symbol={match[1]} size={size} />;
         }
-        // This is regular text
-        return <span key={i}>{part}</span>
+        return <span key={i}>{part}</span>;
       })}
     </span>
   )
