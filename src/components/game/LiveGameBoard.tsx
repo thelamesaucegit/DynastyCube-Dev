@@ -69,7 +69,7 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
   const opponent = useOpponent();
 
   const zoneRowCounts = useMemo(() => {
-    const { zones, cards } = store.gameState ?? { zones: [], cards: {} };
+    const { zones = [], cards = {} } = store.gameState ?? {};
     
     const getRowCount = (playerId: ClientPlayer['playerId'] | null, isCreatureRow: boolean) => {
         if (!playerId) return 0;
