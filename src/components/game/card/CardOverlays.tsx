@@ -1,6 +1,7 @@
 import React from 'react'
 import type { Keyword, AbilityFlag, ClientCardEffect, Color } from '@/types'
-import { keywordManaClass, displayableKeywords } from '@/assets/icons/keywords'
+import { keywordManaClass, keywordSvgIcon, displayableKeywords } from '@/assets/icons/keywords'
+import { SvgGlyph } from '@/assets/icons/SvgGlyph'
 import { styles } from '../board/styles'
 
 /** MTG color to mana-font protection class mapping */
@@ -12,13 +13,35 @@ const PROTECTION_CLASSES: Record<string, string> = {
   GREEN: 'ability-protection-green',
 }
 
-/** MTG color to CSS color for protection icon tinting */
-const PROTECTION_COLORS: Record<string, string> = {
+/** MTG color to CSS color for protection / hexproof icon tinting */
+const COLOR_TINTS: Record<string, string> = {
   WHITE: '#f5f0e0',
   BLUE: '#4a90d9',
   BLACK: '#888888',
   RED: '#d04040',
   GREEN: '#40a050',
+}
+
+/**
+ * Renders a single keyword glyph: prefer a local SVG when mapped (for keywords
+ * the mana-font Arena set lacks, e.g. PERSIST), otherwise fall back to mana-font.
+ */
+function KeywordGlyph({ name, size }: { name: string; size: number }) {
+  const svgUrl = keywordSvgIcon[name]
+  if (svgUrl) {
+    return <SvgGlyph url={svgUrl} size={size} color="#ffffff" />
+  }
+  return (
+    <i
+      className={`ms ms-${keywordManaClass[name] ?? 'ability-static'}`}
+      style={{
+        fontSize: size,
+        color: '#ffffff',
+        display: 'block',
+        lineHeight: 1,
+      }}
+    />
+  )
 }
 
 /**
@@ -29,48 +52,53 @@ export function KeywordIcons({
   keywords,
   abilityFlags,
   protections,
+  hexproofFromColors,
+  isSuspected,
   size,
 }: {
   keywords: readonly Keyword[]
   abilityFlags?: readonly AbilityFlag[]
   protections: readonly Color[]
+  hexproofFromColors?: readonly Color[]
+  /** Whether the permanent currently has the suspected status (CR 701.60). */
+  isSuspected?: boolean
   size: number
 }) {
-  // Filter out PROTECTION (rendered via protections array) and FIRST_STRIKE when DOUBLE_STRIKE is present
+  // Filter out PROTECTION (rendered via protections array) and FIRST_STRIKE when DOUBLE_STRIKE is present.
+  // Also drop generic HEXPROOF when the creature only has per-color hexproof — the colored shields below
+  // already convey the protection set, and showing an uncolored shield alongside misleads the player.
+  const hexproofFromList = hexproofFromColors ?? []
+  const hasFullHexproof = keywords.includes('HEXPROOF' as Keyword)
   const hasDoubleStrike = keywords.includes('DOUBLE_STRIKE' as Keyword)
-  const filteredKeywords = keywords.filter(k => displayableKeywords.has(k) && k !== 'PROTECTION' && !(k === 'FIRST_STRIKE' && hasDoubleStrike))
+  const filteredKeywords = keywords.filter(k =>
+    displayableKeywords.has(k)
+    && k !== 'PROTECTION'
+    && !(k === 'FIRST_STRIKE' && hasDoubleStrike)
+    && !(k === 'HEXPROOF' && !hasFullHexproof && hexproofFromList.length > 0)
+  )
   const displayableFlags = (abilityFlags ?? []).filter(f => displayableKeywords.has(f))
   const hasProtections = protections.length > 0
+  const hasHexproofFrom = hexproofFromList.length > 0
   const hasKeywords = filteredKeywords.length > 0 || displayableFlags.length > 0
+  const hasSuspected = isSuspected === true
 
-  if (!hasKeywords && !hasProtections) return null
+  if (!hasKeywords && !hasProtections && !hasHexproofFrom && !hasSuspected) return null
 
   return (
     <div style={styles.keywordIconsContainer}>
+      {hasSuspected && (
+        <div key="suspected" style={styles.keywordIconWrapper} title="Suspected (has menace and can't block)">
+          <KeywordGlyph name="SUSPECTED" size={size} />
+        </div>
+      )}
       {filteredKeywords.map((keyword) => (
         <div key={keyword} style={styles.keywordIconWrapper} title={keyword.replace(/_/g, ' ')}>
-          <i
-            className={`ms ms-${keywordManaClass[keyword] ?? 'ability-static'}`}
-            style={{
-              fontSize: size,
-              color: '#ffffff',
-              display: 'block',
-              lineHeight: 1,
-            }}
-          />
+          <KeywordGlyph name={keyword} size={size} />
         </div>
       ))}
       {displayableFlags.map((flag) => (
         <div key={flag} style={styles.keywordIconWrapper} title={flag.replace(/_/g, ' ')}>
-          <i
-            className={`ms ms-${keywordManaClass[flag] ?? 'ability-static'}`}
-            style={{
-              fontSize: size,
-              color: '#ffffff',
-              display: 'block',
-              lineHeight: 1,
-            }}
-          />
+          <KeywordGlyph name={flag} size={size} />
         </div>
       ))}
       {protections.map((color) => (
@@ -83,7 +111,29 @@ export function KeywordIcons({
             className={`ms ms-${PROTECTION_CLASSES[color] ?? 'ability-protection'}`}
             style={{
               fontSize: size,
-              color: PROTECTION_COLORS[color] ?? '#aaa',
+              color: COLOR_TINTS[color] ?? '#aaa',
+              display: 'block',
+              lineHeight: 1,
+            }}
+          />
+        </div>
+      ))}
+      {hexproofFromList.map((color) => (
+        <div
+          key={`hexproof-${color}`}
+          style={{
+            ...styles.keywordIconWrapper,
+            // Tinted ring + tinted icon make the per-color shield read at a glance.
+            border: `1px solid ${COLOR_TINTS[color] ?? '#aaa'}`,
+            boxShadow: `0 0 4px ${COLOR_TINTS[color] ?? '#aaa'}`,
+          }}
+          title={`Hexproof from ${color.toLowerCase()}`}
+        >
+          <i
+            className="ms ms-ability-hexproof"
+            style={{
+              fontSize: size,
+              color: COLOR_TINTS[color] ?? '#aaa',
               display: 'block',
               lineHeight: 1,
             }}
@@ -142,6 +192,33 @@ function getBadgeStyle(icon?: string): React.CSSProperties {
         backgroundColor: 'rgba(180, 130, 40, 0.9)',
         border: '1px solid rgba(255, 210, 100, 0.5)',
       }
+    case 'lost-abilities':
+      return {
+        backgroundColor: 'rgba(70, 70, 90, 0.9)',
+        border: '1px solid rgba(160, 160, 200, 0.5)',
+      }
+    case 'type-change':
+      return {
+        backgroundColor: 'rgba(80, 110, 160, 0.9)',
+        border: '1px solid rgba(160, 200, 255, 0.5)',
+      }
+    case 'color-change':
+      // Dark badge with a five-color rainbow border — text stays legible while the
+      // rainbow ring instantly tells the player "colors changed / all colors".
+      return {
+        backgroundColor: 'rgba(20, 20, 30, 0.92)',
+        border: '2px solid transparent',
+        backgroundImage:
+          'linear-gradient(rgba(20, 20, 30, 0.92), rgba(20, 20, 30, 0.92)),' +
+          'linear-gradient(90deg, #f5f0e0 0%, #4a90d9 25%, #888888 50%, #d04040 75%, #40a050 100%)',
+        backgroundOrigin: 'border-box',
+        backgroundClip: 'padding-box, border-box',
+      }
+    case 'granted-ability':
+      return {
+        backgroundColor: 'rgba(150, 50, 200, 0.9)',
+        border: '1px solid rgba(220, 160, 255, 0.6)',
+      }
     default:
       return {}
   }
@@ -167,6 +244,14 @@ function getTooltipBorderColor(icon?: string): string {
       return 'rgba(120, 60, 140, 0.5)'
     case 'redirect':
       return 'rgba(180, 130, 40, 0.5)'
+    case 'lost-abilities':
+      return 'rgba(160, 160, 200, 0.5)'
+    case 'type-change':
+      return 'rgba(160, 200, 255, 0.5)'
+    case 'color-change':
+      return 'rgba(255, 255, 255, 0.7)'
+    case 'granted-ability':
+      return 'rgba(220, 160, 255, 0.6)'
     default:
       return 'rgba(150, 50, 200, 0.5)'
   }
