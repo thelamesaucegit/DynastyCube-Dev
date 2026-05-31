@@ -1,7 +1,4 @@
 export { TargetingOverlay } from './TargetingOverlay'
 export { ManaColorSelectionOverlay } from './ManaColorSelectionOverlay'
 export { LifeDisplay, ActiveEffectsBadges, CommanderDamageBadges } from './LifeDisplay'
-export { ConcedeButton, StandaloneConcedeButton, FullscreenButton, SpectatorCountBadge } from './GameControls'export { TargetingOverlay } from './TargetingOverlay'
-export { ManaColorSelectionOverlay } from './ManaColorSelectionOverlay'
-export { LifeDisplay, ActiveEffectsBadges } from './LifeDisplay'
-export { ConcedeButton, StandaloneConcedeButton, FullscreenButton } from './GameControls'
+export { ConcedeButton, StandaloneConcedeButton, FullscreenButton, SpectatorCountBadge } from './GameControls'
