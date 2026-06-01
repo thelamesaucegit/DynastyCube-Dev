@@ -7,7 +7,7 @@ import { GameBoard } from '../game/GameBoard'
 import { CombatArrows } from '../combat/CombatArrows'
 import type { SpectatingState } from '@/store/slices'
 import { reconstructSnapshots, type ReplayData } from '@/replay/reconstructSnapshots'
-import type { ClientPlayer, ClientCard } from '@/types';
+import type { ClientGameState, ClientPlayer, ClientCard, ClientZone } from '@/types'; 
 import { ZoneType } from '@/types/enums';
 import { useResponsive, ResponsiveContext } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
