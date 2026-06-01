@@ -78,7 +78,7 @@ export default function HomePage() {
     loadData();
     const moveBackground = () => setBgPosition({ x: Math.floor(Math.random() * 100), y: Math.floor(Math.random() * 100) });
     const initialTimeout = setTimeout(moveBackground, 100);
-    const panInterval = setInterval(moveBackground, 25000);
+    const panInterval = setInterval(moveBackground, 60000);
     return () => {
       clearTimeout(initialTimeout);
       clearInterval(panInterval);
@@ -109,7 +109,7 @@ export default function HomePage() {
             backgroundSize: "150%", 
             backgroundRepeat: "no-repeat",
             backgroundPosition: `${bgPosition.x}% ${bgPosition.y}%`,
-            transition: "background-position 25s ease-in-out", 
+            transition: "background-position 60s ease-in-out", 
           }}
         />
         <div className="absolute inset-0 bg-black/65" /> 
