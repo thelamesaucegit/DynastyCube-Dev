@@ -237,8 +237,10 @@ export default function HomePage() {
         />
       )}
 
-      <DraftStatusWidget variant="full" />
-
+ {/* Only render the DraftStatusWidget if the current season phase is 'draft' */}
+      {season?.status === 'draft' && (
+        <DraftStatusWidget variant="full" />
+      )}
       {/* Recent Draft Picks (Shrunk to max-w-5xl to be 80% width and centered) */}
       <section className="max-w-5xl mx-auto w-full space-y-4">
         <div className="flex items-center justify-between">
