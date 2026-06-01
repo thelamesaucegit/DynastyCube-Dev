@@ -39,12 +39,16 @@ import type {
   SpectatorStateUpdateMessage,
   SpectatingStartedMessage,
   SpectatingStoppedMessage,
+  SpectatorCountChangedMessage,
   OpponentAttackerTargetsMessage,
   OpponentBlockerAssignmentsMessage,
   OpponentDisconnectedMessage,
   OpponentReconnectedMessage,
   TournamentPlayerDisconnectedMessage,
   TournamentPlayerReconnectedMessage,
+  QuickGameLobbyStateMessage,
+  QuickGameLobbyClosedMessage,
+  OnlinePlayersCountMessage,
 } from '@/types'
 
 /**
@@ -98,6 +102,7 @@ export interface MessageHandlers {
   onSpectatorStateUpdate: (message: SpectatorStateUpdateMessage) => void
   onSpectatingStarted: (message: SpectatingStartedMessage) => void
   onSpectatingStopped: (message: SpectatingStoppedMessage) => void
+  onSpectatorCountChanged: (message: SpectatorCountChangedMessage) => void
   // Combat UI handlers
   onOpponentAttackerTargets: (message: OpponentAttackerTargetsMessage) => void
   onOpponentBlockerAssignments: (message: OpponentBlockerAssignmentsMessage) => void
@@ -106,6 +111,11 @@ export interface MessageHandlers {
   onOpponentReconnected: (message: OpponentReconnectedMessage) => void
   onTournamentPlayerDisconnected: (message: TournamentPlayerDisconnectedMessage) => void
   onTournamentPlayerReconnected: (message: TournamentPlayerReconnectedMessage) => void
+  // Quick Game Lobby handlers
+  onQuickGameLobbyState: (message: QuickGameLobbyStateMessage) => void
+  onQuickGameLobbyClosed: (message: QuickGameLobbyClosedMessage) => void
+  // Presence handlers
+  onOnlinePlayersCount: (message: OnlinePlayersCountMessage) => void
 }
 
 /**
@@ -240,6 +250,9 @@ export function handleServerMessage(message: ServerMessage, handlers: MessageHan
     case 'spectatingStopped':
       handlers.onSpectatingStopped(message)
       break
+    case 'spectatorCountChanged':
+      handlers.onSpectatorCountChanged(message)
+      break
     // Combat UI messages
     case 'opponentAttackerTargets':
       handlers.onOpponentAttackerTargets(message)
@@ -258,6 +271,15 @@ export function handleServerMessage(message: ServerMessage, handlers: MessageHan
       break
     case 'tournamentPlayerReconnected':
       handlers.onTournamentPlayerReconnected(message)
+      break
+    case 'quickGameLobbyState':
+      handlers.onQuickGameLobbyState(message)
+      break
+    case 'quickGameLobbyClosed':
+      handlers.onQuickGameLobbyClosed(message)
+      break
+    case 'onlinePlayersCount':
+      handlers.onOnlinePlayersCount(message)
       break
     default: {
       // TypeScript exhaustiveness check
