@@ -503,3 +503,57 @@ export async function getCurrentSeason(): Promise<{
     return { season: null, error: String(error) };
   }
 }
+
+
+/**
+ * Checks for an expired 'Off-Season Ends' timer and triggers the season rollover if found.
+ * This can be called by a cron job or manually by an admin to force the transition.
+ */
+export async function checkAndExecuteSeasonRollover(): Promise<{
+  success: boolean;
+  message: string;
+  error?: string;
+}> {
+  console.log("[RolloverCheck] Checking for expired off-season timer...");
+  try {
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_KEY!
+    );
+
+    const { data: timer, error: timerError } = await supabase
+      .from("countdown_timers")
+      .select("id, end_time")
+      .eq("title", "Off-Season Ends")
+      .eq("is_active", true)
+      .single();
+
+    if (timerError && timerError.code !== "PGRST116") {
+      throw new Error(`Database error checking timer: ${timerError.message}`);
+    }
+
+    if (!timer) {
+      return { success: true, message: "No active off-season timer found. No action taken." };
+    }
+
+    const now = new Date();
+    const endTime = new Date(timer.end_time);
+
+    if (now >= endTime) {
+      console.log("[RolloverCheck] Off-season timer has expired. Executing full season rollover...");
+      const rolloverResult = await executeSeasonRollover();
+      if (!rolloverResult.success) {
+        throw new Error(rolloverResult.error || "Rollover function failed without a specific error.");
+      }
+      return { success: true, message: "Season rollover executed successfully." };
+    } else {
+      return { success: true, message: `Off-season timer has not expired yet. Ends at: ${endTime.toISOString()}` };
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("[RolloverCheck] ❌ Failed to check or execute season rollover:", msg);
+    return { success: false, message: "Failed to process season rollover.", error: msg };
+  }
+}
+
