@@ -1,13 +1,21 @@
 // src/app/teams/[teamId]/page.tsx
+
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
-import { getTeamsWithMembers, getTeamByShortName } from "@/app/actions/teamActions";
+
+import { getTeamByShortName } from "@/app/actions/teamActions";
 import { getTeamDraftPicks, getTeamDecks, toggleKeeperStatus } from "@/app/actions/draftActions";
 import { refundDraftPick } from "@/app/actions/cubucksActions";
+import { getCurrentSeason } from "@/app/actions/seasonPhaseActions";
+import { getActiveDraftSession } from "@/app/actions/draftSessionActions";
+import { getAutoDraftPreview, toggleQueuePickVote, type AutoDraftPreviewResult } from "@/app/actions/autoDraftActions";
+import { getCurrentUserRolesForTeam, getTeamMembersWithRoles, type TeamMemberWithRoles } from "@/app/actions/roleActions";
+
 import { DraftInterface } from "@/app/components/DraftInterface";
 import { DeckBuilder } from "@/app/components/DeckBuilder";
 import { CardPreview } from "@/app/components/CardPreview";
@@ -19,34 +27,13 @@ import { MatchSchedulingWidget } from "@/app/components/team/MatchSchedulingWidg
 import { TeamVoting } from "@/app/components/team/TeamVoting";
 import { DraftStatusWidget } from "@/app/components/DraftStatusWidget";
 import { DraftQueueManager } from "@/app/components/DraftQueueManager";
-import { getCurrentSeason } from "@/app/actions/seasonPhaseActions";
-import { getCurrentUserRolesForTeam, getTeamMembersWithRoles, type TeamMemberWithRoles } from "@/app/actions/roleActions";
-import { getRoleEmoji, getRoleDisplayName } from "@/app/utils/roleUtils";
-import { getAutoDraftPreview, toggleQueuePickVote, type AutoDraftPreviewResult } from "@/app/actions/autoDraftActions";
-import { getActiveDraftSession } from "@/app/actions/draftSessionActions";
+
 import type { DraftPick, Deck } from "@/app/actions/draftActions";
-import Link from "next/link";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
 import { Button } from "@/app/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
-import {
-  Target,
-  Layers,
-  BookOpen,
-  ArrowLeftRight,
-  Swords,
-  BarChart3,
-  Crown,
-  Users,
-  Loader2,
-  AlertCircle,
-  ExternalLink,
-  CalendarDays,
-  CheckCircle2,
-  XCircle,
-  Vote,
-} from "lucide-react";
+import { Target, Layers, BookOpen, ArrowLeftRight, Swords, BarChart3, Crown, Users, Loader2, AlertCircle, ExternalLink, CalendarDays, CheckCircle2, XCircle, Vote } from "lucide-react";
 import { useSettings } from "@/contexts/SettingsContext";
 import { getCardImageUrl } from "@/app/utils/cardUtils";
 
@@ -58,8 +45,8 @@ interface TeamMember {
 }
 
 interface Team {
-  id: string;         // UUID primary key
-  short_name: string; // URL slug e.g. 'shards', 'ninja'
+  id: string;
+  short_name: string;
   name: string;
   emoji: string;
   motto: string;
@@ -86,9 +73,7 @@ export default function TeamPage() {
   const [undraftMessage, setUndraftMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [cubucksRefreshKey, setCubucksRefreshKey] = useState(0);
   const [seasonPhase, setSeasonPhase] = useState<string | null>(null);
-    const [togglingKeeper, setTogglingKeeper] = useState<string | null>(null); // <-- NEW STATE
-
-  const isFreeAgencyActive = seasonPhase === "season";
+  const [togglingKeeper, setTogglingKeeper] = useState<string | null>(null);
   const [draftPreview, setDraftPreview] = useState<AutoDraftPreviewResult | null>(null);
   const [activeDraftSessionId, setActiveDraftSessionId] = useState<string | null>(null);
   const [isVoting, setIsVoting] = useState(false);
@@ -97,88 +82,71 @@ export default function TeamPage() {
     (member) => member.user_id === user?.id
   ) || userRoles.length > 0;
 
-  useEffect(() => {
-    console.log("[TeamPage] useEffect triggered. teamShortName:", teamShortName, "user:", user?.id);
-    
-    // Safety guard: Wait until Next.js router successfully hydrates the URL parameter
+  const loadTeamData = useCallback(async () => {
     if (!teamShortName) {
-      console.log("[TeamPage] Waiting for teamShortName to hydrate from URL...");
-      return; 
-    }
-    
-    console.log("[TeamPage] Calling loadTeamData()...");
-    loadTeamData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teamShortName, user?.id]);
-
-  const loadTeamData = async () => {
-    setLoading(true);
-    console.log("[TeamPage] loadTeamData Phase 1 Started");
-    
-    try {
-      // --- Phase 1: Fetch data that has no dependencies ---
-      const { team: foundTeam, error: teamError } = await getTeamByShortName(teamShortName);
-      
-      if (teamError) {
-        console.error("[TeamPage] API Error fetching team:", teamError);
-      }
-      
-      if (teamError || !foundTeam) {
-        console.log("[TeamPage] Team not found or error occurred. Setting team to null.");
-        setTeam(null);
-        setLoading(false);
+        console.log("[TeamPage] Waiting for teamShortName from URL...");
         return;
+    }
+    setLoading(true);
+    console.log("[TeamPage] Starting data load for team:", teamShortName);
+
+    try {
+      // STEP 1: Get the essential team and season data first.
+      const { team: foundTeam, error: teamError } = await getTeamByShortName(teamShortName);
+      if (teamError || !foundTeam) {
+        throw new Error(teamError || "Team not found.");
       }
-      
-      console.log("[TeamPage] Team successfully fetched:", foundTeam.name);
+
+      const seasonResult = await getCurrentSeason();
+      const currentPhase = seasonResult.season?.phase || null;
+      setSeasonPhase(currentPhase);
+
       const teamUUID = foundTeam.id;
 
-      // --- Phase 2: Fetch data that is needed for the next phase ---
-      console.log("[TeamPage] loadTeamData Phase 2 Started");
-      const { session: activeSession } = await getActiveDraftSession();
-      const sessionId = activeSession?.id || null;
-      console.log("[TeamPage] Active Draft Session ID:", sessionId);
-      setActiveDraftSessionId(sessionId); 
+      // STEP 2: Conditionally check for an active draft ONLY if the phase is correct.
+      let sessionId: string | null = null;
+      if (currentPhase === 'draft') {
+        const { session: activeSession } = await getActiveDraftSession();
+        sessionId = activeSession?.id || null;
+        setActiveDraftSessionId(sessionId);
+      } else {
+        setActiveDraftSessionId(null);
+      }
 
-      // --- Phase 3: Fetch all remaining data in parallel ---
-      console.log("[TeamPage] loadTeamData Phase 3 Started (Promise.all)");
-      const previewPromise = sessionId
-        ? getAutoDraftPreview(teamUUID, sessionId)
-        : Promise.resolve(null as AutoDraftPreviewResult | null);
-
-      const [seasonResult, picksResult, decksResult, rolesResult, membersResult, previewResult] = await Promise.all([
-        getCurrentSeason(),
+      // STEP 3: Fetch all remaining data in parallel using the IDs we now have.
+      const dataPromises: [
+          Promise<{ picks: DraftPick[], error?: string }>,
+          Promise<{ decks: Deck[], error?: string }>,
+          Promise<{ roles: string[], error?: string }>,
+          Promise<{ members: TeamMemberWithRoles[], error?: string }>,
+          Promise<AutoDraftPreviewResult | null>
+      ] = [
         getTeamDraftPicks(teamUUID, sessionId || undefined),
         getTeamDecks(teamUUID),
         getCurrentUserRolesForTeam(teamUUID),
         getTeamMembersWithRoles(teamUUID),
-        previewPromise,
-      ]);
-      
-      console.log("[TeamPage] Phase 3 Completed. Processing results...");
-      
+        sessionId ? getAutoDraftPreview(teamUUID, sessionId) : Promise.resolve(null),
+      ];
+
+      const [picksResult, decksResult, rolesResult, membersResult, previewResult] = await Promise.all(dataPromises);
+
+      // STEP 4: Set all state once data is fetched.
       foundTeam.members = membersResult.members.map(m => ({ 
         id: m.member_id, 
         user_id: m.user_id, 
-        team_id: m.team_id,
-        user_email: m.user_email,
         user_display_name: m.user_display_name,
         joined_at: m.joined_at,
       }));
-
       setTeam(foundTeam);
       setDraftPicks(picksResult.picks);
       setDecks(decksResult.decks);
       setUserRoles(rolesResult.roles);
       setMembersWithRoles(membersResult.members);
       setDraftPreview(previewResult);
-      setSeasonPhase(seasonResult.season?.phase || null);
-      
-      // Determine and set the default active tab
+
+      // Determine default active tab
       const isMember = foundTeam.members?.some((m) => m.user_id === user?.id) || rolesResult.roles.length > 0;
       let defaultTab: TabType = "picks";
-      const currentPhase = seasonResult.season?.phase;
-      
       if (currentPhase === "preseason" || currentPhase === "draft") {
         defaultTab = isMember ? "draft" : "picks";
       } else if (currentPhase === "season" || currentPhase === "playoffs") {
@@ -186,18 +154,120 @@ export default function TeamPage() {
       } else if (currentPhase === "postseason") {
         defaultTab = isMember ? "votes" : "picks";
       }
-      
-      console.log("[TeamPage] Setting active tab to:", defaultTab);
       setActiveTab(defaultTab);
-      
+
     } catch (error) {
-      console.error("[TeamPage] Critical Try/Catch Error loading team data:", error);
-      setTeam(null);
+      console.error("[TeamPage] Critical error loading team data:", error);
+      setTeam(null); // Ensure team is cleared on error
     } finally {
-      console.log("[TeamPage] loadTeamData Finally Block - turning off loading spinner");
       setLoading(false);
     }
+  }, [teamShortName, user?.id]);
+
+  useEffect(() => {
+    loadTeamData();
+  }, [loadTeamData]);
+
+  const handleDraftComplete = async () => {
+      // This logic remains correct.
+      if (!activeDraftSessionId || !team) return;
+      const { picks } = await getTeamDraftPicks(team.id, activeDraftSessionId);
+      setDraftPicks(picks);
+      setCubucksRefreshKey((prev) => prev + 1);
+      const preview = await getAutoDraftPreview(team.id, activeDraftSessionId);
+      setDraftPreview(preview);
   };
+  
+  const handleToggleVote = async () => {
+      // This logic remains correct.
+      if (!draftPreview?.nextPick?.id || !activeDraftSessionId || !team) return;
+      setIsVoting(true);
+      try {
+          const result = await toggleQueuePickVote(team.short_name, draftPreview.nextPick.id, activeDraftSessionId);
+          if (result.success) {
+              if (result.pickExecuted) {
+                  await handleDraftComplete();
+              } else {
+                  const updatedPreview = await getAutoDraftPreview(team.id, activeDraftSessionId);
+                  setDraftPreview(updatedPreview);
+              }
+          } else {
+              alert(result.error || "Failed to submit vote");
+          }
+      } catch (error) {
+          console.error("Error toggling vote:", error);
+      } finally {
+          setIsVoting(false);
+      }
+  };
+
+  const handleUndraftCard = async (pick: DraftPick) => {
+    // This logic remains correct.
+    if (pick.is_keeper) return;
+    if (activeDraftSessionId) {
+      alert("Cards cannot be cut from your pool during an active draft session.");
+      return;
+    }
+    if (!pick.id || undrafting || !team) return;
+    const confirmed = window.confirm(`Are you sure you want to undraft "${pick.card_name}"? The Çubucks spent will be refunded to the team.`);
+    if (!confirmed) return;
+    
+    setUndrafting(pick.id);
+    setUndraftMessage(null);
+    try {
+      const result = await refundDraftPick(team.id, pick.id, pick.card_id, pick.card_name);
+      if (result.success) {
+        setUndraftMessage({ type: "success", text: `Undrafted ${pick.card_name}! Refunded ${result.refundAmount} Çubucks.` });
+        const { picks } = await getTeamDraftPicks(team.id, activeDraftSessionId || undefined);
+        setDraftPicks(picks);
+        setCubucksRefreshKey((prev) => prev + 1);
+      } else {
+        setUndraftMessage({ type: "error", text: result.error || "Failed to undraft card" });
+      }
+    } catch (error) {
+      setUndraftMessage({ type: "error", text: "An unexpected error occurred." });
+    } finally {
+      setUndrafting(null);
+      setTimeout(() => setUndraftMessage(null), 5000);
+    }
+  };
+
+  const currentKeepersCount = draftPicks.filter(p => p.is_keeper).length;
+
+  const handleToggleKeeper = async (pick: DraftPick) => {
+    // This logic remains correct.
+    if (!pick.id) return; 
+    if (!pick.is_keeper && currentKeepersCount >= 8) {
+      alert("You can only designate up to 8 Keepers.");
+      return;
+    }
+    setTogglingKeeper(pick.id);
+    try {
+      const result = await toggleKeeperStatus(pick.id, !pick.is_keeper);
+      if (result.success) {
+        setDraftPicks(prev => prev.map(p => p.id === pick.id ? { ...p, is_keeper: !p.is_keeper } : p));
+      } else {
+        alert(result.error || "Failed to update keeper status.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("An unexpected error occurred.");
+    } finally {
+      setTogglingKeeper(null);
+    }
+  };
+
+  const tabs: { id: TabType; label: string; icon: React.ReactNode; count?: number, disabled?: boolean }[] = [
+    ...(isUserTeamMember ? [{ id: "draft" as TabType, label: "Draft & Free Agency", icon: <Target className="size-4" />, count: undefined, disabled: false }] : []),
+    { id: "picks" as TabType, label: "Team Pool", icon: <Layers className="size-4" />, count: draftPicks.length },
+    { id: "decks" as TabType, label: "Decks", icon: <BookOpen className="size-4" />, count: decks.length },
+    { id: "trades" as TabType, label: "Trades", icon: <ArrowLeftRight className="size-4" />, count: undefined },
+    { id: "matches" as TabType, label: "Matches", icon: <Swords className="size-4" />, count: undefined },
+    ...(isUserTeamMember ? [{ id: "votes" as TabType, label: "Votes", icon: <Vote className="size-4" />, count: undefined }] : []),
+    { id: "stats" as TabType, label: "Statistics", icon: <BarChart3 className="size-4" />, count: undefined },
+    ...(isUserTeamMember ? [{ id: "roles" as TabType, label: "Team Roles", icon: <Crown className="size-4" />, count: undefined }] : []),
+    { id: "members" as TabType, label: "Members", icon: <Users className="size-4" />, count: team?.members?.length || 0 },
+  ];
   
   if (loading) {
     return (
@@ -213,167 +283,14 @@ export default function TeamPage() {
   if (!team) {
     return (
       <div className="container max-w-7xl mx-auto px-4 py-8">
-        <Card className="border-destructive">
-          <CardContent className="pt-6 text-center">
-            <AlertCircle className="size-10 text-destructive mx-auto mb-4" />
-            <h2 className="text-2xl font-bold mb-2">Team Not Found</h2>
-            <p className="text-muted-foreground">
-              The team &quot;{teamShortName}&quot; does not exist.
-            </p>
-          </CardContent>
-        </Card>
+        <Card className="border-destructive"><CardContent className="pt-6 text-center">
+          <AlertCircle className="size-10 text-destructive mx-auto mb-4" />
+          <h2 className="text-2xl font-bold mb-2">Team Not Found</h2>
+          <p className="text-muted-foreground">The team &quot;{teamShortName}&quot; does not exist.</p>
+        </CardContent></Card>
       </div>
     );
   }
-
-  const handleDraftComplete = async () => {
-    if (!activeDraftSessionId || !team) return;
-    const { picks } = await getTeamDraftPicks(team.id, activeDraftSessionId);
-    setDraftPicks(picks);
-    setCubucksRefreshKey((prev) => prev + 1);
-    const preview = await getAutoDraftPreview(team.id, activeDraftSessionId);
-    setDraftPreview(preview);
-  };
-
-  const handleToggleVote = async () => {
-    if (!draftPreview?.nextPick?.id || !activeDraftSessionId) return;
-    setIsVoting(true);
-    try {
-      const result = await toggleQueuePickVote(
-        team.short_name,
-        draftPreview.nextPick.id,
-        activeDraftSessionId
-      );
-      if (result.success) {
-        if (result.pickExecuted) {
-          await handleDraftComplete();
-        } else {
-          const updatedPreview = await getAutoDraftPreview(team.id, activeDraftSessionId);
-          setDraftPreview(updatedPreview);
-        }
-      } else {
-        alert(result.error || "Failed to submit vote");
-      }
-    } catch (error) {
-      console.error("Error toggling vote:", error);
-    } finally {
-      setIsVoting(false);
-    }
-  };
-
-  const handleUndraftCard = async (pick: DraftPick) => {
-    console.log(`[Undraft Action] Initiated for card: ${pick.card_name} (ID: ${pick.id})`);
-        if (pick.is_keeper) return; // Guard clause
-
-    // 1. Prevent cutting cards during an active draft session
-    if (activeDraftSessionId) {
-      console.warn("[Undraft Action] Blocked: Cannot cut cards while a draft session is active.");
-      alert("Cards cannot be cut from your pool during an active draft session.");
-      return;
-    }
-
-    // 2. Prevent proceeding if critical data is missing or action is already processing
-    if (!pick.id || undrafting || !team) {
-      console.error("[Undraft Action] Blocked: Missing required state or already processing.", {
-        pickId: pick.id,
-        isUndrafting: undrafting,
-        hasTeam: !!team
-      });
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `Are you sure you want to undraft "${pick.card_name}"? The Çubucks spent will be refunded to the team.`
-    );
-    
-    if (!confirmed) {
-      console.log("[Undraft Action] Cancelled by user.");
-      return;
-    }
-
-    console.log(`[Undraft Action] Proceeding with refund for team ${team.id}`);
-    
-    setUndrafting(pick.id);
-    setUndraftMessage(null);
-
-    try {
-      const result = await refundDraftPick(team.id, pick.id, pick.card_id, pick.card_name);
-      console.log("[Undraft Action] Refund API result:", result);
-
-      if (result.success) {
-        setUndraftMessage({
-          type: "success",
-          text: `Undrafted ${pick.card_name}! Refunded ${result.refundAmount} Çubucks.`,
-        });
-        
-        console.log("[Undraft Action] Refreshing team picks...");
-        const { picks } = await getTeamDraftPicks(team.id, activeDraftSessionId || undefined);
-        setDraftPicks(picks);
-        setCubucksRefreshKey((prev) => prev + 1);
-      } else {
-        console.error("[Undraft Action] Refund failed:", result.error);
-        setUndraftMessage({
-          type: "error",
-          text: result.error || "Failed to undraft card",
-        });
-      }
-    } catch (error) {
-      console.error("[Undraft Action] Exception during refund:", error);
-      setUndraftMessage({
-        type: "error",
-        text: "An unexpected error occurred.",
-      });
-    } finally {
-      setUndrafting(null);
-      setTimeout(() => setUndraftMessage(null), 5000);
-    }
-  };
-// --- NEW HANDLER FOR KEEPERS ---
-  const currentKeepersCount = draftPicks.filter(p => p.is_keeper).length;
-
-  const handleToggleKeeper = async (pick: DraftPick) => {
-    // 1. Add this safety check so TypeScript knows pick.id is definitely a string
-    if (!pick.id) return; 
-
-    if (!pick.is_keeper && currentKeepersCount >= 8) {
-      alert("You can only designate up to 8 Keepers.");
-      return;
-    }
-    
-    setTogglingKeeper(pick.id);
-    try {
-      const result = await toggleKeeperStatus(pick.id, !pick.is_keeper);
-      if (result.success) {
-        // Optimistically update the UI
-        setDraftPicks(prev => prev.map(p => p.id === pick.id ? { ...p, is_keeper: !p.is_keeper } : p));
-      } else {
-        alert(result.error || "Failed to update keeper status.");
-      }
-    } catch (e) {
-      console.error(e);
-      alert("An unexpected error occurred.");
-    } finally {
-      setTogglingKeeper(null);
-    }
-  };
-
-  const tabs: { id: TabType; label: string; icon: React.ReactNode; count?: number, disabled?: boolean }[] = [
-    ...(isUserTeamMember ? [{
-      id: "draft" as TabType,
-      label: "Draft & Free Agency",
-      icon: <Target className="size-4" />,
-      count: undefined,
-      disabled: false 
-    }] : []),
-    { id: "picks" as TabType, label: "Team Pool", icon: <Layers className="size-4" />, count: draftPicks.length },
-    { id: "decks" as TabType, label: "Decks", icon: <BookOpen className="size-4" />, count: decks.length },
-    { id: "trades" as TabType, label: "Trades", icon: <ArrowLeftRight className="size-4" />, count: undefined },
-    { id: "matches" as TabType, label: "Matches", icon: <Swords className="size-4" />, count: undefined },
-    ...(isUserTeamMember ? [{ id: "votes" as TabType, label: "Votes", icon: <Vote className="size-4" />, count: undefined }] : []),
-    { id: "stats" as TabType, label: "Statistics", icon: <BarChart3 className="size-4" />, count: undefined },
-    ...(isUserTeamMember ? [{ id: "roles" as TabType, label: "Team Roles", icon: <Crown className="size-4" />, count: undefined }] : []),
-    { id: "members" as TabType, label: "Members", icon: <Users className="size-4" />, count: team.members?.length || 0 },
-  ];
 
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8">
