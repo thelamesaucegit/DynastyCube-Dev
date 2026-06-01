@@ -13,9 +13,12 @@ import type {
   MatchIntro,
 } from '../types'
 
+const BEHOLD_PULSE_FLOOR_MS = 2000
+
 export interface AnimationSliceState {
   selectedCardId: EntityId | null
   hoveredCardId: EntityId | null
+  hoverPosition: { x: number; y: number } | null
   autoTapPreview: readonly EntityId[] | null
   revealedHandCardIds: readonly EntityId[] | null
   revealedCardsInfo: {
@@ -24,22 +27,33 @@ export interface AnimationSliceState {
     imageUris: readonly (string | null)[]
     source: string | null
     isYourReveal: boolean
+    /**
+     * Per-card revealer attribution (parallel to cardIds), present when one effect reveals
+     * cards from more than one player at once (e.g. Psychic Battle: each player reveals their
+     * top card). `true` = revealed by the viewing player, `false` = by an opponent. Absent for
+     * single-player reveals, which use [isYourReveal] for the whole group.
+     */
+    cardOwnerIsYours?: readonly boolean[]
+    fromZone?: string | null
+    toZone?: string | null
   } | null
   drawAnimations: readonly DrawAnimation[]
   damageAnimations: readonly DamageAnimation[]
   revealAnimations: readonly RevealAnimation[]
   coinFlipAnimations: readonly CoinFlipAnimation[]
   targetReselectedAnimations: readonly TargetReselectedAnimation[]
+  beholdPulses: readonly { cardId: EntityId; sourceName: string; floorUntil: number }[]
   matchIntro: MatchIntro | null
 }
 
 export interface AnimationSliceActions {
   selectCard: (cardId: EntityId | null) => void
-  hoverCard: (cardId: EntityId | null) => void
+  hoverCard: (cardId: EntityId | null, position?: { x: number; y: number }) => void
+  updateHoverPosition: (position: { x: number; y: number }) => void
   setAutoTapPreview: (preview: readonly EntityId[] | null) => void
   showRevealedHand: (cardIds: readonly EntityId[]) => void
   dismissRevealedHand: () => void
-  showRevealedCards: (cardIds: readonly EntityId[], cardNames: readonly string[], imageUris: readonly (string | null)[], source: string | null, isYourReveal: boolean) => void
+  showRevealedCards: (cardIds: readonly EntityId[], cardNames: readonly string[], imageUris: readonly (string | null)[], source: string | null, isYourReveal: boolean, fromZone?: string | null, toZone?: string | null) => void
   dismissRevealedCards: () => void
   addDrawAnimation: (animation: DrawAnimation) => void
   removeDrawAnimation: (id: string) => void
@@ -51,6 +65,8 @@ export interface AnimationSliceActions {
   removeCoinFlipAnimation: (id: string) => void
   addTargetReselectedAnimation: (animation: TargetReselectedAnimation) => void
   removeTargetReselectedAnimation: (id: string) => void
+  addBeholdPulse: (cardId: EntityId, sourceName: string) => void
+  reconcileBeholdPulses: (stackItemNames: readonly string[]) => void
   setMatchIntro: (intro: MatchIntro) => void
   clearMatchIntro: () => void
 }
@@ -60,6 +76,7 @@ export type AnimationSlice = AnimationSliceState & AnimationSliceActions
 export const createAnimationSlice: SliceCreator<AnimationSlice> = (set, get) => ({
   selectedCardId: null,
   hoveredCardId: null,
+  hoverPosition: null,
   autoTapPreview: null,
   revealedHandCardIds: null,
   revealedCardsInfo: null,
@@ -68,6 +85,7 @@ export const createAnimationSlice: SliceCreator<AnimationSlice> = (set, get) => 
   revealAnimations: [],
   coinFlipAnimations: [],
   targetReselectedAnimations: [],
+  beholdPulses: [],
   matchIntro: null,
 
   // Card selection actions
@@ -75,7 +93,7 @@ export const createAnimationSlice: SliceCreator<AnimationSlice> = (set, get) => 
     set({ selectedCardId: cardId })
   },
 
-  hoverCard: (cardId) => {
+  hoverCard: (cardId, position) => {
     let autoTapPreview: readonly EntityId[] | null = null
     if (cardId) {
       const { legalActions, pendingDecision } = get()
@@ -95,7 +113,11 @@ export const createAnimationSlice: SliceCreator<AnimationSlice> = (set, get) => 
         }
       }
     }
-    set({ hoveredCardId: cardId, autoTapPreview })
+    set({ hoveredCardId: cardId, hoverPosition: position ?? null, autoTapPreview })
+  },
+
+  updateHoverPosition: (position) => {
+    set({ hoverPosition: position })
   },
 
   setAutoTapPreview: (preview) => {
@@ -111,8 +133,18 @@ export const createAnimationSlice: SliceCreator<AnimationSlice> = (set, get) => 
     set({ revealedHandCardIds: null })
   },
 
-  showRevealedCards: (cardIds, cardNames, imageUris, source, isYourReveal) => {
-    set({ revealedCardsInfo: { cardIds, cardNames, imageUris, source, isYourReveal } })
+  showRevealedCards: (cardIds, cardNames, imageUris, source, isYourReveal, fromZone, toZone) => {
+    set({
+      revealedCardsInfo: {
+        cardIds,
+        cardNames,
+        imageUris,
+        source,
+        isYourReveal,
+        ...(fromZone !== undefined ? { fromZone } : {}),
+        ...(toZone !== undefined ? { toZone } : {}),
+      },
+    })
   },
 
   dismissRevealedCards: () => {
@@ -178,6 +210,40 @@ export const createAnimationSlice: SliceCreator<AnimationSlice> = (set, get) => 
     set((state) => ({
       targetReselectedAnimations: state.targetReselectedAnimations.filter((a) => a.id !== id),
     }))
+  },
+
+  addBeholdPulse: (cardId, sourceName) => {
+    const floorUntil = Date.now() + BEHOLD_PULSE_FLOOR_MS
+    set((state) => (
+      state.beholdPulses.some((p) => p.cardId === cardId && p.sourceName === sourceName)
+        ? state
+        : { beholdPulses: [...state.beholdPulses, { cardId, sourceName, floorUntil }] }
+    ))
+    // If the beholding spell auto-resolves before the next state update, the stack
+    // will no longer contain the source when reconcile runs. Reschedule a reconcile
+    // after the floor elapses so the pulse stays visible for at least BEHOLD_PULSE_FLOOR_MS.
+    setTimeout(() => {
+      const gameState = get().gameState
+      if (!gameState) {
+        get().reconcileBeholdPulses([])
+        return
+      }
+      const stackZone = gameState.zones.find((z) => z.zoneId.zoneType === 'Stack')
+      const stackItemNames = (stackZone?.cardIds ?? [])
+        .map((id) => gameState.cards[id]?.name)
+        .filter((n): n is string => typeof n === 'string')
+      get().reconcileBeholdPulses(stackItemNames)
+    }, BEHOLD_PULSE_FLOOR_MS + 50)
+  },
+
+  reconcileBeholdPulses: (stackItemNames) => {
+    set((state) => {
+      if (state.beholdPulses.length === 0) return state
+      const names = new Set(stackItemNames)
+      const now = Date.now()
+      const kept = state.beholdPulses.filter((p) => names.has(p.sourceName) || p.floorUntil > now)
+      return kept.length === state.beholdPulses.length ? state : { beholdPulses: kept }
+    })
   },
 
   setMatchIntro: (intro) => {
