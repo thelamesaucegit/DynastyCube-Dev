@@ -1,7 +1,7 @@
 //src/replay/reconstructSnapshots.ts
 
 import type { SpectatorStateUpdate } from '../components/admin/ReplayViewer'
-import type { ClientGameState } from '@/types';
+import type { ClientGameState, ClientZone, EntityId } from '@/types';
 
 /**
  * A delta representation of a SpectatorStateUpdate change.
