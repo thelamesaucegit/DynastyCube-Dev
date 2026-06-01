@@ -1,6 +1,7 @@
-//web-client/src/replay/reconstructSnapshots.ts
+//src/replay/reconstructSnapshots.ts
 
 import type { SpectatorStateUpdate } from '../components/admin/ReplayViewer'
+import type { ClientGameState } from '@/types';
 
 /**
  * A delta representation of a SpectatorStateUpdate change.
@@ -89,9 +90,13 @@ function applySpectatorDelta(
 ): SpectatorStateUpdate {
   return {
     gameSessionId: prev.gameSessionId,
+    // Cast the result of the delta application back to the expected type.
+    // We are telling TypeScript, "Trust us, the object returned by this function
+    // conforms to the shape of Partial<ClientGameState>."
     gameState: delta.gameStateDelta != null
-      ? applyGameStateDelta(prev.gameState as GameStateObj | null, delta.gameStateDelta)
+      ? applyGameStateDelta(prev.gameState as GameStateObj | null, delta.gameStateDelta) as Partial<ClientGameState>
       : prev.gameState,
+    // ----------------------
     player1Id: prev.player1Id,
     player2Id: prev.player2Id,
     player1Name: prev.player1Name,
@@ -107,7 +112,7 @@ function applySpectatorDelta(
       : prev.priorityPlayerId,
     combat: delta.combatCleared ? null : (delta.combat ?? prev.combat),
     decisionStatus: delta.decisionCleared ? null : (delta.decisionStatus ?? prev.decisionStatus),
-  }
+  };
 }
 
 interface GameStateObj {
