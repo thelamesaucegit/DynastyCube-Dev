@@ -4,13 +4,13 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { createClient } from '@/lib/supabase/client';
-import Link from 'next/link'; // Import the Link component
+import Link from 'next/link';
 import { getDraftStatus, type DraftStatus } from "@/app/actions/draftOrderActions";
 import { getTeamDraftPicks } from "@/app/actions/draftActions";
-import { getActiveDraftSession, type DraftSession } from "@/app/actions/draftSessionActions";
+import type { DraftSession } from "@/app/actions/draftSessionActions";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
-import { Clock, ChevronRight, Timer, CalendarClock, PartyPopper, Trophy } from "lucide-react"; // Added Trophy
+import { Clock, ChevronRight, Timer, CalendarClock, PartyPopper, Trophy } from "lucide-react";
 
 interface DraftStatusWidgetProps {
   variant: "full" | "compact" | "team";
@@ -37,16 +37,16 @@ export function DraftStatusWidget({ variant, teamId }: DraftStatusWidgetProps) {
     
     const loadStatus = async () => {
       try {
-        // --- THIS IS THE FIX ---
-        // Use a minimal, client-side query instead of the server action.
-        // This is much faster and avoids the 406 error from the server action's header handling.
+        // Fetch the active draft session using a minimal, client-side query.
         const { data: activeSession, error: sessionError } = await supabase
           .from("draft_sessions")
-          .select("id, status, start_time, total_rounds, hours_per_pick, current_pick_deadline")
+          // --- THIS IS THE FIX ---
+          // Select all columns to ensure the object matches the DraftSession type.
+          .select("*")
           .in("status", ["active", "paused", "scheduled"])
           .order("created_at", { ascending: false })
           .limit(1)
-          .maybeSingle(); // Use maybeSingle to prevent errors if no session is found.
+          .maybeSingle();
 
         if (sessionError) {
           throw sessionError;
@@ -89,14 +89,14 @@ export function DraftStatusWidget({ variant, teamId }: DraftStatusWidgetProps) {
         }
       } catch (error) {
         console.error("Error loading draft status widget data:", error);
-        setStatus(null); // Clear status on error to prevent stale data display
+        setStatus(null);
       } finally {
         setLoading(false);
       }
     };
 
-    loadStatus(); // Initial load
-    const interval = setInterval(loadStatus, 15000); // Polling interval set to 15 seconds
+    loadStatus();
+    const interval = setInterval(loadStatus, 15000);
 
     return () => {
       clearInterval(interval);
@@ -109,11 +109,9 @@ export function DraftStatusWidget({ variant, teamId }: DraftStatusWidgetProps) {
   if (session?.status === "completed") {
     return <CompletedWidget sessionId={session.id} />;
   }
-
   if (session?.status === "scheduled") {
-    return <ScheduledWidget session={session as DraftSession} />;
+    return <ScheduledWidget session={session} />;
   }
-  
   if (!status) {
     return null;
   }
@@ -123,7 +121,6 @@ export function DraftStatusWidget({ variant, teamId }: DraftStatusWidgetProps) {
   return <TeamWidget status={status} session={session} teamId={teamId || ""} recentPick={recentPick} />;
 }
 
-// useCountdown and useStartCountdown helpers remain the same...
 function useCountdown(deadline: string | null | undefined): string {
   const [display, setDisplay] = useState("");
   useEffect(() => {
@@ -179,7 +176,6 @@ function useStartCountdown(startTime: string | null | undefined): string {
   return display;
 }
 
-
 function ScheduledWidget({ session }: { session: DraftSession }) {
   const startCountdown = useStartCountdown(session.start_time);
   return (
@@ -210,7 +206,6 @@ function ScheduledWidget({ session }: { session: DraftSession }) {
   );
 }
 
-// *** MODIFIED CompletedWidget to accept sessionId and link to results ***
 function CompletedWidget({ sessionId }: { sessionId: string }) {
   return (
     <section>
