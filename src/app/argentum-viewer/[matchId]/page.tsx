@@ -1,3 +1,5 @@
+//src/app/argentum-viewer/[matchId]/page.tsx
+
 "use client";
 
 import { useRouter } from 'next/navigation';
@@ -152,13 +154,14 @@ export default function ReplayPage(props: PageProps) {
     if (isLoading) return <div className="text-white p-8 text-center mt-20">Loading and reconstructing replay...</div>; 
     if (!data || !data.gameStates) return <div className="text-white p-8 text-center mt-20">Failed to load replay data.</div>; 
 
-    return (
+   return (
         <main className="w-full h-screen bg-gray-900">
-            <ResponsiveContext.Provider value={null}>
-                <SettingsProvider>
-                    <ArgentumReplayPlayer initialGameStates={data.gameStates} cardDataMap={data.cardDataMap!} />
-                </SettingsProvider>
-            </ResponsiveContext.Provider>
+            <SettingsProvider>
+                <ArgentumReplayPlayer
+                    initialGameStates={data.gameStates}
+                    cardDataMap={data.cardDataMap!}
+                />
+            </SettingsProvider>
         </main>
     );
 }

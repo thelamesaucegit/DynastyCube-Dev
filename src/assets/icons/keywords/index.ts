@@ -2,7 +2,23 @@
  * Keyword ability icon mappings using mana-font CSS classes.
  * Uses the Arena ability icon set from the mana-font package.
  * Class format: "ms ms-ability-{name}" rendered via <i> elements.
+ *
+ * Keywords without a mana-font glyph fall back to a local SVG via `keywordSvgIcon`.
  */
+import persistSvgUrl from './persist.svg'
+import bandingSvgUrl from './banding.svg'
+import questCounterSvgUrl from '../counters/quest.svg'
+
+/** Maps engine keyword names to local SVG URLs (used when mana-font has no glyph). */
+export const keywordSvgIcon: Record<string, string> = {
+  PERSIST: persistSvgUrl,
+  BANDING: bandingSvgUrl,
+}
+
+/** Maps engine CounterType names to local SVG URLs (used when mana-font has no glyph or we prefer custom art). */
+export const counterSvgIcon: Record<string, string> = {
+  QUEST: questCounterSvgUrl,
+}
 
 /** Maps engine keyword names to mana-font ability class suffixes */
 export const keywordManaClass: Record<string, string> = {
@@ -28,7 +44,14 @@ export const keywordManaClass: Record<string, string> = {
   INFECT: 'ability-infect',
   MORPH: 'ability-morph',
   PROTECTION: 'ability-protection',
+  WITHER: 'ability-infect',
+  TOXIC: 'ability-toxic',
   CANT_BE_BLOCKED: 'ability-unblockable',
+  CHANGELING: 'ability-changeling',
+  /** Suspect status (CR 701.60). Rendered via the synthetic SUSPECTED pseudo-keyword from
+   *  ProjectedState.isSuspected — the status itself isn't a keyword, but reusing this
+   *  icon table keeps the badge rendering uniform. */
+  SUSPECTED: 'ability-suspect',
 }
 
 export const displayableKeywords = new Set([
@@ -36,8 +59,9 @@ export const displayableKeywords = new Set([
   'FIRST_STRIKE', 'DOUBLE_STRIKE', 'DEATHTOUCH',
   'LIFELINK', 'VIGILANCE', 'HASTE', 'HEXPROOF',
   'SHROUD', 'INDESTRUCTIBLE', 'DEFENDER', 'MENACE', 'FEAR',
-  'FLASH', 'PROWESS', 'WARD', 'INTIMIDATE', 'INFECT',
-  'CANT_BE_BLOCKED',
+  'PROWESS', 'WARD', 'INTIMIDATE', 'INFECT',
+  'WITHER', 'TOXIC', 'CANT_BE_BLOCKED', 'CHANGELING',
+  'PERSIST', 'BANDING',
 ])
 
 /** Maps engine CounterType to mana-font counter class suffixes */
@@ -56,6 +80,17 @@ export const counterManaClass: Record<string, string> = {
   FINALITY: 'counter-finality',
   SUPPLY: 'counter-brick',
   FLYING: 'ability-flying',
+  FIRST_STRIKE: 'ability-first-strike',
+  LIFELINK: 'ability-lifelink',
+  INDESTRUCTIBLE: 'ability-indestructible',
   STASH: 'counter-charge',
   BLIGHT: 'counter-skull',
+  COIN: 'counter-charge',
+  FLOOD: 'counter-flood',
+  CHORUS: 'counter-charge',
+  DREAM: 'counter-charge',
+  QUEST: 'counter-lore',
+  GROWTH: 'counter-charge',
+  TIME: 'counter-time',
+  FEATHER: 'counter-charge',
 }

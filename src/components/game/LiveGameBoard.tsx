@@ -6,9 +6,10 @@ import { useMemo, useCallback } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import { useInteraction } from '@/hooks/useInteraction';
 import { useViewingPlayer, useOpponent, useStackCards, selectPriorityMode, useGhostCards, useRevealedLibraryTopCard } from '@/store/selectors';
-import { hand, getNextStep, StepShortNames } from '@/types';
+import { hand, getNextStep, StepShortNames } from '@/types'; 
+import { ZoneType } from '@/types/enums'; 
 import { useResponsive, ResponsiveContextProvider } from '@/hooks/useResponsive';
-
+import type { ClientCard, ClientPlayer } from '@/types';
 // Import all the original UI components it needs
 import { StepStrip } from '../ui/StepStrip';
 import { ManaPool } from '../ui/ManaPool';
@@ -29,9 +30,8 @@ interface LiveGameBoardProps {
 }
 
 export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
-  const responsive = useResponsive(topOffset);
-  
   const store = useGameStore((state) => state);
+  
   const {
     gameState: playerGameState,
     spectatingState,
@@ -65,13 +65,51 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
   } = store;
   
   const { executeAction } = useInteraction();
-  const viewingPlayer = useViewingPlayer();
+ const viewingPlayer = useViewingPlayer();
   const opponent = useOpponent();
+
+  const zoneRowCounts = useMemo(() => {
+    const { zones = [], cards = {} } = store.gameState ?? {};
+    
+    const getRowCount = (playerId: ClientPlayer['playerId'] | null, isCreatureRow: boolean) => {
+        if (!playerId) return 0;
+        const zone = zones.find(z => z.zoneId.ownerId === playerId && z.zoneId.zoneType === ZoneType.BATTLEFIELD);
+        if (!zone) return 0;
+        return zone.cardIds
+            // --- THIS IS THE FIX ---
+            // The `cards` object is now guaranteed to be indexable
+            .map(id => cards[id]) 
+            .filter((c): c is ClientCard => !!c)
+            .filter(c => !c.attachedTo)
+            .filter(c => {
+                const isCreatureOrPW = c.cardTypes.includes('CREATURE') || c.cardTypes.includes('PLANESWALKER');
+                return isCreatureRow ? isCreatureOrPW : !isCreatureOrPW;
+            }).length;
+    };
+    return [
+        getRowCount(viewingPlayer?.playerId ?? null, true),
+        getRowCount(viewingPlayer?.playerId ?? null, false),
+        getRowCount(opponent?.playerId ?? null, true),
+        getRowCount(opponent?.playerId ?? null, false),
+    ];
+  }, [store.gameState]);
+
+  const responsive = useResponsive(topOffset, zoneRowCounts);
+  
   const stackCards = useStackCards();
   const ghostCards = useGhostCards(playerId ?? null);
   const opponentRevealedTopCard = useRevealedLibraryTopCard(opponent?.playerId ?? null);
   const computedPriorityMode = useGameStore(selectPriorityMode);
-  
+  const counterTotalAllocated = useMemo(() => {
+    if (!counterDistributionState) return 0;
+    let sum = 0;
+    for (const byType of Object.values(counterDistributionState.distribution)) {
+      for (const v of Object.values(byType)) {
+        sum += v;
+      }
+    }
+    return sum;
+  }, [counterDistributionState]);
   const opponentGhostCards = useMemo(() => (opponentRevealedTopCard ? [opponentRevealedTopCard] : []), [opponentRevealedTopCard]);
 
   const effectiveViewingPlayer = useMemo(() => {
@@ -185,8 +223,7 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
   const distributeRemaining = distributeState ? distributeState.totalAmount - distributeTotalAllocated : 0;
   const isInCounterDistMode = counterDistributionState !== null;
   const isInManaSelectionMode = manaSelectionState !== null;
-  const counterTotalAllocated = counterDistributionState ? Object.values(counterDistributionState.distribution).reduce<number>((sum, v) => sum + v, 0) : 0;
-
+ 
   const getPassButtonLabel = () => {
     if (nextStopPoint) return nextStopPoint;
     if (stackCards.length > 0) return 'Resolve';
@@ -245,6 +282,7 @@ export function LiveGameBoard({ topOffset = 0 }: LiveGameBoardProps) {
             hasPriority={hasPriority}
             priorityMode={computedPriorityMode}
             activePlayerName={spectatingState ? gameState.players.find(p => p.playerId === gameState.activePlayerId)?.name : undefined}
+            activeSide={isMyTurn ? 'bottom' : 'top'}
             stopOverrides={stopOverrides}
             onToggleStop={toggleStopOverride}
             isSpectator={spectatingState !== null}

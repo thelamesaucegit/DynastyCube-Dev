@@ -2,6 +2,7 @@
  * Handlers for gameplay messages: state updates, mulligan, game lifecycle, and errors.
  */
 import type { MessageHandlers } from '@/network/messageHandlers'
+import { ZoneType } from '@/types'
 import type { EntityId } from '@/types'
 import type { ClientGameState, ClientEvent, LegalActionInfo, PendingDecision, OpponentDecisionStatus, PriorityModeValue, Step } from '@/types'
 import { trackEvent, setInGame } from '@/utils/analytics'
@@ -26,6 +27,7 @@ function getEventPlayerId(event: { type: string; playerId?: string; casterId?: s
     case 'handRevealed': return event.revealingPlayerId as EntityId
     case 'cardsRevealed': return event.revealingPlayerId as EntityId
     case 'turnedFaceUp': return event.controllerId as EntityId
+    case 'transformed': return event.controllerId as EntityId
     case 'coinFlipped': return event.playerId as EntityId
     case 'turnChanged': return event.activePlayerId as EntityId
     case 'permanentsSacrificed': return event.playerId as EntityId
@@ -35,6 +37,21 @@ function getEventPlayerId(event: { type: string; playerId?: string; casterId?: s
     case 'decisionMade': return event.playerId as EntityId
     default: return null
   }
+}
+
+/**
+ * True when every revealed card ID is present in the given SelectCards decision's
+ * selectable + non-selectable options. Used to suppress a redundant reveal overlay
+ * for the caster when the selection modal already displays the revealed cards.
+ */
+function isRevealCoveredBySelectDecision(
+  revealedIds: readonly EntityId[],
+  options: readonly EntityId[],
+  nonSelectableOptions: readonly EntityId[]
+): boolean {
+  if (revealedIds.length === 0) return false
+  const covered = new Set<EntityId>([...options, ...nonSelectableOptions])
+  return revealedIds.every((id) => covered.has(id))
 }
 
 function getEventLogType(eventType: string): 'action' | 'turn' | 'combat' | 'system' {
@@ -73,7 +90,7 @@ function processStateUpdate(
   set: SetState,
   get: GetState
 ): void {
-  const { playerId, addDrawAnimation, addDamageAnimation, addRevealAnimation, addCoinFlipAnimation, addTargetReselectedAnimation } = get()
+  const { playerId, addDrawAnimation, addDamageAnimation, addRevealAnimation, addCoinFlipAnimation, addTargetReselectedAnimation, addBeholdPulse, reconcileBeholdPulses } = get()
 
   // Check for hand reveal events
   const handLookedAtEvent = msg.events.find(
@@ -84,9 +101,86 @@ function processStateUpdate(
     (e) => e.type === 'handRevealed' && (e as { revealingPlayerId: EntityId }).revealingPlayerId !== playerId
   ) as { type: 'handRevealed'; cardIds: readonly EntityId[] } | undefined
 
-  const cardsRevealedEvent = msg.events.find(
+  const cardsRevealedEventRaw = msg.events.find(
     (e) => e.type === 'cardsRevealed'
-  ) as { type: 'cardsRevealed'; revealingPlayerId: EntityId; cardIds: readonly EntityId[]; cardNames: readonly string[]; imageUris: readonly (string | null)[]; source: string | null } | undefined
+  ) as { type: 'cardsRevealed'; revealingPlayerId: EntityId; cardIds: readonly EntityId[]; cardNames: readonly string[]; imageUris: readonly (string | null)[]; source: string | null; cardOwnerIds?: readonly EntityId[]; fromZone?: string | null; toZone?: string | null } | undefined
+
+  // A single effect can reveal cards from more than one player at once (Psychic Battle: each
+  // player reveals their top card). The event carries per-card owners in that case; derive a
+  // "revealed by the viewing player?" flag per card so the overlay can tag each one.
+  const cardsRevealedEvent = cardsRevealedEventRaw
+    ? {
+        ...cardsRevealedEventRaw,
+        ...(cardsRevealedEventRaw.cardOwnerIds && cardsRevealedEventRaw.cardOwnerIds.length > 0
+          ? { cardOwnerIsYours: cardsRevealedEventRaw.cardOwnerIds.map((ownerId) => ownerId === playerId) }
+          : {}),
+      }
+    : undefined
+
+  const faceDownCastByOpponent = msg.events.some(
+    (e) => e.type === 'spellCast' &&
+      (e as { casterId?: EntityId; spellName?: string }).casterId !== playerId &&
+      (e as { spellName?: string }).spellName === 'Face-down creature'
+  )
+
+  // Partition revealed cards into battlefield vs. other zones. Battlefield cards are already
+  // public info, so instead of the reveal overlay (which misrepresents them as hidden→shown)
+  // we pulse the permanent in place. Cards still hidden (hand) use the existing overlay.
+  //
+  // Exception: zone-transition reveals (fromZone/toZone set — e.g., graveyard → battlefield
+  // via reanimation) always use the overlay so the opponent sees *what* came back and *why*.
+  const battlefieldCardIds = new Set<EntityId>(
+    resolvedState.zones
+      .filter((z) => z.zoneId.zoneType === 'Battlefield')
+      .flatMap((z) => z.cardIds)
+  )
+  const isZoneTransitionReveal = !!(cardsRevealedEvent?.fromZone && cardsRevealedEvent?.toZone)
+  const beheldBattlefieldIds = cardsRevealedEvent && !isZoneTransitionReveal
+    ? cardsRevealedEvent.cardIds.filter((id) => battlefieldCardIds.has(id))
+    : []
+  const revealOverlayIndices = cardsRevealedEvent
+    ? isZoneTransitionReveal
+      ? cardsRevealedEvent.cardIds.map((_, i) => i)
+      : cardsRevealedEvent.cardIds
+          .map((id, i) => (battlefieldCardIds.has(id) ? -1 : i))
+          .filter((i) => i >= 0)
+    : []
+  const filteredReveal = cardsRevealedEvent && revealOverlayIndices.length > 0
+    ? {
+        ...cardsRevealedEvent,
+        cardIds: revealOverlayIndices.map((i) => cardsRevealedEvent.cardIds[i]!),
+        cardNames: revealOverlayIndices.map((i) => cardsRevealedEvent.cardNames[i]!),
+        imageUris: revealOverlayIndices.map((i) => cardsRevealedEvent.imageUris[i]!),
+        ...(cardsRevealedEvent.cardOwnerIsYours
+          ? { cardOwnerIsYours: revealOverlayIndices.map((i) => cardsRevealedEvent.cardOwnerIsYours![i]!) }
+          : {}),
+      }
+    : null
+
+  const currentVisibleHandCardIds = new Set<EntityId>(
+    resolvedState.zones
+      .filter((z) => z.zoneId.zoneType === ZoneType.HAND)
+      .flatMap((z) => z.cardIds)
+      .filter((id) => resolvedState.cards[id] != null)
+  )
+
+  const filterCurrentVisibleHandIds = (cardIds: readonly EntityId[]): readonly EntityId[] =>
+    cardIds.filter((id) => currentVisibleHandCardIds.has(id))
+
+  if (cardsRevealedEvent && beheldBattlefieldIds.length > 0 && cardsRevealedEvent.source) {
+    for (const id of beheldBattlefieldIds) {
+      addBeholdPulse(id, cardsRevealedEvent.source)
+    }
+  }
+
+  // Clear any pulses whose beholding spell/ability has left the stack (resolved,
+  // countered, or otherwise gone). Runs on every state update so the pulse tracks
+  // the lifetime of the stack item that caused it.
+  const stackZone = resolvedState.zones.find((z) => z.zoneId.zoneType === 'Stack')
+  const stackItemNames = (stackZone?.cardIds ?? [])
+    .map((id) => resolvedState.cards[id]?.name)
+    .filter((n): n is string => typeof n === 'string')
+  reconcileBeholdPulses(stackItemNames)
 
   // Process card draw events for animations
   const cardDrawnEvents = msg.events.filter((e) => e.type === 'cardDrawn') as {
@@ -243,10 +337,47 @@ function processStateUpdate(
       type: getEventLogType((e as { type: string }).type),
     })),
     waitingForOpponentMulligan: false,
-    revealedHandCardIds: handLookedAtEvent?.cardIds ?? handRevealedEvent?.cardIds ?? state.revealedHandCardIds,
-    revealedCardsInfo: cardsRevealedEvent
-      ? { cardIds: cardsRevealedEvent.cardIds, cardNames: cardsRevealedEvent.cardNames, imageUris: cardsRevealedEvent.imageUris, source: cardsRevealedEvent.source, isYourReveal: cardsRevealedEvent.revealingPlayerId === playerId }
-      : state.revealedCardsInfo,
+    revealedHandCardIds: (() => {
+      if (faceDownCastByOpponent) return null
+      const newIds = handLookedAtEvent?.cardIds ?? handRevealedEvent?.cardIds
+      if (!newIds) {
+        if (!state.revealedHandCardIds) return null
+        const currentIds = filterCurrentVisibleHandIds(state.revealedHandCardIds)
+        return currentIds.length > 0 ? currentIds : null
+      }
+      // Combined reveal+select UX: when the new hand reveal is paired with a
+      // SelectCards decision assigned to this player that already displays every
+      // revealed card, the decision modal IS the reveal for them — skip the
+      // overlay so they don't have to dismiss a redundant view. (Used by
+      // Auntie's Sentence / Despise / Mardu Charm's reveal-and-discard flow.)
+      if (
+        msg.pendingDecision?.type === 'SelectCardsDecision' &&
+        msg.pendingDecision.playerId === playerId &&
+        isRevealCoveredBySelectDecision(
+          newIds,
+          msg.pendingDecision.options,
+          msg.pendingDecision.nonSelectableOptions ?? []
+        )
+      ) {
+        return null
+      }
+      return newIds
+    })(),
+    // Combined reveal+select UX (e.g., Aurora Awakener's Vivid ETB): if this update
+    // carries both a reveal to the caster AND a SelectCards decision covering every
+    // revealed card, the selection modal is the reveal for them — suppress the
+    // overlay entirely so it doesn't appear before or after the selection resolves.
+    revealedCardsInfo: filteredReveal
+      ? (filteredReveal.revealingPlayerId === playerId &&
+         msg.pendingDecision?.type === 'SelectCardsDecision' &&
+         isRevealCoveredBySelectDecision(
+           filteredReveal.cardIds,
+           msg.pendingDecision.options,
+           msg.pendingDecision.nonSelectableOptions ?? []
+         )
+          ? null
+          : { cardIds: filteredReveal.cardIds, cardNames: filteredReveal.cardNames, imageUris: filteredReveal.imageUris, source: filteredReveal.source, isYourReveal: filteredReveal.revealingPlayerId === playerId, fromZone: filteredReveal.fromZone ?? null, toZone: filteredReveal.toZone ?? null, ...(filteredReveal.cardOwnerIsYours ? { cardOwnerIsYours: filteredReveal.cardOwnerIsYours } : {}) })
+      : cardsRevealedEvent ? null : state.revealedCardsInfo,
     opponentAttackerTargets: resolvedState.combat ? null : state.opponentAttackerTargets,
     opponentBlockerAssignments: (resolvedState.combat?.blockers?.length || !resolvedState.combat) ? null : state.opponentBlockerAssignments,
   }))
@@ -283,7 +414,8 @@ type GameplayHandlerKeys =
 export function createGameplayHandlers(set: SetState, get: GetState): Pick<MessageHandlers, GameplayHandlerKeys> {
   return {
     onGameCreated: (msg) => {
-      set({ sessionId: msg.sessionId })
+      // Clear any quick-game lobby state — the lobby has done its job (server already removed it).
+      set({ sessionId: msg.sessionId, quickGameLobbyState: null })
     },
 
     onGameStarted: (msg) => {
@@ -338,11 +470,14 @@ export function createGameplayHandlers(set: SetState, get: GetState): Pick<Messa
         },
       })
 
-      set({
+      set((state) => ({
         opponentName: msg.opponentName,
         mulliganState: null,
-        deckBuildingState: null,
-      })
+        // Preserve the drafted deck in tournament mode so the player can still
+        // view or save it from the standings screen between rounds and after
+        // the tournament completes.
+        deckBuildingState: state.tournamentState ? state.deckBuildingState : null,
+      }))
     },
 
     onGameCancelled: () => {
@@ -435,6 +570,11 @@ export function createGameplayHandlers(set: SetState, get: GetState): Pick<Messa
       if (msg.code === 'GAME_NOT_FOUND' || msg.message?.toLowerCase().includes('lobby')) {
         clearLobbyId()
       }
+      // Suppress the error toast for "Not in a game" — this is a benign race condition
+      // where an in-flight action (e.g. PassPriority) arrives after the game session has
+      // already been torn down. The GameOver message handles the real cleanup; no user
+      // action is required and showing a toast here is confusing.
+      if (msg.code === 'GAME_NOT_FOUND' && msg.message === 'Not in a game') return
       set({
         lastError: {
           code: msg.code,

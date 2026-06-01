@@ -20,7 +20,7 @@ import { GridDraftOverlay } from './components/draft/GridDraftOverlay'
 import { SpectatorGameBoard } from './components/spectating/SpectatorGameBoard'
 import { trackPageView } from './utils/analytics'
 import { randomBackground } from './utils/background'
-import { useNavigate } from 'react-router-dom'
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { useGameStore } from './store/gameStore'
 import { useViewingPlayer, useBattlefieldCards } from './store/selectors'
 import type { EntityId } from './types'
@@ -343,7 +343,7 @@ function GameOverlay() {
   const lastError = useGameStore((state) => state.lastError)
   const clearError = useGameStore((state) => state.clearError)
   const returnToMenu = useGameStore((state) => state.returnToMenu)
-  const navigate = useNavigate()
+const router = useRouter()
 
   useEffect(() => {
     if (!lastError) return
@@ -381,7 +381,7 @@ function GameOverlay() {
               <button
                 onClick={() => {
                   returnToMenu()
-                  navigate(`/replay/${gameOverState.gameId}`)
+                  router.push(`/replay/${gameOverState.gameId}`)
                 }}
                 style={overlayStyles.replayButton}
               >

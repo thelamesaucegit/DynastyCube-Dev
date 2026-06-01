@@ -3,8 +3,19 @@ import { useGameStore, type DeckBuildingState } from '@/store/gameStore'
 import type { SealedCardInfo } from '@/types'
 import { useResponsive } from '@/hooks/useResponsive'
 import { getCardImageUrl } from '@/utils/cardImages'
+import { playableWithinColors } from '@/utils/manaCost'
 import { ManaSymbol, ManaCost } from '../ui/ManaSymbols'
+import { HoverCardPreview } from '../ui/HoverCardPreview'
+import { useDfcHoverFlip } from '../ui/useDfcHoverFlip'
 import { SetSynergiesButton, type Archetype } from '../draft/SetSynergiesOverlay'
+import { DeckbuilderChatPanel } from './DeckbuilderChatPanel'
+import {
+  detectProducedColors,
+  suggestBasicLands,
+  type BasicLand,
+  type DeckEntry,
+  type LandColor,
+} from '@/utils/landSuggestion'
 
 /**
  * Deck Builder overlay for sealed draft mode.
@@ -112,6 +123,8 @@ function DeckBuilder({ state }: { state: DeckBuildingState }) {
   const removeCardFromDeck = useGameStore((s) => s.removeCardFromDeck)
   const clearDeck = useGameStore((s) => s.clearDeck)
   const setLandCount = useGameStore((s) => s.setLandCount)
+  const setLlmHighlights = useGameStore((s) => s.setLlmHighlights)
+  const setCommander = useGameStore((s) => s.setCommander)
   const submitSealedDeck = useGameStore((s) => s.submitSealedDeck)
   const unsubmitDeck = useGameStore((s) => s.unsubmitDeck)
   const leaveLobby = useGameStore((s) => s.leaveLobby)
@@ -120,24 +133,41 @@ function DeckBuilder({ state }: { state: DeckBuildingState }) {
   const lobbyState = useGameStore((s) => s.lobbyState)
   const isInLobby = lobbyState !== null
   const isHost = lobbyState?.isHost ?? false
+  // Commander Draft / Sealed lobbies require a commander to be chosen from the pool before the
+  // deck can be submitted. The lobby's preset drives the minimum deck size (defaults to 60).
+  const lobbyFormat = lobbyState?.settings.format
+  const isCommanderShape = lobbyFormat === 'COMMANDER_DRAFT' || lobbyFormat === 'COMMANDER_SEALED'
+  const commanderMinDeckSize = lobbyState?.settings.deckSizeMin ?? 60
 
   const [hoveredCard, setHoveredCard] = useState<SealedCardInfo | null>(null)
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null)
   const [sortBy, setSortBy] = useState<'color' | 'cmc' | 'rarity'>('rarity')
   const [colorFilter, setColorFilter] = useState<Set<string>>(new Set())
+  const [colorMode, setColorMode] = useState<ColorOp>('<=')
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
   const [searchText, setSearchText] = useState('')
   const [creatureTypeFilter, setCreatureTypeFilter] = useState<string | null>(null)
   const [archetypeFilter, setArchetypeFilter] = useState<Archetype | null>(null)
+  // Restrict the pool view to cards inside the chosen commander's colour identity. Defaults to
+  // true and resets to true each time a fresh commander is designated — that matches how a
+  // player thinks ("only show me things I can actually play"). Hidden / inert when no commander
+  // is chosen.
+  const [restrictToCommanderIdentity, setRestrictToCommanderIdentity] = useState(true)
+
+  const dfc = useDfcHoverFlip(hoveredCard)
+  const resetDfcFlip = dfc.resetFlip
 
   const handleHover = useCallback((card: SealedCardInfo | null, e?: React.MouseEvent) => {
-    setHoveredCard(card)
+    setHoveredCard((prev) => {
+      if (prev?.name !== card?.name) resetDfcFlip()
+      return card
+    })
     if (card && e) {
       setHoverPos({ x: e.clientX, y: e.clientY })
     } else {
       setHoverPos(null)
     }
-  }, [])
+  }, [resetDfcFlip])
 
   // Count cards in deck — separate non-basic lands from spells
   const basicLandCount = Object.values(state.landCounts).reduce((a, b) => a + b, 0)
@@ -147,8 +177,87 @@ function DeckBuilder({ state }: { state: DeckBuildingState }) {
   }).length
   const spellCount = state.deck.length - nonBasicLandCount
   const landCount = basicLandCount + nonBasicLandCount
-  const totalCount = state.deck.length + basicLandCount
-  const isValidDeck = totalCount >= 40
+  // Commander shape: the chosen commander counts toward the deck total. The "must be in
+  // state.deck" invariant (see effect below) means state.deck.length already includes the
+  // commander once, so don't add another. Guard the !includes path defensively in case the
+  // invariant is briefly broken between renders.
+  const commanderAlreadyInDeck =
+    state.commander != null && state.deck.includes(state.commander)
+  const commanderInTotal =
+    isCommanderShape && state.commander != null && !commanderAlreadyInDeck ? 1 : 0
+  const totalCount = state.deck.length + basicLandCount + commanderInTotal
+  const requiredSize = isCommanderShape ? commanderMinDeckSize : 40
+  const isValidDeck = totalCount >= requiredSize && (!isCommanderShape || state.commander != null)
+
+  // Pool-filtered eligible commanders for the limited commander formats. Matches the backend's
+  // CommanderEligibility: legendary creature, legendary planeswalker, or any card with an
+  // explicit "can be your commander" override clause in the oracle text. Returned as a Set so
+  // each deck row can check eligibility in O(1) when deciding whether to enable its crown.
+  const eligibleCommanderNames = useMemo<Set<string>>(() => {
+    const out = new Set<string>()
+    if (!isCommanderShape) return out
+    const re = /can be your commander/i
+    for (const card of state.cardPool) {
+      const tl = card.typeLine.toLowerCase()
+      const isLegendary = tl.includes('legendary')
+      const isCreature = tl.includes('creature')
+      const isPlaneswalker = tl.includes('planeswalker')
+      const override = re.test(card.oracleText ?? '')
+      if ((isLegendary && (isCreature || isPlaneswalker)) || override) {
+        out.add(card.name)
+      }
+    }
+    return out
+  }, [state.cardPool, isCommanderShape])
+
+  // The chosen commander's colour identity. Empty = colourless. Null = no commander chosen.
+  // Used to decide which deck rows are off-identity.
+  const commanderIdentity = useMemo<ReadonlySet<string> | null>(() => {
+    if (!isCommanderShape || state.commander == null) return null
+    const card = state.cardPool.find((c) => c.name === state.commander)
+    return new Set(card?.colorIdentity ?? [])
+  }, [state.cardPool, state.commander, isCommanderShape])
+
+  // Reset the identity filter to ON whenever a new commander is designated, so picking a
+  // commander immediately restricts the pool view. Clearing the commander leaves the toggle's
+  // last value alone — it goes inert because the UI hides the chip.
+  useEffect(() => {
+    if (state.commander != null) setRestrictToCommanderIdentity(true)
+  }, [state.commander])
+
+  // If the designated commander is no longer in the deck (the user removed the last copy via
+  // the deck-row click), clear the designation. The identity-filter chip is gated on
+  // [commanderIdentity], so it disappears automatically as soon as state.commander goes null.
+  // Mirrors the standalone /deckbuilder's "clear commander when removed from deckCards" effect.
+  useEffect(() => {
+    if (state.commander != null && !state.deck.includes(state.commander)) {
+      setCommander(null)
+    }
+  }, [state.commander, state.deck, setCommander])
+
+  // Deck cards (and chosen commander) whose colour identity escapes the commander's identity.
+  // Matches the server's COLOR_IDENTITY_VIOLATION check; surfaced as a red left border on the
+  // deck-list row so users get the same visual hint the standalone /deckbuilder shows.
+  const offIdentityNames = useMemo<Set<string>>(() => {
+    const out = new Set<string>()
+    if (!commanderIdentity) return out
+    const namesToCheck = new Set<string>(state.deck)
+    if (state.commander != null) namesToCheck.add(state.commander)
+    for (const name of namesToCheck) {
+      const card = state.cardPool.find((c) => c.name === name)
+      if (!card) continue
+      // The commander itself is always within its own identity — skip it.
+      if (name === state.commander) continue
+      const id = card.colorIdentity ?? []
+      for (const color of id) {
+        if (!commanderIdentity.has(color)) {
+          out.add(name)
+          break
+        }
+      }
+    }
+    return out
+  }, [state.cardPool, state.deck, state.commander, commanderIdentity])
 
   // Deck analytics
   const deckAnalytics = useMemo(() => {
@@ -205,7 +314,7 @@ function DeckBuilder({ state }: { state: DeckBuildingState }) {
     // Non-basic lands in deck
     for (const card of cardInfos) {
       if (!card.typeLine.toLowerCase().includes('land')) continue
-      const produced = detectManaProduction(card)
+      const produced = detectProducedColors({ typeLine: card.typeLine, oracleText: card.oracleText ?? null })
       for (const c of produced) {
         landColors[c] = (landColors[c] ?? 0) + 1
       }
@@ -279,16 +388,19 @@ function DeckBuilder({ state }: { state: DeckBuildingState }) {
         }
         if (colorFilter.size > 0) {
           const cardColors = getCardColors(card)
-          let matches = false
-          if (colorFilter.has('C')) {
-            matches = matches || cardColors.size === 0
-          }
-          for (const c of ['W', 'U', 'B', 'R', 'G']) {
-            if (colorFilter.has(c) && cardColors.has(c)) {
-              matches = true
+          if (!matchesColorIdentityFilter(cardColors, colorFilter, colorMode, card.manaCost || '')) continue
+        }
+        // Commander-identity restriction: every colour in the card's identity must appear in
+        // the commander's identity. Mirrors the server's COLOR_IDENTITY_VIOLATION check.
+        if (commanderIdentity != null && restrictToCommanderIdentity) {
+          let outside = false
+          for (const color of card.colorIdentity ?? []) {
+            if (!commanderIdentity.has(color)) {
+              outside = true
+              break
             }
           }
-          if (!matches) continue
+          if (outside) continue
         }
         if (typeFilter) {
           if (!matchesTypeFilter(card, typeFilter)) continue
@@ -312,7 +424,7 @@ function DeckBuilder({ state }: { state: DeckBuildingState }) {
         return getRarityOrder(a.card) - getRarityOrder(b.card) || getCmc(a.card) - getCmc(b.card)
       }
     })
-  }, [state.cardPool, state.deck, sortBy, colorFilter, typeFilter, creatureTypeFilter, searchText, archetypeFilter])
+  }, [state.cardPool, state.deck, sortBy, colorFilter, colorMode, typeFilter, creatureTypeFilter, searchText, archetypeFilter, commanderIdentity, restrictToCommanderIdentity])
 
   const totalPoolCards = poolCardGroups.reduce((sum, g) => sum + g.availableCount, 0)
 
@@ -336,8 +448,12 @@ function DeckBuilder({ state }: { state: DeckBuildingState }) {
     return { MYTHIC: mythic, RARE: rare, UNCOMMON: uncommon, COMMON: common }
   }, [poolCardGroups, sortBy])
 
-  // Cards highlighted by archetype creature types
+  // Cards highlighted by archetype creature types OR by the LLM advisor.
+  // LLM highlights replace archetype highlights when present.
   const highlightedCards = useMemo(() => {
+    if (state.llmHighlightedCards && state.llmHighlightedCards.length > 0) {
+      return new Set(state.llmHighlightedCards)
+    }
     if (!archetypeFilter?.creatureTypes || archetypeFilter.creatureTypes.length === 0) return null
     const types = archetypeFilter.creatureTypes
     const names = new Set<string>()
@@ -353,7 +469,7 @@ function DeckBuilder({ state }: { state: DeckBuildingState }) {
       }
     }
     return names
-  }, [state.cardPool, archetypeFilter])
+  }, [state.cardPool, archetypeFilter, state.llmHighlightedCards])
 
   // Group deck cards by name for vertical list
   const deckCardGroups = useMemo(() => {
@@ -414,6 +530,8 @@ function DeckBuilder({ state }: { state: DeckBuildingState }) {
             setCodes={state.setCodes}
             cardPool={state.cardPool}
             onSelectArchetype={(archetype) => {
+              // Picking an archetype takes over the highlight slot from the LLM advisor.
+              setLlmHighlights(null)
               setArchetypeFilter((prev) => prev?.name === archetype.name ? null : archetype)
             }}
           />
@@ -436,8 +554,44 @@ function DeckBuilder({ state }: { state: DeckBuildingState }) {
               fontSize: responsive.fontSize.normal,
             }}
           >
-            {totalCount} / 40
+            {totalCount} / {requiredSize}
           </div>
+          {isCommanderShape && !isSubmitted && state.commander == null && (
+            <div
+              title="Click the crown next to a legendary creature in your deck to designate it as your commander."
+              style={{
+                padding: responsive.isMobile ? '4px 10px' : '6px 14px',
+                fontSize: responsive.isMobile ? 11 : 12,
+                backgroundColor: '#3a2b00',
+                color: '#ffb300',
+                border: '1px solid #b8860b',
+                borderRadius: 6,
+                fontWeight: 600,
+              }}
+            >
+              ♛ Pick a commander
+            </div>
+          )}
+          {isCommanderShape && !isSubmitted && state.commander != null && (
+            <div
+              title={`Commander: ${state.commander}`}
+              style={{
+                padding: responsive.isMobile ? '4px 10px' : '6px 14px',
+                fontSize: responsive.isMobile ? 11 : 12,
+                backgroundColor: '#3a2b00',
+                color: '#ffd76b',
+                border: '1px solid #daa520',
+                borderRadius: 6,
+                fontWeight: 600,
+                maxWidth: responsive.isMobile ? 160 : 240,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              ♛ {state.commander}
+            </div>
+          )}
 
           {isSubmitted ? (
             <button
@@ -459,6 +613,13 @@ function DeckBuilder({ state }: { state: DeckBuildingState }) {
             <button
               onClick={submitSealedDeck}
               disabled={!isValidDeck}
+              title={
+                isValidDeck
+                  ? undefined
+                  : isCommanderShape && state.commander == null
+                  ? 'Designate a commander first — click the crown ♛ on a legendary creature in your deck'
+                  : `Deck needs at least ${requiredSize} cards`
+              }
               style={{
                 padding: responsive.isMobile ? '6px 14px' : '8px 20px',
                 fontSize: responsive.fontSize.normal,
@@ -584,6 +745,7 @@ function DeckBuilder({ state }: { state: DeckBuildingState }) {
             <div style={{ width: 1, height: 18, backgroundColor: '#444', margin: '0 4px' }} />
 
             <span style={{ color: '#888', fontSize: 12 }}>Filter:</span>
+            <ColorModeSegmented mode={colorMode} onChange={setColorMode} />
             {COLOR_FILTER_OPTIONS.map(({ key, label }) => {
               const active = colorFilter.has(key)
               return (
@@ -617,6 +779,28 @@ function DeckBuilder({ state }: { state: DeckBuildingState }) {
                 </button>
               )
             })}
+            {commanderIdentity != null && (
+              <button
+                onClick={() => setRestrictToCommanderIdentity((v) => !v)}
+                title={
+                  restrictToCommanderIdentity
+                    ? `Showing only cards inside ${state.commander}'s colour identity. Click to show the full pool.`
+                    : `Restrict the pool to cards inside ${state.commander}'s colour identity.`
+                }
+                style={{
+                  padding: '3px 10px',
+                  fontSize: 11,
+                  backgroundColor: restrictToCommanderIdentity ? '#3a2b00' : '#444',
+                  color: restrictToCommanderIdentity ? '#ffd76b' : '#ccc',
+                  border: restrictToCommanderIdentity ? '1px solid #daa520' : '1px solid #555',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                }}
+              >
+                ♛ Identity {restrictToCommanderIdentity ? 'on' : 'off'}
+              </button>
+            )}
             {colorFilter.size > 0 && (
               <button
                 onClick={() => setColorFilter(new Set())}
@@ -834,7 +1018,11 @@ function DeckBuilder({ state }: { state: DeckBuildingState }) {
                             key={card.name}
                             card={card}
                             count={availableCount}
-                            onClick={() => !isSubmitted && addCardToDeck(card.name)}
+                            onClick={() => {
+                              if (isSubmitted) return
+                              addCardToDeck(card.name)
+                              setHoveredCard(null)
+                            }}
                             onHover={handleHover}
                             disabled={isSubmitted}
                             highlighted={highlightedCards != null ? highlightedCards.has(card.name) : undefined}
@@ -859,7 +1047,11 @@ function DeckBuilder({ state }: { state: DeckBuildingState }) {
                     key={card.name}
                     card={card}
                     count={availableCount}
-                    onClick={() => !isSubmitted && addCardToDeck(card.name)}
+                    onClick={() => {
+                      if (isSubmitted) return
+                      addCardToDeck(card.name)
+                      setHoveredCard(null)
+                    }}
                     onHover={handleHover}
                     disabled={isSubmitted}
                     highlighted={highlightedCards != null ? highlightedCards.has(card.name) : undefined}
@@ -1074,9 +1266,20 @@ function DeckBuilder({ state }: { state: DeckBuildingState }) {
                 key={card.name}
                 card={card}
                 count={count}
-                onClick={() => !isSubmitted && removeCardFromDeck(card.name)}
+                onClick={() => {
+                  if (isSubmitted) return
+                  removeCardFromDeck(card.name)
+                  setHoveredCard(null)
+                }}
                 onHover={handleHover}
                 disabled={isSubmitted}
+                showCommanderControls={isCommanderShape && !isSubmitted}
+                isCommander={state.commander === card.name}
+                canBeCommander={eligibleCommanderNames.has(card.name)}
+                offIdentity={offIdentityNames.has(card.name)}
+                onToggleCommander={() => {
+                  setCommander(state.commander === card.name ? null : card.name)
+                }}
               />
             ))}
 
@@ -1121,7 +1324,13 @@ function DeckBuilder({ state }: { state: DeckBuildingState }) {
 
       {/* Card preview on hover - positioned near cursor */}
       {hoveredCard && !responsive.isMobile && (
-        <CardPreview card={hoveredCard} pos={hoverPos} />
+        <HoverCardPreview
+          name={dfc.displayName ?? hoveredCard.name}
+          imageUri={dfc.displayImageUri ?? hoveredCard.imageUri}
+          pos={hoverPos}
+          rulings={hoveredCard.rulings}
+          overlay={dfc.hint}
+        />
       )}
 
       {/* Submitted overlay */}
@@ -1134,17 +1343,45 @@ function DeckBuilder({ state }: { state: DeckBuildingState }) {
             transform: 'translateX(-50%)',
             backgroundColor: 'rgba(76, 175, 80, 0.9)',
             color: 'white',
-            padding: '12px 24px',
+            padding: '16px 28px',
             borderRadius: 8,
             fontWeight: 600,
             fontSize: responsive.fontSize.large,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 6,
           }}
         >
-          Deck submitted! Waiting for opponent...
+          <span>Deck submitted!</span>
+          {!state.opponentReady && (
+            <span style={{ fontSize: responsive.fontSize.small, opacity: 0.9 }}>
+              Opponent is still building their deck
+              <AnimatedDots />
+            </span>
+          )}
         </div>
       )}
+
+      <DeckbuilderChatPanel state={state} />
     </div>
   )
+}
+
+/**
+ * Animated ellipsis dots for loading/waiting indicators.
+ */
+function AnimatedDots() {
+  const [dotCount, setDotCount] = useState(0)
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDotCount((prev) => (prev + 1) % 4)
+    }, 500)
+    return () => clearInterval(interval)
+  }, [])
+
+  return <span style={{ display: 'inline-block', width: '1.5em', textAlign: 'left' }}>{'.'.repeat(dotCount)}</span>
 }
 
 /**
@@ -1251,12 +1488,22 @@ function DeckListRow({
   onClick,
   onHover,
   disabled,
+  showCommanderControls,
+  isCommander,
+  canBeCommander,
+  offIdentity,
+  onToggleCommander,
 }: {
   card: SealedCardInfo
   count: number
   onClick: () => void
   onHover: (card: SealedCardInfo | null, e?: React.MouseEvent) => void
   disabled: boolean
+  showCommanderControls?: boolean
+  isCommander?: boolean
+  canBeCommander?: boolean
+  offIdentity?: boolean
+  onToggleCommander?: () => void
 }) {
   const cmc = getCmc(card)
 
@@ -1276,13 +1523,18 @@ function DeckListRow({
         position: 'relative',
         overflow: 'hidden',
         borderBottom: '1px solid #2a2a2a',
+        // Off-identity rows get a red left strip + faint red tint, matching the standalone
+        // /deckbuilder's deckRowViolation visual treatment.
+        borderLeft: offIdentity ? '3px solid #ef5350' : '3px solid transparent',
+        backgroundColor: offIdentity ? 'rgba(239, 83, 80, 0.06)' : undefined,
       }}
       onMouseOver={(e) => {
         if (!disabled) e.currentTarget.style.backgroundColor = 'rgba(79, 195, 247, 0.1)'
       }}
       onMouseOut={(e) => {
-        e.currentTarget.style.backgroundColor = 'transparent'
+        e.currentTarget.style.backgroundColor = offIdentity ? 'rgba(239, 83, 80, 0.06)' : 'transparent'
       }}
+      title={offIdentity ? `${card.name} is outside the commander's colour identity` : undefined}
     >
       {/* Count */}
       <span
@@ -1299,7 +1551,7 @@ function DeckListRow({
       </span>
       {/* Card name */}
       <span style={{
-        color: '#ddd',
+        color: offIdentity ? '#ef9a9a' : '#ddd',
         fontSize: 12,
         flex: 1,
         whiteSpace: 'nowrap',
@@ -1308,6 +1560,42 @@ function DeckListRow({
       }}>
         {card.name}
       </span>
+      {/* Commander crown — only in commander-shape lobbies */}
+      {showCommanderControls && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            if (canBeCommander && onToggleCommander) onToggleCommander()
+          }}
+          disabled={!canBeCommander}
+          aria-pressed={!!isCommander}
+          aria-label={isCommander ? `Unset ${card.name} as commander` : `Set ${card.name} as commander`}
+          title={
+            !canBeCommander
+              ? 'Only legendary creatures or planeswalkers can be commanders'
+              : isCommander
+              ? 'Commander — click to unset'
+              : 'Set as commander'
+          }
+          style={{
+            marginLeft: 4,
+            marginRight: 4,
+            padding: '0 4px',
+            fontSize: 14,
+            backgroundColor: 'transparent',
+            color: isCommander ? '#ffd76b' : canBeCommander ? '#666' : '#333',
+            border: 'none',
+            borderRadius: 3,
+            cursor: canBeCommander ? 'pointer' : 'default',
+            opacity: !canBeCommander ? 0.35 : isCommander ? 1 : 0.7,
+            flexShrink: 0,
+            lineHeight: 1,
+          }}
+        >
+          ♛
+        </button>
+      )}
       {/* Mana cost */}
       <span style={{ marginLeft: 4, flexShrink: 0 }}>
         {card.manaCost ? <ManaCost cost={card.manaCost} size={12} /> : <span style={{ color: '#666', fontSize: 10 }}>({cmc})</span>}
@@ -1439,151 +1727,6 @@ function RaritySectionHeader({ rarity, count }: { rarity: string; count: number 
   )
 }
 
-/**
- * Card preview on hover, positioned near the cursor.
- * Shows rulings after hovering for 1 second.
- */
-function CardPreview({ card, pos }: { card: SealedCardInfo; pos: { x: number; y: number } | null }) {
-  const [showRulings, setShowRulings] = useState(false)
-  const [lastCardName, setLastCardName] = useState<string | null>(null)
-
-  // Show rulings after hovering for 1 second
-  useEffect(() => {
-    if (card.name !== lastCardName) {
-      setLastCardName(card.name)
-      setShowRulings(false)
-    }
-
-    const timer = setTimeout(() => {
-      setShowRulings(true)
-    }, 1000)
-
-    return () => clearTimeout(timer)
-  }, [card.name, lastCardName])
-
-  const imageUrl = getCardImageUrl(card.name, card.imageUri, 'large')
-  const previewWidth = 250
-  const previewHeight = Math.round(previewWidth * 1.4)
-  const hasRulings = card.rulings && card.rulings.length > 0
-
-  // Position the preview near the cursor but keep it on screen
-  let top = 80
-  let left = 20
-  if (pos) {
-    // Place to the right of cursor, or to the left if too close to right edge
-    const margin = 20
-    if (pos.x + previewWidth + margin + 20 < window.innerWidth) {
-      left = pos.x + margin
-    } else {
-      left = pos.x - previewWidth - margin
-    }
-    // Vertically centered on cursor, clamped to viewport
-    top = Math.max(10, Math.min(pos.y - previewHeight / 2, window.innerHeight - previewHeight - 10))
-  }
-
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        top,
-        left,
-        pointerEvents: 'none',
-        zIndex: 1001,
-        transition: 'top 0.05s, left 0.05s',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-      }}
-    >
-      <div
-        style={{
-          width: previewWidth,
-          height: previewHeight,
-          borderRadius: 12,
-          overflow: 'hidden',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.8)',
-        }}
-      >
-        <img
-          src={imageUrl}
-          alt={card.name}
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-          }}
-        />
-      </div>
-
-      {/* Rulings panel - appears after 1 second of hovering */}
-      {showRulings && hasRulings && (
-        <div style={cardPreviewStyles.rulings}>
-          <div style={cardPreviewStyles.rulingsHeader}>Rulings</div>
-          {card.rulings!.map((ruling, index) => (
-            <div key={index} style={cardPreviewStyles.ruling}>
-              <div style={cardPreviewStyles.rulingDate}>{ruling.date}</div>
-              <div style={cardPreviewStyles.rulingText}>{ruling.text}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Rulings indicator - shows immediately if card has rulings */}
-      {!showRulings && hasRulings && (
-        <div style={cardPreviewStyles.rulingsHint}>
-          Hold to see rulings...
-        </div>
-      )}
-    </div>
-  )
-}
-
-const cardPreviewStyles = {
-  rulings: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.92)',
-    padding: 12,
-    borderRadius: 8,
-    border: '1px solid rgba(100, 150, 255, 0.3)',
-    maxWidth: 320,
-    maxHeight: 300,
-    overflowY: 'auto' as const,
-  },
-  rulingsHeader: {
-    color: '#6699ff',
-    fontWeight: 700,
-    fontSize: 13,
-    textTransform: 'uppercase' as const,
-    letterSpacing: 1,
-    borderBottom: '1px solid rgba(100, 150, 255, 0.2)',
-    paddingBottom: 6,
-  },
-  ruling: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 2,
-  },
-  rulingDate: {
-    color: '#888888',
-    fontSize: 11,
-    fontStyle: 'italic' as const,
-  },
-  rulingText: {
-    color: '#dddddd',
-    fontSize: 12,
-    lineHeight: 1.4,
-  },
-  rulingsHint: {
-    color: '#666666',
-    fontSize: 11,
-    fontStyle: 'italic' as const,
-    textAlign: 'center' as const,
-    padding: '4px 8px',
-  },
-}
-
 // Constants
 
 const COLOR_FILTER_OPTIONS = [
@@ -1601,6 +1744,10 @@ const TYPE_FILTER_OPTIONS = [
   { key: 'sorcery', label: 'Sorcery' },
   { key: 'enchantment', label: 'Enchantment' },
   { key: 'artifact', label: 'Artifact' },
+  // Substring filter against the type line — matches "Legendary Creature ...",
+  // "Legendary Planeswalker — ...", "Legendary Artifact", etc. Useful as a
+  // commander-shortlist filter in Commander Draft / Sealed lobbies.
+  { key: 'legendary', label: 'Legendary' },
 ]
 
 const MANA_COLORS: Record<string, string> = {
@@ -1613,9 +1760,114 @@ const MANA_COLORS: Record<string, string> = {
 
 // Helper functions
 
+type ColorOp = ':' | '=' | '<='
+
+/**
+ * Filter a card by its color identity against a chip-based selection (W/U/B/R/G/C)
+ * using one of three modes that mirror the main deckbuilder's `ColorModeSegmented`:
+ *
+ * - `:`  Includes — card identity contains all chosen WUBRG colors (AND).
+ * - `=`  Exactly — card identity equals exactly the chosen WUBRG set.
+ * - `<=` At most — card is *playable* in a deck limited to the chosen WUBRG set; colorless always
+ *   passes. Hybrid pips give a choice, so `{R/W}` survives "at most W" (it's castable in mono-white).
+ *   See [playableWithinColors].
+ *
+ * The `C` chip is treated as a separate "include colorless" toggle that ORs with the colored
+ * predicate in `:` and `=` modes (in `<=` mode colorless cards always match anyway).
+ */
+function matchesColorIdentityFilter(
+  cardColors: Set<string>,
+  filter: Set<string>,
+  mode: ColorOp,
+  manaCost: string,
+): boolean {
+  const wanted = new Set<string>()
+  let includeColorless = false
+  for (const c of filter) {
+    if (c === 'C') includeColorless = true
+    else wanted.add(c)
+  }
+  const isColorless = cardColors.size === 0
+
+  if (mode === '<=') {
+    if (isColorless) return true
+    return playableWithinColors(manaCost, cardColors, wanted)
+  }
+
+  if (mode === '=') {
+    if (includeColorless && isColorless) return true
+    if (wanted.size === 0) return false
+    if (cardColors.size !== wanted.size) return false
+    for (const w of wanted) if (!cardColors.has(w)) return false
+    return true
+  }
+
+  // mode === ':' (Includes — AND of chosen colors)
+  if (includeColorless && isColorless) return true
+  if (wanted.size === 0) return false
+  for (const w of wanted) if (!cardColors.has(w)) return false
+  return true
+}
+
+function ColorModeSegmented({
+  mode,
+  onChange,
+}: {
+  mode: ColorOp
+  onChange: (op: ColorOp) => void
+}) {
+  const options: Array<{ op: ColorOp; label: string; title: string }> = [
+    { op: ':', label: 'Includes', title: 'Cards that include the chosen colour(s)' },
+    { op: '=', label: 'Exactly', title: 'Cards whose colour identity is exactly the chosen set' },
+    { op: '<=', label: 'At most', title: 'Cards whose colour identity is a subset of the chosen set' },
+  ]
+  return (
+    <div
+      role="group"
+      aria-label="Colour comparison mode"
+      style={{ display: 'inline-flex', gap: 0, border: '1px solid #444', borderRadius: 4, overflow: 'hidden' }}
+    >
+      {options.map((opt) => {
+        const active = mode === opt.op
+        return (
+          <button
+            key={opt.op}
+            type="button"
+            onClick={() => onChange(opt.op)}
+            title={opt.title}
+            style={{
+              padding: '4px 8px',
+              fontSize: 11,
+              backgroundColor: active ? '#4fc3f7' : 'transparent',
+              color: active ? '#000' : '#ccc',
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            {opt.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
+ * Color identity (CR 903.4) of [card] as single-letter codes. The server-side identity already
+ * folds in oracle-text colored symbols, basic-land subtype colors, and the Scryfall override,
+ * so it correctly catches off-color activation costs and dual lands. Falls back to parsing the
+ * printed mana cost when the server didn't ship `colorIdentity` (older clients / older messages).
+ */
 function getCardColors(card: SealedCardInfo): Set<string> {
-  const cost = card.manaCost || ''
   const colors = new Set<string>()
+  if (card.colorIdentity && card.colorIdentity.length > 0) {
+    for (const name of card.colorIdentity) {
+      const letter = COLOR_NAME_TO_LETTER[name]
+      if (letter) colors.add(letter)
+    }
+    return colors
+  }
+  const cost = card.manaCost || ''
   if (cost.includes('W')) colors.add('W')
   if (cost.includes('U')) colors.add('U')
   if (cost.includes('B')) colors.add('B')
@@ -1624,227 +1876,64 @@ function getCardColors(card: SealedCardInfo): Set<string> {
   return colors
 }
 
-/**
- * Detect which colors of mana a card can produce, based on available card info.
- * Checks land subtypes in typeLine and "Add {X}" patterns in oracleText.
- */
-function detectManaProduction(card: SealedCardInfo): string[] {
-  const colors: string[] = []
-  const typeLine = card.typeLine.toLowerCase()
-  const text = (card.oracleText || '').toLowerCase()
+const COLOR_NAME_TO_LETTER: Record<string, string> = {
+  WHITE: 'W',
+  BLUE: 'U',
+  BLACK: 'B',
+  RED: 'R',
+  GREEN: 'G',
+}
 
-  // Check basic land subtypes in typeLine (e.g., "Land — Plains Forest")
-  if (typeLine.includes('plains')) colors.push('W')
-  if (typeLine.includes('island')) colors.push('U')
-  if (typeLine.includes('swamp')) colors.push('B')
-  if (typeLine.includes('mountain')) colors.push('R')
-  if (typeLine.includes('forest')) colors.push('G')
-
-  // Check oracle text for mana production ("Add {G}", "add {R}{R}", etc.)
-  if (text.includes('add')) {
-    if (text.includes('{w}')) colors.push('W')
-    if (text.includes('{u}')) colors.push('U')
-    if (text.includes('{b}')) colors.push('B')
-    if (text.includes('{r}')) colors.push('R')
-    if (text.includes('{g}')) colors.push('G')
-    if (text.includes('any color')) colors.push('W', 'U', 'B', 'R', 'G')
-  }
-
-  return [...new Set(colors)]
+const BASIC_LAND_COLOR: Record<string, LandColor> = {
+  Plains: 'W', Island: 'U', Swamp: 'B', Mountain: 'R', Forest: 'G',
 }
 
 /**
- * Curve-aware weight multiplier for colored pips based on Frank Karsten's data.
- * Cheap spells need more reliable color access than expensive ones. In a 40-card
- * deck with 17 lands, a single pip at CMC 2 needs ~10 sources while CMC 5+ needs ~7.
- * We model this as a multiplier on each pip's demand weight.
+ * Build curve-aware basic-land suggestions from sealed deck state and apply
+ * them via `setLandCount`. Thin adapter over the shared `suggestBasicLands`.
  */
-function cmcWeight(cmc: number): number {
-  if (cmc <= 1) return 1.6    // 1-drops: hardest to cast on curve
-  if (cmc === 2) return 1.35  // 2-drops: still need early color access
-  if (cmc === 3) return 1.1   // 3-drops: baseline
-  if (cmc === 4) return 0.95  // 4-drops: slightly easier
-  return 0.8                  // 5+: you'll draw into sources
-}
-
-/**
- * Multi-pip weight per Karsten: double-pip spells need disproportionately more sources.
- * In a 17-land/40-card deck at CMC 3: 1 pip ~9 sources, 2 pips ~13, 3 pips ~16.
- * Weights: 1 pip = 1.0, 2 pips = 2.9, 3 pips = 5.3
- */
-function multiPipWeight(pips: number): number {
-  if (pips <= 0) return 0
-  if (pips === 1) return 1.0
-  if (pips === 2) return 2.9
-  if (pips === 3) return 5.3
-  return 5.3 + (pips - 3) * 2.0  // extrapolate for 4+
-}
-
-/**
- * Determine target total land count based on deck's mana curve.
- * Aggro (low avg CMC) wants 16, midrange 17, control 18.
- */
-function targetLandCount(cards: SealedCardInfo[]): number {
-  const spells = cards.filter((c) => !c.typeLine.toLowerCase().includes('land'))
-  if (spells.length === 0) return 17
-  const totalCmc = spells.reduce((sum, c) => sum + getCmc(c), 0)
-  const avgCmc = totalCmc / spells.length
-  // Base land ratio for a 40-card deck: avgCmc ~2.0 → 40%, ~2.8 → 42.5%, ~3.5+ → 45%
-  let landRatio: number
-  if (avgCmc < 2.3) landRatio = 0.4
-  else if (avgCmc < 3.2) landRatio = 0.425
-  else landRatio = 0.45
-  // Scale total lands based on actual spell count and land ratio
-  const totalDeckSize = Math.max(Math.round(spells.length / (1 - landRatio)), 40)
-  return Math.round(totalDeckSize * landRatio)
-}
-
 function suggestLands(
   state: DeckBuildingState,
-  spellCount: number,
+  _spellCount: number,
   setLandCount: (name: string, count: number) => void,
 ) {
-  const MIN_DECK_SIZE = 40
-  const COLORS = ['W', 'U', 'B', 'R', 'G'] as const
-  const colorToLand: Record<string, string> = { W: 'Plains', U: 'Island', B: 'Swamp', R: 'Mountain', G: 'Forest' }
   const basicLandNames = new Set(state.basicLands.map((l) => l.name))
 
-  // Resolve card info for all deck cards
-  const cardInfos: SealedCardInfo[] = []
-  for (const cardName of state.deck) {
-    const info = state.cardPool.find((c) => c.name === cardName)
-    if (info) cardInfos.push(info)
+  // Tally deck cards into name → count, skipping basics (they're driven by landCounts).
+  const counts = new Map<string, number>()
+  for (const name of state.deck) counts.set(name, (counts.get(name) ?? 0) + 1)
+
+  const entries: DeckEntry[] = []
+  for (const [name, count] of counts) {
+    const info = state.cardPool.find((c) => c.name === name)
+    if (!info) continue
+    const isBasic = basicLandNames.has(info.name)
+    if (isBasic) continue
+    const isLand = info.typeLine.toLowerCase().includes('land')
+    entries.push({
+      name: info.name,
+      manaCost: info.manaCost ?? '',
+      cmc: getCmc(info),
+      isLand,
+      isBasicLand: false,
+      producedColors: detectProducedColors({
+        typeLine: info.typeLine,
+        oracleText: info.oracleText ?? null,
+      }),
+      count,
+    })
   }
 
-  // Step 1: Categorize deck cards — identify non-basic lands and mana sources
-  let nonBasicLandCount = 0
-  let nonLandManaSourceCount = 0
-  const existingSources: Record<string, number> = { W: 0, U: 0, B: 0, R: 0, G: 0 }
+  const availableBasics: BasicLand[] = state.basicLands
+    .map((l) => {
+      const color = BASIC_LAND_COLOR[l.name]
+      return color ? { name: l.name, color } : null
+    })
+    .filter((b): b is BasicLand => b !== null)
 
-  for (const info of cardInfos) {
-    const isLand = info.typeLine.toLowerCase().includes('land') && !basicLandNames.has(info.name)
-    const producedColors = detectManaProduction(info)
+  const result = suggestBasicLands({ entries, availableBasics, minDeckSize: 40 })
 
-    if (isLand) {
-      nonBasicLandCount++
-      for (const c of producedColors) existingSources[c] = (existingSources[c] ?? 0) + 1.0
-    } else if (producedColors.length > 0) {
-      nonLandManaSourceCount++
-      // Mana dork / mana rock: half credit for color sources
-      for (const c of producedColors) existingSources[c] = (existingSources[c] ?? 0) + 0.5
-    }
-  }
-
-  // Step 2: Calculate target basic lands based on curve, non-basic lands, and min deck size
-  // Mana-producing non-lands (rocks, dorks) partially reduce the land target:
-  // every 2 mana rocks ≈ 1 fewer land needed
-  const manaRockReduction = Math.floor(nonLandManaSourceCount / 2)
-  const curveBasedTotal = targetLandCount(cardInfos)
-  const ratioBasedLands = curveBasedTotal - nonBasicLandCount - manaRockReduction
-  const minBasedLands = MIN_DECK_SIZE - spellCount
-  const targetBasicLands = Math.max(ratioBasedLands, minBasedLands, 0)
-  if (targetBasicLands === 0) {
-    for (const land of state.basicLands) setLandCount(land.name, 0)
-    return
-  }
-
-  // Step 3: Curve-aware weighted color demand
-  // Each card's colored pips are weighted by both multi-pip intensity (Karsten)
-  // and CMC urgency (cheap spells demand more reliable color access).
-  const demand: Record<string, number> = { W: 0, U: 0, B: 0, R: 0, G: 0 }
-  for (const info of cardInfos) {
-    if (info.typeLine.toLowerCase().includes('land')) continue
-    const cost = info.manaCost || ''
-    const cmc = getCmc(info)
-    const cWeight = cmcWeight(cmc)
-    const pipsPerColor: Record<string, number> = { W: 0, U: 0, B: 0, R: 0, G: 0 }
-    const matches = cost.match(/\{([^}]+)\}/g) || []
-    for (const match of matches) {
-      const inner = match.slice(1, -1)
-      if (inner in pipsPerColor) pipsPerColor[inner] = (pipsPerColor[inner] ?? 0) + 1
-    }
-    for (const c of COLORS) {
-      const pips = pipsPerColor[c] ?? 0
-      if (pips > 0) {
-        demand[c] = (demand[c] ?? 0) + multiPipWeight(pips) * cWeight
-      }
-    }
-  }
-
-  const totalDemand = Object.values(demand).reduce((a, b) => a + b, 0)
-
-  if (totalDemand === 0) {
-    // Colorless deck — give all to first available land type
-    const availableLands = state.basicLands.map((l) => l.name)
-    for (const land of availableLands) setLandCount(land, 0)
-    if (availableLands.length > 0) setLandCount(availableLands[0]!, targetBasicLands)
-    return
-  }
-
-  // Step 4: Adjust demand based on existing mana sources (non-basic lands, dorks)
-  const targetTotalLands = targetBasicLands + nonBasicLandCount
-  const sourceScale = targetTotalLands > 0 ? totalDemand / targetTotalLands : 0
-  const adjustedDemand: Record<string, number> = {}
-  for (const c of COLORS) {
-    adjustedDemand[c] = Math.max(0, (demand[c] ?? 0) - (existingSources[c] ?? 0) * sourceScale)
-  }
-  const totalAdjustedDemand = Object.values(adjustedDemand).reduce((a, b) => a + b, 0)
-
-  // If existing sources cover everything, fall back to raw demand distribution
-  const distributionDemand = totalAdjustedDemand > 0 ? adjustedDemand : demand
-  const distributionTotal = totalAdjustedDemand > 0 ? totalAdjustedDemand : totalDemand
-
-  // Step 5: Distribute basic lands proportionally to demand
-  const landCounts: Record<string, number> = {}
-  let assigned = 0
-  const entries = COLORS.filter((c) => (distributionDemand[c] ?? 0) > 0).sort(
-    (a, b) => (distributionDemand[b] ?? 0) - (distributionDemand[a] ?? 0),
-  )
-
-  for (const color of entries) {
-    const landName = colorToLand[color]
-    if (!landName) continue
-    const share = Math.round(((distributionDemand[color] ?? 0) / distributionTotal) * targetBasicLands)
-    landCounts[landName] = share
-    assigned += share
-  }
-
-  // Fix rounding errors — adjust the largest share
-  if (assigned !== targetBasicLands && entries.length > 0) {
-    const topLand = entries[0] ? colorToLand[entries[0]] : undefined
-    if (topLand && landCounts[topLand] != null) {
-      landCounts[topLand] = (landCounts[topLand] ?? 0) + targetBasicLands - assigned
-    }
-  }
-
-  // Step 6: Enforce minimum 3 sources for any color with cards in the deck.
-  // Splash colors with fewer than 3 total sources (basics + non-basics) are bumped up,
-  // stealing from the most over-represented color if needed.
-  for (const color of entries) {
-    const landName = colorToLand[color]
-    if (!landName) continue
-    const basics = landCounts[landName] ?? 0
-    const totalSources = basics + (existingSources[color] ?? 0)
-    if (totalSources < 3) {
-      const needed = Math.ceil(3 - totalSources)
-      landCounts[landName] = basics + needed
-      // Steal from the color with the most basics (that isn't this one)
-      const donor = entries
-        .filter((c) => c !== color)
-        .sort((a, b) => (landCounts[colorToLand[b] ?? ''] ?? 0) - (landCounts[colorToLand[a] ?? ''] ?? 0))[0]
-      if (donor) {
-        const donorLand = colorToLand[donor]
-        if (donorLand && (landCounts[donorLand] ?? 0) > needed) {
-          landCounts[donorLand] = (landCounts[donorLand] ?? 0) - needed
-        }
-      }
-    }
-  }
-
-  // Apply — reset all to 0 first, then set computed values
-  for (const land of state.basicLands) {
-    setLandCount(land.name, landCounts[land.name] ?? 0)
-  }
+  for (const land of state.basicLands) setLandCount(land.name, result[land.name] ?? 0)
 }
 
 function matchesSearch(card: SealedCardInfo, query: string): boolean {

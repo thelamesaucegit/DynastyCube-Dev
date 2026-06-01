@@ -11,6 +11,7 @@ import type {
   PhaseResult,
   TargetingState,
   XSelectionState,
+  BlightVariableSelectionState,
   ConvokeSelectionState,
   DelveSelectionState,
   CounterDistributionState,
@@ -24,6 +25,7 @@ import type {
 
 export interface PipelineStoreMethods {
   startXSelection: (state: XSelectionState) => void
+  startBlightVariableSelection: (state: BlightVariableSelectionState) => void
   startConvokeSelection: (state: ConvokeSelectionState) => void
   startDelveSelection: (state: DelveSelectionState) => void
   startCounterDistribution: (state: CounterDistributionState) => void
@@ -45,13 +47,16 @@ export interface ComputePhasesOptions {
 export function computePhases(actionInfo: LegalActionInfo, options?: ComputePhasesOptions): PipelinePhase[] {
   const phases: PipelinePhase[] = []
 
-  // 1. Counter distribution (X cost with counter removal creatures)
-  //    OR X selection (plain X cost / repeatable ability)
-  if (
-    actionInfo.hasXCost &&
-    actionInfo.additionalCostInfo?.counterRemovalCreatures &&
-    actionInfo.additionalCostInfo.counterRemovalCreatures.length > 0
-  ) {
+  // 1. Counter distribution
+  //    - X cost with counter removal creatures (Remove X +1/+1 counters), OR
+  //    - Fixed distributed cost (RemoveCountersFromYourCreatures, e.g. Dawnhand Dissident)
+  const hasCounterCreatures =
+    (actionInfo.additionalCostInfo?.counterRemovalCreatures?.length ?? 0) > 0
+  const hasFixedCounterCost =
+    (actionInfo.additionalCostInfo?.distributedCounterRemovalTotal ?? 0) > 0
+  if (actionInfo.hasXCost && hasCounterCreatures) {
+    phases.push({ type: 'counterDistribution' })
+  } else if (hasFixedCounterCost && hasCounterCreatures) {
     phases.push({ type: 'counterDistribution' })
   } else if (actionInfo.hasXCost) {
     phases.push({ type: 'xSelection' })
@@ -64,6 +69,11 @@ export function computePhases(actionInfo: LegalActionInfo, options?: ComputePhas
   }
 
   // 2. Delve
+  //    Push when there's any generic mana that delve could pay for — either
+  //    printed generic (Murderous Cut's {4}{B}) or generic that appears once an X
+  //    cost has been resolved by xSelection (Empty the Pits' {X}{X}{B}{B}{B}{B}
+  //    becomes {6}{B}{B}{B}{B} for X=3). `maxDelve` is recomputed against the
+  //    merged action's xValue in enterPhase('delve').
   if (
     actionInfo.action.type === 'CastSpell' &&
     actionInfo.hasDelve &&
@@ -72,16 +82,16 @@ export function computePhases(actionInfo: LegalActionInfo, options?: ComputePhas
   ) {
     const manaCostStr = actionInfo.manaCostString ?? ''
     const genericMatch = manaCostStr.match(/\{(\d+)\}/)
-    const genericAmount = genericMatch ? parseInt(genericMatch[1]!, 10) : 0
-    const maxDelve = Math.min(genericAmount, actionInfo.validDelveCards.length)
-    if (maxDelve > 0) {
+    const printedGeneric = genericMatch ? parseInt(genericMatch[1]!, 10) : 0
+    const hasXGeneric = !!actionInfo.hasXCost && (actionInfo.maxAffordableX ?? 0) > 0
+    if (printedGeneric > 0 || hasXGeneric) {
       phases.push({ type: 'delve' })
     }
   }
 
-  // 3. Convoke
+  // 3. Convoke (spells with Convoke keyword, or activated abilities with hasConvoke like Heirloom Epic)
   if (
-    actionInfo.action.type === 'CastSpell' &&
+    (actionInfo.action.type === 'CastSpell' || actionInfo.action.type === 'ActivateAbility') &&
     actionInfo.hasConvoke &&
     actionInfo.validConvokeCreatures &&
     actionInfo.validConvokeCreatures.length > 0
@@ -112,6 +122,10 @@ export function computePhases(actionInfo: LegalActionInfo, options?: ComputePhas
       'ExileFromGraveyard',
       'ExileFromZone',
       'RevealCard',
+      'Behold',
+      'ChooseEntity',
+      'Blight',
+      'Conspire',
     ]
 
     if (costTypesNeedingSelection.includes(costType)) {
@@ -124,6 +138,8 @@ export function computePhases(actionInfo: LegalActionInfo, options?: ComputePhas
       if (!isAutoSelectable) {
         phases.push({ type: 'costPayment' })
       }
+    } else if (costType === 'BlightVariable') {
+      phases.push({ type: 'blightVariable' })
     }
   }
 
@@ -156,12 +172,32 @@ export function mergeResult(
   switch (result.type) {
     case 'counterDistribution': {
       if (action.type === 'ActivateAbility') {
+        // Activated abilities only use this for `RemoveXPlusOnePlusOneCounters`,
+        // which is single-type. Sum the typed entries per creature back into the
+        // legacy `counterRemovals: Map<EntityId, Int>` shape the engine still
+        // consumes for that path.
+        const counterRemovals: Record<string, number> = {}
+        for (const r of result.distributedCounterRemovals) {
+          counterRemovals[r.entityId] = (counterRemovals[r.entityId] ?? 0) + r.count
+        }
         return {
           ...action,
           xValue: result.xValue,
           costPayment: {
             ...action.costPayment,
-            counterRemovals: result.counterRemovals,
+            counterRemovals,
+          },
+        }
+      }
+      if (action.type === 'CastSpell') {
+        // Fixed distributed counter cost (Dawnhand Dissident's linked-exile cost) —
+        // send the typed payload so the engine knows exactly which counter type
+        // came off each creature.
+        return {
+          ...action,
+          additionalCostPayment: {
+            ...action.additionalCostPayment,
+            distributedCounterRemovals: [...result.distributedCounterRemovals],
           },
         }
       }
@@ -196,7 +232,7 @@ export function mergeResult(
     }
 
     case 'convoke': {
-      if (action.type === 'CastSpell') {
+      if (action.type === 'CastSpell' || action.type === 'ActivateAbility') {
         return {
           ...action,
           alternativePayment: {
@@ -227,15 +263,42 @@ export function mergeResult(
       return action
     }
 
+    case 'blightVariable': {
+      if (action.type === 'CastSpell') {
+        return {
+          ...action,
+          additionalCostPayment: {
+            ...action.additionalCostPayment,
+            blightAmount: result.blightAmount,
+          },
+        }
+      }
+      return action
+    }
+
     case 'costPayment': {
       const { costType, selectedTargets } = result
       if (action.type === 'CastSpell') {
-        const additionalCostPayment =
+        // Conspire populates a dedicated field on CastSpell, not additionalCostPayment.
+        if (costType === 'Conspire') {
+          return { ...action, conspiredCreatures: selectedTargets }
+        }
+        const fieldUpdate =
           costType === 'DiscardCard'
             ? { discardedCards: selectedTargets }
             : costType === 'ExileFromGraveyard'
               ? { exiledCards: selectedTargets }
-              : { sacrificedPermanents: selectedTargets }
+              : costType === 'Behold' || costType === 'ChooseEntity'
+                ? { beheldCards: selectedTargets }
+                : costType === 'Blight' || costType === 'BlightVariable'
+                  ? { blightTargets: selectedTargets }
+                  : { sacrificedPermanents: selectedTargets }
+        // Spread the existing additionalCostPayment so prior phases' fields
+        // (e.g. `blightAmount` from a preceding BlightVariable phase) survive.
+        const additionalCostPayment = {
+          ...action.additionalCostPayment,
+          ...fieldUpdate,
+        }
         return { ...action, additionalCostPayment }
       }
       if (action.type === 'ActivateAbility') {
@@ -248,7 +311,9 @@ export function mergeResult(
                 ? { bouncedPermanents: selectedTargets }
                 : costType === 'ExileFromGraveyard'
                   ? { exiledCards: selectedTargets }
-                  : { sacrificedPermanents: selectedTargets }
+                  : costType === 'Blight'
+                    ? { blightTargets: selectedTargets }
+                    : { sacrificedPermanents: selectedTargets }
         return { ...action, costPayment }
       }
       if (action.type === 'TurnFaceUp') {
@@ -308,20 +373,36 @@ export function enterPhase(
   actionInfo: LegalActionInfo,
   action: GameAction,
   store: PipelineStoreMethods,
+  gameState?: ClientGameState,
 ): void {
   switch (phase.type) {
     case 'counterDistribution': {
       const counterCreatures = actionInfo.additionalCostInfo!.counterRemovalCreatures!
-      const distribution: Record<string, number> = {}
+      // Seed a zero allocation per (creature, counterType). When a creature
+      // exposes multiple types via `availableCountersByType`, each type gets its
+      // own slot; older payloads (pre-engine-fix) without the map fall back to
+      // a single-type `+1/+1` slot keyed by total.
+      const distribution: Record<string, Record<string, number>> = {}
       for (const creature of counterCreatures) {
-        distribution[creature.entityId] = 0
+        const byType = creature.availableCountersByType
+        if (byType && Object.keys(byType).length > 0) {
+          const inner: Record<string, number> = {}
+          for (const counterType of Object.keys(byType)) inner[counterType] = 0
+          distribution[creature.entityId] = inner
+        } else {
+          distribution[creature.entityId] = { '+1/+1': 0 }
+        }
       }
+      const fixedTotal = actionInfo.additionalCostInfo?.distributedCounterRemovalTotal
       store.startCounterDistribution({
         actionInfo,
         cardName: actionInfo.description,
         xValue: 0,
         creatures: counterCreatures,
         distribution,
+        ...(fixedTotal && fixedTotal > 0
+          ? { requiredTotal: fixedTotal, description: actionInfo.additionalCostInfo!.description }
+          : {}),
       })
       break
     }
@@ -359,7 +440,12 @@ export function enterPhase(
     case 'delve': {
       const manaCostStr = actionInfo.manaCostString ?? ''
       const genericMatch = manaCostStr.match(/\{(\d+)\}/)
-      const genericAmount = genericMatch ? parseInt(genericMatch[1]!, 10) : 0
+      const printedGeneric = genericMatch ? parseInt(genericMatch[1]!, 10) : 0
+      // X mana resolves to xValue per {X} of generic, which delve can pay for like
+      // any other generic. xValue is set by the preceding xSelection phase.
+      const xCount = (manaCostStr.match(/\{X\}/g) ?? []).length
+      const xValue = action.type === 'CastSpell' ? action.xValue ?? 0 : 0
+      const genericAmount = printedGeneric + xCount * xValue
       const maxDelve = Math.min(genericAmount, actionInfo.validDelveCards!.length)
       store.startDelveSelection({
         actionInfo,
@@ -421,6 +507,14 @@ export function enterPhase(
           flags.isSacrificeSelection = true
           flags.isTapPermanentSelection = true
           break
+        case 'Conspire':
+          validTargets = [...(costInfo.validTapTargets ?? [])]
+          minTargets = costInfo.tapCount ?? 2
+          maxTargets = costInfo.tapCount ?? 2
+          flags.isSacrificeSelection = true
+          flags.isTapPermanentSelection = true
+          flags.targetDescription = costInfo.description
+          break
         case 'BouncePermanent':
           validTargets = [...(costInfo.validBounceTargets ?? [])]
           minTargets = costInfo.bounceCount ?? 1
@@ -459,6 +553,25 @@ export function enterPhase(
           flags.isSacrificeSelection = true
           flags.isRevealSelection = true
           break
+        case 'Behold':
+        case 'ChooseEntity':
+          validTargets = [...(costInfo.validBeholdTargets ?? [])]
+          minTargets = costInfo.beholdCount ?? 1
+          maxTargets = costInfo.beholdCount ?? 1
+          flags.isSacrificeSelection = true
+          flags.isBeholdSelection = true
+          flags.targetDescription = costInfo.description
+          break
+        case 'Blight':
+        case 'BlightVariable':
+          validTargets = [...(costInfo.validBlightTargets ?? [])]
+          minTargets = 1
+          maxTargets = 1
+          flags.targetDescription =
+            costType === 'BlightVariable'
+              ? `Choose a creature to receive ${(action as { additionalCostPayment?: { blightAmount?: number } }).additionalCostPayment?.blightAmount ?? 0} -1/-1 counter(s)`
+              : costInfo.description
+          break
         default:
           return
       }
@@ -475,14 +588,47 @@ export function enterPhase(
     }
 
     case 'targeting': {
+      // X-cost spells with "mana value X or less" target restrictions: the engine
+      // enumerates targets permissively because X is unbound at enumeration time.
+      // Once X has been chosen (cast-time or activation-time), narrow the candidate
+      // list to creatures whose mana value the chosen X actually covers.
+      const chosenX: number | null = (() => {
+        if (gameState == null) return null
+        if (action.type === 'CastSpell' || action.type === 'ActivateAbility' || action.type === 'TurnFaceUp') {
+          return typeof action.xValue === 'number' ? action.xValue : null
+        }
+        return null
+      })()
+      const filterByX = (
+        ids: readonly EntityId[],
+        constrained: boolean | undefined,
+      ): EntityId[] => {
+        if (!constrained || chosenX == null || gameState == null) return [...ids]
+        return ids.filter((id) => {
+          const mv = gameState.cards[id]?.manaValue
+          return typeof mv === 'number' && mv <= chosenX
+        })
+      }
+
+      // When a requirement's max-count is X-driven (TargetObject.dynamicMaxCount =
+      // XValue server-side), the static `count` field is just a placeholder (often
+      // its default of 1). After the user picks X via the cast-time xSelection
+      // phase, the chosen X *replaces* the placeholder as the max — not min(static, X).
+      const resolveMaxByX = (staticMax: number, constrained: boolean | undefined): number => {
+        if (!constrained) return staticMax
+        if (chosenX == null) return staticMax
+        return chosenX
+      }
+
       if (actionInfo.targetRequirements && actionInfo.targetRequirements.length > 1) {
         const firstReq = actionInfo.targetRequirements[0]!
+        const maxTargets = resolveMaxByX(firstReq.maxTargets, firstReq.xConstrainsCount)
         store.startTargeting({
           action,
-          validTargets: [...firstReq.validTargets],
+          validTargets: filterByX(firstReq.validTargets, firstReq.xConstrainsManaValue),
           selectedTargets: [],
-          minTargets: firstReq.minTargets,
-          maxTargets: firstReq.maxTargets,
+          minTargets: Math.min(firstReq.minTargets, maxTargets),
+          maxTargets,
           currentRequirementIndex: 0,
           allSelectedTargets: [],
           targetRequirements: actionInfo.targetRequirements,
@@ -492,12 +638,15 @@ export function enterPhase(
           ...(actionInfo.requiresDamageDistribution ? { requiresDamageDistribution: true } : {}),
         })
       } else {
+        const rawMax = actionInfo.targetCount ?? 1
+        const maxTargets = resolveMaxByX(rawMax, actionInfo.xConstrainsTargetCount)
+        const rawMin = actionInfo.minTargets ?? rawMax
         store.startTargeting({
           action,
-          validTargets: [...(actionInfo.validTargets ?? [])],
+          validTargets: filterByX(actionInfo.validTargets ?? [], actionInfo.xConstrainsTargetManaValue),
           selectedTargets: [],
-          minTargets: actionInfo.minTargets ?? actionInfo.targetCount ?? 1,
-          maxTargets: actionInfo.targetCount ?? 1,
+          minTargets: Math.min(rawMin, maxTargets),
+          maxTargets,
           ...(actionInfo.requiresDamageDistribution ? { requiresDamageDistribution: true } : {}),
         })
       }
@@ -505,7 +654,25 @@ export function enterPhase(
     }
 
     case 'manaColorChoice': {
-      store.startManaColorSelection({ action })
+      store.startManaColorSelection({
+        action,
+        ...(actionInfo.availableManaColors ? { availableColors: actionInfo.availableManaColors } : {}),
+      })
+      break
+    }
+
+    case 'blightVariable': {
+      const costInfo = actionInfo.additionalCostInfo
+      if (!costInfo) return
+      const cardName = actionInfo.description
+        .replace(/^Cast /, '')
+        .replace(/^Activate /, '')
+      store.startBlightVariableSelection({
+        actionInfo,
+        cardName,
+        maxX: costInfo.blightVariableMaxX ?? 0,
+        selectedX: 0,
+      })
       break
     }
 

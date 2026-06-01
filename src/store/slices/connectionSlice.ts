@@ -1,8 +1,11 @@
+// src/store/slices/connectionSlice.ts
+
 /**
  * Connection slice - handles WebSocket connection state and authentication.
  */
 import type { SliceCreator, EntityId } from './types'
 import type { ConnectionStatus } from '@/network/websocket'
+import type { AvailableSet } from '@/types'
 import { GameWebSocket, getWebSocketUrl } from '@/network/websocket'
 import { handleServerMessage, createLoggingHandlers } from '@/network/messageHandlers'
 import { createConnectMessage, ErrorCode } from '@/types'
@@ -19,13 +22,17 @@ export interface ConnectionSliceState {
   playerId: EntityId | null
   sessionId: string | null
   pendingTournamentId: string | null
+  pendingSpectateGameId: string | null
   aiEnabled: boolean
+  availableSets: readonly AvailableSet[]
+  onlinePlayers: number | null
 }
 
 export interface ConnectionSliceActions {
   connect: (playerName: string) => void
   disconnect: () => void
   setPendingTournamentId: (lobbyId: string | null) => void
+  setPendingSpectateGameId: (gameSessionId: string | null) => void
 }
 
 export type ConnectionSlice = ConnectionSliceState & ConnectionSliceActions
@@ -36,7 +43,10 @@ export const createConnectionSlice: SliceCreator<ConnectionSlice> = (set, get) =
   playerId: null,
   sessionId: null,
   pendingTournamentId: null,
+  pendingSpectateGameId: null,
   aiEnabled: false,
+  availableSets: [],
+  onlinePlayers: null,
 
   // Actions
   connect: (playerName) => {
@@ -55,17 +65,16 @@ export const createConnectionSlice: SliceCreator<ConnectionSlice> = (set, get) =
 
     // Build message handlers from the full store
     const handlers = createMessageHandlers(set, get)
-    const wrappedHandlers = process.env.NODE_ENV !== 'production'
-      ? createLoggingHandlers(handlers)
-      : handlers
 
+    // --- THIS IS THE FIX ---
+    // The conditional check for import.meta.env.DEV has been removed.
+    // We now always use the direct handlers, as the logging wrapper was for debugging.
     const ws = new GameWebSocket({
       url: getWebSocketUrl(),
-      onMessage: (msg) => handleServerMessage(msg, wrappedHandlers),
+      onMessage: (msg) => handleServerMessage(msg, handlers), // Use handlers directly
       onStatusChange: (status) => {
         set({ connectionStatus: status })
         if (status === 'connected' && getWebSocket()) {
-          // Check URL ?token= param first (for dev scenario links), then localStorage
           const urlToken = new URLSearchParams(window.location.search).get('token')
           if (urlToken) {
             localStorage.setItem('argentum-token', urlToken)
@@ -85,7 +94,6 @@ export const createConnectionSlice: SliceCreator<ConnectionSlice> = (set, get) =
         })
       },
     })
-
     setWebSocket(ws)
     ws.connect()
   },
@@ -103,6 +111,7 @@ export const createConnectionSlice: SliceCreator<ConnectionSlice> = (set, get) =
       playerId: null,
       sessionId: null,
       pendingTournamentId: null,
+      pendingSpectateGameId: null,
       opponentName: null,
       gameState: null,
       legalActions: [],
@@ -118,5 +127,9 @@ export const createConnectionSlice: SliceCreator<ConnectionSlice> = (set, get) =
 
   setPendingTournamentId: (lobbyId) => {
     set({ pendingTournamentId: lobbyId })
+  },
+
+  setPendingSpectateGameId: (gameSessionId) => {
+    set({ pendingSpectateGameId: gameSessionId })
   },
 })

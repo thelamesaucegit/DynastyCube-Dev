@@ -1,46 +1,47 @@
-//src/components/ui/ManaSymbols.tsx
+// src/components/ui/ManaSymbols.tsx
 
 /**
  * Mana symbol rendering using local SVG assets.
+ * This version manually lists symbols to be compatible with Next.js's build process
+ * without relying on non-standard bundler features like import.meta.glob or require.context.
  */
+import React from 'react';
 
-// Import all symbol SVGs as static assets from both mana and actions folders
-const manaModules = import.meta.glob('../../assets/symbols/mana/*.svg', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
-const actionModules = import.meta.glob('../../assets/symbols/actions/*.svg', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
+// --- THIS IS THE FIX ---
 
-// Build a lookup map: symbol key -> resolved URL
-const SYMBOL_URLS: Record<string, string> = {}
-for (const [path, url] of Object.entries({ ...manaModules, ...actionModules })) {
-  const match = path.match(/\/(\w+)\.svg$/)
-  if (match?.[1]) {
-    SYMBOL_URLS[match[1]] = url
-  }
-}
+// 1. Manually define the list of all possible symbols.
+// This is the most robust way to ensure Next.js's bundler can track the assets.
+const manaSymbolNames = ['W', 'U', 'B', 'R', 'G', 'C', 'X', 'Y', 'Z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', 'S', 'P', 'W_U', 'W_B', 'U_B', 'U_R', 'B_R', 'B_G', 'R_G', 'R_W', 'G_W', 'G_U', '2_W', '2_U', '2_B', '2_R', '2_G'];
+const actionSymbolNames = ['T', 'Q', 'E'];
 
+// 2. Build the lookup map at build time.
+const SYMBOL_URLS: Record<string, string> = {};
+
+manaSymbolNames.forEach(name => {
+  // The key needs to be normalized (e.g., 'W_U' becomes 'WU')
+  const key = name.replace('_', '').toUpperCase();
+  // The path needs to be correct relative to the 'public' folder
+  SYMBOL_URLS[key] = `/assets/symbols/mana/${name}.svg`;
+});
+
+actionSymbolNames.forEach(name => {
+  const key = name.toUpperCase();
+  SYMBOL_URLS[key] = `/assets/symbols/actions/${name}.svg`;
+});
+
+// --------------------
 
 /**
  * Renders a single mana symbol as an SVG icon.
  */
 export function ManaSymbol({ symbol, size = 14 }: { symbol: string; size?: number }) {
-  const normalized = symbol.replace('/', '')
-  const url = SYMBOL_URLS[normalized]
+  const normalized = symbol.replace('/', '').toUpperCase();
+  const url = SYMBOL_URLS[normalized];
 
   if (!url) {
     // Fallback for symbols we don't have locally
     return (
-      <span style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: size,
-        height: size,
-        borderRadius: '50%',
-        backgroundColor: '#666',
-        color: '#fff',
-        fontSize: size * 0.6,
-        fontWeight: 700,
-        verticalAlign: 'middle',
-      }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: size, height: size, borderRadius: '50%', backgroundColor: '#666', color: '#fff', fontSize: size * 0.6, fontWeight: 700, verticalAlign: 'middle' }}>
         {symbol}
       </span>
     )
@@ -65,14 +66,13 @@ export function ManaSymbol({ symbol, size = 14 }: { symbol: string; size?: numbe
  */
 export function ManaCost({ cost, size = 14, gap = 1 }: { cost: string | null; size?: number; gap?: number }) {
   if (!cost) return null
-
-  const symbols = cost.match(/\{([^}]+)\}/g)
+  const symbols = cost.match(/\{([^}]+)\}/g);
   if (!symbols || symbols.length === 0) return null
 
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap }}>
       {symbols.map((match, i) => {
-        const inner = match.slice(1, -1)
+        const inner = match.slice(1, -1);
         return <ManaSymbol key={i} symbol={inner} size={size} />
       })}
     </span>
@@ -85,25 +85,20 @@ export function ManaCost({ cost, size = 14, gap = 1 }: { cost: string | null; si
  */
 export function AbilityText({ text, size = 14 }: { text: string; size?: number }) {
   if (!text) return null
-
-  // Check if text contains any symbols to parse
   if (!text.includes('{')) {
     return <span>{text}</span>
   }
 
-  // Split by mana symbol pattern, keeping the delimiters
-  const parts = text.split(/(\{[^}]+\})/g).filter(Boolean)
+  const parts = text.split(/(\{[^}]+\})/g).filter(Boolean);
 
   return (
     <span>
       {parts.map((part, i) => {
-        const match = part.match(/^\{([^}]+)\}$/)
+        const match = part.match(/^\{([^}]+)\}$/);
         if (match && match[1]) {
-          // This is a mana symbol
-          return <ManaSymbol key={i} symbol={match[1]} size={size} />
+          return <ManaSymbol key={i} symbol={match[1]} size={size} />;
         }
-        // This is regular text
-        return <span key={i}>{part}</span>
+        return <span key={i}>{part}</span>;
       })}
     </span>
   )

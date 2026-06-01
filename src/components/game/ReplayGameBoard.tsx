@@ -1,8 +1,8 @@
 // /src/components/game/ReplayGameBoard.tsx
 "use client";
 
-import React, { useMemo } from 'react';
-import { ResponsiveContextProvider, useResponsive } from '@/hooks/useResponsive';
+import React, { useMemo, useContext } from 'react';
+import { ResponsiveContext } from '@/hooks/useResponsive'; // Only import context
 import type { SpectatorStateUpdate, ReplayCardData, ClientPlayer } from '@/types';
 import { hand, entityId } from '@/types';
 import { ReplayBattlefield } from './board/ReplayBattlefield';
@@ -24,26 +24,28 @@ interface ReplayGameBoardProps {
 }
 
 export function ReplayGameBoard({ topOffset = 0, snapshot, cardDataMap }: ReplayGameBoardProps) {
-    const responsive = useResponsive(snapshot, topOffset);
+    const responsive = useContext(ResponsiveContext);
     const { useOldestArt } = useSettings();
 
     // --- THIS IS THE FIX: Define player1 and player2 from the snapshot ---
-    const { player1, player2, activePlayer } = useMemo(() => {
-        // Player 1 in the snapshot is our "viewing player"
+      const { player1, player2, activePlayer, isPlayer1Active } = useMemo(() => { // <-- Add isPlayer1Active
         const p1 = snapshot.gameState.players.find(p => p.playerId === snapshot.player1Id);
-        // Player 2 is the opponent
         const p2 = snapshot.gameState.players.find(p => p.playerId === snapshot.player2Id);
         const ap = snapshot.gameState.players.find(p => p.playerId === snapshot.gameState.activePlayerId);
-        return { player1: p1, player2: p2, activePlayer: ap };
+        
+        // The viewing player (player1) is always on the bottom.
+        const isP1Active = ap?.playerId === p1?.playerId;
+
+        return { player1: p1, player2: p2, activePlayer: ap, isPlayer1Active: isP1Active }; // <-- Return it
     }, [snapshot]);
     
     if (!player1 || !player2) {
         return <div style={{ color: 'white' }}>Waiting for player data in snapshot...</div>;
     }
+    if (!responsive) return <div>Loading layout...</div>;
 
     return (
-        <ResponsiveContextProvider value={responsive}>
-            <div style={{ ...styles.container, padding: `0 ${responsive.containerPadding}px`, gap: responsive.sectionGap }}>
+        <div style={{ ...styles.container, padding: `0 ${responsive.containerPadding}px`, gap: responsive.sectionGap }}>
                 <FullscreenButton />
                 
                 <div data-zone="opponent-hand" style={{ position: 'absolute', top: topOffset, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }}>
@@ -75,10 +77,11 @@ export function ReplayGameBoard({ topOffset = 0, snapshot, cardDataMap }: Replay
                         phase={snapshot.gameState.currentPhase}
                         step={snapshot.gameState.currentStep}
                         turnNumber={snapshot.gameState.turnNumber}
-                        isActivePlayer={false}
+                        isActivePlayer={false} // This prop is for the live game controls, not relevant here
                         isSpectator={true}
                         hasPriority={false}
                         priorityMode={'ownTurn'}
+                        activeSide={isPlayer1Active ? 'bottom' : 'top'} 
                         stopOverrides={{ myTurnStops: [], opponentTurnStops: [] }}
                         onToggleStop={() => {}}
                         activePlayerName={activePlayer?.name}
@@ -110,6 +113,5 @@ export function ReplayGameBoard({ topOffset = 0, snapshot, cardDataMap }: Replay
                 <ReplayTargetingArrows snapshot={snapshot} />
                 <ReplayGameLog snapshot={snapshot} />
             </div>
-        </ResponsiveContextProvider>
     );
 }

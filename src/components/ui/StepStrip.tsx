@@ -2,8 +2,8 @@
 
 import { useState, useCallback } from 'react'
 import { Phase, Step, StepShortNames } from '@/types'
-import { useResponsive } from '@/hooks/useResponsive.ts'
-import type { PriorityMode } from '@/store/selectors.ts'
+import { useResponsive } from '@/hooks/useResponsive'
+import type { PriorityMode } from '@/store/selectors'
 
 interface StepStripProps {
   phase: Phase
@@ -105,7 +105,7 @@ export function StepStrip({
   onToggleStop,
   isSpectator = false,
 }: StepStripProps) {
-  const responsive = useResponsive()
+const responsive = useResponsive();
   const colors = priorityMode === 'waiting' && isActivePlayer
     ? waitingMyTurn
     : modeColors[priorityMode]

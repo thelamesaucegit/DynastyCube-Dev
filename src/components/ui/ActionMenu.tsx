@@ -1,15 +1,15 @@
 //src/components/ui/ActionMenu.tsx
 
 import { useEffect, useCallback, useMemo, useState } from 'react'
-import { useGameStore } from '@/store/gameStore.ts'
-import { useCardActions } from '@/hooks/useLegalActions.ts'
-import { useInteraction } from '@/hooks/useInteraction.ts'
+import { useGameStore } from '@/store/gameStore'
+import { useCardActions } from '@/hooks/useLegalActions'
+import { useInteraction } from '@/hooks/useInteraction'
 import type { LegalActionInfo, ClientCard } from '@/types'
 import { ManaCost, AbilityText } from './ManaSymbols'
 import { ManaCostProgress } from './ManaCostProgress'
-import { useViewingPlayer } from '@/store/selectors.ts'
+import { useViewingPlayer } from '@/store/selectors'
 import { isManaPoolEmpty } from '@/types'
-import { getCardImageUrl } from '@/utils/cardImages.ts'
+import { getCardImageUrl } from '@/utils/cardImages'
 import styles from './ActionMenu.module.css'
 
 /**
@@ -46,15 +46,7 @@ function buildActionOptions(
   const options: ActionOption[] = []
   if (!cardInfo) return options
 
-  // Debug: log all action types received
-  if (import.meta.env.DEV) {
-    console.log('buildActionOptions - legalActions:', legalActions.map(a => ({
-      actionType: a.actionType,
-      'action.type': a.action.type,
-      description: a.description,
-      isAffordable: a.isAffordable
-    })))
-  }
+
 
   // Find each type of action - server sends all potential actions with isAffordable flag
   const castActions = legalActions.filter(
@@ -68,15 +60,7 @@ function buildActionOptions(
   const plotAction = legalActions.find((a) => a.action.type === 'PlotCard')
   const playLandAction = legalActions.find((a) => a.action.type === 'PlayLand')
 
-  // Debug: log found actions
-  if (import.meta.env.DEV) {
-    console.log('buildActionOptions - found:', { castAction: !!castAction, castActions: castActions.length, morphAction: !!morphAction, cycleAction: !!cycleAction, playLandAction: !!playLandAction })
-    // Extra debug for cycling
-    legalActions.forEach((a, i) => {
-      console.log(`  action[${i}]: action.type=${a.action.type}, actionType=${a.actionType}, isCycleCard=${a.action.type === 'CycleCard'}`)
-    })
-  }
-
+ 
   // 1. Modal spell modes — show one button per mode instead of a single "Cast" button
   const modeActions = legalActions.filter((a) => a.actionType === 'CastSpellMode')
   // Sibling CastSpellModal actions (e.g., Pyrrhic Strike's blight path forces every mode)
@@ -334,16 +318,7 @@ export function ActionMenu() {
   // Show the nice modal for any actionable card click
   const shouldShowModal = hasMultiplePotentialOptions || hasSingleAction
 
-  // Debug logging - always log when card is selected
-  if (import.meta.env.DEV && selectedCardId) {
-    console.log('ActionMenu render:', {
-      selectedCardId,
-      cardActionsCount: cardActions.length,
-      cardActionTypes: cardActions.map(a => a.action.type),
-      actionOptionsCount: actionOptions.length,
-      actionOptionKeys: actionOptions.map(o => o.key),
-    })
-  }
+  
 
   // Handle Escape key to cancel
   const handleKeyDown = useCallback(

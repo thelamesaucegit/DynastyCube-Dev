@@ -6,6 +6,7 @@ import type {
   SliceCreator,
   EntityId,
   XSelectionState,
+  BlightVariableSelectionState,
   ConvokeSelectionState,
   CrewSelectionState,
   DelveSelectionState,
@@ -24,6 +25,7 @@ import { parseManaCost as parseManaCostUtil, getRemainingCostSymbols } from '@/u
 
 export interface SelectionSliceState {
   xSelectionState: XSelectionState | null
+  blightVariableSelectionState: BlightVariableSelectionState | null
   convokeSelectionState: ConvokeSelectionState | null
   crewSelectionState: CrewSelectionState | null
   delveSelectionState: DelveSelectionState | null
@@ -37,6 +39,10 @@ export interface SelectionSliceActions {
   updateXValue: (x: number) => void
   cancelXSelection: () => void
   confirmXSelection: () => void
+  startBlightVariableSelection: (state: BlightVariableSelectionState) => void
+  updateBlightVariableX: (x: number) => void
+  cancelBlightVariableSelection: () => void
+  confirmBlightVariableSelection: () => void
   startConvokeSelection: (state: ConvokeSelectionState) => void
   toggleConvokeCreature: (entityId: EntityId, name: string, payingColor: string | null) => void
   cancelConvokeSelection: () => void
@@ -66,6 +72,7 @@ export type SelectionSlice = SelectionSliceState & SelectionSliceActions
 
 export const createSelectionSlice: SliceCreator<SelectionSlice> = (set, get) => ({
   xSelectionState: null,
+  blightVariableSelectionState: null,
   convokeSelectionState: null,
   crewSelectionState: null,
   delveSelectionState: null,
@@ -105,6 +112,41 @@ export const createSelectionSlice: SliceCreator<SelectionSlice> = (set, get) => 
       type: 'xSelection',
       xValue: xSelectionState.selectedX,
       ...(xSelectionState.isRepeatCount ? { isRepeatCount: true } : {}),
+    })
+  },
+
+  // BlightVariable selection actions
+  startBlightVariableSelection: (blightVariableSelectionState) => {
+    set({ blightVariableSelectionState })
+  },
+
+  updateBlightVariableX: (x) => {
+    set((state) => {
+      if (!state.blightVariableSelectionState) return state
+      const clamped = Math.max(0, Math.min(state.blightVariableSelectionState.maxX, x))
+      return {
+        blightVariableSelectionState: {
+          ...state.blightVariableSelectionState,
+          selectedX: clamped,
+        },
+      }
+    })
+  },
+
+  cancelBlightVariableSelection: () => {
+    const { pipelineState, cancelPipeline } = get()
+    if (pipelineState) { cancelPipeline(); return }
+    set({ blightVariableSelectionState: null })
+  },
+
+  confirmBlightVariableSelection: () => {
+    const { blightVariableSelectionState, pipelineState } = get()
+    if (!blightVariableSelectionState || !pipelineState) return
+    const { selectedX } = blightVariableSelectionState
+    set({ blightVariableSelectionState: null })
+    get().advancePipeline({
+      type: 'blightVariable',
+      blightAmount: selectedX,
     })
   },
 
@@ -284,17 +326,40 @@ export const createSelectionSlice: SliceCreator<SelectionSlice> = (set, get) => 
           decisionSelectionState: {
             ...state.decisionSelectionState,
             selectedOptions: selectedOptions.filter((id) => id !== cardId),
+            warning: null,
           },
         }
-      } else if (selectedOptions.length < maxSelections) {
+      }
+      if (selectedOptions.length < maxSelections) {
         return {
           decisionSelectionState: {
             ...state.decisionSelectionState,
             selectedOptions: [...selectedOptions, cardId],
+            warning: null,
           },
         }
       }
-      return state
+      if (maxSelections === 1) {
+        // Single-select step: clicking a different card replaces the previous pick so the
+        // user doesn't have to deselect first. Without this, flows like Wear Down's gift
+        // silently reject the new click and the player is stuck on the wrong target.
+        return {
+          decisionSelectionState: {
+            ...state.decisionSelectionState,
+            selectedOptions: [cardId],
+            warning: null,
+          },
+        }
+      }
+      // Multi-select at cap: keep existing picks but flag a warning so the user knows
+      // the click was ignored on purpose (and their spell won't fizzle from picking too
+      // many). Cleared the moment the user makes a legal toggle.
+      return {
+        decisionSelectionState: {
+          ...state.decisionSelectionState,
+          warning: `You can select at most ${maxSelections} target${maxSelections === 1 ? '' : 's'} here — deselect one first to pick a different target.`,
+        },
+      }
     })
   },
 
@@ -332,17 +397,45 @@ export const createSelectionSlice: SliceCreator<SelectionSlice> = (set, get) => 
       sourceColors[source.entityId] = colors
       sourceManaAmounts[source.entityId] = source.manaAmount ?? 1
     }
-    // Pre-select the autoTapPreview sources as the default
-    const preSelected = actionInfo.autoTapPreview ?? []
+    // The accumulated action carries xValue from the prior xSelection phase.
+    // The server's autoTapPreview only covers the fixed cost (X is unknown
+    // server-side), so we extend the pre-selection with enough additional
+    // sources to also cover xValue * (number of {X} symbols).
+    const action = actionInfo.action as { xValue?: number }
+    const xValue = action.xValue ?? 0
+    const manaCost = actionInfo.manaCostString ?? ''
+    const xSymbolCount = Math.max(1, (manaCost.match(/\{X\}/g)?.length ?? 0))
+    const xManaNeeded = xValue * xSymbolCount
+
+    const preSelectedIds = [...(actionInfo.autoTapPreview ?? [])]
+    if (xManaNeeded > 0) {
+      const alreadySelected = new Set(preSelectedIds)
+      const manaProvided = (id: string) => sourceManaAmounts[id] ?? 1
+      // Extend with sources not yet picked, preferring least-flexible
+      // (colorless / fewest colors) first since X is generic mana and we
+      // want to keep multi-color sources available for future plays. Server
+      // re-solves on submit (CastPaymentProcessor.explicitPay), so the exact
+      // ordering only affects the default — over-selection is safe.
+      const candidates = sources
+        .filter(s => !alreadySelected.has(s.entityId))
+        .map(s => ({ id: s.entityId, flexibility: (sourceColors[s.entityId]?.length ?? 0) }))
+        .sort((a, b) => a.flexibility - b.flexibility)
+      let remaining = xManaNeeded
+      for (const c of candidates) {
+        if (remaining <= 0) break
+        preSelectedIds.push(c.id)
+        remaining -= manaProvided(c.id)
+      }
+    }
     set({
       selectedCardId: null,
       manaSelectionState: {
         action: actionInfo.action,
         actionInfo,
         validSources: sources.map(s => s.entityId),
-        selectedSources: [...preSelected],
-        manaCost: actionInfo.manaCostString ?? '',
-        xValue: 0,
+        selectedSources: preSelectedIds,
+        manaCost,
+        xValue,
         sourceColors,
         sourceManaAmounts,
       },
