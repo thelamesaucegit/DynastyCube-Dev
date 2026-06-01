@@ -6,6 +6,7 @@ import type { SetState, GetState } from './types'
 
 type SpectatingHandlerKeys =
   | 'onActiveMatches' | 'onSpectatorStateUpdate' | 'onSpectatingStarted' | 'onSpectatingStopped'
+  | 'onSpectatorCountChanged'
   | 'onOpponentAttackerTargets' | 'onOpponentBlockerAssignments'
   | 'onOpponentDisconnected' | 'onOpponentReconnected'
   | 'onTournamentPlayerDisconnected' | 'onTournamentPlayerReconnected'
@@ -108,6 +109,13 @@ export function createSpectatingHandlers(set: SetState, get: GetState): Pick<Mes
 
     onSpectatingStopped: () => {
       set({ spectatingState: null })
+    },
+
+    onSpectatorCountChanged: (msg) => {
+      set({
+        spectatorCount: msg.count,
+        spectatorNames: msg.spectatorNames ?? [],
+      })
     },
 
     onOpponentAttackerTargets: (msg) => {
