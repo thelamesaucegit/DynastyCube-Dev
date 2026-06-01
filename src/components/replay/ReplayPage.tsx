@@ -1,6 +1,6 @@
 //src/components/replay/ReplayPage.tsx
 
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { useGameStore } from '@/store/gameStore'
 import { SpectatorContext } from '../../contexts/SpectatorContext'
@@ -9,6 +9,10 @@ import { CombatArrows } from '../combat/CombatArrows'
 import type { SpectatingState } from '@/store/slices'
 import type { SpectatorStateUpdate } from '../admin/ReplayViewer'
 import { reconstructSnapshots, type PublicReplayData } from '@/replay/reconstructSnapshots'
+import type { ClientPlayer, ClientCard } from '@/types';
+import { ZoneType } from '@/types/enums';
+import { useResponsive, ResponsiveContext } from '@/hooks/useResponsive';
+import { SettingsProvider } from '@/contexts/SettingsContext';
 
 const HEADER_HEIGHT = 55
 
@@ -24,7 +28,9 @@ const router = useRouter()
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const setSpectatingState = useGameStore((s) => s.setSpectatingState)
+  const currentSnapshot = snapshots[currentStep];
 
+  
   const writeSnapshotToStore = useCallback(
     (snapshot: SpectatorStateUpdate) => {
       const state: SpectatingState = {
@@ -47,7 +53,28 @@ const router = useRouter()
     },
     [setSpectatingState],
   )
+const zoneRowCounts = useMemo(() => {
+    if (!currentSnapshot) return [0, 0, 0, 0];
+    const { gameState, player1Id, player2Id } = currentSnapshot;
+    const getRowCount = (playerId: ClientPlayer['playerId'], isCreatureRow: boolean) => {
+      if (!gameState || !(gameState as any).zones) return 0;
+      const zones = (gameState as any).zones;
+      const cards = (gameState as any).cards;
+      const zone = zones.find((z: any) => z.zoneId.ownerId === playerId && z.zoneId.zoneType === ZoneType.BATTLEFIELD);
+      if (!zone) return 0;
+      return zone.cardIds.map((id: string) => cards[id]).filter((c: ClientCard) => !!c && !c.attachedTo).filter((c: ClientCard) => {
+        const isCreatureOrPW = c.cardTypes.includes('CREATURE') || c.cardTypes.includes('PLANESWALKER');
+        return isCreatureRow ? isCreatureOrPW : !isCreatureOrPW;
+      }).length;
+    };
+    return [
+      getRowCount(player1Id as string, true), getRowCount(player1Id as string, false),
+      getRowCount(player2Id as string, true), getRowCount(player2Id as string, false),
+    ];
+  }, [currentSnapshot]);
 
+  const responsiveSizes = useResponsive(HEADER_HEIGHT, zoneRowCounts);
+ 
   // Load replay on mount
   useEffect(() => {
     if (!gameId) return
@@ -175,6 +202,8 @@ const router = useRouter()
         player2Name: currentSnapshot.player2Name ?? 'Player 2',
       }}
     >
+      <ResponsiveContext.Provider value={responsiveSizes}>
+        <SettingsProvider>
       <div style={styles.replayContainer}>
         <div style={styles.replayHeader}>
           <button onClick={() => router.push('/')} style={styles.backButton}>
@@ -223,6 +252,8 @@ const router = useRouter()
         </div>
       </div>
       <CombatArrows />
+           </SettingsProvider>
+      </ResponsiveContext.Provider>
     </SpectatorContext.Provider>
   )
 }
