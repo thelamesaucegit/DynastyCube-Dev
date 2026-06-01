@@ -136,6 +136,18 @@ export interface TypecycleCardAction {
   readonly paymentStrategy?: PaymentStrategy
 }
 
+/**
+ * Plot a card from hand (CR 718, Outlaws of Thunder Junction).
+ * Sorcery-speed special action — pays the printed plot cost and exiles the card.
+ * The plotted card becomes castable for free from exile on a later turn.
+ */
+export interface PlotCardAction {
+  readonly type: 'PlotCard'
+  readonly playerId: EntityId
+  readonly cardId: EntityId
+  readonly paymentStrategy?: PaymentStrategy
+}
+
 // =============================================================================
 // Crew Actions
 // =============================================================================
