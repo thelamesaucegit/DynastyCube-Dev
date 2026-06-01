@@ -150,18 +150,47 @@ export default function ReplayPage(props: PageProps) {
         
         fetchData();
     }, [matchId, router]);
+     const [currentIndex, setCurrentIndex] = useState(0); // Add state for the current index
+
+    const currentSnapshot = useMemo(() => data?.gameStates?.[currentIndex], [data, currentIndex]);
+
+    const zoneRowCounts = useMemo(() => {
+        if (!currentSnapshot) return [0, 0, 0, 0];
+        const { gameState, player1Id, player2Id } = currentSnapshot;
+        const getRowCount = (playerId: EntityId | null, isCreatureRow: boolean) => {
+            if (!gameState?.zones || !gameState?.cards) return 0;
+            const zones = gameState.zones as ClientZone[];
+            const cards = gameState.cards as Record<string, ClientCard>;
+            const zone = zones.find(z => z.zoneId.ownerId === playerId && z.zoneId.zoneType === ZoneType.BATTLEFIELD);
+            if (!zone) return 0;
+            return zone.cardIds.map(id => cards[id]).filter((c): c is ClientCard => !!c && !c.attachedTo).filter(c => {
+                const isCreatureOrPW = c.cardTypes.includes('CREATURE') || c.cardTypes.includes('PLANESWALKER');
+                return isCreatureRow ? isCreatureOrPW : !isCreatureOrPW;
+            }).length;
+        };
+        return [
+            getRowCount(player1Id, true), getRowCount(player1Id, false),
+            getRowCount(player2Id, true), getRowCount(player2Id, false),
+        ];
+    }, [currentSnapshot]);
+
+    const responsiveSizes = useResponsive(0, zoneRowCounts);
+
     
     if (isLoading) return <div className="text-white p-8 text-center mt-20">Loading and reconstructing replay...</div>; 
     if (!data || !data.gameStates) return <div className="text-white p-8 text-center mt-20">Failed to load replay data.</div>; 
 
    return (
         <main className="w-full h-screen bg-gray-900">
-            <SettingsProvider>
-                <ArgentumReplayPlayer
+<ResponsiveContext.Provider value={responsiveSizes}>
+                <SettingsProvider>
+                    <ArgentumReplayPlayer
                     initialGameStates={data.gameStates}
                     cardDataMap={data.cardDataMap!}
                 />
             </SettingsProvider>
+                </ResponsiveContext.Provider>
+
         </main>
     );
 }
