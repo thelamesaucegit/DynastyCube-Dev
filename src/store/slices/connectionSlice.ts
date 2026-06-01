@@ -3,6 +3,7 @@
  */
 import type { SliceCreator, EntityId } from './types'
 import type { ConnectionStatus } from '@/network/websocket'
+import type { AvailableSet } from '@/types'
 import { GameWebSocket, getWebSocketUrl } from '@/network/websocket'
 import { handleServerMessage, createLoggingHandlers } from '@/network/messageHandlers'
 import { createConnectMessage, ErrorCode } from '@/types'
@@ -19,13 +20,17 @@ export interface ConnectionSliceState {
   playerId: EntityId | null
   sessionId: string | null
   pendingTournamentId: string | null
+  pendingSpectateGameId: string | null
   aiEnabled: boolean
+  availableSets: readonly AvailableSet[]
+  onlinePlayers: number | null
 }
 
 export interface ConnectionSliceActions {
   connect: (playerName: string) => void
   disconnect: () => void
   setPendingTournamentId: (lobbyId: string | null) => void
+  setPendingSpectateGameId: (gameSessionId: string | null) => void
 }
 
 export type ConnectionSlice = ConnectionSliceState & ConnectionSliceActions
@@ -36,7 +41,10 @@ export const createConnectionSlice: SliceCreator<ConnectionSlice> = (set, get) =
   playerId: null,
   sessionId: null,
   pendingTournamentId: null,
+  pendingSpectateGameId: null,
   aiEnabled: false,
+  availableSets: [],
+  onlinePlayers: null,
 
   // Actions
   connect: (playerName) => {
@@ -55,7 +63,7 @@ export const createConnectionSlice: SliceCreator<ConnectionSlice> = (set, get) =
 
     // Build message handlers from the full store
     const handlers = createMessageHandlers(set, get)
-    const wrappedHandlers = process.env.NODE_ENV !== 'production'
+    const wrappedHandlers = import.meta.env.DEV
       ? createLoggingHandlers(handlers)
       : handlers
 
@@ -103,6 +111,7 @@ export const createConnectionSlice: SliceCreator<ConnectionSlice> = (set, get) =
       playerId: null,
       sessionId: null,
       pendingTournamentId: null,
+      pendingSpectateGameId: null,
       opponentName: null,
       gameState: null,
       legalActions: [],
@@ -118,5 +127,9 @@ export const createConnectionSlice: SliceCreator<ConnectionSlice> = (set, get) =
 
   setPendingTournamentId: (lobbyId) => {
     set({ pendingTournamentId: lobbyId })
+  },
+
+  setPendingSpectateGameId: (gameSessionId) => {
+    set({ pendingSpectateGameId: gameSessionId })
   },
 })
