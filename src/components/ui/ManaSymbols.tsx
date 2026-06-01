@@ -2,49 +2,33 @@
 
 /**
  * Mana symbol rendering using local SVG assets.
+ * This version manually lists symbols to be compatible with Next.js's build process
+ * without relying on non-standard bundler features like import.meta.glob or require.context.
  */
 import React from 'react';
 
 // --- THIS IS THE FIX ---
 
-// 1. Define the specific shape of the module we expect Webpack to return for our SVGs.
-// It's an object with a 'default' property that holds the URL string.
-type SvgModule = {
-  default: string;
-};
+// 1. Manually define the list of all possible symbols.
+// This is the most robust way to ensure Next.js's bundler can track the assets.
+const manaSymbolNames = ['W', 'U', 'B', 'R', 'G', 'C', 'X', 'Y', 'Z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', 'S', 'P', 'W_U', 'W_B', 'U_B', 'U_R', 'B_R', 'B_G', 'R_G', 'R_W', 'G_W', 'G_U', '2_W', '2_U', '2_B', '2_R', '2_G'];
+const actionSymbolNames = ['T', 'Q', 'E'];
 
-// 2. Define a type-safe interface for Webpack's require.context function.
-// This tells TypeScript what the function and its return value look like.
-interface WebpackRequireContext {
-  keys(): string[];
-  (id: string): SvgModule; // It will return our defined module shape.
-}
-
-function requireAll(requireContext: WebpackRequireContext): SvgModule[] {
-  return requireContext.keys().map(requireContext);
-}
-
-// 3. Use these type-safe functions to import and process the modules.
-const manaSvgs = requireAll(require.context('../../assets/symbols/mana', false, /\.svg$/));
-const actionSvgs = requireAll(require.context('../../assets/symbols/actions', false, /\.svg$/));
-
+// 2. Build the lookup map at build time.
 const SYMBOL_URLS: Record<string, string> = {};
 
-// The 'modules' parameter is now strongly typed as SvgModule[]
-function processModules(modules: SvgModule[]) {
-    for (const mod of modules) {
-        // We know 'mod.default' is a string because of our SvgModule type
-        const url = mod.default; 
-        const match = url.match(/\/(\w+)\.svg/);
-        if (match?.[1]) {
-            // The symbol name (e.g., "W", "U", "TAP") is the first capture group
-            SYMBOL_URLS[match[1].toUpperCase()] = url;
-        }
-    }
-}
+manaSymbolNames.forEach(name => {
+  // The key needs to be normalized (e.g., 'W_U' becomes 'WU')
+  const key = name.replace('_', '').toUpperCase();
+  // The path needs to be correct relative to the 'public' folder
+  SYMBOL_URLS[key] = `/assets/symbols/mana/${name}.svg`;
+});
 
-processModules(manaSvgs);
-processModules(actionSvgs);
+actionSymbolNames.forEach(name => {
+  const key = name.toUpperCase();
+  SYMBOL_URLS[key] = `/assets/symbols/actions/${name}.svg`;
+});
+
 // --------------------
 
 /**
