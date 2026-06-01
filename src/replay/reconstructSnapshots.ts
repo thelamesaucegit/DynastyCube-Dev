@@ -90,13 +90,12 @@ function applySpectatorDelta(
 ): SpectatorStateUpdate {
   return {
     gameSessionId: prev.gameSessionId,
-    // --- THIS IS THE FIX ---
-    // First cast to 'unknown', then to the final desired type.
-    // This tells TypeScript that the conversion is intentional.
+     // --- THIS IS THE FIX (Part 2) ---
+    // The cast to `unknown` is still needed because the function signatures
+    // are now correctly identified as being different.
     gameState: delta.gameStateDelta != null
-      ? applyGameStateDelta(prev.gameState as GameStateObj | null, delta.gameStateDelta) as unknown as Partial<ClientGameState>
+      ? applyGameStateDelta(prev.gameState as unknown as GameStateObj | null, delta.gameStateDelta) as unknown as Partial<ClientGameState>
       : prev.gameState,
-    // ----------------------
     player1Id: prev.player1Id,
     player2Id: prev.player2Id,
     player1Name: prev.player1Name,
@@ -104,31 +103,31 @@ function applySpectatorDelta(
     player1: delta.player1 !== undefined && delta.player1 !== null ? delta.player1 : prev.player1,
     player2: delta.player2 !== undefined && delta.player2 !== null ? delta.player2 : prev.player2,
     currentPhase: delta.currentPhase ?? prev.currentPhase,
-    activePlayerId: delta.activePlayerId !== undefined && delta.activePlayerId !== null
+    activePlayerId: (delta.activePlayerId !== undefined && delta.activePlayerId !== null
       ? (delta.activePlayerId === '' ? null : delta.activePlayerId)
-      : prev.activePlayerId,
-    priorityPlayerId: delta.priorityPlayerId !== undefined && delta.priorityPlayerId !== null
+      : prev.activePlayerId) as EntityId | null,
+    priorityPlayerId: (delta.priorityPlayerId !== undefined && delta.priorityPlayerId !== null
       ? (delta.priorityPlayerId === '' ? null : delta.priorityPlayerId)
-      : prev.priorityPlayerId,
+      : prev.priorityPlayerId) as EntityId | null,
     combat: delta.combatCleared ? null : (delta.combat ?? prev.combat),
     decisionStatus: delta.decisionCleared ? null : (delta.decisionStatus ?? prev.decisionStatus),
   };
 }
 
 interface GameStateObj {
-  cards: Record<string, unknown>
-  zones: unknown[]
-  players: unknown[]
-  currentPhase: string
-  currentStep: string
-  activePlayerId: string
-  priorityPlayerId: string
-  turnNumber: number
-  isGameOver: boolean
-  winnerId: string | null
-  combat: unknown | null
-  gameLog: unknown[]
-  [key: string]: unknown
+  cards: Record<string, unknown>;
+  zones: unknown[]; // Use a mutable array of unknown
+  players: unknown[];
+  currentPhase: string;
+  currentStep: string;
+  activePlayerId: string | null; // Allow null
+  priorityPlayerId: string | null; // Allow null
+  turnNumber: number;
+  isGameOver: boolean;
+  winnerId: string | null;
+  combat: unknown | null;
+  gameLog: unknown[];
+  [key: string]: unknown;
 }
 
 function applyGameStateDelta(
