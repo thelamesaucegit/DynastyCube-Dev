@@ -90,11 +90,11 @@ function applySpectatorDelta(
 ): SpectatorStateUpdate {
   return {
     gameSessionId: prev.gameSessionId,
-    // Cast the result of the delta application back to the expected type.
-    // We are telling TypeScript, "Trust us, the object returned by this function
-    // conforms to the shape of Partial<ClientGameState>."
+    // --- THIS IS THE FIX ---
+    // First cast to 'unknown', then to the final desired type.
+    // This tells TypeScript that the conversion is intentional.
     gameState: delta.gameStateDelta != null
-      ? applyGameStateDelta(prev.gameState as GameStateObj | null, delta.gameStateDelta) as Partial<ClientGameState>
+      ? applyGameStateDelta(prev.gameState as GameStateObj | null, delta.gameStateDelta) as unknown as Partial<ClientGameState>
       : prev.gameState,
     // ----------------------
     player1Id: prev.player1Id,
