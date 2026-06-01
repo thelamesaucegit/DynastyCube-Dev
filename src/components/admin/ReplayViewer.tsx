@@ -1,12 +1,16 @@
 //src/components/admin/ReplayViewer.tsx
 
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'; // Added React and useMemo
 import { useGameStore } from '@/store/gameStore'
 import { SpectatorContext } from '../../contexts/SpectatorContext'
 import { GameBoard } from '../game/GameBoard'
 import { CombatArrows } from '../combat/CombatArrows'
 import type { SpectatingState } from '@/store/slices'
 import { reconstructSnapshots, type ReplayData } from '@/replay/reconstructSnapshots'
+import type { ClientPlayer, ClientCard } from '@/types';
+import { ZoneType } from '@/types/enums';
+import { useResponsive, ResponsiveContext } from '@/hooks/useResponsive';
+import { SettingsProvider } from '@/contexts/SettingsContext';
 
 // ============================================================================
 // Types
@@ -355,6 +359,29 @@ function ReplayView({
   onToggleAutoPlay: () => void
   onBack: () => void
 }) {
+
+  const zoneRowCounts = useMemo(() => {
+    if (!snapshot) return [0, 0, 0, 0];
+    const { gameState, player1Id, player2Id } = snapshot;
+    const getRowCount = (playerId: ClientPlayer['playerId'], isCreatureRow: boolean) => {
+      if (!gameState || !(gameState as any).zones) return 0;
+      const zones = (gameState as any).zones;
+      const cards = (gameState as any).cards;
+      const zone = zones.find((z: any) => z.zoneId.ownerId === playerId && z.zoneId.zoneType === ZoneType.BATTLEFIELD);
+      if (!zone) return 0;
+      return zone.cardIds.map((id: string) => cards[id]).filter((c: ClientCard) => !!c && !c.attachedTo).filter((c: ClientCard) => {
+        const isCreatureOrPW = c.cardTypes.includes('CREATURE') || c.cardTypes.includes('PLANESWALKER');
+        return isCreatureRow ? isCreatureOrPW : !isCreatureOrPW;
+      }).length;
+    };
+    return [
+      getRowCount(player1Id as string, true), getRowCount(player1Id as string, false),
+      getRowCount(player2Id as string, true), getRowCount(player2Id as string, false),
+    ];
+  }, [snapshot]);
+
+  const responsiveSizes = useResponsive(HEADER_HEIGHT, zoneRowCounts);
+ 
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -377,6 +404,8 @@ function ReplayView({
         player2Name: snapshot.player2Name ?? 'Player 2',
       }}
     >
+      <ResponsiveContext.Provider value={responsiveSizes}>
+        <SettingsProvider>
       <div style={styles.replayContainer}>
         <div style={styles.replayHeader}>
           <button onClick={onBack} style={styles.backButton}>
@@ -419,6 +448,8 @@ function ReplayView({
         </div>
       </div>
       <CombatArrows />
+          </SettingsProvider>
+      </ResponsiveContext.Provider>
     </SpectatorContext.Provider>
   )
 }
