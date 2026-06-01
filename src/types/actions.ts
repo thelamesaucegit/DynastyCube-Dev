@@ -1,5 +1,3 @@
-//src/types/actions.ts
-
 import { EntityId } from './entities'
 
 /**
@@ -58,14 +56,30 @@ export interface AdditionalCostPayment {
   readonly discardedCards?: readonly EntityId[]
   readonly lifePaid?: number
   readonly exiledCards?: readonly EntityId[]
+  readonly beheldCards?: readonly EntityId[]
   readonly tappedPermanents?: readonly EntityId[]
   readonly bouncedPermanents?: readonly EntityId[]
   readonly counterRemovals?: Readonly<Record<EntityId, number>>
+  /**
+   * Typed counter-removal entries — each entry removes `count` counters of
+   * `counterType` from `entityId`. Preferred over the legacy `counterRemovals`
+   * map (engine still accepts that as a fallback for older clients).
+   */
+  readonly distributedCounterRemovals?: ReadonlyArray<{
+    entityId: EntityId
+    counterType: string
+    count: number
+  }>
+  readonly blightTargets?: readonly EntityId[]
+  /** X chosen for `AdditionalCost.BlightVariable` (e.g., Soul Immolation). */
+  readonly blightAmount?: number
 }
 
 export interface AlternativePaymentChoice {
   readonly delvedCards: readonly EntityId[]
   readonly convokedCreatures: Record<EntityId, ConvokePayment>
+  /** Single creature tapped for Harmonize, reducing the generic cost by its power. */
+  readonly harmonizeCreature?: EntityId | null
 }
 
 export interface ConvokePayment {
@@ -88,8 +102,22 @@ export interface CastSpellAction {
   readonly wasKicked?: boolean
   /** Pre-chosen damage distribution for DividedDamageEffect spells (target ID -> damage amount) */
   readonly damageDistribution?: Record<EntityId, number>
-  /** Chosen modal mode index (for modal spells where mode is selected at cast time) */
-  readonly chosenMode?: number
+  /**
+   * Chosen modal mode indices (rule 700.2). Ordered; the same index may repeat when the
+   * spell's ModalEffect has `allowRepeat = true` (Escalate/Spree).
+   */
+  readonly chosenModes?: readonly number[]
+  /** Per-mode target bindings, aligned 1:1 with `chosenModes`. */
+  readonly modeTargetsOrdered?: readonly (readonly ChosenTarget[])[]
+  /** Per-mode DividedDamageEffect allocations (future). */
+  readonly modeDamageDistribution?: Record<number, Record<EntityId, number>>
+  /** Creatures tapped to pay Conspire's optional additional cost (two distinct IDs) */
+  readonly conspiredCreatures?: readonly EntityId[]
+  /**
+   * For split-layout cards (Rooms, etc.): index into the card's `cardFaces` of the face being
+   * cast. Required for SPLIT cards; null/omitted for normal single-face cards.
+   */
+  readonly faceIndex?: number | null
 }
 
 export type PaymentStrategy =
@@ -116,6 +144,8 @@ export interface ActivateAbilityAction {
   /** Number of times to repeat this activation (for batch activation) */
   readonly repeatCount?: number
   readonly paymentStrategy?: PaymentStrategy
+  /** Alternative payment choices (e.g., convoke for abilities like Heirloom Epic) */
+  readonly alternativePayment?: AlternativePaymentChoice
 }
 
 // =============================================================================
@@ -190,6 +220,9 @@ export interface DeclareAttackersAction {
   readonly type: 'DeclareAttackers'
   readonly playerId: EntityId
   readonly attackers: Record<EntityId, EntityId>  // attacker -> defending player
+  // Banding bands (CR 702.22): each set is one band of attacker IDs. Deserialized directly
+  // into the engine's DeclareAttackers.bands; omitted when no bands were formed.
+  readonly bands?: readonly (readonly EntityId[])[]
 }
 
 export interface DeclareBlockersAction {
@@ -208,20 +241,6 @@ export interface OrderBlockersAction {
 // =============================================================================
 // Decision Actions
 // =============================================================================
-
-export interface MakeChoiceAction {
-  readonly type: 'MakeChoice'
-  readonly playerId: EntityId
-  readonly decisionId: string
-  readonly choiceIndex: number
-}
-
-export interface SelectTargetsAction {
-  readonly type: 'SelectTargets'
-  readonly playerId: EntityId
-  readonly abilityEntityId: EntityId
-  readonly targets: readonly ChosenTarget[]
-}
 
 export interface ChooseManaColorAction {
   readonly type: 'ChooseManaColor'
@@ -260,6 +279,23 @@ export interface BottomCardsAction {
   readonly type: 'BottomCards'
   readonly playerId: EntityId
   readonly cardIds: readonly EntityId[]
+}
+
+// =============================================================================
+// Room Actions (CR 709.5e — special action, not the stack)
+// =============================================================================
+
+export interface UnlockRoomDoorAction {
+  readonly type: 'UnlockRoomDoor'
+  readonly playerId: EntityId
+  readonly roomId: EntityId
+  /**
+   * Face id of the locked door being unlocked. Backend `RoomFaceId` is a `@JvmInline value class`
+   * around a String, so kotlinx-serialization encodes it transparently as a JSON string.
+   * Currently the face's printed name (e.g., "Ritual Chamber").
+   */
+  readonly faceId: string
+  readonly paymentStrategy?: PaymentStrategy
 }
 
 // =============================================================================
@@ -305,12 +341,16 @@ export function getActionSubject(action: GameAction): EntityId | null {
       return action.cardId
     case 'TypecycleCard':
       return action.cardId
+    case 'PlotCard':
+      return action.cardId
     case 'ActivateAbility':
       return action.sourceId
     case 'TurnFaceUp':
       return action.sourceId
     case 'CrewVehicle':
       return action.vehicleId
+    case 'UnlockRoomDoor':
+      return action.roomId
     default:
       return null
   }
