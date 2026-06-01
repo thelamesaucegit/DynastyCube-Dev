@@ -50,36 +50,42 @@ export default function HomePage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      // --- FIX: Step 1 - Fetch the season first to determine the phase ---
+      // Step 1: Fetch the essential season data first.
       const seasonResult = await getCurrentSeason();
-      setSeason(seasonResult.season);
-      const currentPhase = seasonResult.season?.status;
+      const currentSeason = seasonResult.season;
+      setSeason(currentSeason);
+      const currentPhase = currentSeason?.status;
 
-      // --- FIX: Step 2 - Conditionally build the list of promises ---
-      const dataPromises = [
+      // Step 2: Conditionally fetch draft and live match data based on the phase.
+      let draftSessionPromise = Promise.resolve({ session: null });
+      if (currentPhase === 'draft') {
+        draftSessionPromise = getActiveDraftSession();
+      }
+
+      let liveMatchPromise = Promise.resolve({ match: null });
+      const isActivePlayPhase = currentPhase && currentPhase !== 'offseason' && currentPhase !== 'draft';
+      if (isActivePlayPhase) {
+        liveMatchPromise = getLatestStreamMatch();
+      }
+      
+      // Step 3: Fetch all remaining data in parallel, including the conditional promises.
+      const [
+        teamsResult, 
+        newsResult, 
+        picksResult, 
+        timerResult, 
+        draftSessionResult, 
+        streamResult
+      ] = await Promise.all([
         getTeamsWithDetails(),
         getAdminNews(3),
         getRecentDraftPicks(20),
         getActiveCountdownTimer(),
-      ];
-
-      // Only check for a draft session if the phase is 'draft'
-      if (currentPhase === 'draft') {
-        dataPromises.push(getActiveDraftSession());
-      } else {
-        dataPromises.push(Promise.resolve({ session: null })); // Placeholder
-      }
-
-      // Only check for a live stream if the season is active (not offseason or draft)
-      const isActivePlayPhase = currentPhase && currentPhase !== 'offseason' && currentPhase !== 'draft';
-      if (isActivePlayPhase) {
-        dataPromises.push(getLatestStreamMatch());
-      } else {
-        dataPromises.push(Promise.resolve({ match: null })); // Placeholder
-      }
+        draftSessionPromise,
+        liveMatchPromise,
+      ]);
       
-      const [teamsResult, newsResult, picksResult, timerResult, draftSessionResult, streamResult] = await Promise.all(dataPromises);
-
+      // Step 4: Set state with all the fetched data.
       const activeTeamCount = teamsResult.teams?.filter(t => !t.is_hidden).length || 8;
       setAdminNews(newsResult.news);
       setRecentPicks(picksResult.picks.slice(0, activeTeamCount));
