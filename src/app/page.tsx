@@ -23,9 +23,10 @@ import {
   type CurrentSeason,
   type AdminNews,
   type CountdownTimer as CountdownTimerType,
+  type ActiveDraftSession, // Import the specific type
 } from "@/app/actions/homeActions";
 import { getLatestStreamMatch, type StreamMatch } from "@/app/actions/liveStreamActions";
-import { getTeamsWithDetails } from "@/app/actions/teamActions";
+import { getTeamsWithDetails, type TeamWithDetails } from "@/app/actions/teamActions";
 
 function getRelativeTime(dateString: string): string {
   const date = new Date(dateString);
@@ -50,36 +51,45 @@ export default function HomePage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      // --- FIX: Step 1 - Fetch the season first to determine the phase ---
       const seasonResult = await getCurrentSeason();
-      setSeason(seasonResult.season);
-      const currentPhase = seasonResult.season?.status;
+      const currentSeason = seasonResult.season;
+      setSeason(currentSeason);
+      const currentPhase = currentSeason?.status;
 
-      // --- FIX: Step 2 - Conditionally build the list of promises ---
-      const dataPromises = [
+      // --- THIS IS THE FIX ---
+      // Explicitly declare the types of the promise variables before the if/else blocks.
+      let draftSessionPromise: ReturnType<typeof getActiveDraftSession>;
+      let liveMatchPromise: ReturnType<typeof getLatestStreamMatch>;
+
+      if (currentPhase === 'draft') {
+        draftSessionPromise = getActiveDraftSession();
+      } else {
+        draftSessionPromise = Promise.resolve({ session: null });
+      }
+
+      const isActivePlayPhase = currentPhase && currentPhase !== 'offseason' && currentPhase !== 'draft';
+      if (isActivePlayPhase) {
+        liveMatchPromise = getLatestStreamMatch();
+      } else {
+        liveMatchPromise = Promise.resolve({ match: null });
+      }
+      
+      const [
+        teamsResult, 
+        newsResult, 
+        picksResult, 
+        timerResult, 
+        draftSessionResult, 
+        streamResult
+      ] = await Promise.all([
         getTeamsWithDetails(),
         getAdminNews(3),
         getRecentDraftPicks(20),
         getActiveCountdownTimer(),
-      ];
-
-      // Only check for a draft session if the phase is 'draft'
-      if (currentPhase === 'draft') {
-        dataPromises.push(getActiveDraftSession());
-      } else {
-        dataPromises.push(Promise.resolve({ session: null })); // Placeholder
-      }
-
-      // Only check for a live stream if the season is active (not offseason or draft)
-      const isActivePlayPhase = currentPhase && currentPhase !== 'offseason' && currentPhase !== 'draft';
-      if (isActivePlayPhase) {
-        dataPromises.push(getLatestStreamMatch());
-      } else {
-        dataPromises.push(Promise.resolve({ match: null })); // Placeholder
-      }
+        draftSessionPromise,
+        liveMatchPromise,
+      ]);
       
-      const [teamsResult, newsResult, picksResult, timerResult, draftSessionResult, streamResult] = await Promise.all(dataPromises);
-
       const activeTeamCount = teamsResult.teams?.filter(t => !t.is_hidden).length || 8;
       setAdminNews(newsResult.news);
       setRecentPicks(picksResult.picks.slice(0, activeTeamCount));
@@ -123,7 +133,6 @@ export default function HomePage() {
 
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8 space-y-12">
-      
       <section className="relative overflow-hidden rounded-2xl min-h-[200px] flex flex-col justify-center border border-border/50 shadow-md">
         <div
           className="absolute inset-0"
@@ -161,7 +170,6 @@ export default function HomePage() {
               A collaborative, living draft league where teams compete, evolve, and shape the fate of the multiverse.
             </p>
           </div>
-          
           <div className="flex flex-row items-center gap-3 flex-shrink-0 w-full lg:w-auto">
             <Button size="lg" className="shadow-lg flex-1 lg:flex-none lg:w-48" asChild>
               <Link href="/about">
@@ -179,7 +187,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* --- FIX: Only render the LiveStreamWidget if a match exists AND the season is in an active play phase --- */}
       {isPlayActive && liveMatch && <LiveStreamWidget initialMatch={liveMatch} onStreamEnd={loadData} />}
       
       <section className="space-y-4">
@@ -195,22 +202,15 @@ export default function HomePage() {
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2 mb-2">
                   <Badge>Latest</Badge>
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(adminNews[0].created_at).toLocaleDateString()}
-                  </span>
+                  <span className="text-xs text-muted-foreground">{new Date(adminNews[0].created_at).toLocaleDateString()}</span>
                 </div>
-                <CardTitle className="text-2xl md:text-3xl">
-                  {adminNews[0].title}
-                </CardTitle>
+                <CardTitle className="text-2xl md:text-3xl">{adminNews[0].title}</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="leading-relaxed whitespace-pre-line text-muted-foreground line-clamp-3">
-                  {adminNews[0].content}
-                </p>
+                <p className="leading-relaxed whitespace-pre-line text-muted-foreground line-clamp-3">{adminNews[0].content}</p>
                 <p className="text-xs text-muted-foreground mt-4 font-medium">{adminNews[0].author_name}</p>
               </CardContent>
             </Card>
-
             {adminNews.length > 1 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {adminNews.slice(1).map((item) => (
@@ -218,16 +218,12 @@ export default function HomePage() {
                     <CardHeader className="pb-2">
                       <div className="flex items-center gap-2 mb-1">
                         <Badge variant="outline">News</Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(item.created_at).toLocaleDateString()}
-                        </span>
+                        <span className="text-xs text-muted-foreground">{new Date(item.created_at).toLocaleDateString()}</span>
                       </div>
                       <CardTitle className="text-lg line-clamp-2">{item.title}</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-sm text-muted-foreground line-clamp-2">
-                        {item.content}
-                      </p>
+                      <p className="text-sm text-muted-foreground line-clamp-2">{item.content}</p>
                       <p className="text-xs text-muted-foreground mt-3">{item.author_name}</p>
                     </CardContent>
                   </Card>
@@ -237,25 +233,14 @@ export default function HomePage() {
           </div>
         ) : (
           <Card>
-            <CardContent className="p-8 text-center text-muted-foreground">
-              No news available yet. Check back soon!
-            </CardContent>
+            <CardContent className="p-8 text-center text-muted-foreground">No news available yet. Check back soon!</CardContent>
           </Card>
         )}
       </section>
 
-      {countdownTimer && (
-        <CountdownTimer
-          title={countdownTimer.title}
-          endTime={countdownTimer.end_time}
-          linkUrl={countdownTimer.link_url}
-          linkText={countdownTimer.link_text}
-        />
-      )}
+      {countdownTimer && ( <CountdownTimer title={countdownTimer.title} endTime={countdownTimer.end_time} linkUrl={countdownTimer.link_url} linkText={countdownTimer.link_text}/>)}
       
-      {season?.status === 'draft' && (
-        <DraftStatusWidget variant="full" />
-      )}
+      {season?.status === 'draft' && (<DraftStatusWidget variant="full" />)}
       
       <section className="max-w-5xl mx-auto w-full space-y-4">
         <div className="flex items-center justify-between">
@@ -273,23 +258,11 @@ export default function HomePage() {
                     <div className="p-4 hover:bg-accent/50 transition-colors cursor-pointer border-b border-border/50 last:border-0">
                       <div className="flex items-center justify-between">
                         <div className="flex-1 flex items-center gap-4">
-                          {pick.image_url && (
-                            <Image 
-                              src={pick.image_url} 
-                              alt={pick.card_name} 
-                              width={40} 
-                              height={56} 
-                              className="rounded-sm object-cover shadow-sm hidden sm:block"
-                            />
-                          )}
+                          {pick.image_url && (<Image src={pick.image_url} alt={pick.card_name} width={40} height={56} className="rounded-sm object-cover shadow-sm hidden sm:block"/>)}
                           <div>
                             <div className="flex items-center gap-2 mb-1">
                               <span className="font-semibold text-lg">{pick.card_name}</span>
-                              {pick.card_type && (
-                                <Badge variant="secondary" className="text-[10px]">
-                                  {pick.card_type}
-                                </Badge>
-                              )}
+                              {pick.card_type && (<Badge variant="secondary" className="text-[10px]">{pick.card_type}</Badge>)}
                             </div>
                             <p className="text-sm text-muted-foreground flex items-center gap-1.5">
                               <span className="text-lg">{pick.team_emoji}</span>
@@ -298,18 +271,14 @@ export default function HomePage() {
                             </p>
                           </div>
                         </div>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap ml-4 font-medium bg-muted/50 px-2 py-1 rounded-full">
-                          {getRelativeTime(pick.drafted_at)}
-                        </span>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap ml-4 font-medium bg-muted/50 px-2 py-1 rounded-full">{getRelativeTime(pick.drafted_at)}</span>
                       </div>
                     </div>
                   </CardPreview>
                 ))}
               </div>
             ) : (
-              <div className="p-12 text-center text-muted-foreground">
-                No draft picks yet. Check back once the draft begins!
-              </div>
+              <div className="p-12 text-center text-muted-foreground">No draft picks yet. Check back once the draft begins!</div>
             )}
           </CardContent>
         </Card>
