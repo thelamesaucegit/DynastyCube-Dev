@@ -5,32 +5,40 @@
  */
 import React from 'react';
 
+// --- THIS IS THE FIX ---
+
+// 1. Define the specific shape of the module we expect Webpack to return for our SVGs.
+// It's an object with a 'default' property that holds the URL string.
+type SvgModule = {
+  default: string;
+};
+
+// 2. Define a type-safe interface for Webpack's require.context function.
+// This tells TypeScript what the function and its return value look like.
 interface WebpackRequireContext {
   keys(): string[];
-  (id: string): any; // It's safe to use 'any' here as we process the result immediately
+  (id: string): SvgModule; // It will return our defined module shape.
 }
 
-
-function requireAll(requireContext: WebpackRequireContext) {
+function requireAll(requireContext: WebpackRequireContext): SvgModule[] {
   return requireContext.keys().map(requireContext);
 }
 
-// Dynamically import all SVGs from the mana and actions folders
-const manaSvgs = requireAll(require.context('../../assets/symbols/mana/', false, /\.svg$/));
-const actionSvgs = requireAll(require.context('../../assets/symbols/actions/', false, /\.svg$/));
+// 3. Use these type-safe functions to import and process the modules.
+const manaSvgs = requireAll(require.context('../../assets/symbols/mana', false, /\.svg$/));
+const actionSvgs = requireAll(require.context('../../assets/symbols/actions', false, /\.svg$/));
 
-// Build a lookup map: symbol key -> resolved URL
 const SYMBOL_URLS: Record<string, string> = {};
 
-// The 'modules' parameter is correctly typed as 'any[]' because requireAll returns 'any[]'
-function processModules(modules: any[]) {
+// The 'modules' parameter is now strongly typed as SvgModule[]
+function processModules(modules: SvgModule[]) {
     for (const mod of modules) {
-        const url = mod.default || mod; // Handle different module export structures
-        if (typeof url === 'string') {
-            const match = url.match(/\/(\w+)\.svg/);
-            if (match?.[1]) {
-                SYMBOL_URLS[match[1].toUpperCase()] = url;
-            }
+        // We know 'mod.default' is a string because of our SvgModule type
+        const url = mod.default; 
+        const match = url.match(/\/(\w+)\.svg/);
+        if (match?.[1]) {
+            // The symbol name (e.g., "W", "U", "TAP") is the first capture group
+            SYMBOL_URLS[match[1].toUpperCase()] = url;
         }
     }
 }
