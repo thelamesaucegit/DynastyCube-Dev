@@ -7,7 +7,7 @@ import { GameBoard } from '../game/GameBoard'
 import { CombatArrows } from '../combat/CombatArrows'
 import type { SpectatingState } from '@/store/slices'
 import { reconstructSnapshots, type ReplayData } from '@/replay/reconstructSnapshots'
-import type { ClientGameState, ClientPlayer, ClientCard, ClientZone } from '@/types'; 
+import type { ClientGameState, ClientPlayer, ClientCard, ClientZone, EntityId } from '@/types'; 
 import { ZoneType } from '@/types/enums';
 import { useResponsive, ResponsiveContext } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
@@ -31,15 +31,15 @@ export interface GameSummary {
 export interface SpectatorStateUpdate {
   gameSessionId: string
   gameState: Partial<ClientGameState> 
-  player1Id: string | null
-  player2Id: string | null
+  player1Id: EntityId | null
+  player2Id: EntityId | null
   player1Name: string | null
   player2Name: string | null
   player1: unknown
   player2: unknown
   currentPhase: string
-  activePlayerId: string | null
-  priorityPlayerId: string | null
+  activePlayerId: EntityId | null
+  priorityPlayerId: EntityId | null
   combat: unknown
   decisionStatus: unknown
 }
@@ -360,36 +360,28 @@ function ReplayView({
   onBack: () => void
 }) {
 
-  const zoneRowCounts = useMemo(() => {
-    if (!snapshot) return [0, 0, 0, 0];
-    
-    const gameState = snapshot.gameState as Partial<ClientGameState>;
-    const { player1Id, player2Id } = snapshot;
-
-    const getRowCount = (playerId: ClientPlayer['playerId'] | null, isCreatureRow: boolean) => {
-      if (!gameState?.zones || !gameState?.cards) return 0;
-      
-      const zones = gameState.zones as ClientZone[];
-      const cards = gameState.cards as Record<string, ClientCard>;
-      
-      const zone = zones.find(z => z.zoneId.ownerId === playerId && z.zoneId.zoneType === ZoneType.BATTLEFIELD);
-      if (!zone) return 0;
-
-      return zone.cardIds
-        .map(id => cards[id])
-        .filter((c): c is ClientCard => !!c && !c.attachedTo)
-        .filter(c => {
-          const isCreatureOrPW = c.cardTypes.includes('CREATURE') || c.cardTypes.includes('PLANESWALKER');
-          return isCreatureRow ? isCreatureOrPW : !isCreatureOrPW;
+   const getRowCount = (playerId: ClientPlayer['playerId'] | null, isCreatureRow: boolean) => {
+        if (!gameState?.zones || !gameState?.cards) return 0;
+        const zones = gameState.zones as ClientZone[];
+        const cards = gameState.cards as Record<string, ClientCard>;
+        const zone = zones.find(z => z.zoneId.ownerId === playerId && z.zoneId.zoneType === ZoneType.BATTLEFIELD);
+        if (!zone) return 0;
+        return zone.cardIds.map(id => cards[id]).filter((c): c is ClientCard => !!c && !c.attachedTo).filter(c => {
+            const isCreatureOrPW = c.cardTypes.includes('CREATURE') || c.cardTypes.includes('PLANESWALKER');
+            return isCreatureRow ? isCreatureOrPW : !isCreatureOrPW;
         }).length;
     };
+
     return [
+      // --- THIS IS THE FIX (Part 2) ---
+      // No longer need to cast to string, as the types now match correctly.
       getRowCount(player1Id, true), getRowCount(player1Id, false),
       getRowCount(player2Id, true), getRowCount(player2Id, false),
     ];
   }, [snapshot]);
 
   const responsiveSizes = useResponsive(HEADER_HEIGHT, zoneRowCounts);
+
 
  
   // Keyboard shortcuts
