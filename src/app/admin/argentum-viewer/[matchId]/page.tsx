@@ -14,47 +14,62 @@ import { produce } from 'immer';
 import { createClient } from '@supabase/supabase-js';
 import { ZoneType } from '@/types/enums';
 
-// This reconstruction logic is correct and remains unchanged.
 function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
     return (item as SpectatorStateDiff).isDiff === true;
 }
+
+// --- THIS IS THE FIX ---
+// The reconstruction logic is updated to handle readonly properties correctly.
 function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
     if (!rawStates || rawStates.length === 0) return [];
+    
     const reconstructed: SpectatorStateUpdate[] = [];
     let currentBlueprint: SpectatorStateUpdate | null = null;
+
     for (const item of rawStates) {
         if (isDiff(item)) {
             if (!currentBlueprint || reconstructed.length === 0) continue;
+            
             const previousState = reconstructed[reconstructed.length - 1];
+            
             const nextState = produce(previousState, draft => {
+                // Top-level properties can be mutated directly
                 if (item.combat !== undefined) draft.combat = JSON.parse(JSON.stringify(item.combat));
                 if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
-                if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId;
-                if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId;
+                if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId as EntityId | null;
+                if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId as EntityId | null;
+
                 if (item.gameState) {
                     const gsd = item.gameState;
-                    if (gsd.currentPhase !== undefined) (draft.gameState as ClientGameState).currentPhase = gsd.currentPhase;
-                    if (gsd.currentStep !== undefined) (draft.gameState as ClientGameState).currentStep = gsd.currentStep;
-                    if (gsd.activePlayerId !== undefined) (draft.gameState as ClientGameState).activePlayerId = gsd.activePlayerId as EntityId;
-                    if (gsd.priorityPlayerId !== undefined) (draft.gameState as ClientGameState).priorityPlayerId = gsd.priorityPlayerId as EntityId;
-                    if (gsd.turnNumber !== undefined) (draft.gameState as ClientGameState).turnNumber = gsd.turnNumber;
-                    if (gsd.isGameOver !== undefined) (draft.gameState as ClientGameState).isGameOver = gsd.isGameOver;
-                    if (gsd.winnerId !== undefined) (draft.gameState as ClientGameState).winnerId = gsd.winnerId as EntityId;
-                    if (gsd.combat !== undefined) (draft.gameState as ClientGameState).combat = JSON.parse(JSON.stringify(gsd.combat));
-                    if (gsd.gameLog && (draft.gameState as ClientGameState).gameLog) (draft.gameState as ClientGameState).gameLog.push(...JSON.parse(JSON.stringify(gsd.gameLog)));
-                    if (gsd.cards) Object.assign((draft.gameState as ClientGameState).cards, JSON.parse(JSON.stringify(gsd.cards)));
-                    if (gsd.players) {
-                        Object.values(gsd.players).forEach((p: ClientPlayer) => {
-                            const index = (draft.gameState as ClientGameState).players.findIndex((pl: ClientPlayer) => pl.playerId === p.playerId);
-                            if (index !== -1) (draft.gameState as ClientGameState).players[index] = JSON.parse(JSON.stringify(p));
-                        });
-                    }
-                    if (gsd.zones) {
-                        Object.values(gsd.zones).forEach((z: ClientZone) => {
-                            const index = (draft.gameState as ClientGameState).zones.findIndex((zn: ClientZone) => zn.zoneId.ownerId === z.zoneId.ownerId && zn.zoneId.zoneType === z.zoneId.zoneType);
-                            if (index !== -1) (draft.gameState as ClientGameState).zones[index] = JSON.parse(JSON.stringify(z));
-                        });
-                    }
+                    const prevGameState = draft.gameState as ClientGameState;
+
+                    // Instead of mutating readonly properties, create a new gameState object
+                    draft.gameState = {
+                        ...prevGameState,
+                        ...(gsd.currentPhase !== undefined && { currentPhase: gsd.currentPhase }),
+                        ...(gsd.currentStep !== undefined && { currentStep: gsd.currentStep }),
+                        ...(gsd.activePlayerId !== undefined && { activePlayerId: gsd.activePlayerId as EntityId }),
+                        ...(gsd.priorityPlayerId !== undefined && { priorityPlayerId: gsd.priorityPlayerId as EntityId }),
+                        ...(gsd.turnNumber !== undefined && { turnNumber: gsd.turnNumber }),
+                        ...(gsd.isGameOver !== undefined && { isGameOver: gsd.isGameOver }),
+                        ...(gsd.winnerId !== undefined && { winnerId: gsd.winnerId as EntityId | null }),
+                        ...(gsd.combat !== undefined && { combat: JSON.parse(JSON.stringify(gsd.combat)) }),
+                        ...(gsd.gameLog && { gameLog: [...prevGameState.gameLog, ...JSON.parse(JSON.stringify(gsd.gameLog))] }),
+                        ...(gsd.cards && { cards: { ...prevGameState.cards, ...JSON.parse(JSON.stringify(gsd.cards)) } }),
+                        // For arrays of objects, we need to merge them carefully
+                        ...(gsd.players && { 
+                            players: prevGameState.players.map(p => {
+                                const updatedPlayer = (gsd.players as ClientPlayer[]).find(up => up.playerId === p.playerId);
+                                return updatedPlayer ? JSON.parse(JSON.stringify(updatedPlayer)) : p;
+                            })
+                        }),
+                        ...(gsd.zones && {
+                            zones: prevGameState.zones.map(z => {
+                                const updatedZone = (gsd.zones as ClientZone[]).find(uz => uz.zoneId.ownerId === z.zoneId.ownerId && uz.zoneId.zoneType === z.zoneId.zoneType);
+                                return updatedZone ? JSON.parse(JSON.stringify(updatedZone)) : z;
+                            })
+                        }),
+                    };
                 }
             });
             reconstructed.push(nextState);
@@ -65,6 +80,8 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     }
     return reconstructed;
 }
+// --- END OF FIX ---
+
 
 interface PageProps {
     params: Promise<{ matchId: string }>;
@@ -110,8 +127,9 @@ export default function ReplayPage(props: PageProps) {
                 
                 const allCardNames = new Set<string>();
                 validStates.forEach(state => {
-                    if ((state.gameState as ClientGameState).cards) {
-                        for (const card of Object.values((state.gameState as ClientGameState).cards)) {
+                    const gameState = state.gameState as Partial<ClientGameState>;
+                    if (gameState.cards) {
+                        for (const card of Object.values(gameState.cards)) {
                             if (card?.name) allCardNames.add(card.name);
                         }
                     }
@@ -139,9 +157,10 @@ export default function ReplayPage(props: PageProps) {
         if (!currentSnapshot) return [0, 0, 0, 0];
         const { gameState, player1Id, player2Id } = currentSnapshot;
         const getRowCount = (playerId: EntityId | null, isCreatureRow: boolean) => {
-            if (!gameState?.zones || !gameState?.cards) return 0;
-            const zones = gameState.zones as ClientZone[];
-            const cards = gameState.cards as Record<string, ClientCard>;
+            const gs = gameState as Partial<ClientGameState>;
+            if (!gs?.zones || !gs?.cards) return 0;
+            const zones = gs.zones as ClientZone[];
+            const cards = gs.cards as Record<string, ClientCard>;
             const zone = zones.find(z => z.zoneId.ownerId === playerId && z.zoneId.zoneType === ZoneType.BATTLEFIELD);
             if (!zone) return 0;
             return zone.cardIds.map(id => cards[id]).filter((c): c is ClientCard => !!c && !c.attachedTo).filter(c => {
