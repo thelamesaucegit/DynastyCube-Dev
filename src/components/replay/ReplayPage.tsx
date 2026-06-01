@@ -55,25 +55,37 @@ const router = useRouter()
   )
 const zoneRowCounts = useMemo(() => {
     if (!currentSnapshot) return [0, 0, 0, 0];
-    const { gameState, player1Id, player2Id } = currentSnapshot;
-    const getRowCount = (playerId: ClientPlayer['playerId'], isCreatureRow: boolean) => {
-      if (!gameState || !(gameState as any).zones) return 0;
-      const zones = (gameState as any).zones;
-      const cards = (gameState as any).cards;
-      const zone = zones.find((z: any) => z.zoneId.ownerId === playerId && z.zoneId.zoneType === ZoneType.BATTLEFIELD);
+    
+    // Cast gameState once to the type we know it is.
+    const gameState = currentSnapshot.gameState as Partial<ClientGameState>;
+    const { player1Id, player2Id } = currentSnapshot;
+
+    const getRowCount = (playerId: ClientPlayer['playerId'] | null, isCreatureRow: boolean) => {
+      if (!gameState?.zones || !gameState?.cards) return 0;
+      
+      const zones = gameState.zones as ClientZone[];
+      const cards = gameState.cards as Record<string, ClientCard>;
+      
+      const zone = zones.find(z => z.zoneId.ownerId === playerId && z.zoneId.zoneType === ZoneType.BATTLEFIELD);
       if (!zone) return 0;
-      return zone.cardIds.map((id: string) => cards[id]).filter((c: ClientCard) => !!c && !c.attachedTo).filter((c: ClientCard) => {
-        const isCreatureOrPW = c.cardTypes.includes('CREATURE') || c.cardTypes.includes('PLANESWALKER');
-        return isCreatureRow ? isCreatureOrPW : !isCreatureOrPW;
-      }).length;
+
+      return zone.cardIds
+        .map(id => cards[id])
+        .filter((c): c is ClientCard => !!c && !c.attachedTo)
+        .filter(c => {
+          const isCreatureOrPW = c.cardTypes.includes('CREATURE') || c.cardTypes.includes('PLANESWALKER');
+          return isCreatureRow ? isCreatureOrPW : !isCreatureOrPW;
+        }).length;
     };
+
     return [
-      getRowCount(player1Id as string, true), getRowCount(player1Id as string, false),
-      getRowCount(player2Id as string, true), getRowCount(player2Id as string, false),
+      getRowCount(player1Id, true), getRowCount(player1Id, false),
+      getRowCount(player2Id, true), getRowCount(player2Id, false),
     ];
   }, [currentSnapshot]);
 
   const responsiveSizes = useResponsive(HEADER_HEIGHT, zoneRowCounts);
+
  
   // Load replay on mount
   useEffect(() => {
