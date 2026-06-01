@@ -33,6 +33,8 @@ export function createDraftHandlers(set: SetState, _get: GetState): Pick<Message
             Forest: 0,
           },
           opponentReady: false,
+          llmHighlightedCards: null,
+          commander: null,
         },
       })
     },
@@ -66,6 +68,8 @@ export function createDraftHandlers(set: SetState, _get: GetState): Pick<Message
               Forest: 0,
             },
             opponentReady: state.deckBuildingState?.opponentReady ?? false,
+            llmHighlightedCards: state.deckBuildingState?.llmHighlightedCards ?? null,
+            commander: state.deckBuildingState?.commander ?? null,
           },
         }
       })
@@ -104,7 +108,8 @@ export function createDraftHandlers(set: SetState, _get: GetState): Pick<Message
                 timeRemaining: msg.timeRemainingSeconds,
                 passDirection: msg.passDirection,
                 picksPerRound: msg.picksPerRound,
-                waitingForPlayers: [],
+                queuedPacks: msg.queuedPacks ?? 0,
+                playerPackCounts: state.lobbyState.draftState?.playerPackCounts ?? {},
               },
             }
           : null,
@@ -116,7 +121,7 @@ export function createDraftHandlers(set: SetState, _get: GetState): Pick<Message
         lobbyState: state.lobbyState?.draftState
           ? {
               ...state.lobbyState,
-              draftState: { ...state.lobbyState.draftState, waitingForPlayers: msg.waitingForPlayers },
+              draftState: { ...state.lobbyState.draftState, playerPackCounts: msg.playerPackCounts },
             }
           : state.lobbyState,
       }))
@@ -161,6 +166,8 @@ export function createDraftHandlers(set: SetState, _get: GetState): Pick<Message
           deck: [],
           landCounts: { Plains: 0, Island: 0, Swamp: 0, Mountain: 0, Forest: 0 },
           opponentReady: false,
+          llmHighlightedCards: null,
+          commander: null,
         },
       }))
     },
