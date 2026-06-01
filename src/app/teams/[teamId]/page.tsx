@@ -76,6 +76,7 @@ export default function TeamPage() {
   const [cubucksRefreshKey, setCubucksRefreshKey] = useState(0);
   const [seasonPhase, setSeasonPhase] = useState<string | null>(null);
   const [togglingKeeper, setTogglingKeeper] = useState<string | null>(null);
+    const isFreeAgencyActive = seasonPhase === "season";
   const [draftPreview, setDraftPreview] = useState<AutoDraftPreviewResult | null>(null);
   const [activeDraftSessionId, setActiveDraftSessionId] = useState<string | null>(null);
   const [isVoting, setIsVoting] = useState(false);
