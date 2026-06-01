@@ -40,7 +40,9 @@ import { getCardImageUrl } from "@/app/utils/cardUtils";
 interface TeamMember {
   id: string;
   user_id: string;
+  team_id: string; // Add missing property
   user_display_name?: string;
+  user_email?: string | null; // Add missing property
   joined_at: string;
 }
 
@@ -131,12 +133,15 @@ export default function TeamPage() {
       const [picksResult, decksResult, rolesResult, membersResult, previewResult] = await Promise.all(dataPromises);
 
       // STEP 4: Set all state once data is fetched.
-      foundTeam.members = membersResult.members.map(m => ({ 
+       foundTeam.members = membersResult.members.map(m => ({ 
         id: m.member_id, 
-        user_id: m.user_id, 
-        user_display_name: m.user_display_name,
+        user_id: m.user_id,
+        team_id: m.team_id, // Pass through the team_id
+        user_email: m.user_email, // Pass through the user_email
+        user_display_name: m.user_display_name || undefined,
         joined_at: m.joined_at,
       }));
+
       setTeam(foundTeam);
       setDraftPicks(picksResult.picks);
       setDecks(decksResult.decks);
@@ -144,7 +149,6 @@ export default function TeamPage() {
       setMembersWithRoles(membersResult.members);
       setDraftPreview(previewResult);
 
-      // Determine default active tab
       const isMember = foundTeam.members?.some((m) => m.user_id === user?.id) || rolesResult.roles.length > 0;
       let defaultTab: TabType = "picks";
       if (currentPhase === "preseason" || currentPhase === "draft") {
@@ -158,7 +162,7 @@ export default function TeamPage() {
 
     } catch (error) {
       console.error("[TeamPage] Critical error loading team data:", error);
-      setTeam(null); // Ensure team is cleared on error
+      setTeam(null);
     } finally {
       setLoading(false);
     }
