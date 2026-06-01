@@ -3,6 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link'; // Import the Link component
 import { getDraftStatus, type DraftStatus } from "@/app/actions/draftOrderActions";
 import { getTeamDraftPicks } from "@/app/actions/draftActions";
@@ -29,24 +30,36 @@ export function DraftStatusWidget({ variant, teamId }: DraftStatusWidgetProps) {
   
   const prevStatusRef = useRef<DraftStatus | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  
   const [recentPick, setRecentPick] = useState<RecentPickData | null>(null);
 
   useEffect(() => {
+    const supabase = createClient();
+    
     const loadStatus = async () => {
       try {
-        const sessionResult = await getActiveDraftSession();
-        const activeSession = sessionResult.session;
-        setSession(activeSession); // Set session state regardless of status
+        // --- THIS IS THE FIX ---
+        // Use a minimal, client-side query instead of the server action.
+        // This is much faster and avoids the 406 error from the server action's header handling.
+        const { data: activeSession, error: sessionError } = await supabase
+          .from("draft_sessions")
+          .select("id, status, start_time, total_rounds, hours_per_pick, current_pick_deadline")
+          .in("status", ["active", "paused", "scheduled"])
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(); // Use maybeSingle to prevent errors if no session is found.
 
-        // *** NEW LOGIC: Handle 'completed' state upfront ***
+        if (sessionError) {
+          throw sessionError;
+        }
+
+        setSession(activeSession);
+
         if (activeSession?.status === 'completed') {
-          setStatus(null); // No need to fetch draft status if completed
+          setStatus(null);
           setLoading(false);
           return;
         }
-
-        // Only fetch status if the session is active, scheduled, or paused
+        
         if (activeSession) {
             const statusResult = await getDraftStatus(activeSession.id);
             const newStatus = statusResult.status;
@@ -74,18 +87,17 @@ export function DraftStatusWidget({ variant, teamId }: DraftStatusWidgetProps) {
         } else {
             setStatus(null);
         }
-
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        if (msg.includes("Failed to find Server Action")) window.location.reload();
-        else console.error("Error loading draft status:", error);
+        console.error("Error loading draft status widget data:", error);
+        setStatus(null); // Clear status on error to prevent stale data display
       } finally {
         setLoading(false);
       }
     };
 
-    loadStatus();
-    const interval = setInterval(loadStatus, 10000);
+    loadStatus(); // Initial load
+    const interval = setInterval(loadStatus, 15000); // Polling interval set to 15 seconds
+
     return () => {
       clearInterval(interval);
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -94,22 +106,18 @@ export function DraftStatusWidget({ variant, teamId }: DraftStatusWidgetProps) {
 
   if (loading) return null;
 
-  // *** NEW RENDER LOGIC ***
   if (session?.status === "completed") {
-    // Pass the session ID to the completed widget
     return <CompletedWidget sessionId={session.id} />;
   }
 
   if (session?.status === "scheduled") {
-    return <ScheduledWidget session={session} />;
+    return <ScheduledWidget session={session as DraftSession} />;
   }
-
-  // If there's no session and no status, render nothing
+  
   if (!status) {
     return null;
   }
 
-  // Render the appropriate widget based on variant
   if (variant === "full") return <FullWidget status={status} session={session} recentPick={recentPick} />;
   if (variant === "compact") return <CompactWidget status={status} session={session} recentPick={recentPick} />;
   return <TeamWidget status={status} session={session} teamId={teamId || ""} recentPick={recentPick} />;
