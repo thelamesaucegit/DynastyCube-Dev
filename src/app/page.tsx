@@ -1,4 +1,5 @@
 // src/app/page.tsx
+
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
@@ -11,7 +12,7 @@ import { ArrowRight, Info } from "lucide-react";
 import CountdownTimer from "@/app/components/CountdownTimer";
 import { DraftStatusWidget } from "@/app/components/DraftStatusWidget";
 import { CardPreview } from "@/app/components/CardPreview";
-import { LiveStreamWidget } from "@/app/components/LiveStreamWidget"; // <-- IMPORT NEW WIDGET
+import { LiveStreamWidget } from "@/app/components/LiveStreamWidget";
 import {
   getRecentDraftPicks,
   getCurrentSeason,
@@ -47,26 +48,45 @@ export default function HomePage() {
   const [bgPosition, setBgPosition] = useState({ x: 50, y: 50 });
 
   const loadData = useCallback(async () => {
-    // Only set loading to true on the initial load
-    setLoading(prev => !prev);
+    setLoading(true);
     try {
-      const [teamsResult, seasonResult, newsResult, picksResult, timerResult, draftSessionResult, streamResult] = await Promise.all([
+      // --- FIX: Step 1 - Fetch the season first to determine the phase ---
+      const seasonResult = await getCurrentSeason();
+      setSeason(seasonResult.season);
+      const currentPhase = seasonResult.season?.status;
+
+      // --- FIX: Step 2 - Conditionally build the list of promises ---
+      const dataPromises = [
         getTeamsWithDetails(),
-        getCurrentSeason(),
         getAdminNews(3),
         getRecentDraftPicks(20),
         getActiveCountdownTimer(),
-        getActiveDraftSession(),
-        getLatestStreamMatch(),
-      ]);
+      ];
+
+      // Only check for a draft session if the phase is 'draft'
+      if (currentPhase === 'draft') {
+        dataPromises.push(getActiveDraftSession());
+      } else {
+        dataPromises.push(Promise.resolve({ session: null })); // Placeholder
+      }
+
+      // Only check for a live stream if the season is active (not offseason or draft)
+      const isActivePlayPhase = currentPhase && currentPhase !== 'offseason' && currentPhase !== 'draft';
+      if (isActivePlayPhase) {
+        dataPromises.push(getLatestStreamMatch());
+      } else {
+        dataPromises.push(Promise.resolve({ match: null })); // Placeholder
+      }
       
+      const [teamsResult, newsResult, picksResult, timerResult, draftSessionResult, streamResult] = await Promise.all(dataPromises);
+
       const activeTeamCount = teamsResult.teams?.filter(t => !t.is_hidden).length || 8;
-      setSeason(seasonResult.season);
       setAdminNews(newsResult.news);
       setRecentPicks(picksResult.picks.slice(0, activeTeamCount));
       setCountdownTimer(timerResult.timer);
       setDraftSessionId(draftSessionResult.session?.id || null);
       setLiveMatch(streamResult.match);
+
     } catch (error) {
       console.error("Error loading home page data:", error);
     } finally {
@@ -76,14 +96,18 @@ export default function HomePage() {
 
   useEffect(() => {
     loadData();
+  }, [loadData]);
+
+  useEffect(() => {
     const moveBackground = () => setBgPosition({ x: Math.floor(Math.random() * 100), y: Math.floor(Math.random() * 100) });
     const initialTimeout = setTimeout(moveBackground, 100);
     const panInterval = setInterval(moveBackground, 60000);
+    
     return () => {
       clearTimeout(initialTimeout);
       clearInterval(panInterval);
     };
-  }, [loadData]);
+  }, []);
 
   if (loading) {
     return (
@@ -95,12 +119,11 @@ export default function HomePage() {
   }
 
   const liveDraftLink = draftSessionId ? `/draft/${draftSessionId}/live` : "#";
-
+  const isPlayActive = season?.status && season.status !== 'offseason' && season.status !== 'draft';
 
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8 space-y-12">
       
-      {/* Hero Section (Slimmed Down) */}
       <section className="relative overflow-hidden rounded-2xl min-h-[200px] flex flex-col justify-center border border-border/50 shadow-md">
         <div
           className="absolute inset-0"
@@ -137,10 +160,8 @@ export default function HomePage() {
             <p className="text-base md:text-lg text-zinc-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] font-medium leading-relaxed">
               A collaborative, living draft league where teams compete, evolve, and shape the fate of the multiverse.
             </p>
-
           </div>
           
-          {/* FIX: Side-by-side buttons with aligned icons */}
           <div className="flex flex-row items-center gap-3 flex-shrink-0 w-full lg:w-auto">
             <Button size="lg" className="shadow-lg flex-1 lg:flex-none lg:w-48" asChild>
               <Link href="/about">
@@ -157,11 +178,10 @@ export default function HomePage() {
           </div>
         </div>
       </section>
-            {liveMatch && <LiveStreamWidget initialMatch={liveMatch} onStreamEnd={loadData} />}
 
+      {/* --- FIX: Only render the LiveStreamWidget if a match exists AND the season is in an active play phase --- */}
+      {isPlayActive && liveMatch && <LiveStreamWidget initialMatch={liveMatch} onStreamEnd={loadData} />}
       
-
-     {/* Latest News (Full Width natively) */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">Latest News</h2>
@@ -169,10 +189,8 @@ export default function HomePage() {
             <Link href="/news">View All</Link>
           </Button>
         </div>
-
         {adminNews.length > 0 ? (
           <div className="space-y-6">
-            {/* Featured Post (first item, full width!) */}
             <Card className="overflow-hidden hover:shadow-lg transition-shadow">
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2 mb-2">
@@ -193,7 +211,6 @@ export default function HomePage() {
               </CardContent>
             </Card>
 
-            {/* Remaining posts in grid */}
             {adminNews.length > 1 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {adminNews.slice(1).map((item) => (
@@ -227,7 +244,6 @@ export default function HomePage() {
         )}
       </section>
 
-      {/* Countdown Timer */}
       {countdownTimer && (
         <CountdownTimer
           title={countdownTimer.title}
@@ -236,12 +252,11 @@ export default function HomePage() {
           linkText={countdownTimer.link_text}
         />
       )}
-
- {/* Only render the DraftStatusWidget if the current season phase is 'draft' */}
+      
       {season?.status === 'draft' && (
         <DraftStatusWidget variant="full" />
       )}
-      {/* Recent Draft Picks (Shrunk to max-w-5xl to be 80% width and centered) */}
+      
       <section className="max-w-5xl mx-auto w-full space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">Recent Draft Picks</h2>
@@ -299,7 +314,6 @@ export default function HomePage() {
           </CardContent>
         </Card>
       </section>
-
     </div>
   );
 }
