@@ -45,8 +45,8 @@ export interface DraftSession {
   created_at: string;
   updated_at: string;
   autodraft_next_pick_at: string;
-  // This column should have been added via SQL
-  consecutive_skipped_picks?: number; 
+  consecutive_skipped_picks?: number;
+    locked_at?: string;
 }
 
 export interface DraftSessionWithStatus extends DraftSession {

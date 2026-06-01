@@ -2,17 +2,17 @@
 
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
+import { Badge } from "@/app/components/ui/badge";
 import { Users, ArrowRight } from "lucide-react";
 import { DraftStatusWidget, getTeamDraftBadge } from "@/app/components/DraftStatusWidget";
 import { getDraftStatus, type DraftStatus } from "@/app/actions/draftOrderActions";
 import { getTeamsWithDetails, type TeamWithDetails } from "@/app/actions/teamActions";
 import { getCurrentSeason } from "@/app/actions/seasonPhaseActions";
-import { getActiveDraftSession } from "@/app/actions/draftSessionActions"; // Import the action
 
 export default function TeamsPage() {
   const [teams, setTeams] = useState<TeamWithDetails[]>([]);
@@ -20,68 +20,50 @@ export default function TeamsPage() {
   const [draftStatus, setDraftStatus] = useState<DraftStatus | null>(null);
   const [seasonPhase, setSeasonPhase] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchAllData = async () => {
-      setLoading(true);
-      try {
-        // Fetch all data in parallel
-        const [teamsResult, seasonResult, sessionResult] = await Promise.all([
-          getTeamsWithDetails(),
-          getCurrentSeason(),
-          getActiveDraftSession(), // Fetch the active session
-        ]);
+  // This useCallback is important to prevent re-creating the function on every render
+  const fetchPageData = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Fetch only the necessary data in parallel
+      const [teamsResult, seasonResult] = await Promise.all([
+        getTeamsWithDetails(),
+        getCurrentSeason(),
+      ]);
+
+      if (teamsResult.teams) {
+        const sortedTeams = teamsResult.teams.sort((a, b) => a.name.localeCompare(b.name));
+        setTeams(sortedTeams);
+      }
+      
+      if (seasonResult.season) {
+        const phase = seasonResult.season.phase;
+        setSeasonPhase(phase);
         
-        // Process teams
-        if (teamsResult.teams) {
-          const sortedTeams = teamsResult.teams.sort((a, b) => a.name.localeCompare(b.name));
-          setTeams(sortedTeams);
-        }
-        
-        // Process season
-        if (seasonResult.season) {
-          setSeasonPhase(seasonResult.season.phase);
-        }
-        
-        // THIS IS THE FIX: Use the session ID to get the correct draft status
-        const sessionId = sessionResult.session?.id;
-        if (sessionId) {
-          const draftStatusResult = await getDraftStatus(sessionId);
+        // Only fetch draft status if the season is in the draft phase
+        if (phase === 'draft') {
+          // The DraftStatusWidget will handle its own data fetching, but we can get an initial state
+          // to avoid layout shifts. We use the more direct getDraftStatus action.
+          const draftStatusResult = await getDraftStatus();
           if (draftStatusResult.status) {
             setDraftStatus(draftStatusResult.status);
           }
         } else {
-          // Handle case where there is no active draft
-          const draftStatusResult = await getDraftStatus();
-           if (draftStatusResult.status) {
-            setDraftStatus(draftStatusResult.status);
-          }
+          setDraftStatus(null); // Ensure draft status is cleared outside of draft phase
         }
-
-      } catch (error) {
-        console.error("Failed to load page data:", error);
-      } finally {
-        setLoading(false);
       }
-    };
-
-    fetchAllData();
-
-    // Set up polling for draft status
-    const intervalId = setInterval(async () => {
-      try {
-        const sessionResult = await getActiveDraftSession();
-        const sessionId = sessionResult.session?.id;
-        const draftStatusResult = await getDraftStatus(sessionId);
-        if (draftStatusResult.status) {
-          setDraftStatus(draftStatusResult.status);
-        }
-      } catch (error) {
-        console.error("Failed to refresh draft status:", error);
-      }
-    }, 15000);
-
-    return () => clearInterval(intervalId);
+    } catch (error) {
+      console.error("Failed to load page data:", error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchPageData();
+    // THE POLLING LOGIC (setInterval) HAS BEEN COMPLETELY REMOVED.
+    // The DraftStatusWidget is now responsible for handling its own live updates.
+  }, [fetchPageData]);
+
 
   if (loading) {
     return (
@@ -91,8 +73,7 @@ export default function TeamsPage() {
     );
   }
 
-
-       return (
+  return (
     <div className="container max-w-7xl mx-auto px-4 py-8 space-y-8">
       <div className="flex items-center justify-between">
         <div>
@@ -105,14 +86,14 @@ export default function TeamsPage() {
         </div>
       </div>
       
-      <DraftStatusWidget variant="compact" />
+      {/* Conditionally render the DraftStatusWidget only during the draft phase */}
+      {seasonPhase === 'draft' && <DraftStatusWidget variant="compact" />}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
         {teams.map((team) => {
           const badge = getTeamDraftBadge(draftStatus, team.id);
           const primaryColor = team.primary_color || "#71717a";
           const secondaryColor = team.secondary_color || "#e4e4e7";
-
           return (
             <Link key={team.short_name} href={`/teams/${team.short_name}`}>
               <Card className={`group relative hover:shadow-xl hover:z-50 transition-all hover:-translate-y-1 cursor-pointer h-full flex flex-col ${
@@ -140,31 +121,23 @@ export default function TeamsPage() {
                     &ldquo;{team.motto}&rdquo;
                   </p>
                 </CardHeader>
-
                 <CardContent className="flex-grow flex flex-col w-full">
                   <div className="flex-grow flex flex-col items-center justify-center gap-4 mb-4 p-4 rounded-lg bg-muted/30 w-full border border-border/50">
-                    
-                      {/* Record Display with Hover Detail */}
                     <div className="text-center w-full group/record relative">
                         <p className="text-xs font-semibold text-muted-foreground tracking-wider mb-1 sm:cursor-help">RECORD</p>
                         <p className="text-xl font-bold sm:cursor-help">{Math.floor(team.wins)} - {Math.floor(team.losses)}</p>
                         
-                        {/* MOBILE ONLY: Inline game record */}
                         <p className="text-[10px] text-muted-foreground mt-1 sm:hidden">
                           ({team.game_wins}W - {team.game_losses}L games)
                         </p>
-
-                        {/* DESKTOP ONLY: Styled tooltip overlay */}
                         <div className="hidden sm:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover text-popover-foreground text-xs rounded shadow-xl border opacity-0 group-hover/record:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
                             <p className="font-bold border-b border-border mb-1">Tiebreaker Detail</p>
                             <p>{team.game_wins}W - {team.game_losses}L in Individual Games</p>
                         </div>
                     </div>
-
                     {seasonPhase === "draft" && (
                       <div className="text-center border-t border-border/50 pt-4 w-full">
                         <p className="text-xs font-semibold text-muted-foreground tracking-wider mb-2">LAST PICK</p>
-                        
                         {team.last_pick?.image_url ? (
                           <div className="relative size-12 mx-auto group/pick">
                             <Image
@@ -190,7 +163,6 @@ export default function TeamsPage() {
                       </div>
                     )}
                   </div>
-
                   <Button variant="outline" className="w-full mt-auto" tabIndex={-1}>
                     View Team Profile
                     <ArrowRight className="ml-2 size-4" />
