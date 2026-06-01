@@ -15,7 +15,7 @@ import { getCurrentSeason } from "@/app/actions/seasonPhaseActions";
 import { getActiveDraftSession } from "@/app/actions/draftSessionActions";
 import { getAutoDraftPreview, toggleQueuePickVote, type AutoDraftPreviewResult } from "@/app/actions/autoDraftActions";
 import { getCurrentUserRolesForTeam, getTeamMembersWithRoles, type TeamMemberWithRoles } from "@/app/actions/roleActions";
-
+import { getRoleEmoji, getRoleDisplayName } from "@/app/utils/roleUtils";
 import { DraftInterface } from "@/app/components/DraftInterface";
 import { DeckBuilder } from "@/app/components/DeckBuilder";
 import { CardPreview } from "@/app/components/CardPreview";
