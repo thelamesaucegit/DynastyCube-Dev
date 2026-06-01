@@ -21,10 +21,9 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap, currentIn
     const [playbackSpeed, setPlaybackSpeed] = useState<1 | 2 | 4 >(1);
     const totalStates = initialGameStates.length;
     
-    // The component now receives the current snapshot directly
     const currentSnapshot = useMemo(() => initialGameStates[currentIndex], [currentIndex, initialGameStates]);
 
-    // The responsive logic has been moved to the parent page component.
+    // Responsive logic has been moved to the parent page component.
     
     useEffect(() => {
         if (!isPlaying) return;
@@ -32,7 +31,7 @@ export function ArgentumReplayPlayer({ initialGameStates, cardDataMap, currentIn
         const currentDelay = baseDelay / playbackSpeed;
         const interval = setInterval(() => {
             if (currentIndex < totalStates - 1) {
-                onIndexChange(currentIndex + 1); // Use the callback to update state
+                onIndexChange(currentIndex + 1); // Use the callback to update state in the parent
             } else {
                 setIsPlaying(false);
             }
