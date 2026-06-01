@@ -1,3 +1,5 @@
+// src/store/slices/connectionSlice.ts
+
 /**
  * Connection slice - handles WebSocket connection state and authentication.
  */
@@ -63,17 +65,16 @@ export const createConnectionSlice: SliceCreator<ConnectionSlice> = (set, get) =
 
     // Build message handlers from the full store
     const handlers = createMessageHandlers(set, get)
-    const wrappedHandlers = import.meta.env.DEV
-      ? createLoggingHandlers(handlers)
-      : handlers
 
+    // --- THIS IS THE FIX ---
+    // The conditional check for import.meta.env.DEV has been removed.
+    // We now always use the direct handlers, as the logging wrapper was for debugging.
     const ws = new GameWebSocket({
       url: getWebSocketUrl(),
-      onMessage: (msg) => handleServerMessage(msg, wrappedHandlers),
+      onMessage: (msg) => handleServerMessage(msg, handlers), // Use handlers directly
       onStatusChange: (status) => {
         set({ connectionStatus: status })
         if (status === 'connected' && getWebSocket()) {
-          // Check URL ?token= param first (for dev scenario links), then localStorage
           const urlToken = new URLSearchParams(window.location.search).get('token')
           if (urlToken) {
             localStorage.setItem('argentum-token', urlToken)
@@ -93,7 +94,6 @@ export const createConnectionSlice: SliceCreator<ConnectionSlice> = (set, get) =
         })
       },
     })
-
     setWebSocket(ws)
     ws.connect()
   },
