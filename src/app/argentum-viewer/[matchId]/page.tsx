@@ -1,4 +1,4 @@
-//src/app/argentum-viewer/[matchId]/page.tsx
+// src/app/argentum-viewer/[matchId]/page.tsx
 
 "use client";
 
@@ -8,67 +8,83 @@ import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer
 import { getPublicMatchReplayData } from './public-actions'; 
 import { getCardDataForReplay } from '@/app/actions/cardActions';
 import type { SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientPlayer, ClientZone, ReplayCardData, ClientCard, EntityId, ClientGameState } from '@/types';
-import { ResponsiveContext } from '@/components/game/board/shared';
-import { useResponsive } from '@/hooks/useResponsive';
+import { ResponsiveContext, useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
-import { produce } from 'immer';
-import { createClient } from '@supabase/supabase-js'; // Use standard client for the quick fetch
+import { produce, WritableDraft } from 'immer';
+import { createClient } from '@supabase/supabase-js';
 import { ZoneType } from '@/types/enums';
 
-// --- (Reconstruction logic remains unchanged) ---
+
+// --- THIS IS THE FIX (Part 1) ---
+// The type-safe reconstruction logic and the page component are now correctly implemented.
+
+// A deeply mutable version of SpectatorStateUpdate for immer.
+type DeepWritable<T> = T extends (...args: unknown[]) => unknown ? T : T extends object ? {
+    -readonly [P in keyof T]: DeepWritable<T[P]>;
+} : T;
+
+
 function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
     return (item as SpectatorStateDiff).isDiff === true;
 }
 
 function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
     if (!rawStates || rawStates.length === 0) return [];
+    
     const reconstructed: SpectatorStateUpdate[] = [];
     let currentBlueprint: SpectatorStateUpdate | null = null;
+
     for (const item of rawStates) {
         if (isDiff(item)) {
             if (!currentBlueprint || reconstructed.length === 0) continue;
+            
             const previousState = reconstructed[reconstructed.length - 1];
-            const nextState = produce(previousState, draft => {
-                if (item.combat !== undefined) draft.combat = JSON.parse(JSON.stringify(item.combat));
+            
+            const nextState = produce(previousState, (draft: WritableDraft<DeepWritable<SpectatorStateUpdate>>) => {
+                if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId as EntityId | null;
+                if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId as EntityId | null;
                 if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
-                if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId;
-                if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId;
-                
+                if (item.combat !== undefined) draft.combat = JSON.parse(JSON.stringify(item.combat));
+
                 if (item.gameState) {
                     const gsd = item.gameState;
-                    if (gsd.currentPhase !== undefined) draft.gameState.currentPhase = gsd.currentPhase;
-                    if (gsd.currentStep !== undefined) draft.gameState.currentStep = gsd.currentStep;
-                    if (gsd.activePlayerId !== undefined) draft.gameState.activePlayerId = gsd.activePlayerId;
-                    if (gsd.priorityPlayerId !== undefined) draft.gameState.priorityPlayerId = gsd.priorityPlayerId;
-                    if (gsd.turnNumber !== undefined) draft.gameState.turnNumber = gsd.turnNumber;
-                    if (gsd.isGameOver !== undefined) draft.gameState.isGameOver = gsd.isGameOver;
-                    if (gsd.winnerId !== undefined) draft.gameState.winnerId = gsd.winnerId;
-                    if (gsd.combat !== undefined) draft.gameState.combat = JSON.parse(JSON.stringify(gsd.combat));
-                    if (gsd.gameLog && draft.gameState.gameLog) draft.gameState.gameLog.push(...JSON.parse(JSON.stringify(gsd.gameLog)));
-                    if (gsd.cards) Object.assign(draft.gameState.cards, JSON.parse(JSON.stringify(gsd.cards)));
+                    const draftGameState = draft.gameState;
+
+                    if (gsd.currentPhase !== undefined && draftGameState) draftGameState.currentPhase = gsd.currentPhase;
+                    if (gsd.currentStep !== undefined && draftGameState) draftGameState.currentStep = gsd.currentStep;
+                    if (gsd.activePlayerId !== undefined && draftGameState) draftGameState.activePlayerId = gsd.activePlayerId as EntityId;
+                    if (gsd.priorityPlayerId !== undefined && draftGameState) draftGameState.priorityPlayerId = gsd.priorityPlayerId as EntityId;
+                    if (gsd.turnNumber !== undefined && draftGameState) draftGameState.turnNumber = gsd.turnNumber;
+                    if (gsd.isGameOver !== undefined && draftGameState) draftGameState.isGameOver = gsd.isGameOver;
+                    if (gsd.winnerId !== undefined && draftGameState) draftGameState.winnerId = gsd.winnerId as EntityId | null;
+                    if (gsd.combat !== undefined && draftGameState) draftGameState.combat = JSON.parse(JSON.stringify(gsd.combat));
                     
-                    if (gsd.players) {
-                        Object.values(gsd.players).forEach((p: ClientPlayer) => {
-                            const index = draft.gameState.players.findIndex((pl: ClientPlayer) => pl.playerId === p.playerId);
-                            if (index !== -1) draft.gameState.players[index] = JSON.parse(JSON.stringify(p));
+                    if (gsd.gameLog && draftGameState?.gameLog) (draftGameState.gameLog as unknown[]).push(...JSON.parse(JSON.stringify(gsd.gameLog)));
+                    if (gsd.cards && draftGameState?.cards) Object.assign(draftGameState.cards, JSON.parse(JSON.stringify(gsd.cards)));
+                    
+                    if (gsd.players && draftGameState?.players) {
+                        Object.values(gsd.players as Record<string, ClientPlayer>).forEach(p => {
+                            const index = draftGameState.players.findIndex(pl => pl.playerId === p.playerId);
+                            if (index !== -1) (draftGameState.players as ClientPlayer[])[index] = JSON.parse(JSON.stringify(p));
                         });
                     }
-                    if (gsd.zones) {
-                        Object.values(gsd.zones).forEach((z: ClientZone) => {
-                            const index = draft.gameState.zones.findIndex((zn: ClientZone) => zn.zoneId.ownerId === z.zoneId.ownerId && zn.zoneId.zoneType === z.zoneId.zoneType);
-                            if (index !== -1) draft.gameState.zones[index] = JSON.parse(JSON.stringify(z));
+                    if (gsd.zones && draftGameState?.zones) {
+                        Object.values(gsd.zones as Record<string, ClientZone>).forEach(z => {
+                            const index = draftGameState.zones.findIndex(zn => zn.zoneId.ownerId === z.zoneId.ownerId && zn.zoneId.zoneType === z.zoneId.zoneType);
+                            if (index !== -1) (draftGameState.zones as ClientZone[])[index] = JSON.parse(JSON.stringify(z));
                         });
                     }
                 }
             });
             reconstructed.push(nextState);
         } else {
-            currentBlueprint = item;
+            currentBlueprint = item as SpectatorStateUpdate;
             reconstructed.push(currentBlueprint);
         }
     }
-    return reconstructed;
+    return reconstructed as SpectatorStateUpdate[];
 }
+
 
 interface PageProps {
     params: Promise<{ matchId: string }>;
@@ -83,12 +99,10 @@ export default function ReplayPage(props: PageProps) {
         gameStates: SpectatorStateUpdate[] | null;
         cardDataMap: Record<string, ReplayCardData> | null;
     } | null>(null);
-    
     const [isLoading, setIsLoading] = useState(true);
     
     useEffect(() => {
         if (!matchId) return;
-
         async function fetchData() {
             setIsLoading(true);
             try {
@@ -97,40 +111,26 @@ export default function ReplayPage(props: PageProps) {
                 if (!rawGameStates || rawGameStates.length === 0) {
                     throw new Error("No game states found for this match in database.");
                 }
-
-                // --- SPOILER LOCK USING CLIENT FETCH ---
-                const supabase = createClient(
-                    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-                    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-                );
                 
-                const { data: scheduleRow } = await supabase
-                    .from('schedule')
-                    .select('match_date')
-                    .eq('sim_match_id', matchId)
-                    .single();
-
+                const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+                const { data: scheduleRow } = await supabase.from('schedule').select('match_date').eq('sim_match_id', matchId).single();
                 if (scheduleRow && scheduleRow.match_date) {
                     const broadcastStart = new Date(scheduleRow.match_date).getTime() + (30 * 60000);
                     const broadcastEnd = broadcastStart + (rawGameStates.length * 2000);
-                    
                     if (Date.now() < broadcastEnd) {
-                        console.log("[Spoiler Lock] Stream hasn't finished! Redirecting to Live View.");
                         router.replace(`/stream/${matchId}`);
-                        return; // Stop rendering!
+                        return;
                     }
                 }
-                // ----------------------------------------
                 
-                const finalGameStates = reconstructGameStates(rawGameStates as ReplayStateItem[]);
+                const finalGameStates = reconstructGameStates(rawStates as ReplayStateItem[]);
                 const validStates = finalGameStates.filter(s => s?.gameState != null);
-                
                 if (validStates.length === 0) throw new Error("No valid game states remained after reconstruction.");
                 
                 const allCardNames = new Set<string>();
                 validStates.forEach(state => {
-                    if (state.gameState.cards) {
-                        for (const card of Object.values(state.gameState.cards)) {
+                    if ((state.gameState as Partial<ClientGameState>).cards) {
+                        for (const card of Object.values((state.gameState as Partial<ClientGameState>).cards)) {
                             if (card?.name) allCardNames.add(card.name);
                         }
                     }
@@ -148,20 +148,20 @@ export default function ReplayPage(props: PageProps) {
                 setIsLoading(false);
             }
         }
-        
         fetchData();
     }, [matchId, router]);
-     const [currentIndex, setCurrentIndex] = useState(0); // Add state for the current index
-
+    
+    const [currentIndex, setCurrentIndex] = useState(0);
     const currentSnapshot = useMemo(() => data?.gameStates?.[currentIndex], [data, currentIndex]);
 
     const zoneRowCounts = useMemo(() => {
         if (!currentSnapshot) return [0, 0, 0, 0];
         const { gameState, player1Id, player2Id } = currentSnapshot;
         const getRowCount = (playerId: EntityId | null, isCreatureRow: boolean) => {
-            if (!gameState?.zones || !gameState?.cards) return 0;
-            const zones = gameState.zones as ClientZone[];
-            const cards = gameState.cards as Record<string, ClientCard>;
+            const gs = gameState as Partial<ClientGameState>;
+            if (!gs?.zones || !gs?.cards) return 0;
+            const zones = gs.zones as ClientZone[];
+            const cards = gs.cards as Record<string, ClientCard>;
             const zone = zones.find(z => z.zoneId.ownerId === playerId && z.zoneId.zoneType === ZoneType.BATTLEFIELD);
             if (!zone) return 0;
             return zone.cardIds.map(id => cards[id]).filter((c): c is ClientCard => !!c && !c.attachedTo).filter(c => {
@@ -176,22 +176,22 @@ export default function ReplayPage(props: PageProps) {
     }, [currentSnapshot]);
 
     const responsiveSizes = useResponsive(0, zoneRowCounts);
-
     
     if (isLoading) return <div className="text-white p-8 text-center mt-20">Loading and reconstructing replay...</div>; 
     if (!data || !data.gameStates) return <div className="text-white p-8 text-center mt-20">Failed to load replay data.</div>; 
 
-   return (
+    return (
         <main className="w-full h-screen bg-gray-900">
-<ResponsiveContext.Provider value={responsiveSizes}>
+            <ResponsiveContext.Provider value={responsiveSizes}>
                 <SettingsProvider>
                     <ArgentumReplayPlayer
-                    initialGameStates={data.gameStates}
-                    cardDataMap={data.cardDataMap!}
-                />
-            </SettingsProvider>
-                </ResponsiveContext.Provider>
-
+                        initialGameStates={data.gameStates}
+                        cardDataMap={data.cardDataMap!}
+                        currentIndex={currentIndex}
+                        onIndexChange={setCurrentIndex}
+                    />
+                </SettingsProvider>
+            </ResponsiveContext.Provider>
         </main>
     );
 }
