@@ -1,3 +1,5 @@
+//src/components/game/board/shared.ts
+
 import React, { createContext, useContext, useLayoutEffect, useMemo, useState, type RefObject } from 'react'
 import { ResponsiveContext, useResponsiveContext as useBaseResponsiveContext, type ResponsiveSizes, type BadgeSizes } from '@/hooks/useResponsive';
 import { getScryfallFallbackUrl } from '../../../utils/cardImages'
