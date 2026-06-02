@@ -6,7 +6,7 @@ import React, { useMemo } from 'react';
 import { ReplayCardStack } from '../card/ReplayCardStack';
 import { ReplayGameCard } from '../card/ReplayGameCard';
 import { CardPreview } from '@/app/components/CardPreview';
-import { useResponsiveContext } from '/components/game/board/shared';
+import { useResponsiveContext } from '/shared';
 import type { SpectatorStateUpdate, ReplayCardData, ClientCard, EntityId } from '@/types';
 import { entityId, zoneIdEquals, battlefield } from '@/types';
 
