@@ -184,7 +184,6 @@ export function ReplayPage() {
     )
   }
 
-  const currentSnapshot = snapshots[currentStep]
   if (!currentSnapshot) return null
 
   return (
