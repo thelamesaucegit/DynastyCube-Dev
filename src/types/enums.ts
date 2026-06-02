@@ -1,3 +1,5 @@
+//src/types/enums.ts
+
 /**
  * Game phase enum matching backend Phase.kt
  */
