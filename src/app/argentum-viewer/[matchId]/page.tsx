@@ -10,13 +10,11 @@ import { getCardDataForReplay } from '@/app/actions/cardActions';
 import type { SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientPlayer, ClientZone, ReplayCardData, ClientCard, EntityId, ClientGameState } from '@/types';
 import { ResponsiveContext, useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
-// REMOVED: import { produce, WritableDraft } from 'immer';
 import { createClient } from '@supabase/supabase-js';
 import { ZoneType } from '@/types/enums';
 
 // The reconstruction logic is correct and remains unchanged.
 function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
-    // Correctly restore the function body
     return (item as SpectatorStateDiff).isDiff === true;
 }
 
@@ -25,11 +23,10 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     
     const reconstructed: SpectatorStateUpdate[] = [];
     let currentBlueprint: SpectatorStateUpdate | null = null;
-
     for (const item of rawStates) {
         if (isDiff(item)) {
             if (!currentBlueprint || reconstructed.length === 0) continue;
-            const previousState = reconstructed[reconstructed.length - 1];
+            const previousState = reconstructed[reconstructed.length - 1]!;
             let nextGameState = { ...previousState.gameState as ClientGameState };
             if (item.gameState) {
                 const gsd = item.gameState;
@@ -75,6 +72,9 @@ interface PageProps {
 }
 
 export default function ReplayPage(props: PageProps) {
+    // --- DIAGNOSTIC LOGGING ---
+    console.log('[ReplayPage] Component Render Start');
+
     const unwrappedParams = use(props.params);
     const matchId = unwrappedParams?.matchId;
     const router = useRouter();
@@ -136,34 +136,59 @@ export default function ReplayPage(props: PageProps) {
         fetchData();
     }, [matchId, router]);
     
+    // State to manage the current step of the replay
     const [currentIndex, setCurrentIndex] = useState(0);
+    
+    // Derive the current snapshot from the data and index
     const currentSnapshot = useMemo(() => data?.gameStates?.[currentIndex], [data, currentIndex]);
 
+    // Calculate battlefield card counts, which are a dependency for the useResponsive hook.
     const zoneRowCounts = useMemo(() => {
+        // --- DIAGNOSTIC LOGGING ---
+        console.log('[ReplayPage] Recalculating zoneRowCounts. Current snapshot available:', !!currentSnapshot);
         if (!currentSnapshot) return [0, 0, 0, 0];
+
         const { gameState, player1Id, player2Id } = currentSnapshot;
         const getRowCount = (playerId: EntityId | null, isCreatureRow: boolean) => {
             const gs = gameState as Partial<ClientGameState>;
-            if (!gs?.zones || !gs?.cards) return 0;
+            if (!gs?.zones || !gs?.cards || !playerId) return 0;
+
             const zones = gs.zones as ClientZone[];
             const cards = gs.cards as Record<string, ClientCard>;
             const zone = zones.find(z => z.zoneId.ownerId === playerId && z.zoneId.zoneType === ZoneType.BATTLEFIELD);
             if (!zone) return 0;
+            
             return zone.cardIds.map(id => cards[id]).filter((c): c is ClientCard => !!c && !c.attachedTo).filter(c => {
                 const isCreatureOrPW = c.cardTypes.includes('CREATURE') || c.cardTypes.includes('PLANESWALKER');
                 return isCreatureRow ? isCreatureOrPW : !isCreatureOrPW;
             }).length;
         };
-        return [
+        const counts = [
             getRowCount(player1Id, true), getRowCount(player1Id, false),
             getRowCount(player2Id, true), getRowCount(player2Id, false),
         ];
+        console.log('[ReplayPage] Zone row counts calculated:', counts);
+        return counts;
     }, [currentSnapshot]);
-
-    const responsiveSizes = useResponsive(0, zoneRowCounts);
     
+    // Calculate the responsive sizes. This hook now correctly receives its dependencies.
+    const responsiveSizes = useResponsive(0, zoneRowCounts);
+
+    // --- DIAGNOSTIC LOGGING ---
+    useEffect(() => {
+        console.log('[ReplayPage] ResponsiveSizes object updated:', responsiveSizes ? 'Exists' : 'null');
+    }, [responsiveSizes]);
+
     if (isLoading) return <div className="text-white p-8 text-center mt-20">Loading and reconstructing replay...</div>; 
     if (!data || !data.gameStates) return <div className="text-white p-8 text-center mt-20">Failed to load replay data.</div>; 
+    
+    // --- DIAGNOSTIC LOGGING ---
+    console.log('[ReplayPage] Rendering main content. ResponsiveContext Provider value:', responsiveSizes ? 'Exists' : 'null');
+
+    // Final safeguard: Do not render children until responsiveSizes is valid.
+    if (!responsiveSizes) {
+         return <div className="text-white p-8 text-center mt-20">Calculating layout...</div>;
+    }
 
     return (
         <main className="w-full h-screen bg-gray-900">
