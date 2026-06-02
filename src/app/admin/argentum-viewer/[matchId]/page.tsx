@@ -45,13 +45,17 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     
                     if (gsd.cards) {
                         for (const cardId in gsd.cards) {
-                            draft.gameState.cards[cardId] = JSON.parse(JSON.stringify(gsd.cards[cardId]));
+                            // This ensures cardId is treated as a valid key.
+                            const key = cardId as keyof typeof gsd.cards;
+                            draft.gameState.cards[key] = JSON.parse(JSON.stringify(gsd.cards[key]));
                         }
                     }
                     if (gsd.zones) {
                         for (const zoneKey in gsd.zones) {
-                            const updatedZone = gsd.zones[zoneKey]!;
-                            const index = draft.gameState.zones.findIndex(z => `${z.zoneId.ownerId}:${z.zoneId.zoneType}` === zoneKey);
+                             // This ensures zoneKey is treated as a valid key.
+                            const key = zoneKey as keyof typeof gsd.zones;
+                            const updatedZone = gsd.zones[key]!;
+                            const index = draft.gameState.zones.findIndex(z => `${z.zoneId.ownerId}:${z.zoneId.zoneType}` === key);
                             if (index !== -1) {
                                 draft.gameState.zones[index] = JSON.parse(JSON.stringify(updatedZone));
                             } else {
@@ -61,7 +65,9 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     }
                     if (gsd.players) {
                          for (const playerId in gsd.players) {
-                            const updatedPlayer = gsd.players[playerId]!;
+                            // This ensures playerId is treated as a valid key.
+                            const key = playerId as keyof typeof gsd.players;
+                            const updatedPlayer = gsd.players[key]!;
                             const index = draft.gameState.players.findIndex(p => p.playerId === updatedPlayer.playerId);
                              if (index !== -1) {
                                 draft.gameState.players[index] = JSON.parse(JSON.stringify(updatedPlayer));
