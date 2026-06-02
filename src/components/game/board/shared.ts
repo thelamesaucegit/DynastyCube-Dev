@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useLayoutEffect, useMemo, useState, type RefObject } from 'react'
-import type { ResponsiveSizes, BadgeSizes } from '../../../hooks/useResponsive'
+import type { ResponsiveContext, ResponsiveSizes, BadgeSizes } from '../../../hooks/useResponsive'
 import { getScryfallFallbackUrl } from '../../../utils/cardImages'
 import type { ClientCard, LegalActionInfo } from '../../../types'
 import { CounterType } from '../../../types'
@@ -8,10 +8,21 @@ import { Color } from '../../../types/enums'
 // Context to pass responsive sizes down the component tree
 export const ResponsiveContext = createContext<ResponsiveSizes | null>(null)
 
+/**
+ * Custom hook to safely consume the ResponsiveContext.
+ * This provides a clear error message if the context is not available.
+ */
 export function useResponsiveContext(): ResponsiveSizes {
-  const ctx = useContext(ResponsiveContext)
-  if (!ctx) throw new Error('ResponsiveContext not provided')
-  return ctx
+    const context = useContext(ResponsiveContext);
+    
+    // DIAGNOSTIC LOGGING: This log MUST appear before any crash.
+    console.log('[useResponsiveContext from shared.ts] Hook called. Context value is:', context ? 'Exists' : 'null');
+    
+    if (context === null) {
+        // This specific error message confirms which version of the hook is running.
+        throw new Error('useResponsiveContext from shared.ts must be used within a ResponsiveContextProvider. Check the component tree.');
+    }
+    return context;
 }
 
 // Hard ceiling on slot-derived card growth. The window-derived `useResponsive`
