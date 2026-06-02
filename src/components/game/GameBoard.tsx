@@ -1,11 +1,12 @@
-// /src/components/game/GameBoard.tsx
+// src/components/game/GameBoard.tsx
 
 "use client";
+
 import React from 'react';
 import { LiveGameBoard } from './LiveGameBoard';
 import { ReplayGameBoard } from './ReplayGameBoard';
-import type { SpectatorStateUpdate, ReplayCardData } from '@/types/replay-types';
-import { SettingsProvider, useSettings } from '@/contexts/SettingsContext';
+import type { SpectatorStateUpdate, ReplayCardData } from '@/types';
+import { SettingsProvider } from '@/contexts/SettingsContext';
 
 interface GameBoardProps {
   spectatorMode?: boolean;
@@ -14,21 +15,29 @@ interface GameBoardProps {
   cardDataMap?: Record<string, ReplayCardData>;
 }
 
-function ReplayGameBoardWrapper({ snapshot, cardDataMap, topOffset }: { snapshot: SpectatorStateUpdate, cardDataMap: Record<string, ReplayCardData>, topOffset: number }) {
-  const { useOldestArt } = useSettings();
-  return <ReplayGameBoard snapshot={snapshot} cardDataMap={cardDataMap} topOffset={topOffset} useOldestArt={useOldestArt} />;
-}
-
 export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, cardDataMap = {} }: GameBoardProps) {
-  if (spectatorMode) {
-    if (!snapshot) {
-      return <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>Loading replay data...</div>;
-    }
-    return (
-      <SettingsProvider>
-        <ReplayGameBoardWrapper snapshot={snapshot} cardDataMap={cardDataMap} topOffset={topOffset} />
-      </SettingsProvider>
-    );
+  // For a live game, render the LiveGameBoard component.
+  // This part of the logic remains untouched as it is not our current focus.
+  if (!spectatorMode) {
+    return <LiveGameBoard topOffset={topOffset} />;
   }
-  return <LiveGameBoard topOffset={topOffset} />;
+
+  // For spectator/replay mode, we proceed with rendering the replay components.
+  if (!snapshot) {
+    // If spectator mode is on but there's no snapshot data yet, show a loading state.
+    return <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>Loading replay snapshot...</div>;
+  }
+  
+  // The ReplayGameBoard now gets the `useOldestArt` setting from the `useSettings` context hook directly.
+  // Therefore, we must wrap it in the SettingsProvider, but we no longer need to pass the prop.
+  // The intermediate ReplayGameBoardWrapper is no longer necessary.
+  return (
+    <SettingsProvider>
+      <ReplayGameBoard
+        snapshot={snapshot}
+        cardDataMap={cardDataMap}
+        topOffset={topOffset}
+      />
+    </Settings-Provider>
+  );
 }
