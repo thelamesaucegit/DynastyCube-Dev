@@ -13,6 +13,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
 import { produce } from 'immer';
 import { createClient } from '@supabase/supabase-js'; // Use standard client for the quick fetch
+import { ZoneType } from '@/types/enums';
 
 // --- (Reconstruction logic remains unchanged) ---
 function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
