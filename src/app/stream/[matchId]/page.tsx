@@ -42,25 +42,27 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             const previousState = reconstructed[reconstructed.length - 1]!;
 
             const nextState = produce(previousState, (draft: WritableDraft<SpectatorStateUpdate>) => {
-                // Apply top-level diff properties
                 if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId;
                 if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId;
                 if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
                 if (item.combat !== undefined) draft.combat = JSON.parse(JSON.stringify(item.combat));
 
-                // Deep-merge the nested gameState object
                 if (item.gameState) {
                     const gsd = item.gameState;
                     
                     if (gsd.cards) {
                         for (const cardId in gsd.cards) {
-                            draft.gameState.cards[cardId] = JSON.parse(JSON.stringify(gsd.cards[cardId]));
+                            // This ensures cardId is treated as a valid key.
+                            const key = cardId as keyof typeof gsd.cards;
+                            draft.gameState.cards[key] = JSON.parse(JSON.stringify(gsd.cards[key]));
                         }
                     }
                     if (gsd.zones) {
                         for (const zoneKey in gsd.zones) {
-                            const updatedZone = gsd.zones[zoneKey]!;
-                            const index = draft.gameState.zones.findIndex(z => `${z.zoneId.ownerId}:${z.zoneId.zoneType}` === zoneKey);
+                             // This ensures zoneKey is treated as a valid key.
+                            const key = zoneKey as keyof typeof gsd.zones;
+                            const updatedZone = gsd.zones[key]!;
+                            const index = draft.gameState.zones.findIndex(z => `${z.zoneId.ownerId}:${z.zoneId.zoneType}` === key);
                             if (index !== -1) {
                                 draft.gameState.zones[index] = JSON.parse(JSON.stringify(updatedZone));
                             } else {
@@ -70,7 +72,9 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     }
                     if (gsd.players) {
                          for (const playerId in gsd.players) {
-                            const updatedPlayer = gsd.players[playerId]!;
+                            // This ensures playerId is treated as a valid key.
+                            const key = playerId as keyof typeof gsd.players;
+                            const updatedPlayer = gsd.players[key]!;
                             const index = draft.gameState.players.findIndex(p => p.playerId === updatedPlayer.playerId);
                              if (index !== -1) {
                                 draft.gameState.players[index] = JSON.parse(JSON.stringify(updatedPlayer));
