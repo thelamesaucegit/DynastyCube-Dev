@@ -1,3 +1,5 @@
+//src/components/game/board/styles.ts
+
 import React from 'react'
 import { TARGET_COLOR, TARGET_COLOR_BRIGHT } from '../../../styles/targetingColors'
 
