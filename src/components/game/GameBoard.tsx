@@ -38,6 +38,6 @@ export function GameBoard({ spectatorMode = false, topOffset = 0, snapshot, card
         cardDataMap={cardDataMap}
         topOffset={topOffset}
       />
-    </Settings-Provider>
+    </SettingsProvider>
   );
 }
