@@ -23,33 +23,38 @@ function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
  * This version correctly performs a deep merge of the nested gameState objects.
  */
 function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
+    console.log(`[Reconstruction] Starting process with ${rawStates.length} raw states.`);
+    
     if (!rawStates || rawStates.length === 0) return [];
     
     const reconstructed: SpectatorStateUpdate[] = [];
     let currentBlueprint: SpectatorStateUpdate | null = null;
 
-    for (const item of rawStates) {
+    for (let i = 0; i < rawStates.length; i++) {
+        const item = rawStates[i]!;
+
         if (isDiff(item)) {
             if (!currentBlueprint || reconstructed.length === 0) {
+                console.warn(`[Reconstruction] Step ${i}: Skipping diff because no blueprint is set.`);
                 continue;
             }
             
             const previousState = reconstructed[reconstructed.length - 1]!;
 
+            // --- DIAGNOSTIC: Log the state BEFORE the merge ---
+            const previousCardCount = Object.keys(previousState.gameState.cards).length;
+            const previousZoneCount = previousState.gameState.zones.length;
+            console.log(`[Reconstruction] Step ${i}: Applying diff. PREVIOUS state has ${previousCardCount} cards and ${previousZoneCount} zones.`);
+
             const nextState = produce(previousState, (draft: WritableDraft<SpectatorStateUpdate>) => {
-                // Apply top-level diff properties
                 if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId;
                 if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId;
                 if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
                 if (item.combat !== undefined) draft.combat = JSON.parse(JSON.stringify(item.combat));
 
-                // Deep-merge the nested gameState object
                 if (item.gameState) {
                     const gsd = item.gameState;
                     
-                    // --- TYPE-SAFE MERGE LOGIC ---
-
-                    // Initialize nested objects if they don't exist on the draft
                     if (!draft.gameState) draft.gameState = {} as WritableDraft<ClientGameState>;
                     if (!draft.gameState.cards) draft.gameState.cards = {};
                     if (!draft.gameState.zones) draft.gameState.zones = [];
@@ -85,11 +90,9 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                         }
                     }
                     if (gsd.gameLog) {
-                        // This check is now safe because we initialized draft.gameState.gameLog above
                         draft.gameState.gameLog.push(...JSON.parse(JSON.stringify(gsd.gameLog)));
                     }
                     
-                    // Overwrite simple properties
                     if (gsd.currentPhase !== undefined) draft.gameState.currentPhase = gsd.currentPhase;
                     if (gsd.currentStep !== undefined) draft.gameState.currentStep = gsd.currentStep;
                     if (gsd.activePlayerId !== undefined) draft.gameState.activePlayerId = gsd.activePlayerId;
@@ -100,15 +103,29 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     if (gsd.combat !== undefined) draft.gameState.combat = JSON.parse(JSON.stringify(gsd.combat));
                 }
             });
+
+            // --- DIAGNOSTIC: Log the state AFTER the merge ---
+            const nextCardCount = Object.keys(nextState.gameState.cards).length;
+            const nextZoneCount = nextState.gameState.zones.length;
+            console.log(`[Reconstruction] Step ${i}: Diff applied.    POST state has ${nextCardCount} cards and ${nextZoneCount} zones.`);
+            
+            // --- DIAGNOSTIC: Highlight if data is being lost ---
+            if (nextCardCount < previousCardCount || nextZoneCount < previousZoneCount) {
+                console.error(`[Reconstruction] CRITICAL DATA LOSS DETECTED at step ${i}!`);
+            }
+
             reconstructed.push(nextState);
 
         } else {
+            console.log(`[Reconstruction] Step ${i}: Found a new BLUEPRINT.`);
             currentBlueprint = item as SpectatorStateUpdate;
             reconstructed.push(currentBlueprint);
         }
     }
+    console.log(`[Reconstruction] Process finished. Produced ${reconstructed.length} final states.`);
     return reconstructed;
 }
+
 
 
 interface PageProps {
