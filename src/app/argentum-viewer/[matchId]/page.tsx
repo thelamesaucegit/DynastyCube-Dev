@@ -30,35 +30,30 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
 
     for (const item of rawStates) {
         if (isDiff(item)) {
-            if (!currentBlueprint || reconstructed.length === 0) {
-                continue;
-            }
+            if (!currentBlueprint || reconstructed.length === 0) continue;
             
             const previousState = reconstructed[reconstructed.length - 1]!;
 
-            // Use Immer to safely and correctly produce the next state by deep-merging the diff
             const nextState = produce(previousState, (draft: WritableDraft<SpectatorStateUpdate>) => {
-                // Apply top-level diff properties
                 if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId;
                 if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId;
                 if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
                 if (item.combat !== undefined) draft.combat = JSON.parse(JSON.stringify(item.combat));
 
-                // Deep-merge the nested gameState object
                 if (item.gameState) {
                     const gsd = item.gameState;
                     
-                    // Merge cards: update existing, add new
                     if (gsd.cards) {
                         for (const cardId in gsd.cards) {
-                            draft.gameState.cards[cardId] = JSON.parse(JSON.stringify(gsd.cards[cardId]));
+                            const key = cardId as keyof typeof gsd.cards;
+                            draft.gameState.cards[key] = JSON.parse(JSON.stringify(gsd.cards[key]));
                         }
                     }
-                    // Merge zones: update existing, add new
                     if (gsd.zones) {
                         for (const zoneKey in gsd.zones) {
-                            const updatedZone = gsd.zones[zoneKey]!;
-                            const index = draft.gameState.zones.findIndex(z => `${z.zoneId.ownerId}:${z.zoneId.zoneType}` === zoneKey);
+                            const key = zoneKey as keyof typeof gsd.zones;
+                            const updatedZone = gsd.zones[key]!;
+                            const index = draft.gameState.zones.findIndex(z => `${z.zoneId.ownerId}:${z.zoneId.zoneType}` === key);
                             if (index !== -1) {
                                 draft.gameState.zones[index] = JSON.parse(JSON.stringify(updatedZone));
                             } else {
@@ -66,21 +61,20 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                             }
                         }
                     }
-                    // Merge players: update existing
                     if (gsd.players) {
                          for (const playerId in gsd.players) {
-                            const updatedPlayer = gsd.players[playerId]!;
+                            const key = playerId as keyof typeof gsd.players;
+                            const updatedPlayer = gsd.players[key]!;
                             const index = draft.gameState.players.findIndex(p => p.playerId === updatedPlayer.playerId);
                              if (index !== -1) {
                                 draft.gameState.players[index] = JSON.parse(JSON.stringify(updatedPlayer));
                             }
                         }
                     }
-                    // Append to gameLog
                     if (gsd.gameLog) {
                         draft.gameState.gameLog.push(...JSON.parse(JSON.stringify(gsd.gameLog)));
                     }
-                    // Overwrite simple properties
+
                     if (gsd.currentPhase !== undefined) draft.gameState.currentPhase = gsd.currentPhase;
                     if (gsd.currentStep !== undefined) draft.gameState.currentStep = gsd.currentStep;
                     if (gsd.activePlayerId !== undefined) draft.gameState.activePlayerId = gsd.activePlayerId;
@@ -94,13 +88,13 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             reconstructed.push(nextState);
 
         } else {
-            // This item is a full blueprint, so it becomes the new base
             currentBlueprint = item as SpectatorStateUpdate;
             reconstructed.push(currentBlueprint);
         }
     }
     return reconstructed;
 }
+
 
 interface PageProps {
     params: Promise<{ matchId: string }>;
