@@ -3,20 +3,21 @@
 "use client";
 
 import { useRouter } from 'next/navigation';
-import React, { useState, useEffect, use, useMemo, useCallback } from 'react';
+// FIX: Removed unused 'useCallback' import
+import React, { useState, useEffect, use, useMemo } from 'react';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
 //import { getPublicMatchReplayData } from './public-actions'; 
 import { getCardDataForReplay } from '@/app/actions/cardActions';
-import type { SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientPlayer, ClientZone, ReplayCardData, ClientCard, EntityId, ClientGameState } from '@/types';
+import type { SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientPlayer, ClientZone, ReplayCardData, ClientCard, EntityId, ClientGameState, ClientEvent } from '@/types';
 import { ResponsiveContext, useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
-import { produce, WritableDraft } from 'immer'; // Import WritableDraft from immer
+import { produce, WritableDraft } from 'immer';
 import { createClient } from '@supabase/supabase-js';
 import { ZoneType } from '@/types/enums';
 
-// --- THIS IS THE FINAL, ROBUST FIX (Part 1) ---
-// Define a utility type to make all properties of an object mutable, including nested objects and arrays.
-type DeepMutable<T> = T extends (...args: any[]) => any ? T : T extends object ? {
+// --- THIS IS THE LINTER-FRIENDLY FIX ---
+// Use 'unknown' instead of 'any' to satisfy strict linting rules.
+type DeepMutable<T> = T extends (...args: unknown[]) => unknown ? T : T extends object ? {
     -readonly [P in keyof T]: DeepMutable<T[P]>;
 } : T;
 
@@ -44,7 +45,6 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
 
                 if (item.gameState) {
                     const gsd = item.gameState;
-                    // Use our DeepMutable type to ensure the draft state is fully writable
                     const draftGameState = draft.gameState as DeepMutable<ClientGameState>;
 
                     if (gsd.currentPhase !== undefined) draftGameState.currentPhase = gsd.currentPhase;
