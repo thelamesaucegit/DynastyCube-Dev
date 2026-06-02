@@ -1,7 +1,7 @@
 // src/components/game/card/ReplayCardStack.tsx
 "use client";
 
-import type { GroupedCard } from '@/components/game/board/Battlefield'; // Use the local type
+import type { GroupedCard } from '@/components/game/board/ReplayBattlefield'; // Use the local type
 import { useResponsiveContext } from '../board/shared';
 import { ReplayGameCard } from './ReplayGameCard';
 import type { ReplayCardData } from '@/types/replay-types';
