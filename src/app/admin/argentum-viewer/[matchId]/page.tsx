@@ -5,7 +5,7 @@
 import { useRouter } from 'next/navigation';
 import React, { useState, useEffect, use, useMemo } from 'react'; // Removed unused useCallback
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
-//import { getPublicMatchReplayData } from './public-actions'; 
+import { getPublicMatchReplayData } from './actions'; 
 import { getCardDataForReplay } from '@/app/actions/cardActions';
 import type { SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientPlayer, ClientZone, ReplayCardData, ClientCard, EntityId, ClientGameState, ClientEvent } from '@/types';
 import { ResponsiveContext, useResponsive } from '@/hooks/useResponsive';
