@@ -64,20 +64,36 @@ export const ResponsiveContext = createContext<ResponsiveSizes | null>(null);
 export const ResponsiveContextProvider = ResponsiveContext.Provider;
 
 /**
- * Custom hook to consume the ResponsiveContext.
- * This provides a clear error message if the context is not available.
+ * Custom hook to safely consume the ResponsiveContext.
+ * This provides a clear error message if the context is not available, which is
+ * the root of the "Uncaught Error" we are debugging.
  */
 export function useResponsiveContext(): ResponsiveSizes {
     const context = useContext(ResponsiveContext);
-    // --- DIAGNOSTIC LOGGING ---
+    // DIAGNOSTIC LOGGING: See what value the consumer hook receives.
     console.log('[useResponsiveContext] Hook called. Context value is:', context ? 'Exists' : 'null');
     
     if (context === null) {
-        // This is the specific error that will be thrown if a component
-        // tries to use the context outside of its provider.
         throw new Error('useResponsiveContext must be used within a ResponsiveContextProvider. Check the component tree.');
     }
     return context;
+}
+
+/**
+ * Calculate the optimal card width to fit N cards in available width.
+ * Returns width that ensures all cards are visible.
+ */
+export function calculateFittingCardWidth(
+  cardCount: number,
+  availableWidth: number,
+  gap: number,
+  maxCardWidth: number,
+  minCardWidth: number = 50
+): number {
+  if (cardCount <= 0) return maxCardWidth;
+  const totalGaps = gap * Math.max(0, cardCount - 1);
+  const calculatedWidth = Math.floor((availableWidth - totalGaps) / cardCount);
+  return Math.max(minCardWidth, Math.min(maxCardWidth, calculatedWidth));
 }
 
 /**
@@ -103,6 +119,7 @@ export function useViewportSize(): ViewportSize {
 
 /**
  * Hook to get responsive sizes based on viewport.
+ * This is the "creator" of the responsive sizes object.
  */
 export function useResponsive(
   topOffset: number = 0,
@@ -110,9 +127,8 @@ export function useResponsive(
 ): ResponsiveSizes {
   const { width, height } = useViewportSize();
 
-  // useMemo will recalculate the sizes object whenever a dependency changes.
   const responsiveSizes = useMemo(() => {
-    // --- DIAGNOSTIC LOGGING ---
+    // DIAGNOSTIC LOGGING: See when the calculation runs and with what inputs.
     console.log(`[useResponsive] Calculation triggered. width: ${width}, height: ${height}, zoneRowCounts: [${zoneRowCounts.join(',')}]`);
 
     const isMobile = width < 640;
