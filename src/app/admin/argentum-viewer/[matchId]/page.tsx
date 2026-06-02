@@ -30,29 +30,40 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
 
     for (const item of rawStates) {
         if (isDiff(item)) {
-            if (!currentBlueprint || reconstructed.length === 0) continue;
+            if (!currentBlueprint || reconstructed.length === 0) {
+                continue;
+            }
             
             const previousState = reconstructed[reconstructed.length - 1]!;
 
             const nextState = produce(previousState, (draft: WritableDraft<SpectatorStateUpdate>) => {
+                // Apply top-level diff properties
                 if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId;
                 if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId;
                 if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
                 if (item.combat !== undefined) draft.combat = JSON.parse(JSON.stringify(item.combat));
 
+                // Deep-merge the nested gameState object
                 if (item.gameState) {
                     const gsd = item.gameState;
                     
+                    // --- TYPE-SAFE MERGE LOGIC ---
+
+                    // Initialize nested objects if they don't exist on the draft
+                    if (!draft.gameState) draft.gameState = {} as WritableDraft<ClientGameState>;
+                    if (!draft.gameState.cards) draft.gameState.cards = {};
+                    if (!draft.gameState.zones) draft.gameState.zones = [];
+                    if (!draft.gameState.players) draft.gameState.players = [];
+                    if (!draft.gameState.gameLog) draft.gameState.gameLog = [];
+
                     if (gsd.cards) {
                         for (const cardId in gsd.cards) {
-                            // This ensures cardId is treated as a valid key.
                             const key = cardId as keyof typeof gsd.cards;
                             draft.gameState.cards[key] = JSON.parse(JSON.stringify(gsd.cards[key]));
                         }
                     }
                     if (gsd.zones) {
                         for (const zoneKey in gsd.zones) {
-                             // This ensures zoneKey is treated as a valid key.
                             const key = zoneKey as keyof typeof gsd.zones;
                             const updatedZone = gsd.zones[key]!;
                             const index = draft.gameState.zones.findIndex(z => `${z.zoneId.ownerId}:${z.zoneId.zoneType}` === key);
@@ -65,7 +76,6 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     }
                     if (gsd.players) {
                          for (const playerId in gsd.players) {
-                            // This ensures playerId is treated as a valid key.
                             const key = playerId as keyof typeof gsd.players;
                             const updatedPlayer = gsd.players[key]!;
                             const index = draft.gameState.players.findIndex(p => p.playerId === updatedPlayer.playerId);
@@ -75,9 +85,11 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                         }
                     }
                     if (gsd.gameLog) {
+                        // This check is now safe because we initialized draft.gameState.gameLog above
                         draft.gameState.gameLog.push(...JSON.parse(JSON.stringify(gsd.gameLog)));
                     }
-
+                    
+                    // Overwrite simple properties
                     if (gsd.currentPhase !== undefined) draft.gameState.currentPhase = gsd.currentPhase;
                     if (gsd.currentStep !== undefined) draft.gameState.currentStep = gsd.currentStep;
                     if (gsd.activePlayerId !== undefined) draft.gameState.activePlayerId = gsd.activePlayerId;
@@ -97,6 +109,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     }
     return reconstructed;
 }
+
 
 interface PageProps {
     params: Promise<{ matchId: string }>;
