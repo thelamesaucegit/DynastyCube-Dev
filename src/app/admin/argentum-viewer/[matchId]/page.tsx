@@ -3,8 +3,7 @@
 "use client";
 
 import { useRouter } from 'next/navigation';
-// FIX: Removed unused 'useCallback' import
-import React, { useState, useEffect, use, useMemo } from 'react';
+import React, { useState, useEffect, use, useMemo } from 'react'; // Removed unused useCallback
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
 //import { getPublicMatchReplayData } from './public-actions'; 
 import { getCardDataForReplay } from '@/app/actions/cardActions';
@@ -15,10 +14,11 @@ import { produce, WritableDraft } from 'immer';
 import { createClient } from '@supabase/supabase-js';
 import { ZoneType } from '@/types/enums';
 
-// --- THIS IS THE LINTER-FRIENDLY FIX ---
-// Use 'unknown' instead of 'any' to satisfy strict linting rules.
-type DeepMutable<T> = T extends (...args: unknown[]) => unknown ? T : T extends object ? {
-    -readonly [P in keyof T]: DeepMutable<T[P]>;
+// --- THIS IS THE ROBUST FIX ---
+
+// 1. A type utility to make nested properties writable for immer.
+type DeepWritable<T> = T extends (...args: any[]) => any ? T : T extends object ? {
+    -readonly [P in keyof T]: DeepWritable<T[P]>;
 } : T;
 
 function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
@@ -37,38 +37,49 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             
             const previousState = reconstructed[reconstructed.length - 1];
             
-            const nextState = produce(previousState, (draft: WritableDraft<SpectatorStateUpdate>) => {
-                if (item.combat !== undefined) draft.combat = JSON.parse(JSON.stringify(item.combat));
-                if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
-                if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId as EntityId | null;
-                if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId as EntityId | null;
+            // 2. Use produce with a correctly and deeply typed WritableDraft.
+            const nextState = produce(previousState, (draft: WritableDraft<DeepWritable<SpectatorStateUpdate>>) => {
+                
+                // 3. Handle nulls explicitly before assignment.
+                if (item.activePlayerId !== undefined) {
+                    draft.activePlayerId = item.activePlayerId as EntityId | null;
+                }
+                if (item.priorityPlayerId !== undefined) {
+                    draft.priorityPlayerId = item.priorityPlayerId as EntityId | null;
+                }
+                if (item.currentPhase !== undefined) {
+                    draft.currentPhase = item.currentPhase;
+                }
+                if (item.combat !== undefined) {
+                    draft.combat = JSON.parse(JSON.stringify(item.combat));
+                }
 
                 if (item.gameState) {
                     const gsd = item.gameState;
-                    const draftGameState = draft.gameState as DeepMutable<ClientGameState>;
+                    const draftGameState = draft.gameState;
 
-                    if (gsd.currentPhase !== undefined) draftGameState.currentPhase = gsd.currentPhase;
-                    if (gsd.currentStep !== undefined) draftGameState.currentStep = gsd.currentStep;
-                    if (gsd.activePlayerId !== undefined) draftGameState.activePlayerId = gsd.activePlayerId as EntityId;
-                    if (gsd.priorityPlayerId !== undefined) draftGameState.priorityPlayerId = gsd.priorityPlayerId as EntityId;
-                    if (gsd.turnNumber !== undefined) draftGameState.turnNumber = gsd.turnNumber;
-                    if (gsd.isGameOver !== undefined) draftGameState.isGameOver = gsd.isGameOver;
-                    if (gsd.winnerId !== undefined) draftGameState.winnerId = gsd.winnerId as EntityId | null;
-                    if (gsd.combat !== undefined) draftGameState.combat = JSON.parse(JSON.stringify(gsd.combat));
+                    if (gsd.currentPhase !== undefined && draftGameState) draftGameState.currentPhase = gsd.currentPhase;
+                    if (gsd.currentStep !== undefined && draftGameState) draftGameState.currentStep = gsd.currentStep;
+                    if (gsd.activePlayerId !== undefined && draftGameState) draftGameState.activePlayerId = gsd.activePlayerId as EntityId;
+                    if (gsd.priorityPlayerId !== undefined && draftGameState) draftGameState.priorityPlayerId = gsd.priorityPlayerId as EntityId;
+                    if (gsd.turnNumber !== undefined && draftGameState) draftGameState.turnNumber = gsd.turnNumber;
+                    if (gsd.isGameOver !== undefined && draftGameState) draftGameState.isGameOver = gsd.isGameOver;
+                    if (gsd.winnerId !== undefined && draftGameState) draftGameState.winnerId = gsd.winnerId as EntityId | null;
+                    if (gsd.combat !== undefined && draftGameState) draftGameState.combat = JSON.parse(JSON.stringify(gsd.combat));
                     
-                    if (gsd.gameLog && draftGameState.gameLog) {
+                    if (gsd.gameLog && draftGameState?.gameLog) {
                         draftGameState.gameLog.push(...JSON.parse(JSON.stringify(gsd.gameLog)));
                     }
-                    if (gsd.cards) {
+                    if (gsd.cards && draftGameState?.cards) {
                         Object.assign(draftGameState.cards, JSON.parse(JSON.stringify(gsd.cards)));
                     }
-                    if (gsd.players) {
+                    if (gsd.players && draftGameState?.players) {
                         (gsd.players as ClientPlayer[]).forEach(p => {
                             const index = draftGameState.players.findIndex(pl => pl.playerId === p.playerId);
                             if (index !== -1) draftGameState.players[index] = JSON.parse(JSON.stringify(p));
                         });
                     }
-                    if (gsd.zones) {
+                    if (gsd.zones && draftGameState?.zones) {
                         (gsd.zones as ClientZone[]).forEach(z => {
                             const index = draftGameState.zones.findIndex(zn => zn.zoneId.ownerId === z.zoneId.ownerId && zn.zoneId.zoneType === z.zoneId.zoneType);
                             if (index !== -1) draftGameState.zones[index] = JSON.parse(JSON.stringify(z));
@@ -76,7 +87,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     }
                 }
             });
-            reconstructed.push(nextState);
+            reconstructed.push(nextState as SpectatorStateUpdate);
         } else {
             currentBlueprint = item as SpectatorStateUpdate;
             reconstructed.push(currentBlueprint);
@@ -84,6 +95,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     }
     return reconstructed;
 }
+
 // --- END OF FIX ---
 
 
