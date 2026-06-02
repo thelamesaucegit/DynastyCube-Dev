@@ -6,9 +6,11 @@ import React, { useMemo } from 'react';
 import { ReplayCardStack } from '../card/ReplayCardStack';
 import { ReplayGameCard } from '../card/ReplayGameCard';
 import { CardPreview } from '@/app/components/CardPreview';
-import { useResponsiveContext } from '@/hooks/useResponsive';
+import { useResponsiveContext } from '/components/game/board/shared';
 import type { SpectatorStateUpdate, ReplayCardData, ClientCard, EntityId } from '@/types';
 import { entityId, zoneIdEquals, battlefield } from '@/types';
+
+
 
 /**
  * Represents a visual grouping of one or more card instances on the battlefield.
