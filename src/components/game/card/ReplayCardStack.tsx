@@ -3,7 +3,7 @@
 "use client";
 
 import type { GroupedCard } from '../board/ReplayBattlefield';
-import { useResponsiveContext } from '@hooks/useResponsive';
+import { useResponsiveContext } from '@/hooks/useResponsive';
 import { ReplayGameCard } from './ReplayGameCard';
 import type { ReplayCardData } from '@/types/replay-types';
 import { CardPreview } from '@/app/components/CardPreview';
