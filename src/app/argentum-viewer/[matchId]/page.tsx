@@ -25,6 +25,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     let currentBlueprint: SpectatorStateUpdate | null = null;
     for (const item of rawStates) {
         if (isDiff(item)) {
+            console.log("Processing diff:", JSON.stringify(item));
             if (!currentBlueprint || reconstructed.length === 0) continue;
             const previousState = reconstructed[reconstructed.length - 1]!;
             let nextGameState = { ...previousState.gameState as ClientGameState };
