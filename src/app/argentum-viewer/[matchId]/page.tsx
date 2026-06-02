@@ -14,15 +14,16 @@ import { produce, WritableDraft } from 'immer';
 import { createClient } from '@supabase/supabase-js';
 import { ZoneType } from '@/types/enums';
 
+// ============================================================================
+// THE FINAL AND CORRECT SOLUTION
+// ============================================================================
 
-// --- THIS IS THE FIX (Part 1) ---
-// The type-safe reconstruction logic and the page component are now correctly implemented.
+// This utility type and the reconstruction logic are now self-contained in this file
+// and do not depend on any other component's implementation.
 
-// A deeply mutable version of SpectatorStateUpdate for immer.
 type DeepWritable<T> = T extends (...args: unknown[]) => unknown ? T : T extends object ? {
     -readonly [P in keyof T]: DeepWritable<T[P]>;
 } : T;
-
 
 function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
     return (item as SpectatorStateDiff).isDiff === true;
@@ -41,10 +42,18 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             const previousState = reconstructed[reconstructed.length - 1];
             
             const nextState = produce(previousState, (draft: WritableDraft<DeepWritable<SpectatorStateUpdate>>) => {
-                if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId as EntityId | null;
-                if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId as EntityId | null;
-                if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
-                if (item.combat !== undefined) draft.combat = JSON.parse(JSON.stringify(item.combat));
+                if (item.activePlayerId !== undefined) {
+                    draft.activePlayerId = item.activePlayerId;
+                }
+                if (item.priorityPlayerId !== undefined) {
+                    draft.priorityPlayerId = item.priorityPlayerId;
+                }
+                if (item.currentPhase !== undefined) {
+                    draft.currentPhase = item.currentPhase;
+                }
+                if (item.combat !== undefined) {
+                    draft.combat = JSON.parse(JSON.stringify(item.combat));
+                }
 
                 if (item.gameState) {
                     const gsd = item.gameState;
@@ -52,23 +61,23 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
 
                     if (gsd.currentPhase !== undefined && draftGameState) draftGameState.currentPhase = gsd.currentPhase;
                     if (gsd.currentStep !== undefined && draftGameState) draftGameState.currentStep = gsd.currentStep;
-                    if (gsd.activePlayerId !== undefined && draftGameState) draftGameState.activePlayerId = gsd.activePlayerId as EntityId;
-                    if (gsd.priorityPlayerId !== undefined && draftGameState) draftGameState.priorityPlayerId = gsd.priorityPlayerId as EntityId;
+                    if (gsd.activePlayerId !== undefined && draftGameState) draftGameState.activePlayerId = gsd.activePlayerId;
+                    if (gsd.priorityPlayerId !== undefined && draftGameState) draftGameState.priorityPlayerId = gsd.priorityPlayerId;
                     if (gsd.turnNumber !== undefined && draftGameState) draftGameState.turnNumber = gsd.turnNumber;
                     if (gsd.isGameOver !== undefined && draftGameState) draftGameState.isGameOver = gsd.isGameOver;
-                    if (gsd.winnerId !== undefined && draftGameState) draftGameState.winnerId = gsd.winnerId as EntityId | null;
+                    if (gsd.winnerId !== undefined && draftGameState) draftGameState.winnerId = gsd.winnerId;
                     if (gsd.combat !== undefined && draftGameState) draftGameState.combat = JSON.parse(JSON.stringify(gsd.combat));
                     
-                    if (gsd.gameLog && draftGameState?.gameLog) (draftGameState.gameLog as unknown[]).push(...JSON.parse(JSON.stringify(gsd.gameLog)));
-                    if (gsd.cards && draftGameState?.cards) Object.assign(draftGameState.cards, JSON.parse(JSON.stringify(gsd.cards)));
+                    if (gsd.gameLog && draftGameState.gameLog) (draftGameState.gameLog as unknown[]).push(...JSON.parse(JSON.stringify(gsd.gameLog)));
+                    if (gsd.cards && draftGameState.cards) Object.assign(draftGameState.cards, JSON.parse(JSON.stringify(gsd.cards)));
                     
-                    if (gsd.players && draftGameState?.players) {
+                    if (gsd.players && draftGameState.players) {
                         Object.values(gsd.players as Record<string, ClientPlayer>).forEach(p => {
                             const index = draftGameState.players.findIndex(pl => pl.playerId === p.playerId);
                             if (index !== -1) (draftGameState.players as ClientPlayer[])[index] = JSON.parse(JSON.stringify(p));
                         });
                     }
-                    if (gsd.zones && draftGameState?.zones) {
+                    if (gsd.zones && draftGameState.zones) {
                         Object.values(gsd.zones as Record<string, ClientZone>).forEach(z => {
                             const index = draftGameState.zones.findIndex(zn => zn.zoneId.ownerId === z.zoneId.ownerId && zn.zoneId.zoneType === z.zoneId.zoneType);
                             if (index !== -1) (draftGameState.zones as ClientZone[])[index] = JSON.parse(JSON.stringify(z));
@@ -85,6 +94,9 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     return reconstructed as SpectatorStateUpdate[];
 }
 
+// ============================================================================
+// END OF FIX
+// ============================================================================
 
 interface PageProps {
     params: Promise<{ matchId: string }>;
@@ -99,6 +111,7 @@ export default function ReplayPage(props: PageProps) {
         gameStates: SpectatorStateUpdate[] | null;
         cardDataMap: Record<string, ReplayCardData> | null;
     } | null>(null);
+    
     const [isLoading, setIsLoading] = useState(true);
     
     useEffect(() => {
