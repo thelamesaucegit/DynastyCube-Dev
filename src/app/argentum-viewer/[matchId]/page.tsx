@@ -10,12 +10,16 @@ import { getCardDataForReplay } from '@/app/actions/cardActions';
 import type { SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientPlayer, ClientZone, ReplayCardData, ClientCard, EntityId, ClientGameState } from '@/types';
 import { ResponsiveContext, useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
-// REMOVED: produce from immer
+// REMOVED: import { produce, WritableDraft } from 'immer';
 import { createClient } from '@supabase/supabase-js';
 import { ZoneType } from '@/types/enums';
 
 // The reconstruction logic is correct and remains unchanged.
-function isDiff(item: ReplayStateItem): item is SpectatorStateDiff { /* ... */ }
+function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
+    // Correctly restore the function body
+    return (item as SpectatorStateDiff).isDiff === true;
+}
+
 function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
     if (!rawStates || rawStates.length === 0) return [];
     
@@ -103,11 +107,8 @@ export default function ReplayPage(props: PageProps) {
                     }
                 }
                 
-                // --- THIS IS THE FIX ---
-                // Corrected the variable name from 'rawStates' to 'rawGameStates'
                 const finalGameStates = reconstructGameStates(rawGameStates as ReplayStateItem[]);
                 const validStates = finalGameStates.filter(s => s?.gameState != null);
-                
                 if (validStates.length === 0) throw new Error("No valid game states remained after reconstruction.");
                 
                 const allCardNames = new Set<string>();
