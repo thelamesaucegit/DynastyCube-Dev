@@ -3,7 +3,7 @@
 "use client";
 
 import { useRouter } from 'next/navigation';
-import React, { useState, useEffect, use } from 'react';
+import React, { useState, useEffect, use, useMemo } from 'react';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
 import { getPublicMatchReplayData } from './public-actions'; 
 import { getCardDataForReplay } from '@/app/actions/cardActions';
