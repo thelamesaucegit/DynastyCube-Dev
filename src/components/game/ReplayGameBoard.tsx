@@ -2,7 +2,7 @@
 
 "use client";
 
-import React, { useMemo, useContext } from 'react';
+import React, { useMemo, useContext, useEffect } from 'react';
 import { ResponsiveContext } from '@/hooks/useResponsive';
 import type { SpectatorStateUpdate, ReplayCardData, ClientPlayer } from '@/types';
 import { hand, entityId } from '@/types';
@@ -24,21 +24,22 @@ interface ReplayGameBoardProps {
 }
 
 export function ReplayGameBoard({ topOffset = 0, snapshot, cardDataMap }: ReplayGameBoardProps) {
+    // --- DIAGNOSTIC LOGGING ---
+    console.log('[ReplayGameBoard] Component Render Start');
+
     const responsive = useContext(ResponsiveContext);
     const { useOldestArt } = useSettings();
 
-    const { player1, player2, activePlayer, isPlayer1Active } = useMemo(() => {
-        // Player 1 is defined as the primary viewing player by the root snapshot.player1Id.
-        const p1 = snapshot.gameState.players.find(p => p.playerId === snapshot.player1Id);
-        // Player 2 is the opponent.
-        const p2 = snapshot.gameState.players.find(p => p.playerId === snapshot.player2Id);
-        // The active player is determined by the gameState's activePlayerId.
-        const ap = snapshot.gameState.players.find(p => p.playerId === snapshot.gameState.activePlayerId);
-        
-        // The viewing player (p1) is always rendered on the bottom of the screen.
-        // This flag determines if the bottom player is the currently active player.
-        const isP1Active = ap?.playerId === p1?.playerId;
+    // --- DIAGNOSTIC LOGGING ---
+    useEffect(() => {
+        console.log('[ReplayGameBoard] ResponsiveContext value is:', responsive ? 'Exists' : 'null');
+    }, [responsive]);
 
+    const { player1, player2, activePlayer, isPlayer1Active } = useMemo(() => {
+        const p1 = snapshot.gameState.players.find(p => p.playerId === snapshot.player1Id);
+        const p2 = snapshot.gameState.players.find(p => p.playerId === snapshot.player2Id);
+        const ap = snapshot.gameState.players.find(p => p.playerId === snapshot.gameState.activePlayerId);
+        const isP1Active = ap?.playerId === p1?.playerId;
         return { player1: p1, player2: p2, activePlayer: ap, isPlayer1Active: isP1Active };
     }, [snapshot]);
     
@@ -47,7 +48,11 @@ export function ReplayGameBoard({ topOffset = 0, snapshot, cardDataMap }: Replay
     }
 
     if (!responsive) {
-        return <div style={{ color: 'white' }}>Loading layout...</div>;
+        // This is the explicit failure point. If we reach here, the context was not provided.
+        // This log will confirm the error source before the exception is thrown.
+        console.error('[ReplayGameBoard] CRITICAL: Render attempted but responsive context is null. Provider is missing or value is invalid.');
+        // The hook `useResponsiveContext` would throw, but `useContext` returns null, so we can handle it.
+        return <div style={{ color: 'red', padding: '20px', textAlign: 'center' }}>Error: Responsive layout context not found.</div>;
     }
 
     return (
@@ -86,9 +91,7 @@ export function ReplayGameBoard({ topOffset = 0, snapshot, cardDataMap }: Replay
                     priorityMode={'ownTurn'}
                     activeSide={isPlayer1Active ? 'bottom' : 'top'} 
                     stopOverrides={{ myTurnStops: [], opponentTurnStops: [] }}
-                    onToggleStop={() => {
-                        // No-op in replay mode
-                    }}
+                    onToggleStop={() => {}}
                     activePlayerName={activePlayer?.name}
                 />
                 
