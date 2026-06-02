@@ -14,10 +14,9 @@ import { produce, WritableDraft } from 'immer';
 import { createClient } from '@supabase/supabase-js';
 import { ZoneType } from '@/types/enums';
 
-// --- THIS IS THE ROBUST FIX ---
-
-// 1. A type utility to make nested properties writable for immer.
-type DeepWritable<T> = T extends (...args: any[]) => any ? T : T extends object ? {
+// --- THE FINAL, LINTER-SAFE FIX ---
+// Use 'unknown' instead of 'any' to satisfy strict linting rules.
+type DeepWritable<T> = T extends (...args: unknown[]) => unknown ? T : T extends object ? {
     -readonly [P in keyof T]: DeepWritable<T[P]>;
 } : T;
 
@@ -37,22 +36,11 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             
             const previousState = reconstructed[reconstructed.length - 1];
             
-            // 2. Use produce with a correctly and deeply typed WritableDraft.
             const nextState = produce(previousState, (draft: WritableDraft<DeepWritable<SpectatorStateUpdate>>) => {
-                
-                // 3. Handle nulls explicitly before assignment.
-                if (item.activePlayerId !== undefined) {
-                    draft.activePlayerId = item.activePlayerId as EntityId | null;
-                }
-                if (item.priorityPlayerId !== undefined) {
-                    draft.priorityPlayerId = item.priorityPlayerId as EntityId | null;
-                }
-                if (item.currentPhase !== undefined) {
-                    draft.currentPhase = item.currentPhase;
-                }
-                if (item.combat !== undefined) {
-                    draft.combat = JSON.parse(JSON.stringify(item.combat));
-                }
+                if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId as EntityId | null;
+                if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId as EntityId | null;
+                if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
+                if (item.combat !== undefined) draft.combat = JSON.parse(JSON.stringify(item.combat));
 
                 if (item.gameState) {
                     const gsd = item.gameState;
@@ -67,12 +55,8 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     if (gsd.winnerId !== undefined && draftGameState) draftGameState.winnerId = gsd.winnerId as EntityId | null;
                     if (gsd.combat !== undefined && draftGameState) draftGameState.combat = JSON.parse(JSON.stringify(gsd.combat));
                     
-                    if (gsd.gameLog && draftGameState?.gameLog) {
-                        draftGameState.gameLog.push(...JSON.parse(JSON.stringify(gsd.gameLog)));
-                    }
-                    if (gsd.cards && draftGameState?.cards) {
-                        Object.assign(draftGameState.cards, JSON.parse(JSON.stringify(gsd.cards)));
-                    }
+                    if (gsd.gameLog && draftGameState?.gameLog) draftGameState.gameLog.push(...JSON.parse(JSON.stringify(gsd.gameLog)));
+                    if (gsd.cards && draftGameState?.cards) Object.assign(draftGameState.cards, JSON.parse(JSON.stringify(gsd.cards)));
                     if (gsd.players && draftGameState?.players) {
                         (gsd.players as ClientPlayer[]).forEach(p => {
                             const index = draftGameState.players.findIndex(pl => pl.playerId === p.playerId);
@@ -95,7 +79,6 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     }
     return reconstructed;
 }
-
 // --- END OF FIX ---
 
 
