@@ -1,4 +1,4 @@
-//src/app/stream/[matchId]/page.tsx
+// src/app/stream/[matchId]/page.tsx
 
 import { createServerClient } from "@/lib/supabase";
 import { notFound } from "next/navigation";
@@ -11,23 +11,27 @@ import type {
     SpectatorStateDiff, 
     ClientPlayer, 
     ClientZone,
-    ClientCard 
+    ClientCard,
+    ClientGameState
 } from "@/types";
-import { produce } from "immer";
+import { produce, WritableDraft } from 'immer';
 
-// Define the shape of the database response for the sim match
 interface DbSimMatch {
     argentum_game_states?: ReplayStateItem[];
     game_states?: ReplayStateItem[];
 }
 
-// Exactly mirroring the reconstruction logic from the normal viewer
 function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
     return (item as SpectatorStateDiff).isDiff === true;
 }
 
+/**
+ * Constructs a full timeline of game states from an initial blueprint and subsequent diffs.
+ * This version correctly performs a deep merge of the nested gameState objects.
+ */
 function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
     if (!rawStates || rawStates.length === 0) return [];
+    
     const reconstructed: SpectatorStateUpdate[] = [];
     let currentBlueprint: SpectatorStateUpdate | null = null;
 
@@ -35,15 +39,48 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
         if (isDiff(item)) {
             if (!currentBlueprint || reconstructed.length === 0) continue;
             
-            const previousState = reconstructed[reconstructed.length - 1];
-            const nextState = produce(previousState, draft => {
-                if (item.combat !== undefined) draft.combat = JSON.parse(JSON.stringify(item.combat));
-                if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
+            const previousState = reconstructed[reconstructed.length - 1]!;
+
+            const nextState = produce(previousState, (draft: WritableDraft<SpectatorStateUpdate>) => {
+                // Apply top-level diff properties
                 if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId;
                 if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId;
-                
+                if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
+                if (item.combat !== undefined) draft.combat = JSON.parse(JSON.stringify(item.combat));
+
+                // Deep-merge the nested gameState object
                 if (item.gameState) {
                     const gsd = item.gameState;
+                    
+                    if (gsd.cards) {
+                        for (const cardId in gsd.cards) {
+                            draft.gameState.cards[cardId] = JSON.parse(JSON.stringify(gsd.cards[cardId]));
+                        }
+                    }
+                    if (gsd.zones) {
+                        for (const zoneKey in gsd.zones) {
+                            const updatedZone = gsd.zones[zoneKey]!;
+                            const index = draft.gameState.zones.findIndex(z => `${z.zoneId.ownerId}:${z.zoneId.zoneType}` === zoneKey);
+                            if (index !== -1) {
+                                draft.gameState.zones[index] = JSON.parse(JSON.stringify(updatedZone));
+                            } else {
+                                draft.gameState.zones.push(JSON.parse(JSON.stringify(updatedZone)));
+                            }
+                        }
+                    }
+                    if (gsd.players) {
+                         for (const playerId in gsd.players) {
+                            const updatedPlayer = gsd.players[playerId]!;
+                            const index = draft.gameState.players.findIndex(p => p.playerId === updatedPlayer.playerId);
+                             if (index !== -1) {
+                                draft.gameState.players[index] = JSON.parse(JSON.stringify(updatedPlayer));
+                            }
+                        }
+                    }
+                    if (gsd.gameLog) {
+                        draft.gameState.gameLog.push(...JSON.parse(JSON.stringify(gsd.gameLog)));
+                    }
+
                     if (gsd.currentPhase !== undefined) draft.gameState.currentPhase = gsd.currentPhase;
                     if (gsd.currentStep !== undefined) draft.gameState.currentStep = gsd.currentStep;
                     if (gsd.activePlayerId !== undefined) draft.gameState.activePlayerId = gsd.activePlayerId;
@@ -52,26 +89,10 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     if (gsd.isGameOver !== undefined) draft.gameState.isGameOver = gsd.isGameOver;
                     if (gsd.winnerId !== undefined) draft.gameState.winnerId = gsd.winnerId;
                     if (gsd.combat !== undefined) draft.gameState.combat = JSON.parse(JSON.stringify(gsd.combat));
-                    if (gsd.gameLog && draft.gameState.gameLog) draft.gameState.gameLog.push(...JSON.parse(JSON.stringify(gsd.gameLog)));
-                    if (gsd.cards) Object.assign(draft.gameState.cards, JSON.parse(JSON.stringify(gsd.cards)));
-                    
-                    if (gsd.players) {
-                        // Strictly type the Object.values as ClientPlayer[]
-                        Object.values(gsd.players as unknown as Record<string, ClientPlayer>).forEach((p: ClientPlayer) => {
-                            const index = draft.gameState.players.findIndex((pl: ClientPlayer) => pl.playerId === p.playerId);
-                            if (index !== -1) draft.gameState.players[index] = JSON.parse(JSON.stringify(p));
-                        });
-                    }
-                    if (gsd.zones) {
-                        // Strictly type the Object.values as ClientZone[]
-                        Object.values(gsd.zones as unknown as Record<string, ClientZone>).forEach((z: ClientZone) => {
-                            const index = draft.gameState.zones.findIndex((zn: ClientZone) => zn.zoneId.ownerId === z.zoneId.ownerId && zn.zoneId.zoneType === z.zoneId.zoneType);
-                            if (index !== -1) draft.gameState.zones[index] = JSON.parse(JSON.stringify(z));
-                        });
-                    }
                 }
             });
             reconstructed.push(nextState);
+
         } else {
             currentBlueprint = item as SpectatorStateUpdate;
             reconstructed.push(currentBlueprint);
@@ -83,7 +104,6 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
 export default async function LiveStreamPage({ params }: { params: Promise<{ matchId: string }> }) {
     const { matchId } = await params;
     const supabase = await createServerClient();
-
     const { data, error } = await supabase
         .from('schedule')
         .select(`
@@ -106,25 +126,20 @@ export default async function LiveStreamPage({ params }: { params: Promise<{ mat
     
     const rawGameStates: ReplayStateItem[] = simMatch?.argentum_game_states || simMatch?.game_states || [];
     
-    // 1. Inflate the diffs!
     const reconstructedGameStates = reconstructGameStates(rawGameStates);
     const validStates = reconstructedGameStates.filter(s => s?.gameState != null);
- const matchDate = data.match_date;
-       // 2. Extract unique card names from the reconstructed arrays
+    const matchDate = data.match_date;
+
     const cardNamesToFetch = new Set<string>();
-    
     validStates.forEach((state: SpectatorStateUpdate) => {
         if (state.gameState?.cards) {
-            // Read directly from the master cards dictionary!
             Object.values(state.gameState.cards).forEach((card: ClientCard) => {
                 if (card?.name) cardNamesToFetch.add(card.name);
             });
         }
     });
 
-
     const cardDataMap = await getCardDataForReplay(Array.from(cardNamesToFetch));
-
     const serializableCardMap: Record<string, ReplayCardData> = {};
     cardDataMap.forEach((value, key) => {
         serializableCardMap[key] = value;
