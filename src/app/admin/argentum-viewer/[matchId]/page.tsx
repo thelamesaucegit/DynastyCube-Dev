@@ -3,75 +3,50 @@
 "use client";
 
 import { useRouter } from 'next/navigation';
-import React, { useState, useEffect, use, useMemo } from 'react'; // Removed unused useCallback
+import React, { useState, useEffect, use, useMemo } from 'react';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
-import { getPublicMatchReplayData } from './actions'; 
+import { getPublicMatchReplayData } from './actions';
 import { getCardDataForReplay } from '@/app/actions/cardActions';
-import type { SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientPlayer, ClientZone, ReplayCardData, ClientCard, EntityId, ClientGameState, ClientEvent } from '@/types';
+import type { SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientPlayer, ClientZone, ReplayCardData, ClientCard, EntityId, ClientGameState } from '@/types';
 import { ResponsiveContext, useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
 import { produce, WritableDraft } from 'immer';
 import { createClient } from '@supabase/supabase-js';
 import { ZoneType } from '@/types/enums';
 
-// STEP 1: Define a new set of interfaces that are fully mutable and correctly typed for replay reconstruction.
-interface ReplayFrameGameState {
-    cards: Record<string, ClientCard>;
-    zones: ClientZone[];
-    players: ClientPlayer[];
-    currentPhase: string;
-    currentStep: string;
-    activePlayerId: EntityId | null;
-    priorityPlayerId: EntityId | null;
-    turnNumber: number;
-    isGameOver: boolean;
-    winnerId: EntityId | null;
-    combat: unknown | null;
-    gameLog: unknown[];
-}
-
-interface ReplayFrame {
-    gameSessionId: string;
-    gameState: ReplayFrameGameState;
-    player1Id: EntityId;
-    player2Id: EntityId;
-    player1Name: string;
-    player2Name: string;
-    player1: ClientPlayer;
-    player2: ClientPlayer;
-    currentPhase: string;
-    activePlayerId: EntityId | null;
-    priorityPlayerId: EntityId | null;
-    combat: unknown;
-    decisionStatus: unknown;
-}
+// ============================================================================
+// THE FINAL AND CORRECT SOLUTION
+// ============================================================================
 
 function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
     return (item as SpectatorStateDiff).isDiff === true;
 }
 
-// STEP 2: The reconstruction function now uses the correct, mutable data model internally.
 function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
     if (!rawStates || rawStates.length === 0) return [];
     
-    // The accumulator array will hold our new, correctly typed replay frames.
-    const reconstructed: ReplayFrame[] = [];
-    let currentBlueprint: ReplayFrame | null = null;
+    const reconstructed: SpectatorStateUpdate[] = [];
+    let currentBlueprint: SpectatorStateUpdate | null = null;
 
     for (const item of rawStates) {
         if (isDiff(item)) {
             if (!currentBlueprint || reconstructed.length === 0) continue;
             
-            const previousFrame = reconstructed[reconstructed.length - 1];
+            const previousState = reconstructed[reconstructed.length - 1];
             
-            // Use `produce` on our new, fully mutable `ReplayFrame` type.
-            const nextFrame = produce(previousFrame, draft => {
+            const nextState = produce(previousState, (draft: WritableDraft<SpectatorStateUpdate>) => {
+                
+                // --- THIS IS THE FIX ---
+                // The 'activePlayerId' can be undefined in a delta, but if it exists, it's a valid EntityId, never null.
+                // We check for its existence and assign it directly. No 'as' cast is needed.
                 if (item.activePlayerId !== undefined) {
-                    draft.activePlayerId = item.activePlayerId as EntityId | null;
+                    draft.activePlayerId = item.activePlayerId;
                 }
+                // 'priorityPlayerId' CAN be null, so this assignment is correct.
                 if (item.priorityPlayerId !== undefined) {
-                    draft.priorityPlayerId = item.priorityPlayerId as EntityId | null;
+                    draft.priorityPlayerId = item.priorityPlayerId;
                 }
+                // The rest of the properties are handled correctly.
                 if (item.currentPhase !== undefined) {
                     draft.currentPhase = item.currentPhase;
                 }
@@ -81,43 +56,47 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
 
                 if (item.gameState) {
                     const gsd = item.gameState;
-                    const draftGameState = draft.gameState;
+                    const draftGameState = draft.gameState as WritableDraft<ClientGameState>;
 
                     if (gsd.currentPhase !== undefined) draftGameState.currentPhase = gsd.currentPhase;
                     if (gsd.currentStep !== undefined) draftGameState.currentStep = gsd.currentStep;
-                    if (gsd.activePlayerId !== undefined) draftGameState.activePlayerId = gsd.activePlayerId as EntityId;
-                    if (gsd.priorityPlayerId !== undefined) draftGameState.priorityPlayerId = gsd.priorityPlayerId as EntityId;
+                    if (gsd.activePlayerId !== undefined) draftGameState.activePlayerId = gsd.activePlayerId;
+                    if (gsd.priorityPlayerId !== undefined) draftGameState.priorityPlayerId = gsd.priorityPlayerId;
                     if (gsd.turnNumber !== undefined) draftGameState.turnNumber = gsd.turnNumber;
                     if (gsd.isGameOver !== undefined) draftGameState.isGameOver = gsd.isGameOver;
-                    if (gsd.winnerId !== undefined) draftGameState.winnerId = gsd.winnerId as EntityId | null;
+                    if (gsd.winnerId !== undefined) draftGameState.winnerId = gsd.winnerId;
                     if (gsd.combat !== undefined) draftGameState.combat = JSON.parse(JSON.stringify(gsd.combat));
                     
-                    if (gsd.gameLog) draftGameState.gameLog.push(...JSON.parse(JSON.stringify(gsd.gameLog)));
-                    if (gsd.cards) Object.assign(draftGameState.cards, JSON.parse(JSON.stringify(gsd.cards)));
-                    if (gsd.players) {
+                    if (gsd.gameLog && draftGameState.gameLog) (draftGameState.gameLog as unknown[]).push(...JSON.parse(JSON.stringify(gsd.gameLog)));
+                    if (gsd.cards && draftGameState.cards) Object.assign(draftGameState.cards, JSON.parse(JSON.stringify(gsd.cards)));
+                    
+                    if (gsd.players && draftGameState.players) {
                         Object.values(gsd.players as Record<string, ClientPlayer>).forEach(p => {
                             const index = draftGameState.players.findIndex(pl => pl.playerId === p.playerId);
-                            if (index !== -1) draftGameState.players[index] = JSON.parse(JSON.stringify(p));
+                            if (index !== -1) (draftGameState.players as ClientPlayer[])[index] = JSON.parse(JSON.stringify(p));
                         });
                     }
-                    if (gsd.zones) {
+                    if (gsd.zones && draftGameState.zones) {
                         Object.values(gsd.zones as Record<string, ClientZone>).forEach(z => {
                             const index = draftGameState.zones.findIndex(zn => zn.zoneId.ownerId === z.zoneId.ownerId && zn.zoneId.zoneType === z.zoneId.zoneType);
-                            if (index !== -1) draftGameState.zones[index] = JSON.parse(JSON.stringify(z));
+                            if (index !== -1) (draftGameState.zones as ClientZone[])[index] = JSON.parse(JSON.stringify(z));
                         });
                     }
                 }
             });
-            reconstructed.push(nextFrame);
+            reconstructed.push(nextState);
         } else {
-            // The initial blueprint is cast to our new internal type.
-            currentBlueprint = item as unknown as ReplayFrame;
+            currentBlueprint = item as SpectatorStateUpdate;
             reconstructed.push(currentBlueprint);
         }
     }
-    // STEP 3: At the very end, we cast the array of correctly constructed frames back to the type the application expects.
-    return reconstructed as unknown as SpectatorStateUpdate[];
+    return reconstructed;
 }
+
+// ============================================================================
+// END OF FIX
+// ============================================================================
+
 
 interface PageProps {
     params: Promise<{ matchId: string }>;
@@ -132,7 +111,6 @@ export default function ReplayPage(props: PageProps) {
         gameStates: SpectatorStateUpdate[] | null;
         cardDataMap: Record<string, ReplayCardData> | null;
     } | null>(null);
-    
     const [isLoading, setIsLoading] = useState(true);
     
     useEffect(() => {
@@ -146,7 +124,6 @@ export default function ReplayPage(props: PageProps) {
                     throw new Error("No game states found for this match in database.");
                 }
 
-                // Spoiler Lock Logic
                 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
                 const { data: scheduleRow } = await supabase.from('schedule').select('match_date').eq('sim_match_id', matchId).single();
                 if (scheduleRow?.match_date) {
