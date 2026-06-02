@@ -14,24 +14,45 @@ import { SettingsProvider } from '@/contexts/SettingsContext';
 import { createClient } from '@supabase/supabase-js';
 import { ZoneType } from '@/types/enums';
 
+// --- THIS IS THE FINAL, CORRECT IMPLEMENTATION ---
 
-// The robust reconstruction logic is correct and remains unchanged.
-function isDiff(item: ReplayStateItem): item is SpectatorStateDiff { /* ... */ }
+function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
+    // Restore the function body
+    return (item as SpectatorStateDiff).isDiff === true;
+}
+
 function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
     if (!rawStates || rawStates.length === 0) return [];
+    
     const reconstructed: SpectatorStateUpdate[] = [];
     let currentBlueprint: SpectatorStateUpdate | null = null;
+
     for (const item of rawStates) {
         if (isDiff(item)) {
             if (!currentBlueprint || reconstructed.length === 0) continue;
+            
             const previousState = reconstructed[reconstructed.length - 1];
+            
             let nextGameState = { ...previousState.gameState as ClientGameState };
+
             if (item.gameState) {
                 const gsd = item.gameState;
+                
                 const newCards = gsd.cards ? { ...nextGameState.cards, ...JSON.parse(JSON.stringify(gsd.cards)) } : nextGameState.cards;
-                const newPlayers = gsd.players && nextGameState.players ? nextGameState.players.map(p => { const u = (gsd.players as Record<string, ClientPlayer>)[p.playerId]; return u ? JSON.parse(JSON.stringify(u)) : p; }) : nextGameState.players;
-                const newZones = gsd.zones && nextGameState.zones ? nextGameState.zones.map(z => { const k = `${z.zoneId.ownerId}:${z.zoneId.zoneType}`; const u = (gsd.zones as Record<string, ClientZone>)[k]; return u ? JSON.parse(JSON.stringify(u)) : z; }) : nextGameState.zones;
+                
+                const newPlayers = gsd.players && nextGameState.players ? nextGameState.players.map(p => {
+                    const updatedPlayer = (gsd.players as Record<string, ClientPlayer>)[p.playerId];
+                    return updatedPlayer ? JSON.parse(JSON.stringify(updatedPlayer)) : p;
+                }) : nextGameState.players;
+
+                const newZones = gsd.zones && nextGameState.zones ? nextGameState.zones.map(z => {
+                    const zoneKey = `${z.zoneId.ownerId}:${z.zoneId.zoneType}`;
+                    const updatedZone = (gsd.zones as Record<string, ClientZone>)[zoneKey];
+                    return updatedZone ? JSON.parse(JSON.stringify(updatedZone)) : z;
+                }) : nextGameState.zones;
+
                 const newLog = gsd.gameLog && nextGameState.gameLog ? [...nextGameState.gameLog, ...JSON.parse(JSON.stringify(gsd.gameLog))] : nextGameState.gameLog;
+
                 nextGameState = {
                     ...nextGameState,
                     cards: newCards,
@@ -48,6 +69,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     ...(gsd.combat !== undefined && { combat: JSON.parse(JSON.stringify(gsd.combat)) }),
                 };
             }
+
             const nextState: SpectatorStateUpdate = {
                 ...previousState,
                 gameState: nextGameState,
@@ -56,6 +78,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                 ...(item.currentPhase !== undefined && { currentPhase: item.currentPhase }),
                 ...(item.combat !== undefined && { combat: JSON.parse(JSON.stringify(item.combat)) }),
             };
+
             reconstructed.push(nextState);
         } else {
             currentBlueprint = item as SpectatorStateUpdate;
@@ -64,6 +87,9 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     }
     return reconstructed;
 }
+
+// --- END OF FIX ---
+
 
 interface PageProps {
     params: Promise<{ matchId: string }>;
@@ -101,8 +127,6 @@ export default function ReplayPage(props: PageProps) {
                     }
                 }
                 
-                // --- THIS IS THE FIX ---
-                // Corrected the variable name from 'rawStates' to 'rawGameStates'
                 const finalGameStates = reconstructGameStates(rawGameStates as ReplayStateItem[]);
                 const validStates = finalGameStates.filter(s => s?.gameState != null);
                 if (validStates.length === 0) throw new Error("No valid game states remained after reconstruction.");
