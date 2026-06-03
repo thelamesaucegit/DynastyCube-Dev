@@ -24,103 +24,90 @@ function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
  */
 
 function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
-    // Retaining verbose logging to ensure we can verify the fix.
-    console.log(`[Reconstruction] Starting process with ${rawStates.length} raw states.`);
-    
     if (!rawStates || rawStates.length === 0) {
         return [];
     }
 
     const reconstructed: SpectatorStateUpdate[] = [];
-    if (isDiff(rawStates[0]!)) {
-        console.error("Reconstruction failed: The first state item was a diff, not a blueprint.");
-        return [];
-    }
-    
-    reconstructed.push(rawStates[0] as SpectatorStateUpdate);
-    console.log(`[Reconstruction] Step 0: Initial blueprint processed. Card count: ${Object.keys(reconstructed[0]!.gameState.cards).length}`);
+    let currentBlueprint: SpectatorStateUpdate | null = null;
 
-
-    for (let i = 1; i < rawStates.length; i++) {
-        const item = rawStates[i]!;
-        const previousState = reconstructed[reconstructed.length - 1]!;
-
+    for (const item of rawStates) {
         if (isDiff(item)) {
-            const nextState = produce(previousState, (draft: WritableDraft<SpectatorStateUpdate>) => {
-                // All complex objects must be deep-cloned before assignment to the draft.
-                if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId;
-                if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId;
-                if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
-                if (item.combat !== undefined) draft.combat = JSON.parse(JSON.stringify(item.combat));
+            if (!currentBlueprint || reconstructed.length === 0) {
+                continue;
+            }
 
-                if (item.gameState) {
-                    const gsd = item.gameState;
-                    
-                    if (!draft.gameState) draft.gameState = {} as WritableDraft<ClientGameState>;
-                    if (!draft.gameState.cards) draft.gameState.cards = {};
-                    if (!draft.gameState.zones) draft.gameState.zones = [];
-                    if (!draft.gameState.players) draft.gameState.players = [];
-                    if (!draft.gameState.gameLog) draft.gameState.gameLog = [];
+            const previousState = reconstructed[reconstructed.length - 1]!;
+            
+            // Create a deep, mutable copy to work with
+            const nextState: SpectatorStateUpdate = JSON.parse(JSON.stringify(previousState));
 
-                    // --- FINAL, CORRECTED MERGE LOGIC ---
-                    if (gsd.cards) {
-                        for (const cardId in gsd.cards) {
-                            const key = cardId as keyof typeof gsd.cards;
-                            const cardDiff = gsd.cards[key];
-                            if (draft.gameState.cards[key] && cardDiff) {
-                                // Deep clone the diff before assigning to solve readonly issue
-                                Object.assign(draft.gameState.cards[key], JSON.parse(JSON.stringify(cardDiff)));
-                            } else if (cardDiff) {
-                                // Deep clone the new card before assigning
-                                draft.gameState.cards[key] = JSON.parse(JSON.stringify(cardDiff));
-                            }
+            // Apply top-level diff properties
+            if (item.activePlayerId !== undefined) nextState.activePlayerId = item.activePlayerId;
+            if (item.priorityPlayerId !== undefined) nextState.priorityPlayerId = item.priorityPlayerId;
+            if (item.currentPhase !== undefined) nextState.currentPhase = item.currentPhase;
+            if (item.combat !== undefined) nextState.combat = item.combat;
+
+            if (item.gameState) {
+                const gsd = item.gameState;
+
+                // --- ROBUST, MANUAL DEEP MERGE ---
+                if (gsd.cards) {
+                    for (const cardId in gsd.cards) {
+                        const key = cardId as keyof typeof gsd.cards;
+                        const cardDiff = gsd.cards[key];
+                        if (nextState.gameState.cards[key] && cardDiff) {
+                            Object.assign(nextState.gameState.cards[key], cardDiff);
+                        } else if (cardDiff) {
+                            nextState.gameState.cards[key] = cardDiff;
                         }
                     }
-                    if (gsd.zones) {
-                        for (const zoneKey in gsd.zones) {
-                            const key = zoneKey as keyof typeof gsd.zones;
-                            const updatedZone = gsd.zones[key]!;
-                            const index = draft.gameState.zones.findIndex(z => `${z.zoneId.ownerId}:${z.zoneId.zoneType}` === key);
-                            if (index !== -1) {
-                                Object.assign(draft.gameState.zones[index]!, JSON.parse(JSON.stringify(updatedZone)));
-                            } else {
-                                draft.gameState.zones.push(JSON.parse(JSON.stringify(updatedZone)));
-                            }
-                        }
-                    }
-                    if (gsd.players) {
-                         for (const playerId in gsd.players) {
-                            const key = playerId as keyof typeof gsd.players;
-                            const updatedPlayer = gsd.players[key]!;
-                            const index = draft.gameState.players.findIndex(p => p.playerId === key);
-                             if (index !== -1) {
-                                Object.assign(draft.gameState.players[index]!, JSON.parse(JSON.stringify(updatedPlayer)));
-                            }
-                        }
-                    }
-                    if (gsd.gameLog) {
-                        draft.gameState.gameLog.push(...JSON.parse(JSON.stringify(gsd.gameLog)));
-                    }
-                    
-                    if (gsd.currentPhase !== undefined) draft.gameState.currentPhase = gsd.currentPhase;
-                    if (gsd.currentStep !== undefined) draft.gameState.currentStep = gsd.currentStep;
-                    if (gsd.activePlayerId !== undefined) draft.gameState.activePlayerId = gsd.activePlayerId;
-                    if (gsd.priorityPlayerId !== undefined) draft.gameState.priorityPlayerId = gsd.priorityPlayerId;
-                    if (gsd.turnNumber !== undefined) draft.gameState.turnNumber = gsd.turnNumber;
-                    if (gsd.isGameOver !== undefined) draft.gameState.isGameOver = gsd.isGameOver;
-                    if (gsd.winnerId !== undefined) draft.gameState.winnerId = gsd.winnerId;
-                    if (gsd.combat !== undefined) draft.gameState.combat = JSON.parse(JSON.stringify(gsd.combat));
                 }
-            });
+                if (gsd.zones) {
+                    for (const zoneKey in gsd.zones) {
+                        const key = zoneKey as keyof typeof gsd.zones;
+                        const updatedZone = gsd.zones[key]!;
+                        const index = nextState.gameState.zones.findIndex((z: ClientZone) => `${z.zoneId.ownerId}:${z.zoneId.zoneType}` === key);
+                        if (index !== -1) {
+                            Object.assign(nextState.gameState.zones[index], updatedZone);
+                        } else {
+                            nextState.gameState.zones.push(updatedZone);
+                        }
+                    }
+                }
+                if (gsd.players) {
+                     for (const playerId in gsd.players) {
+                        const key = playerId as keyof typeof gsd.players;
+                        const updatedPlayer = gsd.players[key]!;
+                        const index = nextState.gameState.players.findIndex((p: ClientPlayer) => p.playerId === key);
+                         if (index !== -1) {
+                            Object.assign(nextState.gameState.players[index], updatedPlayer);
+                        }
+                    }
+                }
+                if (gsd.gameLog) {
+                    if (!nextState.gameState.gameLog) nextState.gameState.gameLog = [];
+                    nextState.gameState.gameLog.push(...gsd.gameLog);
+                }
+                
+                // Overwrite simple properties
+                if (gsd.currentPhase !== undefined) nextState.gameState.currentPhase = gsd.currentPhase;
+                if (gsd.currentStep !== undefined) nextState.gameState.currentStep = gsd.currentStep;
+                if (gsd.activePlayerId !== undefined) nextState.gameState.activePlayerId = gsd.activePlayerId;
+                if (gsd.priorityPlayerId !== undefined) nextState.gameState.priorityPlayerId = gsd.priorityPlayerId;
+                if (gsd.turnNumber !== undefined) nextState.gameState.turnNumber = gsd.turnNumber;
+                if (gsd.isGameOver !== undefined) nextState.gameState.isGameOver = gsd.isGameOver;
+                if (gsd.winnerId !== undefined) nextState.gameState.winnerId = gsd.winnerId;
+                if (gsd.combat !== undefined) nextState.gameState.combat = gsd.combat;
+            }
             reconstructed.push(nextState);
-
         } else {
-            reconstructed.push(item as SpectatorStateUpdate);
+            currentBlueprint = item as SpectatorStateUpdate;
+            reconstructed.push(currentBlueprint);
         }
     }
     return reconstructed;
 }
-
 
 interface PageProps {
     params: Promise<{ matchId: string }>;
