@@ -33,91 +33,105 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     const reconstructed: SpectatorStateUpdate[] = [];
     let currentBlueprint: SpectatorStateUpdate | null = null;
 
-    for (const item of rawStates) {
+    for (let i = 0; i < rawStates.length; i++) {
+        const item = rawStates[i]!;
+
         if (isDiff(item)) {
-            if (!currentBlueprint) continue;
-
-            // Start with a DEEP COPY of the last known state to avoid mutation issues.
-            const previousState = reconstructed[reconstructed.length - 1]!;
-            const nextState = JSON.parse(JSON.stringify(previousState));
-
-            // Apply top-level diff properties
-            if (item.activePlayerId !== undefined) nextState.activePlayerId = item.activePlayerId;
-            if (item.priorityPlayerId !== undefined) nextState.priorityPlayerId = item.priorityPlayerId;
-            if (item.currentPhase !== undefined) nextState.currentPhase = item.currentPhase;
-            if (item.combat !== undefined) nextState.combat = item.combat;
-
-            // Safely and deeply merge the nested gameState object
-            if (item.gameState) {
-                const gsd = item.gameState;
-
-                // --- DEEP MERGE LOGIC ---
-                
-                // Merge cards: update existing, add new
-                if (gsd.cards) {
-                    for (const cardId in gsd.cards) {
-                        const key = cardId as keyof typeof gsd.cards;
-                        if (nextState.gameState.cards[key]) {
-                            // The card exists, so MERGE properties onto it
-                            Object.assign(nextState.gameState.cards[key], gsd.cards[key]);
-                        } else {
-                            // The card is new, so add it
-                            nextState.gameState.cards[key] = gsd.cards[key];
-                        }
-                    }
-                }
-                
-                // Merge zones
-                if (gsd.zones) {
-                    for (const zoneKey in gsd.zones) {
-                        const key = zoneKey as keyof typeof gsd.zones;
-                        const updatedZone = gsd.zones[key]!;
-                        const index = nextState.gameState.zones.findIndex((z: ClientZone) => `${z.zoneId.ownerId}:${z.zoneId.zoneType}` === key);
-                        if (index !== -1) {
-                            Object.assign(nextState.gameState.zones[index], updatedZone);
-                        } else {
-                            nextState.gameState.zones.push(updatedZone);
-                        }
-                    }
-                }
-
-                // Merge players
-                if (gsd.players) {
-                     for (const playerId in gsd.players) {
-                        const key = playerId as keyof typeof gsd.players;
-                        const updatedPlayer = gsd.players[key]!;
-                        const index = nextState.gameState.players.findIndex((p: ClientPlayer) => p.playerId === updatedPlayer.playerId);
-                         if (index !== -1) {
-                            // Merge the player object, don't replace it
-                            Object.assign(nextState.gameState.players[index], updatedPlayer);
-                        }
-                    }
-                }
-
-                // Append to gameLog
-                if (gsd.gameLog) {
-                    if (!nextState.gameState.gameLog) nextState.gameState.gameLog = [];
-                    nextState.gameState.gameLog.push(...gsd.gameLog);
-                }
-                
-                // Overwrite simple, top-level gameState properties
-                if (gsd.currentPhase !== undefined) nextState.gameState.currentPhase = gsd.currentPhase;
-                if (gsd.currentStep !== undefined) nextState.gameState.currentStep = gsd.currentStep;
-                if (gsd.activePlayerId !== undefined) nextState.gameState.activePlayerId = gsd.activePlayerId;
-                if (gsd.priorityPlayerId !== undefined) nextState.gameState.priorityPlayerId = gsd.priorityPlayerId;
-                if (gsd.turnNumber !== undefined) nextState.gameState.turnNumber = gsd.turnNumber;
-                if (gsd.isGameOver !== undefined) nextState.gameState.isGameOver = gsd.isGameOver;
-                if (gsd.winnerId !== undefined) nextState.gameState.winnerId = gsd.winnerId;
-                if (gsd.combat !== undefined) nextState.gameState.combat = gsd.combat;
+            const previousState = reconstructed[reconstructed.length - 1];
+            if (!previousState) {
+                console.warn(`[Reconstruction] Step ${i}: Skipping diff because no previous state exists.`);
+                continue;
             }
+
+            // --- DIAGNOSTIC: Log the state BEFORE the merge ---
+            const previousCardCount = Object.keys(previousState.gameState.cards).length;
+            const previousZoneCount = previousState.gameState.zones.length;
+            console.log(`[Reconstruction] Step ${i}: Applying diff. PREVIOUS state has ${previousCardCount} cards and ${previousZoneCount} zones.`);
+            if (i > 0 && i < 5) {
+                 console.log('CURRENT DIFF:', JSON.stringify(item.gameState));
+            }
+
+            const nextState = produce(previousState, (draft: WritableDraft<SpectatorStateUpdate>) => {
+                if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId;
+                if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId;
+                if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
+                if (item.combat !== undefined) draft.combat = item.combat;
+
+                if (item.gameState) {
+                    const gsd = item.gameState;
+                    
+                    if (!draft.gameState) draft.gameState = {} as WritableDraft<ClientGameState>;
+                    if (!draft.gameState.cards) draft.gameState.cards = {};
+                    if (!draft.gameState.zones) draft.gameState.zones = [];
+                    if (!draft.gameState.players) draft.gameState.players = [];
+                    if (!draft.gameState.gameLog) draft.gameState.gameLog = [];
+
+                    // CORRECTED LOGIC: Only merge if the object in the diff is not empty.
+                    if (gsd.cards && Object.keys(gsd.cards).length > 0) {
+                        for (const cardId in gsd.cards) {
+                            const key = cardId as keyof typeof gsd.cards;
+                            if (draft.gameState.cards[key]) {
+                                Object.assign(draft.gameState.cards[key], gsd.cards[key]);
+                            } else {
+                                draft.gameState.cards[key] = gsd.cards[key];
+                            }
+                        }
+                    }
+                    if (gsd.zones && Object.keys(gsd.zones).length > 0) {
+                        for (const zoneKey in gsd.zones) {
+                            const key = zoneKey as keyof typeof gsd.zones;
+                            const updatedZone = gsd.zones[key]!;
+                            const index = draft.gameState.zones.findIndex(z => `${z.zoneId.ownerId}:${z.zoneId.zoneType}` === key);
+                            if (index !== -1) {
+                                Object.assign(draft.gameState.zones[index]!, updatedZone);
+                            } else {
+                                draft.gameState.zones.push(updatedZone);
+                            }
+                        }
+                    }
+                    if (gsd.players && Object.keys(gsd.players).length > 0) {
+                         for (const playerId in gsd.players) {
+                            const key = playerId as keyof typeof gsd.players;
+                            const updatedPlayer = gsd.players[key]!;
+                            const index = draft.gameState.players.findIndex(p => p.playerId === key);
+                             if (index !== -1) {
+                                Object.assign(draft.gameState.players[index]!, updatedPlayer);
+                            }
+                        }
+                    }
+                    if (gsd.gameLog && gsd.gameLog.length > 0) {
+                        draft.gameState.gameLog.push(...gsd.gameLog);
+                    }
+                    
+                    if (gsd.currentPhase !== undefined) draft.gameState.currentPhase = gsd.currentPhase;
+                    if (gsd.currentStep !== undefined) draft.gameState.currentStep = gsd.currentStep;
+                    if (gsd.activePlayerId !== undefined) draft.gameState.activePlayerId = gsd.activePlayerId;
+                    if (gsd.priorityPlayerId !== undefined) draft.gameState.priorityPlayerId = gsd.priorityPlayerId;
+                    if (gsd.turnNumber !== undefined) draft.gameState.turnNumber = gsd.turnNumber;
+                    if (gsd.isGameOver !== undefined) draft.gameState.isGameOver = gsd.isGameOver;
+                    if (gsd.winnerId !== undefined) draft.gameState.winnerId = gsd.winnerId;
+                    if (gsd.combat !== undefined) draft.gameState.combat = gsd.combat;
+                }
+            });
+
+            // --- DIAGNOSTIC: Log the state AFTER the merge ---
+            const nextCardCount = Object.keys(nextState.gameState.cards).length;
+            const nextZoneCount = nextState.gameState.zones.length;
+            console.log(`[Reconstruction] Step ${i}: Diff applied.    POST state has ${nextCardCount} cards and ${nextZoneCount} zones.`);
+            if (nextCardCount < previousCardCount) {
+                console.error(`[Reconstruction] CRITICAL CARD DATA LOSS DETECTED at step ${i}!`);
+            }
+
             reconstructed.push(nextState);
 
         } else {
-            // This is a blueprint, it becomes the new base for subsequent diffs.
+            // This is a blueprint. It becomes the new state for this step.
             currentBlueprint = item as SpectatorStateUpdate;
             reconstructed.push(currentBlueprint);
+            console.log(`[Reconstruction] Step ${i}: New BLUEPRINT processed. Card count: ${Object.keys(currentBlueprint.gameState.cards).length}`);
         }
     }
+    console.log(`[Reconstruction] Process finished. Produced ${reconstructed.length} final states.`);
     return reconstructed;
 }
 
