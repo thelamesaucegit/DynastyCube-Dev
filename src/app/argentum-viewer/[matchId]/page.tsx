@@ -24,22 +24,28 @@ function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
  */
 
 function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
+    console.log(`[Reconstruction] Starting process with ${rawStates.length} raw states.`);
+    
     if (!rawStates || rawStates.length === 0) {
         return [];
     }
 
     const reconstructed: SpectatorStateUpdate[] = [];
-    let currentBlueprint: SpectatorStateUpdate | null = null;
 
-    for (const item of rawStates) {
+    if (isDiff(rawStates[0]!)) {
+        console.error("Reconstruction failed: The first state item was a diff, not a blueprint.");
+        return [];
+    }
+    
+    reconstructed.push(rawStates[0] as SpectatorStateUpdate);
+    console.log(`[Reconstruction] Step 0: Initial blueprint processed. Card count: ${Object.keys(reconstructed[0]!.gameState.cards).length}`);
+
+    for (let i = 1; i < rawStates.length; i++) {
+        const item = rawStates[i]!;
+        const previousState = reconstructed[reconstructed.length - 1]!;
+
         if (isDiff(item)) {
-            if (!currentBlueprint || reconstructed.length === 0) {
-                continue;
-            }
-
-            const previousState = reconstructed[reconstructed.length - 1]!;
-            
-            // Create a deep, mutable copy to work with
+            // Start with a DEEP COPY of the last known state.
             const nextState: SpectatorStateUpdate = JSON.parse(JSON.stringify(previousState));
 
             // Apply top-level diff properties
@@ -51,7 +57,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             if (item.gameState) {
                 const gsd = item.gameState;
 
-                // --- ROBUST, MANUAL DEEP MERGE ---
+                // --- FINAL, TYPE-SAFE DEEP MERGE LOGIC ---
                 if (gsd.cards) {
                     for (const cardId in gsd.cards) {
                         const key = cardId as keyof typeof gsd.cards;
@@ -64,30 +70,39 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     }
                 }
                 if (gsd.zones) {
+                    // Create a mutable copy of the zones array
+                    let newZones = [...nextState.gameState.zones];
                     for (const zoneKey in gsd.zones) {
                         const key = zoneKey as keyof typeof gsd.zones;
                         const updatedZone = gsd.zones[key]!;
-                        const index = nextState.gameState.zones.findIndex((z: ClientZone) => `${z.zoneId.ownerId}:${z.zoneId.zoneType}` === key);
+                        const index = newZones.findIndex(z => `${z.zoneId.ownerId}:${z.zoneId.zoneType}` === key);
                         if (index !== -1) {
-                            Object.assign(nextState.gameState.zones[index], updatedZone);
+                            // Replace the object at the index
+                             newZones[index] = { ...newZones[index], ...updatedZone };
                         } else {
-                            nextState.gameState.zones.push(updatedZone);
+                            newZones.push(updatedZone);
                         }
                     }
+                    nextState.gameState.zones = newZones;
                 }
                 if (gsd.players) {
+                     // Create a mutable copy of the players array
+                    let newPlayers = [...nextState.gameState.players];
                      for (const playerId in gsd.players) {
                         const key = playerId as keyof typeof gsd.players;
                         const updatedPlayer = gsd.players[key]!;
-                        const index = nextState.gameState.players.findIndex((p: ClientPlayer) => p.playerId === key);
+                        const index = newPlayers.findIndex(p => p.playerId === key);
                          if (index !== -1) {
-                            Object.assign(nextState.gameState.players[index], updatedPlayer);
+                            // Replace the object at the index
+                            newPlayers[index] = { ...newPlayers[index], ...updatedPlayer };
                         }
                     }
+                    nextState.gameState.players = newPlayers;
                 }
                 if (gsd.gameLog) {
                     if (!nextState.gameState.gameLog) nextState.gameState.gameLog = [];
-                    nextState.gameState.gameLog.push(...gsd.gameLog);
+                    // Create a new array by concatenating
+                    nextState.gameState.gameLog = [...nextState.gameState.gameLog, ...gsd.gameLog];
                 }
                 
                 // Overwrite simple properties
@@ -102,8 +117,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             }
             reconstructed.push(nextState);
         } else {
-            currentBlueprint = item as SpectatorStateUpdate;
-            reconstructed.push(currentBlueprint);
+            reconstructed.push(item as SpectatorStateUpdate);
         }
     }
     return reconstructed;
