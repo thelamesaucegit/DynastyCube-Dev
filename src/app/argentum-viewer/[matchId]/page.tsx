@@ -24,8 +24,6 @@ function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
  */
 
 function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
-    console.log(`[Reconstruction] Starting process with ${rawStates.length} raw states.`);
-    
     if (!rawStates || rawStates.length === 0) {
         return [];
     }
@@ -37,91 +35,106 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
         return [];
     }
     
-    reconstructed.push(rawStates[0] as SpectatorStateUpdate);
-    console.log(`[Reconstruction] Step 0: Initial blueprint processed. Card count: ${Object.keys(reconstructed[0]!.gameState.cards).length}`);
+    let currentBlueprint = rawStates[0] as SpectatorStateUpdate;
+    reconstructed.push(currentBlueprint);
 
     for (let i = 1; i < rawStates.length; i++) {
         const item = rawStates[i]!;
-        const previousState = reconstructed[reconstructed.length - 1]!;
 
         if (isDiff(item)) {
-            // Start with a DEEP COPY of the last known state.
-            const nextState: SpectatorStateUpdate = JSON.parse(JSON.stringify(previousState));
+            const previousState = reconstructed[reconstructed.length - 1]!;
+            
+            // --- FINAL, CORRECT, IMMUTABLE MERGE LOGIC ---
+            
+            const gsd = item.gameState || {};
 
-            // Apply top-level diff properties
-            if (item.activePlayerId !== undefined) nextState.activePlayerId = item.activePlayerId;
-            if (item.priorityPlayerId !== undefined) nextState.priorityPlayerId = item.priorityPlayerId;
-            if (item.currentPhase !== undefined) nextState.currentPhase = item.currentPhase;
-            if (item.combat !== undefined) nextState.combat = item.combat;
+            // Start with the previous simple properties
+            let nextGameState: ClientGameState = {
+                ...previousState.gameState,
+                // Overwrite with diff's simple properties
+                ...(gsd.currentPhase !== undefined && { currentPhase: gsd.currentPhase }),
+                ...(gsd.currentStep !== undefined && { currentStep: gsd.currentStep }),
+                ...(gsd.activePlayerId !== undefined && { activePlayerId: gsd.activePlayerId }),
+                ...(gsd.priorityPlayerId !== undefined && { priorityPlayerId: gsd.priorityPlayerId }),
+                ...(gsd.turnNumber !== undefined && { turnNumber: gsd.turnNumber }),
+                ...(gsd.isGameOver !== undefined && { isGameOver: gsd.isGameOver }),
+                ...(gsd.winnerId !== undefined && { winnerId: gsd.winnerId }),
+                ...(gsd.combat !== undefined && { combat: gsd.combat }),
+                // We will handle array/object merges next
+                cards: {}, // Placeholder
+                zones: [], // Placeholder
+                players: [], // Placeholder
+                gameLog: [], // Placeholder
+            };
 
-            if (item.gameState) {
-                const gsd = item.gameState;
-
-                // --- FINAL, TYPE-SAFE DEEP MERGE LOGIC ---
-                if (gsd.cards) {
-                    for (const cardId in gsd.cards) {
-                        const key = cardId as keyof typeof gsd.cards;
-                        const cardDiff = gsd.cards[key];
-                        if (nextState.gameState.cards[key] && cardDiff) {
-                            Object.assign(nextState.gameState.cards[key], cardDiff);
-                        } else if (cardDiff) {
-                            nextState.gameState.cards[key] = cardDiff;
-                        }
+            // Deep merge cards
+            const newCards = { ...previousState.gameState.cards };
+            if (gsd.cards) {
+                for (const cardId in gsd.cards) {
+                    const key = cardId as keyof typeof gsd.cards;
+                    if (newCards[key] && gsd.cards[key]) {
+                        newCards[key] = { ...newCards[key], ...gsd.cards[key] };
+                    } else if (gsd.cards[key]) {
+                        newCards[key] = gsd.cards[key]!;
                     }
                 }
-                if (gsd.zones) {
-                    // Create a mutable copy of the zones array
-                    const newZones = [...nextState.gameState.zones];
-                    for (const zoneKey in gsd.zones) {
-                        const key = zoneKey as keyof typeof gsd.zones;
-                        const updatedZone = gsd.zones[key]!;
-                        const index = newZones.findIndex(z => `${z.zoneId.ownerId}:${z.zoneId.zoneType}` === key);
-                        if (index !== -1) {
-                            // Replace the object at the index
-                             newZones[index] = { ...newZones[index], ...updatedZone };
-                        } else {
-                            newZones.push(updatedZone);
-                        }
-                    }
-                    nextState.gameState.zones = newZones;
-                }
-                if (gsd.players) {
-                     // Create a mutable copy of the players array
-                    const newPlayers = [...nextState.gameState.players];
-                     for (const playerId in gsd.players) {
-                        const key = playerId as keyof typeof gsd.players;
-                        const updatedPlayer = gsd.players[key]!;
-                        const index = newPlayers.findIndex(p => p.playerId === key);
-                         if (index !== -1) {
-                            // Replace the object at the index
-                            newPlayers[index] = { ...newPlayers[index], ...updatedPlayer };
-                        }
-                    }
-                    nextState.gameState.players = newPlayers;
-                }
-                if (gsd.gameLog) {
-                    if (!nextState.gameState.gameLog) nextState.gameState.gameLog = [];
-                    // Create a new array by concatenating
-                    nextState.gameState.gameLog = [...nextState.gameState.gameLog, ...gsd.gameLog];
-                }
-                
-                // Overwrite simple properties
-                if (gsd.currentPhase !== undefined) nextState.gameState.currentPhase = gsd.currentPhase;
-                if (gsd.currentStep !== undefined) nextState.gameState.currentStep = gsd.currentStep;
-                if (gsd.activePlayerId !== undefined) nextState.gameState.activePlayerId = gsd.activePlayerId;
-                if (gsd.priorityPlayerId !== undefined) nextState.gameState.priorityPlayerId = gsd.priorityPlayerId;
-                if (gsd.turnNumber !== undefined) nextState.gameState.turnNumber = gsd.turnNumber;
-                if (gsd.isGameOver !== undefined) nextState.gameState.isGameOver = gsd.isGameOver;
-                if (gsd.winnerId !== undefined) nextState.gameState.winnerId = gsd.winnerId;
-                if (gsd.combat !== undefined) nextState.gameState.combat = gsd.combat;
             }
-            reconstructed.push(nextState);
+            nextGameState.cards = newCards;
+
+            // Deep merge zones
+            let newZones = [...previousState.gameState.zones];
+            if (gsd.zones) {
+                for (const zoneKey in gsd.zones) {
+                    const key = zoneKey as keyof typeof gsd.zones;
+                    const updatedZone = gsd.zones[key]!;
+                    const index = newZones.findIndex(z => `${z.zoneId.ownerId}:${z.zoneId.zoneType}` === key);
+                    if (index !== -1) {
+                        newZones[index] = { ...newZones[index], ...updatedZone };
+                    } else {
+                        newZones.push(updatedZone);
+                    }
+                }
+            }
+             nextState.zones = newZones;
+
+            // Deep merge players
+            let newPlayers = [...previousState.gameState.players];
+            if (gsd.players) {
+                 for (const playerId in gsd.players) {
+                    const key = playerId as keyof typeof gsd.players;
+                    const updatedPlayer = gsd.players[key]!;
+                    const index = newPlayers.findIndex(p => p.playerId === key);
+                     if (index !== -1) {
+                        newPlayers[index] = { ...newPlayers[index], ...updatedPlayer };
+                    }
+                }
+            }
+            nextState.players = newPlayers;
+
+            // Concatenate gameLog
+            const prevLog = previousState.gameState.gameLog || [];
+            const diffLog = gsd.gameLog || [];
+            nextState.gameLog = [...prevLog, ...diffLog];
+
+            reconstructed.push({
+                ...previousState,
+                gameState: nextState,
+                // Apply top-level diff properties
+                ...(item.activePlayerId !== undefined && { activePlayerId: item.activePlayerId }),
+                ...(item.priorityPlayerId !== undefined && { priorityPlayerId: item.priorityPlayerId }),
+                ...(item.currentPhase !== undefined && { currentPhase: item.currentPhase }),
+                ...(item.combat !== undefined && { combat: item.combat }),
+            });
+
         } else {
-            reconstructed.push(item as SpectatorStateUpdate);
+            // This is a new blueprint. It replaces the state entirely for this step.
+            currentBlueprint = item as SpectatorStateUpdate;
+            reconstructed.push(currentBlueprint);
         }
     }
     return reconstructed;
 }
+
 
 interface PageProps {
     params: Promise<{ matchId: string }>;
