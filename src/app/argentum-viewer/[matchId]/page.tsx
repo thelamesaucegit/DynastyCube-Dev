@@ -37,65 +37,63 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
 
             const previousState = reconstructed[reconstructed.length - 1]!;
             const gsd = item.gameState || {};
-            
-            const newCards = { ...previousState.gameState.cards };
+
+            // Create deep copies to work with, satisfying readonly constraints
+            const nextCards = JSON.parse(JSON.stringify(previousState.gameState.cards));
+            const nextZones = JSON.parse(JSON.stringify(previousState.gameState.zones));
+            const nextPlayers = JSON.parse(JSON.stringify(previousState.gameState.players));
+            const nextLog = JSON.parse(JSON.stringify(previousState.gameState.gameLog || []));
+
+            // Manually merge diffs into the copies
             if (gsd.cards) {
                 for (const cardId in gsd.cards) {
                     const key = cardId as keyof typeof gsd.cards;
-                    const cardDiff = gsd.cards[key];
-                    if (newCards[key] && cardDiff) {
-                        newCards[key] = { ...newCards[key], ...cardDiff };
-                    } else if (cardDiff) {
-                        newCards[key] = cardDiff;
+                    if (nextCards[key] && gsd.cards[key]) {
+                        Object.assign(nextCards[key], gsd.cards[key]);
+                    } else if (gsd.cards[key]) {
+                        nextCards[key] = gsd.cards[key]!;
                     }
                 }
             }
-
-            const newZones = [...previousState.gameState.zones];
             if (gsd.zones) {
                 for (const zoneKey in gsd.zones) {
                     const key = zoneKey as keyof typeof gsd.zones;
                     const updatedZone = gsd.zones[key]!;
-                    const index = newZones.findIndex(z => `${z.zoneId.ownerId}:${z.zoneId.zoneType}` === key);
+                    const index = nextZones.findIndex((z: ClientZone) => `${z.zoneId.ownerId}:${z.zoneId.zoneType}` === key);
                     if (index !== -1) {
-                        newZones[index] = { ...newZones[index]!, ...updatedZone };
+                        Object.assign(nextZones[index], updatedZone);
                     } else {
-                        newZones.push(updatedZone);
+                        nextZones.push(updatedZone);
                     }
                 }
             }
-            
-            const newPlayers = [...previousState.gameState.players];
             if (gsd.players) {
                  for (const playerId in gsd.players) {
                     const key = playerId as keyof typeof gsd.players;
                     const updatedPlayer = gsd.players[key]!;
-                    const index = newPlayers.findIndex(p => p.playerId === key);
+                    const index = nextPlayers.findIndex((p: ClientPlayer) => p.playerId === key);
                      if (index !== -1) {
-                        newPlayers[index] = { ...newPlayers[index]!, ...updatedPlayer };
+                        Object.assign(nextPlayers[index], updatedPlayer);
                     }
                 }
             }
+            if (gsd.gameLog) {
+                nextLog.push(...gsd.gameLog);
+            }
 
-            // --- DEFINITIVE FIX FOR TYPE INFERENCE ---
-            const prevLog = previousState.gameState.gameLog || [];
-            // Explicitly type the fallback array to satisfy the linter
-            const diffLog = gsd.gameLog || [] as ClientEvent[];
-            const newLog = [...prevLog, ...diffLog];
-
+            // Construct the new, immutable state in one pass
             const nextState: SpectatorStateUpdate = {
                 ...previousState,
                 ...item,
                 gameState: {
                     ...previousState.gameState,
                     ...gsd,
-                    cards: newCards,
-                    zones: newZones,
-                    players: newPlayers,
-                    gameLog: newLog,
+                    cards: nextCards,
+                    zones: nextZones,
+                    players: nextPlayers,
+                    gameLog: nextLog,
                 },
             };
-            
             reconstructed.push(nextState);
 
         } else {
