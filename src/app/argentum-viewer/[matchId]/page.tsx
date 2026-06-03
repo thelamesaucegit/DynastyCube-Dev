@@ -23,28 +23,17 @@ function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
  * This version correctly performs a deep merge of the nested gameState objects.
  */
 function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
-    console.log(`[Reconstruction] Starting process with ${rawStates.length} raw states.`);
-    
     if (!rawStates || rawStates.length === 0) return [];
     
     const reconstructed: SpectatorStateUpdate[] = [];
-    let currentBlueprint: SpectatorStateUpdate | null = null;
+    let hasProcessedFirstBlueprint = false;
 
-    for (let i = 0; i < rawStates.length; i++) {
-        const item = rawStates[i]!;
-
+    for (const item of rawStates) {
         if (isDiff(item)) {
-            if (!currentBlueprint || reconstructed.length === 0) {
-                console.warn(`[Reconstruction] Step ${i}: Skipping diff because no blueprint is set.`);
-                continue;
-            }
+            // Only apply a diff if we have a state to apply it to.
+            if (reconstructed.length === 0) continue;
             
             const previousState = reconstructed[reconstructed.length - 1]!;
-
-            // --- DIAGNOSTIC: Log the state BEFORE the merge ---
-            const previousCardCount = Object.keys(previousState.gameState.cards).length;
-            const previousZoneCount = previousState.gameState.zones.length;
-            console.log(`[Reconstruction] Step ${i}: Applying diff. PREVIOUS state has ${previousCardCount} cards and ${previousZoneCount} zones.`);
 
             const nextState = produce(previousState, (draft: WritableDraft<SpectatorStateUpdate>) => {
                 if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId;
@@ -103,28 +92,20 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     if (gsd.combat !== undefined) draft.gameState.combat = JSON.parse(JSON.stringify(gsd.combat));
                 }
             });
-
-            // --- DIAGNOSTIC: Log the state AFTER the merge ---
-            const nextCardCount = Object.keys(nextState.gameState.cards).length;
-            const nextZoneCount = nextState.gameState.zones.length;
-            console.log(`[Reconstruction] Step ${i}: Diff applied.    POST state has ${nextCardCount} cards and ${nextZoneCount} zones.`);
-            
-            // --- DIAGNOSTIC: Highlight if data is being lost ---
-            if (nextCardCount < previousCardCount || nextZoneCount < previousZoneCount) {
-                console.error(`[Reconstruction] CRITICAL DATA LOSS DETECTED at step ${i}!`);
-            }
-
             reconstructed.push(nextState);
 
         } else {
-            console.log(`[Reconstruction] Step ${i}: Found a new BLUEPRINT.`);
-            currentBlueprint = item as SpectatorStateUpdate;
-            reconstructed.push(currentBlueprint);
+            // This is a blueprint. ONLY process it if it's the very first one.
+            if (!hasProcessedFirstBlueprint) {
+                reconstructed.push(item as SpectatorStateUpdate);
+                hasProcessedFirstBlueprint = true;
+            }
+            // Otherwise, we ignore subsequent blueprints to avoid resetting the state.
         }
     }
-    console.log(`[Reconstruction] Process finished. Produced ${reconstructed.length} final states.`);
     return reconstructed;
 }
+
 
 
 
