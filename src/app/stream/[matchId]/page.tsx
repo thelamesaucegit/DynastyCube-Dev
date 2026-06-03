@@ -30,28 +30,36 @@ function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
  * This version correctly performs a deep merge of the nested gameState objects.
  */
 function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
+    console.log(`[Reconstruction] Starting process with ${rawStates.length} raw states.`);
+    
     if (!rawStates || rawStates.length === 0) {
         return [];
     }
 
     const reconstructed: SpectatorStateUpdate[] = [];
 
-    // The very first item MUST be a blueprint.
     if (isDiff(rawStates[0]!)) {
         console.error("Reconstruction failed: The first state item was a diff, not a blueprint.");
         return [];
     }
     
-    // Initialize with the first blueprint.
     reconstructed.push(rawStates[0] as SpectatorStateUpdate);
+    console.log(`[Reconstruction] Step 0: Initial blueprint processed. Card count: ${Object.keys(reconstructed[0]!.gameState.cards).length}`);
 
-    // Iterate through the rest of the states.
+
     for (let i = 1; i < rawStates.length; i++) {
         const item = rawStates[i]!;
         const previousState = reconstructed[reconstructed.length - 1]!;
 
         if (isDiff(item)) {
-            // This is a diff, apply it to the previous state.
+            // --- START OF CRITICAL DIAGNOSTIC ---
+            if (i > 0 && i < 5) { // Only log for the first few diffs
+                 console.log(`[Reconstruction] Applying diff at step ${i}.`);
+                 console.log('PREVIOUS STATE (Blueprint):', JSON.stringify(previousState.gameState));
+                 console.log('CURRENT DIFF:', JSON.stringify(item.gameState));
+            }
+            // --- END OF CRITICAL DIAGNOSTIC ---
+
             const nextState = produce(previousState, (draft: WritableDraft<SpectatorStateUpdate>) => {
                 if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId;
                 if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId;
@@ -95,7 +103,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                             }
                         }
                     }
-                    if (gsd.gameLog) {
+                    if (gsd.gameLog && draft.gameState.gameLog) {
                         draft.gameState.gameLog.push(...JSON.parse(JSON.stringify(gsd.gameLog)));
                     }
                     
@@ -110,9 +118,9 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                 }
             });
             reconstructed.push(nextState);
+
         } else {
-            // This is a new blueprint. It replaces the state entirely for this step.
-            reconstructed.push(item as SpectatorStateUpdate);
+             reconstructed.push(item as SpectatorStateUpdate);
         }
     }
     return reconstructed;
