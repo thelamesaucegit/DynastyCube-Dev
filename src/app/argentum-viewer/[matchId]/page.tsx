@@ -24,34 +24,47 @@ function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
  */
 
 function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
+    console.log(`[Reconstruction] Starting process with ${rawStates.length} raw states.`);
+    
     if (!rawStates || rawStates.length === 0) {
         return [];
     }
 
     const reconstructed: SpectatorStateUpdate[] = [];
-    let currentBlueprint: SpectatorStateUpdate | null = null;
 
-    for (const item of rawStates) {
+    if (isDiff(rawStates[0]!)) {
+        console.error("Reconstruction failed: The first state item was a diff, not a blueprint.");
+        return [];
+    }
+    
+    let currentBlueprint = rawStates[0] as SpectatorStateUpdate;
+    reconstructed.push(currentBlueprint);
+    console.log(`[Reconstruction] Step 0: Initial blueprint processed. Card count: ${Object.keys(reconstructed[0]!.gameState.cards).length}`);
+
+    for (let i = 1; i < rawStates.length; i++) {
+        const item = rawStates[i]!;
+
         if (isDiff(item)) {
-            if (!currentBlueprint) continue;
-
             const previousState = reconstructed[reconstructed.length - 1]!;
             const gsd = item.gameState || {};
+            
+            // --- FINAL, IMMUTABLE, TYPE-SAFE DEEP MERGE ---
 
-            // Create deep copies to work with, satisfying readonly constraints
-            const nextCards = JSON.parse(JSON.stringify(previousState.gameState.cards));
-            const nextZones = JSON.parse(JSON.stringify(previousState.gameState.zones));
-            const nextPlayers = JSON.parse(JSON.stringify(previousState.gameState.players));
-            const nextLog = JSON.parse(JSON.stringify(previousState.gameState.gameLog || []));
+            // Start with a deep copy of the previous collections.
+            const newCards = JSON.parse(JSON.stringify(previousState.gameState.cards));
+            const newZones = JSON.parse(JSON.stringify(previousState.gameState.zones));
+            const newPlayers = JSON.parse(JSON.stringify(previousState.gameState.players));
+            const newLog = JSON.parse(JSON.stringify(previousState.gameState.gameLog || []));
 
-            // Manually merge diffs into the copies
+            // Manually merge diffs into the copies.
             if (gsd.cards) {
                 for (const cardId in gsd.cards) {
                     const key = cardId as keyof typeof gsd.cards;
-                    if (nextCards[key] && gsd.cards[key]) {
-                        Object.assign(nextCards[key], gsd.cards[key]);
-                    } else if (gsd.cards[key]) {
-                        nextCards[key] = gsd.cards[key]!;
+                    const cardDiff = gsd.cards[key];
+                    if (newCards[key] && cardDiff) {
+                        Object.assign(newCards[key], cardDiff);
+                    } else if (cardDiff) {
+                        newCards[key] = cardDiff;
                     }
                 }
             }
@@ -59,11 +72,11 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                 for (const zoneKey in gsd.zones) {
                     const key = zoneKey as keyof typeof gsd.zones;
                     const updatedZone = gsd.zones[key]!;
-                    const index = nextZones.findIndex((z: ClientZone) => `${z.zoneId.ownerId}:${z.zoneId.zoneType}` === key);
+                    const index = newZones.findIndex((z: ClientZone) => `${z.zoneId.ownerId}:${z.zoneId.zoneType}` === key);
                     if (index !== -1) {
-                        Object.assign(nextZones[index], updatedZone);
+                        Object.assign(newZones[index], updatedZone);
                     } else {
-                        nextZones.push(updatedZone);
+                        newZones.push(updatedZone);
                     }
                 }
             }
@@ -71,29 +84,39 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                  for (const playerId in gsd.players) {
                     const key = playerId as keyof typeof gsd.players;
                     const updatedPlayer = gsd.players[key]!;
-                    const index = nextPlayers.findIndex((p: ClientPlayer) => p.playerId === key);
+                    const index = newPlayers.findIndex((p: ClientPlayer) => p.playerId === key);
                      if (index !== -1) {
-                        Object.assign(nextPlayers[index], updatedPlayer);
+                        Object.assign(newPlayers[index], updatedPlayer);
                     }
                 }
             }
             if (gsd.gameLog) {
-                nextLog.push(...gsd.gameLog);
+                newLog.push(...gsd.gameLog);
             }
 
-            // Construct the new, immutable state in one pass
+            // Construct the new state in one immutable pass
             const nextState: SpectatorStateUpdate = {
                 ...previousState,
                 ...item,
                 gameState: {
                     ...previousState.gameState,
-                    ...gsd,
-                    cards: nextCards,
-                    zones: nextZones,
-                    players: nextPlayers,
-                    gameLog: nextLog,
+                    // Overwrite simple properties from the diff
+                    ...(gsd.currentPhase !== undefined && { currentPhase: gsd.currentPhase }),
+                    ...(gsd.currentStep !== undefined && { currentStep: gsd.currentStep }),
+                    ...(gsd.activePlayerId !== undefined && { activePlayerId: gsd.activePlayerId }),
+                    ...(gsd.priorityPlayerId !== undefined && { priorityPlayerId: gsd.priorityPlayerId }),
+                    ...(gsd.turnNumber !== undefined && { turnNumber: gsd.turnNumber }),
+                    ...(gsd.isGameOver !== undefined && { isGameOver: gsd.isGameOver }),
+                    ...(gsd.winnerId !== undefined && { winnerId: gsd.winnerId }),
+                    ...(gsd.combat !== undefined && { combat: gsd.combat }),
+                    // Assign the fully merged collections
+                    cards: newCards,
+                    zones: newZones,
+                    players: newPlayers,
+                    gameLog: newLog,
                 },
             };
+            
             reconstructed.push(nextState);
 
         } else {
@@ -103,6 +126,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     }
     return reconstructed;
 }
+
 
 interface PageProps {
     params: Promise<{ matchId: string }>;
