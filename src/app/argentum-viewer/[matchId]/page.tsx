@@ -49,7 +49,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             const gsd = item.gameState || {};
 
             // Start with the previous simple properties
-            let nextGameState: ClientGameState = {
+            const nextGameState: ClientGameState = {
                 ...previousState.gameState,
                 // Overwrite with diff's simple properties
                 ...(gsd.currentPhase !== undefined && { currentPhase: gsd.currentPhase }),
@@ -82,7 +82,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             nextGameState.cards = newCards;
 
             // Deep merge zones
-            let newZones = [...previousState.gameState.zones];
+            const newZones = [...previousState.gameState.zones];
             if (gsd.zones) {
                 for (const zoneKey in gsd.zones) {
                     const key = zoneKey as keyof typeof gsd.zones;
@@ -98,7 +98,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
              nextState.zones = newZones;
 
             // Deep merge players
-            let newPlayers = [...previousState.gameState.players];
+            const newPlayers = [...previousState.gameState.players];
             if (gsd.players) {
                  for (const playerId in gsd.players) {
                     const key = playerId as keyof typeof gsd.players;
