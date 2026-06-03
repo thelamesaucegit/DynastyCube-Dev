@@ -71,7 +71,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                 }
                 if (gsd.zones) {
                     // Create a mutable copy of the zones array
-                    let newZones = [...nextState.gameState.zones];
+                    const newZones = [...nextState.gameState.zones];
                     for (const zoneKey in gsd.zones) {
                         const key = zoneKey as keyof typeof gsd.zones;
                         const updatedZone = gsd.zones[key]!;
@@ -87,7 +87,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                 }
                 if (gsd.players) {
                      // Create a mutable copy of the players array
-                    let newPlayers = [...nextState.gameState.players];
+                    const newPlayers = [...nextState.gameState.players];
                      for (const playerId in gsd.players) {
                         const key = playerId as keyof typeof gsd.players;
                         const updatedPlayer = gsd.players[key]!;
