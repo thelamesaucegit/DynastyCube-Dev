@@ -32,7 +32,6 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     }
 
     const reconstructed: SpectatorStateUpdate[] = [];
-
     if (isDiff(rawStates[0]!)) {
         console.error("Reconstruction failed: The first state item was a diff, not a blueprint.");
         return [];
@@ -114,6 +113,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                 }
             });
             reconstructed.push(nextState);
+
         } else {
             reconstructed.push(item as SpectatorStateUpdate);
         }
