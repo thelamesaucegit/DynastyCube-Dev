@@ -33,16 +33,17 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     if (!rawStates || rawStates.length === 0) return [];
     
     const reconstructed: SpectatorStateUpdate[] = [];
-    let hasProcessedFirstBlueprint = false;
 
+    // No longer need a separate blueprint tracker; we handle it in the loop.
     for (const item of rawStates) {
         if (isDiff(item)) {
-            // Only apply a diff if we have a state to apply it to.
+            // If the first item is a diff, we can't do anything with it.
             if (reconstructed.length === 0) continue;
             
             const previousState = reconstructed[reconstructed.length - 1]!;
 
             const nextState = produce(previousState, (draft: WritableDraft<SpectatorStateUpdate>) => {
+                // This deep-merge logic is correct, the issue was how we handled blueprints.
                 if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId;
                 if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId;
                 if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
@@ -102,12 +103,9 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             reconstructed.push(nextState);
 
         } else {
-            // This is a blueprint. ONLY process it if it's the very first one.
-            if (!hasProcessedFirstBlueprint) {
-                reconstructed.push(item as SpectatorStateUpdate);
-                hasProcessedFirstBlueprint = true;
-            }
-            // Otherwise, we ignore subsequent blueprints to avoid resetting the state.
+            // This is a blueprint. It becomes the LATEST state in the array,
+            // serving as the new base for subsequent diffs.
+            reconstructed.push(item as SpectatorStateUpdate);
         }
     }
     return reconstructed;
