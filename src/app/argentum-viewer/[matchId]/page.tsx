@@ -29,60 +29,31 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     }
 
     const reconstructed: SpectatorStateUpdate[] = [];
+    let currentBlueprint: SpectatorStateUpdate | null = null;
 
-    if (isDiff(rawStates[0]!)) {
-        console.error("Reconstruction failed: The first state item was a diff, not a blueprint.");
-        return [];
-    }
-    
-    let currentBlueprint = rawStates[0] as SpectatorStateUpdate;
-    reconstructed.push(currentBlueprint);
-
-    for (let i = 1; i < rawStates.length; i++) {
-        const item = rawStates[i]!;
-
+    for (const item of rawStates) {
         if (isDiff(item)) {
+            if (!currentBlueprint) continue;
+
             const previousState = reconstructed[reconstructed.length - 1]!;
-            
-            // --- FINAL, CORRECT, IMMUTABLE MERGE LOGIC ---
-            
             const gsd = item.gameState || {};
 
-            // Start with the previous simple properties
-            const nextGameState: ClientGameState = {
-                ...previousState.gameState,
-                // Overwrite with diff's simple properties
-                ...(gsd.currentPhase !== undefined && { currentPhase: gsd.currentPhase }),
-                ...(gsd.currentStep !== undefined && { currentStep: gsd.currentStep }),
-                ...(gsd.activePlayerId !== undefined && { activePlayerId: gsd.activePlayerId }),
-                ...(gsd.priorityPlayerId !== undefined && { priorityPlayerId: gsd.priorityPlayerId }),
-                ...(gsd.turnNumber !== undefined && { turnNumber: gsd.turnNumber }),
-                ...(gsd.isGameOver !== undefined && { isGameOver: gsd.isGameOver }),
-                ...(gsd.winnerId !== undefined && { winnerId: gsd.winnerId }),
-                ...(gsd.combat !== undefined && { combat: gsd.combat }),
-                // We will handle array/object merges next
-                cards: {}, // Placeholder
-                zones: [], // Placeholder
-                players: [], // Placeholder
-                gameLog: [], // Placeholder
-            };
+            // --- CONSTRUCT the new state immutably ---
 
-            // Deep merge cards
             const newCards = { ...previousState.gameState.cards };
             if (gsd.cards) {
                 for (const cardId in gsd.cards) {
                     const key = cardId as keyof typeof gsd.cards;
-                    if (newCards[key] && gsd.cards[key]) {
-                        newCards[key] = { ...newCards[key], ...gsd.cards[key] };
-                    } else if (gsd.cards[key]) {
-                        newCards[key] = gsd.cards[key]!;
+                    const cardDiff = gsd.cards[key];
+                    if (newCards[key] && cardDiff) {
+                        newCards[key] = { ...newCards[key], ...cardDiff };
+                    } else if (cardDiff) {
+                        newCards[key] = cardDiff;
                     }
                 }
             }
-            nextGameState.cards = newCards;
 
-            // Deep merge zones
-            const newZones = [...previousState.gameState.zones];
+            let newZones = [...previousState.gameState.zones];
             if (gsd.zones) {
                 for (const zoneKey in gsd.zones) {
                     const key = zoneKey as keyof typeof gsd.zones;
@@ -95,10 +66,8 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     }
                 }
             }
-             nextState.zones = newZones;
 
-            // Deep merge players
-            const newPlayers = [...previousState.gameState.players];
+            let newPlayers = [...previousState.gameState.players];
             if (gsd.players) {
                  for (const playerId in gsd.players) {
                     const key = playerId as keyof typeof gsd.players;
@@ -109,31 +78,46 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     }
                 }
             }
-            nextState.players = newPlayers;
 
-            // Concatenate gameLog
             const prevLog = previousState.gameState.gameLog || [];
             const diffLog = gsd.gameLog || [];
-            nextState.gameLog = [...prevLog, ...diffLog];
 
-            reconstructed.push({
+            const nextState: SpectatorStateUpdate = {
                 ...previousState,
-                gameState: nextState,
                 // Apply top-level diff properties
                 ...(item.activePlayerId !== undefined && { activePlayerId: item.activePlayerId }),
                 ...(item.priorityPlayerId !== undefined && { priorityPlayerId: item.priorityPlayerId }),
                 ...(item.currentPhase !== undefined && { currentPhase: item.currentPhase }),
                 ...(item.combat !== undefined && { combat: item.combat }),
-            });
-
+                
+                // Construct the new gameState object
+                gameState: {
+                    ...previousState.gameState,
+                    // Assign the newly constructed collections
+                    cards: newCards,
+                    zones: newZones,
+                    players: newPlayers,
+                    gameLog: [...prevLog, ...diffLog],
+                    // Overwrite simple properties from the diff
+                    ...(gsd.currentPhase !== undefined && { currentPhase: gsd.currentPhase }),
+                    ...(gsd.currentStep !== undefined && { currentStep: gsd.currentStep }),
+                    ...(gsd.activePlayerId !== undefined && { activePlayerId: gsd.activePlayerId }),
+                    ...(gsd.priorityPlayerId !== undefined && { priorityPlayerId: gsd.priorityPlayerId }),
+                    ...(gsd.turnNumber !== undefined && { turnNumber: gsd.turnNumber }),
+                    ...(gsd.isGameOver !== undefined && { isGameOver: gsd.isGameOver }),
+                    ...(gsd.winnerId !== undefined && { winnerId: gsd.winnerId }),
+                    ...(gsd.combat !== undefined && { combat: gsd.combat }),
+                }
+            };
+            reconstructed.push(nextState);
         } else {
-            // This is a new blueprint. It replaces the state entirely for this step.
             currentBlueprint = item as SpectatorStateUpdate;
             reconstructed.push(currentBlueprint);
         }
     }
     return reconstructed;
 }
+
 
 
 interface PageProps {
