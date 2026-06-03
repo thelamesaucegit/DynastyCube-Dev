@@ -1,29 +1,25 @@
+//src/components/game/board/shared.ts
+
 import React, { createContext, useContext, useLayoutEffect, useMemo, useState, type RefObject } from 'react'
-import type { ResponsiveContext, ResponsiveSizes, BadgeSizes } from '../../../hooks/useResponsive'
+import { ResponsiveContext, useResponsiveContext as useBaseResponsiveContext, type ResponsiveSizes, type BadgeSizes } from '@/hooks/useResponsive';
 import { getScryfallFallbackUrl } from '../../../utils/cardImages'
 import type { ClientCard, LegalActionInfo } from '../../../types'
 import { CounterType } from '../../../types'
 import { Color } from '../../../types/enums'
 
 // Context to pass responsive sizes down the component tree
-export const ResponsiveContext = createContext<ResponsiveSizes | null>(null)
+//export const ResponsiveContext = createContext<ResponsiveSizes | null>(null)
 
-/**
- * Custom hook to safely consume the ResponsiveContext.
- * This provides a clear error message if the context is not available.
- */
+// This is the ONLY useResponsiveContext that should be used by board components.
+// It is now a simple wrapper around the real one from the hooks directory,
+// but it allows us to have our definitive logging in one place.
 export function useResponsiveContext(): ResponsiveSizes {
-    const context = useContext(ResponsiveContext);
-    
-    // DIAGNOSTIC LOGGING: This log MUST appear before any crash.
-    console.log('[useResponsiveContext from shared.ts] Hook called. Context value is:', context ? 'Exists' : 'null');
-    
-    if (context === null) {
-        // This specific error message confirms which version of the hook is running.
-        throw new Error('useResponsiveContext from shared.ts must be used within a ResponsiveContextProvider. Check the component tree.');
-    }
-    return context;
+    // --- DIAGNOSTIC LOGGING ---
+    console.log('[useResponsiveContext from shared.ts] Hook called.');
+    // We call the base hook which contains the actual logic and error throwing.
+    return useBaseResponsiveContext();
 }
+
 
 // Hard ceiling on slot-derived card growth. The window-derived `useResponsive`
 // caps base battlefieldCardWidth at 125 (desktop) — that estimate was tuned

@@ -1,5 +1,7 @@
-import React from 'react'
-import { TARGET_COLOR, TARGET_COLOR_BRIGHT } from '../../../styles/targetingColors'
+// src/components/game/board/styles.ts
+
+import React from 'react';
+import { TARGET_COLOR, TARGET_COLOR_BRIGHT } from '../../../styles/targetingColors';
 
 export const styles: Record<string, React.CSSProperties> = {
   container: {
@@ -8,35 +10,29 @@ export const styles: Record<string, React.CSSProperties> = {
     left: 0,
     right: 0,
     bottom: 0,
-    // Five-row grid (template provided inline in GameBoard.tsx since rows 1
-    // and 5 are sized from responsive values):
-    //   1. opp-hand reservation     (px — keeps battlefield clear of fixed hand)
-    //   2. opp-board                (1fr — equal to row 4)
-    //   3. center HUD               (auto — uncrossable partition)
-    //   4. player-board             (1fr — equal to row 2)
-    //   5. player-hand reservation  (px — keeps battlefield clear of fixed hand)
-    // Equal 1fr battlefield rows mean both players get the same card size
-    // via useSlotSizedResponsive, regardless of asymmetric hand sizes.
+    // The main layout is a 5-row CSS Grid. This provides a robust structure
+    // that prevents components from overlapping.
+    // Row definitions are set inline in ReplayGameBoard.tsx based on dynamic values.
     display: 'grid',
     gridTemplateColumns: '100%',
     backgroundColor: '#0a0a15',
     overflow: 'hidden',
   },
   opponentArea: {
+    // This component lives in the second row of the main grid.
     gridRow: 2,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    minHeight: 0,
+    justifyContent: 'flex-start', // Anchors content to the top of its box
+    minHeight: 0, // Flexbox overflow fix
     overflow: 'hidden',
   },
   centerArea: {
-    // 3-column grid so the step strip stays anchored to the viewport center
-    // regardless of how wide each player's name label is. Without this, an
-    // asymmetric name (e.g. long opponent name, short own name) pushes the
-    // strip off-center because flex + justify-content: center centers the
-    // combined bounding box, not the middle item.
+    // CRITICAL FIX: Assign this component to the third grid row.
+    // This locks the HUD into the vertical center of the screen.
+    gridRow: 3,
+    // This 3-column grid keeps the StepStrip centered regardless of player name length.
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
     alignItems: 'center',
@@ -44,6 +40,7 @@ export const styles: Record<string, React.CSSProperties> = {
     columnGap: 16,
     width: '100%',
     overflow: 'hidden',
+    zIndex: 100, // Ensure it sits above the battlefield background
   },
   centerLifeSection: {
     display: 'flex',
@@ -57,71 +54,14 @@ export const styles: Record<string, React.CSSProperties> = {
   centerLifeSectionRight: {
     justifyContent: 'flex-start',
   },
-  playerNameWithLabel: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 1,
-  },
-  playerLabel: {
-    color: '#555',
-    fontStyle: 'italic',
-  },
-  handWithMana: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    justifyContent: 'center',
-  },
-  floatingBarButton: {
-    height: 32,
-    width: 32,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 12,
-    fontWeight: 500,
-    backgroundColor: 'rgba(40, 40, 40, 0.8)',
-    borderRadius: 4,
-    cursor: 'pointer',
-    padding: 0,
-    lineHeight: 1,
-    border: '1px solid #555',
-  },
-  combatButtonContainer: {
-    position: 'fixed',
-    bottom: 16,
-    right: 16,
-    display: 'flex',
-    gap: 8,
-    zIndex: 100,
-  },
-  combatActionButton: {
-    width: 'auto',
-    height: 42,
-    padding: '0 24px',
-    color: 'white',
-    fontWeight: 600,
-    fontSize: 15,
-  },
-  combatPassButton: {
-    width: 170,
-    height: 42,
-    padding: '0 24px',
-    color: 'white',
-    fontWeight: 600,
-    fontSize: 15,
-    backgroundColor: '#424242',
-    border: '1px solid #757575',
-  },
-
   playerArea: {
+    // This component lives in the fourth row of the main grid.
     gridRow: 4,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    minHeight: 0,
+    justifyContent: 'flex-end', // Anchors content to the bottom of its box
+    minHeight: 0, // Flexbox overflow fix
     overflow: 'hidden',
   },
   playerRowWithZones: {
@@ -134,16 +74,25 @@ export const styles: Record<string, React.CSSProperties> = {
     flex: 1,
   },
   playerMainArea: {
+    // CRITICAL FIX: This is the "wall" for the battlefield.
+    // It will grow and shrink to fit its parent grid area, and its children
+    // (the card rows) will be contained within it.
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: 0,
-    flex: 1,
+    flex: 1, // Take up all available space in the playerRowWithZones
     minWidth: 0,
     minHeight: 0,
-    alignSelf: 'stretch',
+    alignSelf: 'stretch', // Stretch vertically to fill the parent's height
+    overflow: 'hidden', // Prevent children from spilling out
   },
+
+  // ... (The rest of the file from your "current version" is correct and remains unchanged)
+  // I am omitting it here for clarity, but you should keep it in your file.
+  // The styles from zonePile onwards are not part of this specific fix.
+
   zonePile: {
     display: 'flex',
     flexDirection: 'column',

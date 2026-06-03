@@ -15,6 +15,7 @@ import {
   rolloverSeasonCosts,
   initializeSeasonCosts,
   deleteFullSeason,
+    executeSeasonRollover,
   type CardCostChange,
 } from "@/app/actions/seasonActions";
 
@@ -66,6 +67,45 @@ function TestSeasonStarter({ onComplete }: { onComplete: () => void }) {
     </button>
   );
 }
+
+/**
+ * A new component for the manual season rollover button, placed in a "Danger Zone".
+ */
+function ManualSeasonRollover({ onComplete }: { onComplete: (result: { success: boolean; error?: string }) => void }) {
+  const [loading, setLoading] = useState(false);
+
+  const handleManualRollover = async () => {
+    if (!confirm("DANGER: This will immediately execute the full season rollover process. This includes calculating curation, creating a new season, generating a draft order, and scheduling the draft. This action is irreversible. Are you absolutely sure?")) return;
+
+    setLoading(true);
+    try {
+      const result = await executeSeasonRollover();
+      onComplete(result);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "An unknown critical error occurred.";
+      onComplete({ success: false, error: errorMessage });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="mt-8 p-6 bg-red-50 dark:bg-red-900/20 border-2 border-red-400 dark:border-red-700 rounded-xl">
+        <h3 className="text-lg font-bold text-red-900 dark:text-red-100 mb-2">🚨 Danger Zone</h3>
+        <p className="text-sm text-red-800 dark:text-red-200 mb-4">
+            Manually trigger the end-of-season process. This should only be used if the automated cron job fails or for emergency administrative purposes.
+        </p>
+        <button
+            onClick={handleManualRollover}
+            disabled={loading}
+            className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-lg shadow-lg flex items-center justify-center gap-2 disabled:bg-red-800 disabled:cursor-not-allowed"
+        >
+            {loading ? <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" /> : "Manual Season Rollover"}
+        </button>
+    </div>
+  );
+}
+
 
 // 2. Main Component
 export const SeasonManagement: React.FC = () => {
@@ -401,6 +441,17 @@ export const SeasonManagement: React.FC = () => {
               ))}
             </div>
           </div>
+
+ {/* 3. Add the new manual rollover component here */}
+          <ManualSeasonRollover onComplete={(result) => {
+              if (result.success) {
+                setMessage({ type: 'success', text: 'Season rollover initiated successfully!' });
+              } else {
+                setMessage({ type: 'error', text: `Rollover failed: ${result.error}` });
+              }
+              loadSeasons(); // Reload seasons list to show the new season
+          }} />
+          
         </>
       )}
 

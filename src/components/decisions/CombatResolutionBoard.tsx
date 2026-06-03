@@ -5,11 +5,10 @@ import type {
   DamageEdge,
   EntityId,
 } from '@/types'
-import { useResponsive } from '@/hooks/useResponsive'
+import { ResponsiveContext , useResponsive } from '@/hooks/useResponsive'
 import { getCardImageUrl } from '@/utils/cardImages'
 import { Keyword } from '@/types/enums'
 import { GameCard } from '@/components/game/card/GameCard'
-import { ResponsiveContext } from '@/components/game/board'
 
 /**
  * The combat resolution board (CR 510 / 702.22). Shows only the damage the local player gets to

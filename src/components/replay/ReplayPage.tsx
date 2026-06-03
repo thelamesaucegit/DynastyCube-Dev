@@ -1,174 +1,157 @@
-//src/components/replay/ReplayPage.tsx
+// src/components/replay/ReplayPage.tsx
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { useRouter, useParams, useSearchParams } from 'next/navigation';
-import { useGameStore } from '@/store/gameStore'
-import { SpectatorContext } from '../../contexts/SpectatorContext'
-import { GameBoard } from '../game/GameBoard'
-import { CombatArrows } from '../combat/CombatArrows'
-import type { SpectatingState } from '@/store/slices'
-import type { SpectatorStateUpdate } from '../admin/ReplayViewer'
-import { reconstructSnapshots, type PublicReplayData } from '@/replay/reconstructSnapshots'
-import type { ClientPlayer, ClientCard } from '@/types';
+'use client';
+
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter, useParams } from 'next/navigation';
+import { useGameStore } from '@/store/gameStore';
+import { SpectatorContext } from '../../contexts/SpectatorContext';
+import { GameBoard } from '../game/GameBoard';
+import { CombatArrows } from '../combat/CombatArrows';
+import type { SpectatingState } from '@/store/slices';
+import type { SpectatorStateUpdate } from '../admin/ReplayViewer';
+import { reconstructSnapshots, type PublicReplayData } from '@/replay/reconstructSnapshots';
+import type { ClientPlayer, ClientCard, ClientGameState, ClientZone, EntityId } from '@/types';
 import { ZoneType } from '@/types/enums';
 import { useResponsive, ResponsiveContext } from '@/hooks/useResponsive';
-import { SettingsProvider } from '@/contexts/SettingsContext';
+// SettingsProvider is correctly provided by the parent page.
 
-const HEADER_HEIGHT = 55
+const HEADER_HEIGHT = 55;
 
 export function ReplayPage() {
-  const { gameId } = useParams<{ gameId: string }>()
-const router = useRouter()
+  // --- THIS IS THE FIX ---
+  // Unify the parameter name to use 'matchId' consistently.
+  const { matchId } = useParams<{ matchId: string }>();
+  const router = useRouter();
+  // ----------------------
+  
+  const [snapshots, setSnapshots] = useState<SpectatorStateUpdate[]>([]);
+  const [metadata, setMetadata] = useState<PublicReplayData['metadata'] | null>(null);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [autoPlay, setAutoPlay] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const setSpectatingState = useGameStore((s) => s.setSpectatingState);
 
-  const [snapshots, setSnapshots] = useState<SpectatorStateUpdate[]>([])
-  const [metadata, setMetadata] = useState<PublicReplayData['metadata'] | null>(null)
-  const [currentStep, setCurrentStep] = useState(0)
-  const [autoPlay, setAutoPlay] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
-  const setSpectatingState = useGameStore((s) => s.setSpectatingState)
   const currentSnapshot = snapshots[currentStep];
 
-  
   const writeSnapshotToStore = useCallback(
     (snapshot: SpectatorStateUpdate) => {
-      const state: SpectatingState = {
-        gameSessionId: snapshot.gameSessionId,
-        gameState: snapshot.gameState as SpectatingState['gameState'],
-        player1Id: snapshot.player1Id,
-        player2Id: snapshot.player2Id,
-        player1Name: snapshot.player1Name ?? 'Player 1',
-        player2Name: snapshot.player2Name ?? 'Player 2',
-        player1: snapshot.player1 as SpectatingState['player1'],
-        player2: snapshot.player2 as SpectatingState['player2'],
-        currentPhase: snapshot.currentPhase,
-        activePlayerId: snapshot.activePlayerId,
-        priorityPlayerId: snapshot.priorityPlayerId,
-        combat: snapshot.combat as SpectatingState['combat'],
-        decisionStatus: snapshot.decisionStatus as SpectatingState['decisionStatus'],
-        isReplay: true,
-      }
-      setSpectatingState(state)
+        const state: SpectatingState = {
+            gameSessionId: snapshot.gameSessionId,
+            gameState: snapshot.gameState as SpectatingState['gameState'],
+            player1Id: snapshot.player1Id,
+            player2Id: snapshot.player2Id,
+            player1Name: snapshot.player1Name ?? 'Player 1',
+            player2Name: snapshot.player2Name ?? 'Player 2',
+            player1: snapshot.player1 as SpectatingState['player1'],
+            player2: snapshot.player2 as SpectatingState['player2'],
+            currentPhase: snapshot.currentPhase,
+            activePlayerId: snapshot.activePlayerId,
+            priorityPlayerId: snapshot.priorityPlayerId,
+            combat: snapshot.combat as SpectatingState['combat'],
+            decisionStatus: snapshot.decisionStatus as SpectatingState['decisionStatus'],
+            isReplay: true,
+        };
+        setSpectatingState(state);
     },
     [setSpectatingState],
-  )
-const zoneRowCounts = useMemo(() => {
+  );
+
+  const zoneRowCounts = useMemo(() => {
     if (!currentSnapshot) return [0, 0, 0, 0];
-    
-    // Cast gameState once to the type we know it is.
     const gameState = currentSnapshot.gameState as Partial<ClientGameState>;
     const { player1Id, player2Id } = currentSnapshot;
-
-    const getRowCount = (playerId: ClientPlayer['playerId'] | null, isCreatureRow: boolean) => {
-      if (!gameState?.zones || !gameState?.cards) return 0;
-      
-      const zones = gameState.zones as ClientZone[];
-      const cards = gameState.cards as Record<string, ClientCard>;
-      
-      const zone = zones.find(z => z.zoneId.ownerId === playerId && z.zoneId.zoneType === ZoneType.BATTLEFIELD);
-      if (!zone) return 0;
-
-      return zone.cardIds
-        .map(id => cards[id])
-        .filter((c): c is ClientCard => !!c && !c.attachedTo)
-        .filter(c => {
-          const isCreatureOrPW = c.cardTypes.includes('CREATURE') || c.cardTypes.includes('PLANESWALKER');
-          return isCreatureRow ? isCreatureOrPW : !isCreatureOrPW;
+    const getRowCount = (playerId: EntityId | null, isCreatureRow: boolean) => {
+        if (!gameState?.zones || !gameState?.cards) return 0;
+        const zones = gameState.zones as ClientZone[];
+        const cards = gameState.cards as Record<string, ClientCard>;
+        const zone = zones.find(z => z.zoneId.ownerId === playerId && z.zoneId.zoneType === ZoneType.BATTLEFIELD);
+        if (!zone) return 0;
+        return zone.cardIds.map(id => cards[id]).filter((c): c is ClientCard => !!c && !c.attachedTo).filter(c => {
+            const isCreatureOrPW = c.cardTypes.includes('CREATURE') || c.cardTypes.includes('PLANESWALKER');
+            return isCreatureRow ? isCreatureOrPW : !isCreatureOrPW;
         }).length;
     };
-
     return [
-      getRowCount(player1Id, true), getRowCount(player1Id, false),
-      getRowCount(player2Id, true), getRowCount(player2Id, false),
+        getRowCount(player1Id, true), getRowCount(player1Id, false),
+        getRowCount(player2Id, true), getRowCount(player2Id, false),
     ];
   }, [currentSnapshot]);
 
   const responsiveSizes = useResponsive(HEADER_HEIGHT, zoneRowCounts);
 
- 
-  // Load replay on mount
   useEffect(() => {
-    if (!gameId) return
-    let cancelled = false
-
+    // --- THIS IS THE FIX ---
+    // Use the corrected 'matchId' variable.
+    if (!matchId) return;
+    let cancelled = false;
     async function loadReplay() {
-      setLoading(true)
-      setError(null)
-      try {
-        const response = await fetch(`/api/public/replays/${gameId}`)
-        if (!response.ok) {
-          if (response.status === 404) {
-            setError('Replay not found. It may have expired or the game ID is invalid.')
-          } else {
-            setError('Failed to load replay.')
-          }
-          setLoading(false)
-          return
+        setLoading(true);
+        setError(null);
+        try {
+            // Use 'matchId' in the API call.
+            const response = await fetch(`/api/public/replays/${matchId}`);
+            if (!response.ok) {
+                if (response.status === 404) setError('Replay not found. It may have expired or the ID is invalid.');
+                else setError('Failed to load replay.');
+                setLoading(false);
+                return;
+            }
+            const data = await response.json() as PublicReplayData;
+            if (cancelled) return;
+            setMetadata(data.metadata);
+            const reconstructed = reconstructSnapshots(data.initialSnapshot, data.deltas);
+            setSnapshots(reconstructed);
+            setCurrentStep(0);
+            if (reconstructed.length > 0) {
+                writeSnapshotToStore(reconstructed[0]!);
+            }
+        } catch {
+            if (!cancelled) setError('Failed to load replay.');
         }
-        const data = await response.json() as PublicReplayData
-        if (cancelled) return
-        setMetadata(data.metadata)
-        const reconstructed = reconstructSnapshots(data.initialSnapshot, data.deltas)
-        setSnapshots(reconstructed)
-        setCurrentStep(0)
-        if (reconstructed.length > 0) {
-          writeSnapshotToStore(reconstructed[0]!)
-        }
-      } catch {
-        if (!cancelled) setError('Failed to load replay.')
-      }
-      if (!cancelled) setLoading(false)
+        if (!cancelled) setLoading(false);
     }
+    loadReplay();
+    return () => { cancelled = true };
+  }, [matchId, writeSnapshotToStore]); // Dependency array updated to 'matchId'.
+  // --- END OF FIX ---
+  
+  useEffect(() => () => setSpectatingState(null), [setSpectatingState]);
 
-    loadReplay()
-    return () => { cancelled = true }
-  }, [gameId, writeSnapshotToStore])
-
-  // Clean up spectating state on unmount
+  const goToStep = useCallback((step: number) => {
+      if (step < 0 || step >= snapshots.length) return;
+      setCurrentStep(step);
+      writeSnapshotToStore(snapshots[step]!);
+  }, [snapshots, writeSnapshotToStore]);
+  
   useEffect(() => {
-    return () => {
-      setSpectatingState(null)
-    }
-  }, [setSpectatingState])
+      if (!autoPlay) return;
+      const timer = setInterval(() => {
+          setCurrentStep((prev) => {
+              const next = prev + 1;
+              if (next >= snapshots.length) {
+                  setAutoPlay(false);
+                  return prev;
+              }
+              writeSnapshotToStore(snapshots[next]!);
+              return next;
+          });
+      }, 1000);
+      return () => clearInterval(timer);
+  }, [autoPlay, snapshots, writeSnapshotToStore]);
 
-  const goToStep = useCallback(
-    (step: number) => {
-      if (step < 0 || step >= snapshots.length) return
-      setCurrentStep(step)
-      writeSnapshotToStore(snapshots[step]!)
-    },
-    [snapshots, writeSnapshotToStore],
-  )
-
-  // Auto-play timer
-  useEffect(() => {
-    if (!autoPlay) return
-    const timer = setInterval(() => {
-      setCurrentStep((prev) => {
-        const next = prev + 1
-        if (next >= snapshots.length) {
-          setAutoPlay(false)
-          return prev
-        }
-        writeSnapshotToStore(snapshots[next]!)
-        return next
-      })
-    }, 1000)
-    return () => clearInterval(timer)
-  }, [autoPlay, snapshots, writeSnapshotToStore])
-
-  // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') { e.preventDefault(); goToStep(currentStep - 1) }
-      else if (e.key === 'ArrowRight') { e.preventDefault(); goToStep(currentStep + 1) }
-      else if (e.key === ' ') { e.preventDefault(); setAutoPlay((p) => !p) }
-      else if (e.key === 'Escape') { router.push('/') }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [goToStep, currentStep, router.push])
+        if (e.key === 'ArrowLeft') { e.preventDefault(); goToStep(currentStep - 1); }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); goToStep(currentStep + 1); }
+        else if (e.key === ' ') { e.preventDefault(); setAutoPlay((p) => !p); }
+        else if (e.key === 'Escape') { router.push('/'); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [goToStep, currentStep, router]);
 
   const handleShare = async () => {
     try {
@@ -201,7 +184,6 @@ const zoneRowCounts = useMemo(() => {
     )
   }
 
-  const currentSnapshot = snapshots[currentStep]
   if (!currentSnapshot) return null
 
   return (
@@ -215,7 +197,6 @@ const zoneRowCounts = useMemo(() => {
       }}
     >
       <ResponsiveContext.Provider value={responsiveSizes}>
-        <SettingsProvider>
       <div style={styles.replayContainer}>
         <div style={styles.replayHeader}>
           <button onClick={() => router.push('/')} style={styles.backButton}>
@@ -264,7 +245,6 @@ const zoneRowCounts = useMemo(() => {
         </div>
       </div>
       <CombatArrows />
-           </SettingsProvider>
       </ResponsiveContext.Provider>
     </SpectatorContext.Provider>
   )

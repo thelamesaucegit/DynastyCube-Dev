@@ -1,3 +1,5 @@
+//src/components/game/card/ReplayGameCard.tsx
+
 "use client";
 
 import React from 'react';

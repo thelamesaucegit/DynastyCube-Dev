@@ -4,6 +4,8 @@
 import { createServerClient } from "@/lib/supabase";
 import { importNextSetToChamber } from "./chamberActions"; // Ensure this is imported at the top
 import { generateDraftOrder } from "./draftOrderActions";
+import { logSystemEvent } from "@/lib/systemLogger";
+
 
 
 export interface CardCostChange {
@@ -30,41 +32,56 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
     try {
         // 1. Run the Curation Economy
         const curationResult = await executeOffseasonCuration();
-        if (!curationResult.success) throw new Error(curationResult.error);
+        if (!curationResult.success) {
+            throw new Error(`Curation failed: ${curationResult.error}`);
+        }
 
         // 2. Identify Previous Season
-        const { data: oldSeason } = await supabase.from('seasons').select('*').eq('is_active', true).single();
-        if (!oldSeason) throw new Error("Could not find active season to roll over.");
+        const { data: oldSeason, error: oldSeasonErr } = await supabase.from('seasons').select('*').eq('is_active', true).single();
+        
+        if (oldSeasonErr || !oldSeason) {
+            throw new Error(`Could not find active season to roll over. DB Error: ${JSON.stringify(oldSeasonErr)}`);
+        }
 
         const nextSeasonNumber = oldSeason.season_number + 1;
         const isTestSeason = oldSeason.season_name.toUpperCase().includes("TEST");
         const nextSeasonName = isTestSeason ? `Test Season ${nextSeasonNumber}` : `Season ${nextSeasonNumber}`;
-
+        
         console.log(`[SeasonRollover] Building ${nextSeasonName}...`);
 
         // 3. Deactivate Old, Create New
-        await supabase.from('seasons').update({ is_active: false }).eq('id', oldSeason.id);
+        const { error: deactivateErr } = await supabase.from('seasons').update({ is_active: false }).eq('id', oldSeason.id);
+        if (deactivateErr) {
+            throw new Error(`Failed to deactivate old season. DB Error: ${JSON.stringify(deactivateErr)}`);
+        }
         
+        // PROACTIVE FIX: It's highly likely cubucks_allocation is required by your DB.
+        // We will carry over the allocation from the previous season.
         const { data: newSeason, error: seasonErr } = await supabase.from('seasons').insert({
             season_name: nextSeasonName,
             season_number: nextSeasonNumber,
             is_active: true,
-            phase: 'draft'
+            phase: 'draft',
+            cubucks_allocation: oldSeason.cubucks_allocation || 100 // Fallback just in case
         }).select('id').single();
-
-        if (seasonErr || !newSeason) throw new Error("Failed to create new season.");
+        
+        if (seasonErr || !newSeason) {
+            // This exposes the EXACT reason Supabase rejected the insert!
+            throw new Error(`Failed to create new season. DB Error: ${JSON.stringify(seasonErr)}`);
+        }
 
         // 4. Generate the highly-calculated Draft Order!
         const draftOrderResult = await generateDraftOrder(newSeason.id, { orderType: 'previous_season' });
-        if (!draftOrderResult.success) throw new Error(`Draft order generation failed: ${draftOrderResult.error}`);
+        if (!draftOrderResult.success) {
+            throw new Error(`Draft order generation failed: ${draftOrderResult.error}`);
+        }
 
-               // Draft starts IMMEDIATELY when the offseason timer hits zero (Thursday 12 PM CT)!
+        // Draft starts IMMEDIATELY when the offseason timer hits zero (Thursday 12 PM CT)!
         const startTime = isTestSeason 
             ? new Date(Date.now() + 5 * 60000).toISOString() 
             : new Date().toISOString(); 
-
         
-        await supabase.from("draft_sessions").insert({
+        const { error: draftErr } = await supabase.from("draft_sessions").insert({
             season_id: newSeason.id,
             status: "scheduled",
             total_rounds: 15, // Set to your cube standard
@@ -72,20 +89,35 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
             start_time: startTime,
             started_by: null,
         });
+
+        if (draftErr) {
+            throw new Error(`Failed to insert draft session. DB Error: ${JSON.stringify(draftErr)}`);
+        }
+
         // Clear the countdown timer permanently
         await supabase.from('countdown_timers').delete().eq('is_active', true);
-
-
+        
         console.log("[SeasonRollover] ✅ Rollover complete! New draft scheduled.");
         return { success: true };
 
     } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        console.error("[SeasonRollover] ❌ Rollover Failed:", msg);
+        
+        // ARCHIVE THE ERROR TO SYSTEM LOGS
+        // By awaiting this, we ensure it saves to the DB before returning the failure to the UI
+        await logSystemEvent(
+            'SeasonRollover', 
+            'error', 
+            `Rollover Pipeline Failed: ${msg}`,
+            {
+                timestamp: new Date().toISOString(),
+                rawError: error instanceof Error ? error.stack : error
+            }
+        );
+
         return { success: false, error: msg };
     }
 }
-
 /**
  * Executes the strict economic and pool curation rules for the Offseason.
  */
