@@ -7,7 +7,7 @@ import React, { useState, useEffect, use, useMemo } from 'react';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
 import { getPublicMatchReplayData } from './public-actions'; 
 import { getCardDataForReplay } from '@/app/actions/cardActions';
-import type { SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientEvent, ClientPlayer, ClientZone, ReplayCardData, ClientCard, EntityId, ClientGameState } from '@/types';
+import type { SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientCombatState, ClientEvent, ClientPlayer, ClientZone, ReplayCardData, ClientCard, EntityId, ClientGameState } from '@/types';
 import { ResponsiveContext, useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
 import { createClient } from '@supabase/supabase-js';
@@ -35,9 +35,10 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             
             const previousState = reconstructed[reconstructed.length - 1]!;
             
-            // Let Immer infer the Draft<T> type to safely handle 'readonly' modifiers
-            const nextState = produce(previousState, draft => {
-                if (item.combat !== undefined) draft.combat = item.combat as any;
+            const nextState = produce(previousState, (draft: WritableDraft<SpectatorStateUpdate>) => {
+                if (item.combat !== undefined) {
+                    draft.combat = item.combat === null ? null : (item.combat as unknown as WritableDraft<ClientCombatState>);
+                }
                 if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
                 if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId;
                 if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId;
@@ -52,32 +53,33 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     if (gsd.turnNumber !== undefined) draft.gameState.turnNumber = gsd.turnNumber;
                     if (gsd.isGameOver !== undefined) draft.gameState.isGameOver = gsd.isGameOver;
                     if (gsd.winnerId !== undefined) draft.gameState.winnerId = gsd.winnerId;
-                    if (gsd.combat !== undefined) draft.gameState.combat = gsd.combat as any;
+                    
+                    if (gsd.combat !== undefined) {
+                        draft.gameState.combat = gsd.combat === null ? null : (gsd.combat as unknown as WritableDraft<ClientCombatState>);
+                    }
 
                     if (gsd.gameLog && gsd.gameLog.length > 0) {
                         if (!draft.gameState.gameLog) {
                             draft.gameState.gameLog = [];
                         }
-                        // Type cast bypasses strict readonly checks safely inside the draft
-                        (draft.gameState.gameLog as any[]).push(...gsd.gameLog);
+                        // Safely type-cast the array push without 'any'
+                        draft.gameState.gameLog.push(...(gsd.gameLog as unknown as WritableDraft<ClientEvent>[]));
                     }
 
-                    // --- CRITICAL LOGICAL FIX: DEEP PROPERTY MERGE ---
-                    // The backend sends PARTIAL objects (e.g. just { isTapped: true }).
-                    // We must merge these properties INTO the existing card object.
                     if (gsd.cards) {
                         Object.entries(gsd.cards).forEach(([cardId, cardUpdate]) => {
                             if (draft.gameState.cards[cardId]) {
                                 Object.assign(draft.gameState.cards[cardId]!, cardUpdate);
                             } else {
-                                draft.gameState.cards[cardId] = cardUpdate as any;
+                                // Safely assign new cards using unknown cast
+                                draft.gameState.cards[cardId] = cardUpdate as unknown as WritableDraft<ClientCard>;
                             }
                         });
                     }
                     
-                    // Merge partial player updates so we don't lose handSize, librarySize, etc.
                     if (gsd.players) {
-                        Object.values(gsd.players).forEach((pUpdate: any) => {
+                        // Explicitly typing pUpdate to ClientPlayer removes the unused var warning and the 'any'
+                        Object.values(gsd.players).forEach((pUpdate: ClientPlayer) => {
                             const index = draft.gameState.players.findIndex(pl => pl.playerId === pUpdate.playerId);
                             if (index !== -1) {
                                 Object.assign(draft.gameState.players[index]!, pUpdate);
@@ -85,14 +87,14 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                         });
                     }
 
-                    // Zones are sent as complete arrays of cardIds for that zone, so full replacement is correct.
                     if (gsd.zones) {
-                        Object.values(gsd.zones).forEach((zUpdate: any) => {
+                        // Explicitly typing zUpdate to ClientZone removes the 'any'
+                        Object.values(gsd.zones).forEach((zUpdate: ClientZone) => {
                             const index = draft.gameState.zones.findIndex(zn => zn.zoneId.ownerId === zUpdate.zoneId.ownerId && zn.zoneId.zoneType === zUpdate.zoneId.zoneType);
                             if (index !== -1) {
-                                draft.gameState.zones[index] = zUpdate as any;
+                                draft.gameState.zones[index] = zUpdate as unknown as WritableDraft<ClientZone>;
                             } else {
-                                draft.gameState.zones.push(zUpdate as any);
+                                draft.gameState.zones.push(zUpdate as unknown as WritableDraft<ClientZone>);
                             }
                         });
                     }
@@ -106,6 +108,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     }
     return reconstructed;
 }
+
 
 interface PageProps {
     params: Promise<{ matchId: string }>;
