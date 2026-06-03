@@ -26,30 +26,24 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     if (!rawStates || rawStates.length === 0) return [];
     
     const reconstructed: SpectatorStateUpdate[] = [];
-    let currentBlueprint: SpectatorStateUpdate | null = null;
+    let hasProcessedFirstBlueprint = false;
 
     for (const item of rawStates) {
         if (isDiff(item)) {
-            if (!currentBlueprint || reconstructed.length === 0) {
-                continue;
-            }
+            // Only apply a diff if we have a state to apply it to.
+            if (reconstructed.length === 0) continue;
             
             const previousState = reconstructed[reconstructed.length - 1]!;
 
             const nextState = produce(previousState, (draft: WritableDraft<SpectatorStateUpdate>) => {
-                // Apply top-level diff properties
                 if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId;
                 if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId;
                 if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
                 if (item.combat !== undefined) draft.combat = JSON.parse(JSON.stringify(item.combat));
 
-                // Deep-merge the nested gameState object
                 if (item.gameState) {
                     const gsd = item.gameState;
                     
-                    // --- TYPE-SAFE MERGE LOGIC ---
-
-                    // Initialize nested objects if they don't exist on the draft
                     if (!draft.gameState) draft.gameState = {} as WritableDraft<ClientGameState>;
                     if (!draft.gameState.cards) draft.gameState.cards = {};
                     if (!draft.gameState.zones) draft.gameState.zones = [];
@@ -85,11 +79,9 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                         }
                     }
                     if (gsd.gameLog) {
-                        // This check is now safe because we initialized draft.gameState.gameLog above
                         draft.gameState.gameLog.push(...JSON.parse(JSON.stringify(gsd.gameLog)));
                     }
                     
-                    // Overwrite simple properties
                     if (gsd.currentPhase !== undefined) draft.gameState.currentPhase = gsd.currentPhase;
                     if (gsd.currentStep !== undefined) draft.gameState.currentStep = gsd.currentStep;
                     if (gsd.activePlayerId !== undefined) draft.gameState.activePlayerId = gsd.activePlayerId;
@@ -103,12 +95,17 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
             reconstructed.push(nextState);
 
         } else {
-            currentBlueprint = item as SpectatorStateUpdate;
-            reconstructed.push(currentBlueprint);
+            // This is a blueprint. ONLY process it if it's the very first one.
+            if (!hasProcessedFirstBlueprint) {
+                reconstructed.push(item as SpectatorStateUpdate);
+                hasProcessedFirstBlueprint = true;
+            }
+            // Otherwise, we ignore subsequent blueprints to avoid resetting the state.
         }
     }
     return reconstructed;
 }
+
 
 
 interface PageProps {
