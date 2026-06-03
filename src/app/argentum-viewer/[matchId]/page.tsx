@@ -23,20 +23,29 @@ function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
  * This version correctly performs a deep merge of the nested gameState objects.
  */
 function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
-    if (!rawStates || rawStates.length === 0) return [];
-    
+    if (!rawStates || rawStates.length === 0) {
+        return [];
+    }
+
     const reconstructed: SpectatorStateUpdate[] = [];
 
-    // No longer need a separate blueprint tracker; we handle it in the loop.
-    for (const item of rawStates) {
-        if (isDiff(item)) {
-            // If the first item is a diff, we can't do anything with it.
-            if (reconstructed.length === 0) continue;
-            
-            const previousState = reconstructed[reconstructed.length - 1]!;
+    // The very first item MUST be a blueprint.
+    if (isDiff(rawStates[0]!)) {
+        console.error("Reconstruction failed: The first state item was a diff, not a blueprint.");
+        return [];
+    }
+    
+    // Initialize with the first blueprint.
+    reconstructed.push(rawStates[0] as SpectatorStateUpdate);
 
+    // Iterate through the rest of the states.
+    for (let i = 1; i < rawStates.length; i++) {
+        const item = rawStates[i]!;
+        const previousState = reconstructed[reconstructed.length - 1]!;
+
+        if (isDiff(item)) {
+            // This is a diff, apply it to the previous state.
             const nextState = produce(previousState, (draft: WritableDraft<SpectatorStateUpdate>) => {
-                // This deep-merge logic is correct, the issue was how we handled blueprints.
                 if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId;
                 if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId;
                 if (item.currentPhase !== undefined) draft.currentPhase = item.currentPhase;
@@ -94,16 +103,13 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                 }
             });
             reconstructed.push(nextState);
-
         } else {
-            // This is a blueprint. It becomes the LATEST state in the array,
-            // serving as the new base for subsequent diffs.
+            // This is a new blueprint. It replaces the state entirely for this step.
             reconstructed.push(item as SpectatorStateUpdate);
         }
     }
     return reconstructed;
 }
-
 
 
 interface PageProps {
