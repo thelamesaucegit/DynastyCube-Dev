@@ -7,7 +7,7 @@ import React, { useState, useEffect, use, useMemo } from 'react';
 import { ArgentumReplayPlayer } from '@/app/components/game/ArgentumReplayPlayer';
 import { getPublicMatchReplayData } from './public-actions'; 
 import { getCardDataForReplay } from '@/app/actions/cardActions';
-import type { SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientPlayer, ClientZone, ReplayCardData, ClientCard, EntityId, ClientGameState } from '@/types';
+import type { SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientEvent, ClientPlayer, ClientZone, ReplayCardData, ClientCard, EntityId, ClientGameState } from '@/types';
 import { ResponsiveContext, useResponsive } from '@/hooks/useResponsive';
 import { SettingsProvider } from '@/contexts/SettingsContext';
 import { createClient } from '@supabase/supabase-js';
