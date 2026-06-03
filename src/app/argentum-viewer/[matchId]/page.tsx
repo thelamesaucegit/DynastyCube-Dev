@@ -24,74 +24,65 @@ function isDiff(item: ReplayStateItem): item is SpectatorStateDiff {
  */
 
 function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpdate[] {
-    console.log(`[Reconstruction] Starting process with ${rawStates.length} raw states.`);
-    
     if (!rawStates || rawStates.length === 0) {
         return [];
     }
 
     const reconstructed: SpectatorStateUpdate[] = [];
+    let currentBlueprint: SpectatorStateUpdate | null = null;
 
-    if (isDiff(rawStates[0]!)) {
-        console.error("Reconstruction failed: The first state item was a diff, not a blueprint.");
-        return [];
-    }
-    
-    let currentBlueprint = rawStates[0] as SpectatorStateUpdate;
-    reconstructed.push(currentBlueprint);
-    console.log(`[Reconstruction] Step 0: Initial blueprint processed. Card count: ${Object.keys(reconstructed[0]!.gameState.cards).length}`);
-
-    for (let i = 1; i < rawStates.length; i++) {
-        const item = rawStates[i]!;
-
+    for (const item of rawStates) {
         if (isDiff(item)) {
+            if (!currentBlueprint) continue;
+
             const previousState = reconstructed[reconstructed.length - 1]!;
             const gsd = item.gameState || {};
             
-            // --- FINAL, IMMUTABLE, SINGLE-PASS CONSTRUCTION ---
-
-            // Step 1: Deep merge `cards`
             const newCards = { ...previousState.gameState.cards };
-            if (gsd.cards && Object.keys(gsd.cards).length > 0) {
+            if (gsd.cards) {
                 for (const cardId in gsd.cards) {
                     const key = cardId as keyof typeof gsd.cards;
-                    if (newCards[key] && gsd.cards[key]) {
-                        newCards[key] = { ...newCards[key], ...gsd.cards[key] };
-                    } else if (gsd.cards[key]) {
-                        newCards[key] = gsd.cards[key]!;
+                    const cardDiff = gsd.cards[key];
+                    if (newCards[key] && cardDiff) {
+                        newCards[key] = { ...newCards[key], ...cardDiff };
+                    } else if (cardDiff) {
+                        newCards[key] = cardDiff;
                     }
                 }
             }
 
-            // Step 2: Deep merge `zones`
             const newZones = [...previousState.gameState.zones];
-            if (gsd.zones && Object.keys(gsd.zones).length > 0) {
+            if (gsd.zones) {
                 for (const zoneKey in gsd.zones) {
                     const key = zoneKey as keyof typeof gsd.zones;
                     const updatedZone = gsd.zones[key]!;
                     const index = newZones.findIndex(z => `${z.zoneId.ownerId}:${z.zoneId.zoneType}` === key);
-                    if (index !== -1 && newZones[index]) {
+                    if (index !== -1) {
                         newZones[index] = { ...newZones[index]!, ...updatedZone };
                     } else {
                         newZones.push(updatedZone);
                     }
                 }
             }
-
-            // Step 3: Deep merge `players`
+            
             const newPlayers = [...previousState.gameState.players];
-            if (gsd.players && Object.keys(gsd.players).length > 0) {
+            if (gsd.players) {
                  for (const playerId in gsd.players) {
                     const key = playerId as keyof typeof gsd.players;
                     const updatedPlayer = gsd.players[key]!;
                     const index = newPlayers.findIndex(p => p.playerId === key);
-                     if (index !== -1 && newPlayers[index]) {
+                     if (index !== -1) {
                         newPlayers[index] = { ...newPlayers[index]!, ...updatedPlayer };
                     }
                 }
             }
-            
-            // Step 4: Construct the final `nextState` in one go.
+
+            // --- DEFINITIVE FIX FOR TYPE INFERENCE ---
+            const prevLog = previousState.gameState.gameLog || [];
+            // Explicitly type the fallback array to satisfy the linter
+            const diffLog = gsd.gameLog || [] as ClientEvent[];
+            const newLog = [...prevLog, ...diffLog];
+
             const nextState: SpectatorStateUpdate = {
                 ...previousState,
                 ...item,
@@ -101,10 +92,10 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     cards: newCards,
                     zones: newZones,
                     players: newPlayers,
-                    gameLog: [...(previousState.gameState.gameLog || []), ...(gsd.gameLog || [])],
+                    gameLog: newLog,
                 },
             };
-
+            
             reconstructed.push(nextState);
 
         } else {
@@ -114,7 +105,6 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
     }
     return reconstructed;
 }
-
 
 interface PageProps {
     params: Promise<{ matchId: string }>;
