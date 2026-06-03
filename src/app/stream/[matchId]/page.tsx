@@ -1,21 +1,15 @@
 // src/app/stream/[matchId]/page.tsx
+import React, { useState, useEffect, use, useMemo } from 'react';
+import { ResponsiveContext, useResponsive } from '@/hooks/useResponsive';
+import { SettingsProvider } from '@/contexts/SettingsContext';
 
 import { createServerClient } from "@/lib/supabase";
 import { notFound } from "next/navigation";
 import { ArgentumLiveStreamPlayer } from "@/app/components/game/ArgentumLiveStreamPlayer";
 import { getCardDataForReplay } from "@/app/actions/cardActions";
-import type { 
-    SpectatorStateUpdate, 
-    ReplayCardData, 
-    ReplayStateItem, 
-    SpectatorStateDiff, 
-    ClientPlayer, 
-    ClientZone,
-    ClientCard,
-    ClientGameState,
-    ClientCombatState, 
-    ClientEvent 
-} from "@/types";
+import type { SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientCombatState, ClientEvent, ClientPlayer, ClientZone, ReplayCardData, ClientCard, EntityId, ClientGameState } from '@/types';
+import { ZoneType } from '@/types/enums';
+
 import { produce, WritableDraft } from 'immer';
 
 interface DbSimMatch {
