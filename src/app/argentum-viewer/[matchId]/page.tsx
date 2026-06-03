@@ -53,7 +53,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                 }
             }
 
-            let newZones = [...previousState.gameState.zones];
+            const newZones = [...previousState.gameState.zones];
             if (gsd.zones) {
                 for (const zoneKey in gsd.zones) {
                     const key = zoneKey as keyof typeof gsd.zones;
@@ -67,7 +67,7 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                 }
             }
 
-            let newPlayers = [...previousState.gameState.players];
+            const newPlayers = [...previousState.gameState.players];
             if (gsd.players) {
                  for (const playerId in gsd.players) {
                     const key = playerId as keyof typeof gsd.players;
