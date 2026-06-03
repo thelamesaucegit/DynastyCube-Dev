@@ -48,7 +48,6 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
 
         if (isDiff(item)) {
             const nextState = produce(previousState, (draft: WritableDraft<SpectatorStateUpdate>) => {
-                // --- DEFINITIVE FIX FOR READONLY ERROR ---
                 // All complex objects must be deep-cloned before assignment to the draft.
                 if (item.activePlayerId !== undefined) draft.activePlayerId = item.activePlayerId;
                 if (item.priorityPlayerId !== undefined) draft.priorityPlayerId = item.priorityPlayerId;
@@ -64,40 +63,44 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     if (!draft.gameState.players) draft.gameState.players = [];
                     if (!draft.gameState.gameLog) draft.gameState.gameLog = [];
 
-                    if (gsd.cards && Object.keys(gsd.cards).length > 0) {
+                    // --- FINAL, CORRECTED MERGE LOGIC ---
+                    if (gsd.cards) {
                         for (const cardId in gsd.cards) {
                             const key = cardId as keyof typeof gsd.cards;
-                            if (draft.gameState.cards[key]) {
-                                Object.assign(draft.gameState.cards[key], gsd.cards[key]);
-                            } else {
-                                draft.gameState.cards[key] = gsd.cards[key];
+                            const cardDiff = gsd.cards[key];
+                            if (draft.gameState.cards[key] && cardDiff) {
+                                // Deep clone the diff before assigning to solve readonly issue
+                                Object.assign(draft.gameState.cards[key], JSON.parse(JSON.stringify(cardDiff)));
+                            } else if (cardDiff) {
+                                // Deep clone the new card before assigning
+                                draft.gameState.cards[key] = JSON.parse(JSON.stringify(cardDiff));
                             }
                         }
                     }
-                    if (gsd.zones && Object.keys(gsd.zones).length > 0) {
+                    if (gsd.zones) {
                         for (const zoneKey in gsd.zones) {
                             const key = zoneKey as keyof typeof gsd.zones;
                             const updatedZone = gsd.zones[key]!;
                             const index = draft.gameState.zones.findIndex(z => `${z.zoneId.ownerId}:${z.zoneId.zoneType}` === key);
                             if (index !== -1) {
-                                Object.assign(draft.gameState.zones[index]!, updatedZone);
+                                Object.assign(draft.gameState.zones[index]!, JSON.parse(JSON.stringify(updatedZone)));
                             } else {
-                                draft.gameState.zones.push(updatedZone);
+                                draft.gameState.zones.push(JSON.parse(JSON.stringify(updatedZone)));
                             }
                         }
                     }
-                    if (gsd.players && Object.keys(gsd.players).length > 0) {
+                    if (gsd.players) {
                          for (const playerId in gsd.players) {
                             const key = playerId as keyof typeof gsd.players;
                             const updatedPlayer = gsd.players[key]!;
                             const index = draft.gameState.players.findIndex(p => p.playerId === key);
                              if (index !== -1) {
-                                Object.assign(draft.gameState.players[index]!, updatedPlayer);
+                                Object.assign(draft.gameState.players[index]!, JSON.parse(JSON.stringify(updatedPlayer)));
                             }
                         }
                     }
-                    if (gsd.gameLog && gsd.gameLog.length > 0) {
-                        draft.gameState.gameLog.push(...gsd.gameLog);
+                    if (gsd.gameLog) {
+                        draft.gameState.gameLog.push(...JSON.parse(JSON.stringify(gsd.gameLog)));
                     }
                     
                     if (gsd.currentPhase !== undefined) draft.gameState.currentPhase = gsd.currentPhase;
@@ -107,12 +110,10 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     if (gsd.turnNumber !== undefined) draft.gameState.turnNumber = gsd.turnNumber;
                     if (gsd.isGameOver !== undefined) draft.gameState.isGameOver = gsd.isGameOver;
                     if (gsd.winnerId !== undefined) draft.gameState.winnerId = gsd.winnerId;
-                    // Apply the same deep-clone fix for the nested combat object
                     if (gsd.combat !== undefined) draft.gameState.combat = JSON.parse(JSON.stringify(gsd.combat));
                 }
             });
             reconstructed.push(nextState);
-
         } else {
             reconstructed.push(item as SpectatorStateUpdate);
         }
