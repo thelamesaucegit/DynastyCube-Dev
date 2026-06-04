@@ -111,7 +111,7 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
         const { error: draftErr } = await supabase.from("draft_sessions").insert({
             season_id: newSeason.id,
             status: "scheduled",
-            total_rounds: 15, 
+            total_rounds: 40, 
             hours_per_pick: isTestSeason ? 0.05 : 12, 
             start_time: startTime,
             started_by: null,
