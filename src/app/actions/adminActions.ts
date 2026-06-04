@@ -466,7 +466,7 @@ export async function backfillCMCForDraftPicks(): Promise<{ success: boolean; up
     }
 }
 
-export async function backfillCMCForTable(tableName: string = 'card_pools'): Promise<{ success: boolean; updated: number; failed: number; errors: string[]; }> {
+export async function backfillCMCForCardPools(tableName: string = 'card_pools'): Promise<{ success: boolean; updated: number; failed: number; errors: string[]; }> {
     const supabase = createServiceRoleClient();
     let updatedCount = 0;
     let failedCount = 0;
