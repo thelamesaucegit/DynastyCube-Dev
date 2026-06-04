@@ -7,25 +7,24 @@ import { executeSeasonRollover } from '@/app/actions/seasonActions';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
-    // Basic security: require a simple token in the URL (e.g. /api/cron/rollover?token=my-secret-token)
     const { searchParams } = new URL(request.url);
+
     if (searchParams.get('token') !== process.env.SUPABASE_SERVICE_KEY?.substring(0, 10)) {
         return new NextResponse('Unauthorized', { status: 401 });
     }
 
     try {
-        // God-mode client for checking the timer
         const supabase = createClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
             process.env.SUPABASE_SERVICE_KEY!
         );
 
-        // 1. Check if there is an active Offseason Timer that has EXPIRED
+        // FIX 4: Ensure the cron job uses the same fuzzy match
         const { data: timer } = await supabase
             .from('countdown_timers')
             .select('*')
             .eq('is_active', true)
-            .ilike('title', '%Offseason%')
+            .ilike('title', '%Offseason Curation%')
             .single();
 
         if (!timer) {
@@ -36,7 +35,6 @@ export async function GET(request: Request) {
             return NextResponse.json({ status: 'Offseason timer is still ticking' });
         }
 
-        // 2. The timer has expired! Execute the massive rollover!
         console.log("[CRON] Offseason timer expired! Initiating Rollover...");
         const result = await executeSeasonRollover();
 

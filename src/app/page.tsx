@@ -67,7 +67,7 @@ export default function HomePage() {
         draftSessionPromise = Promise.resolve({ session: null });
       }
 
-      const isActivePlayPhase = currentPhase && currentPhase !== 'offseason' && currentPhase !== 'draft';
+      const isActivePlayPhase = currentPhase && currentPhase !== 'postseason' && currentPhase !== 'draft';
       if (isActivePlayPhase) {
         liveMatchPromise = getLatestStreamMatch();
       } else {
@@ -129,7 +129,7 @@ export default function HomePage() {
   }
 
   const liveDraftLink = draftSessionId ? `/draft/${draftSessionId}/live` : "#";
-  const isPlayActive = season?.status && season.status !== 'offseason' && season.status !== 'draft';
+  const isPlayActive = season?.status && season.status !== 'postseason' && season.status !== 'draft';
 
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8 space-y-12">
