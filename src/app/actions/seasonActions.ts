@@ -102,7 +102,7 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
             
             // Note: I'm awaiting these sequentially to respect rate limits on Scryfall
             const { updateAllCubecobraElo } = await import('@/app/actions/cardRatingActions');
-            const { backfillOracleData, backfillColorIdentity, backfillCMCForTable } = await import('@/app/actions/adminActions');
+            const { backfillOracleData, backfillColorIdentity, backfillCMCForCardPools } = await import('@/app/actions/adminActions');
 
             await updateAllCubecobraElo('the_chamber');
             await backfillOracleData('the_chamber');
