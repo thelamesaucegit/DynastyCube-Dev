@@ -92,12 +92,25 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
 
 
         // --- STEP 6: REFILL THE CHAMBER (EXTERNAL API) ---
+       // --- STEP 6: REFILL THE CHAMBER & BACKFILL METADATA ---
         console.log("[SeasonRollover] Refilling The Chamber...");
         const importResult = await importNextSetToChamber();
         if (!importResult.success) {
             console.warn("[SeasonRollover] Chamber import returned an issue:", importResult.message);
-        }
+        } else {
+            console.log("[SeasonRollover] Chamber refilled! Backfilling metadata...");
+            
+            // Note: I'm awaiting these sequentially to respect rate limits on Scryfall
+            const { updateAllCubecobraElo } = await import('@/app/actions/cardRatingActions');
+            const { backfillOracleData, backfillColorIdentity, backfillCMCForTable } = await import('@/app/actions/adminActions');
 
+            await updateAllCubecobraElo('the_chamber');
+            await backfillOracleData('the_chamber');
+            await backfillColorIdentity('the_chamber');
+            await backfillCMCForTable('the_chamber');
+            
+            console.log("[SeasonRollover] Metadata backfill complete for new chamber set.");
+        }
 
         // --- STEP 7: DRAFT ORDER & SCHEDULING ---
         console.log("[SeasonRollover] Generating Draft Order...");

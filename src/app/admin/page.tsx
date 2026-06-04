@@ -11,6 +11,7 @@ import { CubucksManagement } from "../components/admin/CubucksManagement";
 import { SeasonManagement } from "../components/admin/SeasonManagement";
 import { ChamberManagement } from "@/app/components/admin/ChamberManagement"; // Add this import
 import { TradeSettings } from "../components/admin/TradeSettings";
+import { CardRatingSync } from "../components/admin/CardRatingSync"; 
 import { ReportManagement } from "../components/admin/ReportManagement";
 import { NewsManagement } from "../components/admin/NewsManagement";
 import { VoteManagement } from "../components/admin/VoteManagement";
@@ -138,7 +139,13 @@ export default function AdminPage() {
       case "teams":
         return <TeamManagement onUpdate={loadStats} />;
       case "cards":
-        return <CardManagement onUpdate={loadStats} />;
+        return (
+          <div className="space-y-8">
+            <CardManagement onUpdate={loadStats} />
+            <hr className="border-border" />
+            <CardRatingSync />
+          </div>
+        );
       case "cubucks":
         return <CubucksManagement />;
       case "essence":
