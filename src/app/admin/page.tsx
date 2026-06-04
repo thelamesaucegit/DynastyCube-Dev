@@ -11,6 +11,7 @@ import { CubucksManagement } from "../components/admin/CubucksManagement";
 import { SeasonManagement } from "../components/admin/SeasonManagement";
 import { ChamberManagement } from "@/app/components/admin/ChamberManagement"; // Add this import
 import { TradeSettings } from "../components/admin/TradeSettings";
+import { CardRatingSync } from "../components/admin/CardRatingSync"; 
 import { ReportManagement } from "../components/admin/ReportManagement";
 import { NewsManagement } from "../components/admin/NewsManagement";
 import { VoteManagement } from "../components/admin/VoteManagement";
