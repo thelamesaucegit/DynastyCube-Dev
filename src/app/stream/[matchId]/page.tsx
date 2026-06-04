@@ -1,21 +1,15 @@
 // src/app/stream/[matchId]/page.tsx
+import React, { useState, useEffect, use, useMemo } from 'react';
+import { ResponsiveContext, useResponsive } from '@/hooks/useResponsive';
+import { SettingsProvider } from '@/contexts/SettingsContext';
 
 import { createServerClient } from "@/lib/supabase";
 import { notFound } from "next/navigation";
 import { ArgentumLiveStreamPlayer } from "@/app/components/game/ArgentumLiveStreamPlayer";
 import { getCardDataForReplay } from "@/app/actions/cardActions";
-import type { 
-    SpectatorStateUpdate, 
-    ReplayCardData, 
-    ReplayStateItem, 
-    SpectatorStateDiff, 
-    ClientPlayer, 
-    ClientZone,
-    ClientCard,
-    ClientGameState,
-    ClientCombatState, 
-    ClientEvent 
-} from "@/types";
+import type { SpectatorStateUpdate, ReplayStateItem, SpectatorStateDiff, ClientCombatState, ClientEvent, ClientPlayer, ClientZone, ReplayCardData, ClientCard, EntityId, ClientGameState } from '@/types';
+import { ZoneType } from '@/types/enums';
+
 import { produce, WritableDraft } from 'immer';
 
 interface DbSimMatch {
@@ -70,23 +64,24 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                         if (!draft.gameState.gameLog) {
                             draft.gameState.gameLog = [];
                         }
-                        // Safely type-cast the array push without 'any'
                         draft.gameState.gameLog.push(...(gsd.gameLog as unknown as WritableDraft<ClientEvent>[]));
                     }
 
                     if (gsd.cards) {
                         Object.entries(gsd.cards).forEach(([cardId, cardUpdate]) => {
-                            if (draft.gameState.cards[cardId]) {
-                                Object.assign(draft.gameState.cards[cardId]!, cardUpdate);
+                            // --- THE FIX: Explicitly cast the generic string to EntityId ---
+                            const typedCardId = cardId as EntityId;
+                            
+                            if (draft.gameState.cards[typedCardId]) {
+                                Object.assign(draft.gameState.cards[typedCardId]!, cardUpdate);
                             } else {
                                 // Safely assign new cards using unknown cast
-                                draft.gameState.cards[cardId] = cardUpdate as unknown as WritableDraft<ClientCard>;
+                                draft.gameState.cards[typedCardId] = cardUpdate as unknown as WritableDraft<ClientCard>;
                             }
                         });
                     }
                     
                     if (gsd.players) {
-                        // Explicitly typing pUpdate to ClientPlayer removes the unused var warning and the 'any'
                         Object.values(gsd.players).forEach((pUpdate: ClientPlayer) => {
                             const index = draft.gameState.players.findIndex(pl => pl.playerId === pUpdate.playerId);
                             if (index !== -1) {
@@ -96,7 +91,6 @@ function reconstructGameStates(rawStates: ReplayStateItem[]): SpectatorStateUpda
                     }
 
                     if (gsd.zones) {
-                        // Explicitly typing zUpdate to ClientZone removes the 'any'
                         Object.values(gsd.zones).forEach((zUpdate: ClientZone) => {
                             const index = draft.gameState.zones.findIndex(zn => zn.zoneId.ownerId === zUpdate.zoneId.ownerId && zn.zoneId.zoneType === zUpdate.zoneId.zoneType);
                             if (index !== -1) {
