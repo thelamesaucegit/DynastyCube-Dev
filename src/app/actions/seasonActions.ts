@@ -107,7 +107,7 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
             await updateAllCubecobraElo('the_chamber');
             await backfillOracleData('the_chamber');
             await backfillColorIdentity('the_chamber');
-            await backfillCMCForTable('the_chamber');
+            await backfillCMCForCardPools('the_chamber');
             
             console.log("[SeasonRollover] Metadata backfill complete for new chamber set.");
         }
