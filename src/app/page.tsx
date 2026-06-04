@@ -22,15 +22,15 @@ import {
   type CurrentSeason,
   type AdminNews,
   type CountdownTimer as CountdownTimerType,
-  type ActiveDraftSession, 
 } from "@/app/actions/homeActions";
 import { getLatestStreamMatch, type StreamMatch } from "@/app/actions/liveStreamActions";
-import { getTeamsWithDetails, type TeamWithDetails } from "@/app/actions/teamActions";
+import { getTeamsWithDetails } from "@/app/actions/teamActions";
 
 function getRelativeTime(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
   if (diffInSeconds < 60) return "Just now";
   if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
   if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
@@ -54,8 +54,8 @@ export default function HomePage() {
       const currentSeason = seasonResult.season;
       setSeason(currentSeason);
       
-      // --- FIX: Safely check both phase and status depending on the API mapping ---
-      const currentPhase = (currentSeason as any)?.phase || currentSeason?.status;
+      // --- FIX: Use strict type intersection instead of 'any' ---
+      const currentPhase = (currentSeason as CurrentSeason & { phase?: string })?.phase || currentSeason?.status;
 
       let draftSessionPromise: ReturnType<typeof getActiveDraftSession>;
       let liveMatchPromise: ReturnType<typeof getLatestStreamMatch>;
@@ -89,7 +89,9 @@ export default function HomePage() {
         liveMatchPromise,
       ]);
       
-      const activeTeamCount = teamsResult.teams?.filter(t => !(t as any).is_hidden).length || 8;
+      // --- FIX: Use strict type intersection instead of 'any' ---
+      const activeTeamCount = teamsResult.teams?.filter(t => !(t as { is_hidden?: boolean }).is_hidden).length || 8;
+      
       setAdminNews(newsResult.news);
       setRecentPicks(picksResult.picks.slice(0, activeTeamCount));
       setCountdownTimer(timerResult.timer);
@@ -128,8 +130,8 @@ export default function HomePage() {
 
   const liveDraftLink = draftSessionId ? `/draft/${draftSessionId}/live` : "#";
   
-  // --- FIX: Calculate Phase safely ---
-  const currentPhase = (season as any)?.phase || season?.status;
+  // --- FIX: Calculate Phase safely with strict types ---
+  const currentPhase = (season as CurrentSeason & { phase?: string })?.phase || season?.status;
   const isPlayActive = currentPhase && currentPhase !== 'postseason' && currentPhase !== 'draft';
 
   return (
@@ -150,8 +152,9 @@ export default function HomePage() {
           <div className="max-w-2xl">
             {season && (
               <div className="mb-3">
+                {/* --- FIX: Safe type casting for is_active --- */}
                 <Badge variant="secondary" className="text-[10px] bg-black/50 text-white border-white/20 backdrop-blur-md">
-                  {season.name} {(season as any).is_active || season.status === "active" ? "Active" : ""}
+                  {season.name} {(season as CurrentSeason & { is_active?: boolean }).is_active || season.status === "active" ? "Active" : ""}
                 </Badge>
               </div>
             )}
@@ -241,7 +244,6 @@ export default function HomePage() {
 
       {countdownTimer && ( <CountdownTimer title={countdownTimer.title} endTime={countdownTimer.end_time} linkUrl={countdownTimer.link_url} linkText={countdownTimer.link_text}/>)}
       
-      {/* --- FIX: Safely check currentPhase for 'draft' --- */}
       {currentPhase === 'draft' && (<DraftStatusWidget variant="full" />)}
       
       <section className="max-w-5xl mx-auto w-full space-y-4">
