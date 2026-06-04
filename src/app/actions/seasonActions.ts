@@ -480,7 +480,7 @@ export async function checkAndExecuteSeasonRollover(): Promise<{
   message: string;
   error?: string;
 }> {
-  console.log("[RolloverCheck] Checking for expired off-season timer...");
+  console.log("[RolloverCheck] Checking for expired postseason timer...");
   try {
     const { createClient } = await import("@supabase/supabase-js");
     const supabase = createClient(
@@ -488,10 +488,11 @@ export async function checkAndExecuteSeasonRollover(): Promise<{
         process.env.SUPABASE_SERVICE_KEY!
     );
 
+    // FIX 3: Use .ilike() for robust matching against the actual timer title in the DB!
     const { data: timer, error: timerError } = await supabase
       .from("countdown_timers")
-      .select("id, end_time")
-      .eq("title", "Off-Season Ends")
+      .select("id, end_time, title")
+      .ilike("title", "%Offseason Curation%") // Matches "Offseason Curation & Next Draft"
       .eq("is_active", true)
       .single();
 
@@ -500,21 +501,21 @@ export async function checkAndExecuteSeasonRollover(): Promise<{
     }
 
     if (!timer) {
-      return { success: true, message: "No active off-season timer found. No action taken." };
+      return { success: true, message: "No active postseason timer found. No action taken." };
     }
 
     const now = new Date();
     const endTime = new Date(timer.end_time);
 
     if (now >= endTime) {
-      console.log("[RolloverCheck] Off-season timer has expired. Executing full season rollover...");
+      console.log(`[RolloverCheck] Timer '${timer.title}' has expired. Executing full season rollover...`);
       const rolloverResult = await executeSeasonRollover();
       if (!rolloverResult.success) {
         throw new Error(rolloverResult.error || "Rollover function failed without a specific error.");
       }
       return { success: true, message: "Season rollover executed successfully." };
     } else {
-      return { success: true, message: `Off-season timer has not expired yet. Ends at: ${endTime.toISOString()}` };
+      return { success: true, message: `Timer '${timer.title}' has not expired yet. Ends at: ${endTime.toISOString()}` };
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -522,4 +523,3 @@ export async function checkAndExecuteSeasonRollover(): Promise<{
     return { success: false, message: "Failed to process season rollover.", error: msg };
   }
 }
-
