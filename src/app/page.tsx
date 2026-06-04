@@ -1,5 +1,4 @@
 // src/app/page.tsx
-
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
@@ -23,7 +22,7 @@ import {
   type CurrentSeason,
   type AdminNews,
   type CountdownTimer as CountdownTimerType,
-  type ActiveDraftSession, // Import the specific type
+  type ActiveDraftSession, 
 } from "@/app/actions/homeActions";
 import { getLatestStreamMatch, type StreamMatch } from "@/app/actions/liveStreamActions";
 import { getTeamsWithDetails, type TeamWithDetails } from "@/app/actions/teamActions";
@@ -54,10 +53,10 @@ export default function HomePage() {
       const seasonResult = await getCurrentSeason();
       const currentSeason = seasonResult.season;
       setSeason(currentSeason);
-      const currentPhase = currentSeason?.status;
+      
+      // --- FIX: Safely check both phase and status depending on the API mapping ---
+      const currentPhase = (currentSeason as any)?.phase || currentSeason?.status;
 
-      // --- THIS IS THE FIX ---
-      // Explicitly declare the types of the promise variables before the if/else blocks.
       let draftSessionPromise: ReturnType<typeof getActiveDraftSession>;
       let liveMatchPromise: ReturnType<typeof getLatestStreamMatch>;
 
@@ -90,13 +89,12 @@ export default function HomePage() {
         liveMatchPromise,
       ]);
       
-      const activeTeamCount = teamsResult.teams?.filter(t => !t.is_hidden).length || 8;
+      const activeTeamCount = teamsResult.teams?.filter(t => !(t as any).is_hidden).length || 8;
       setAdminNews(newsResult.news);
       setRecentPicks(picksResult.picks.slice(0, activeTeamCount));
       setCountdownTimer(timerResult.timer);
       setDraftSessionId(draftSessionResult.session?.id || null);
       setLiveMatch(streamResult.match);
-
     } catch (error) {
       console.error("Error loading home page data:", error);
     } finally {
@@ -129,7 +127,10 @@ export default function HomePage() {
   }
 
   const liveDraftLink = draftSessionId ? `/draft/${draftSessionId}/live` : "#";
-  const isPlayActive = season?.status && season.status !== 'postseason' && season.status !== 'draft';
+  
+  // --- FIX: Calculate Phase safely ---
+  const currentPhase = (season as any)?.phase || season?.status;
+  const isPlayActive = currentPhase && currentPhase !== 'postseason' && currentPhase !== 'draft';
 
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8 space-y-12">
@@ -150,7 +151,7 @@ export default function HomePage() {
             {season && (
               <div className="mb-3">
                 <Badge variant="secondary" className="text-[10px] bg-black/50 text-white border-white/20 backdrop-blur-md">
-                  {season.name} {season.status === "active" ? "Active" : ""}
+                  {season.name} {(season as any).is_active || season.status === "active" ? "Active" : ""}
                 </Badge>
               </div>
             )}
@@ -240,7 +241,8 @@ export default function HomePage() {
 
       {countdownTimer && ( <CountdownTimer title={countdownTimer.title} endTime={countdownTimer.end_time} linkUrl={countdownTimer.link_url} linkText={countdownTimer.link_text}/>)}
       
-      {season?.status === 'draft' && (<DraftStatusWidget variant="full" />)}
+      {/* --- FIX: Safely check currentPhase for 'draft' --- */}
+      {currentPhase === 'draft' && (<DraftStatusWidget variant="full" />)}
       
       <section className="max-w-5xl mx-auto w-full space-y-4">
         <div className="flex items-center justify-between">
