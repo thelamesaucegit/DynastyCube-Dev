@@ -29,7 +29,7 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
     console.log("[SeasonRollover] 🔄 Starting full modular season rollover...");
     
     try {
-        // --- STEP 1: IDENTIFY OLD & CREATE NEW SEASON ---
+       // --- STEP 1: IDENTIFY OLD & CREATE NEW SEASON ---
         const { data: oldSeason, error: oldSeasonErr } = await supabase.from('seasons').select('*').eq('is_active', true).single();
         if (oldSeasonErr || !oldSeason) throw new Error(`Could not find active season. DB Error: ${JSON.stringify(oldSeasonErr)}`);
 
@@ -42,17 +42,28 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
         const { error: deactivateErr } = await supabase.from('seasons').update({ is_active: false }).eq('id', oldSeason.id);
         if (deactivateErr) throw new Error(`Failed to deactivate old season: ${JSON.stringify(deactivateErr)}`);
         
+        // FIX: Calculate dynamic start and end dates to satisfy NOT NULL constraints
+        const now = new Date();
+        
+        // Determine the length of the previous season to mirror it (fallback to 90 days if unavailable)
+        const oldDurationMs = (oldSeason.end_date && oldSeason.start_date)
+            ? new Date(oldSeason.end_date).getTime() - new Date(oldSeason.start_date).getTime()
+            : 90 * 24 * 60 * 60 * 1000; 
+            
+        const nextEndDate = new Date(now.getTime() + oldDurationMs);
+
         const { data: newSeason, error: seasonErr } = await supabase.from('seasons').insert({
             season_name: nextSeasonName,
             season_number: nextSeasonNumber,
             is_active: true,
             phase: 'draft',
+            start_date: now.toISOString(),
+            end_date: nextEndDate.toISOString(),
             cubucks_allocation: oldSeason.cubucks_allocation || 100 
         }).select('id').single();
         
         if (seasonErr || !newSeason) throw new Error(`Failed to create new season: ${JSON.stringify(seasonErr)}`);
-
-
+      
         // --- STEP 2: ROLLOVER COSTS & RETIREMENTS ---
         console.log("[SeasonRollover] Running Cost Economy & Retirements...");
         const { error: costErr } = await supabase.rpc('rollover_season_costs', {
