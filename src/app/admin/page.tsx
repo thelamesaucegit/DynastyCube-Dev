@@ -139,7 +139,13 @@ export default function AdminPage() {
       case "teams":
         return <TeamManagement onUpdate={loadStats} />;
       case "cards":
-        return <CardManagement onUpdate={loadStats} />;
+        return (
+          <div className="space-y-8">
+            <CardManagement onUpdate={loadStats} />
+            <hr className="border-border" />
+            <CardRatingSync />
+          </div>
+        );
       case "cubucks":
         return <CubucksManagement />;
       case "essence":
