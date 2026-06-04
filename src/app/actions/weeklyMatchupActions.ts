@@ -794,7 +794,7 @@ async function triggerOffseason(seasonId: string, isTestSeason: boolean, supabas
     console.log(`[AUTOMATION] 👑 Championship Concluded! Triggering Offseason for Season: ${seasonId}`);
     await logSystemEvent("SeasonEnd", "info", `Championship concluded. Starting offseason timer for season ${seasonId}.`);
 
-    await supabase.from('seasons').update({ phase: 'offseason' }).eq('id', seasonId);
+    await supabase.from('seasons').update({ phase: 'posteason' }).eq('id', seasonId);
 
     let offSeasonEnd: Date;
     if (isTestSeason) {
@@ -848,7 +848,7 @@ export async function advancePlayoffBracket(seasonId: string, isTestSeason: bool
         if (advancingTeams.length <= 1) {
         console.log(`[PLAYOFFS] 👑 Championship complete! Winner: ${advancingTeams[0]}`);
         await logSystemEvent("Playoffs", "info", `Championship complete! Winner: ${advancingTeams[0]}`);
-        await supabase.from('seasons').update({ phase: 'offseason' }).eq('id', seasonId);
+        await supabase.from('seasons').update({ phase: 'postseason' }).eq('id', seasonId);
         
         let offSeasonEnd: Date;
         if (isTestSeason) {
