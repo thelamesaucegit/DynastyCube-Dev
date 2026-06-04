@@ -38,88 +38,94 @@ function getRelativeTime(dateString: string): string {
 }
 
 export default function HomePage() {
+  // Core Page State
   const [season, setSeason] = useState<CurrentSeason | null>(null);
   const [adminNews, setAdminNews] = useState<AdminNews[]>([]);
-  const [recentPicks, setRecentPicks] = useState<RecentDraftPick[]>([]);
   const [countdownTimer, setCountdownTimer] = useState<CountdownTimerType | null>(null);
-  const [draftSessionId, setDraftSessionId] = useState<string | null>(null);
   const [liveMatch, setLiveMatch] = useState<StreamMatch | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [activeTeamCount, setActiveTeamCount] = useState(8);
+  const [loadingCore, setLoadingCore] = useState(true);
   const [bgPosition, setBgPosition] = useState({ x: 50, y: 50 });
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  // Draft-Specific State (Loaded Non-Blockingly)
+  const [recentPicks, setRecentPicks] = useState<RecentDraftPick[]>([]);
+  const [draftSessionId, setDraftSessionId] = useState<string | null>(null);
+  const [loadingDraft, setLoadingDraft] = useState(true);
+
+  // 1. Load Core Data (Blocks the main UI until finished)
+  const loadCoreData = useCallback(async () => {
     try {
       const seasonResult = await getCurrentSeason();
       const currentSeason = seasonResult.season;
       setSeason(currentSeason);
       
-      // --- FIX: Use strict type intersection instead of 'any' ---
       const currentPhase = (currentSeason as CurrentSeason & { phase?: string })?.phase || currentSeason?.status;
-
-      let draftSessionPromise: ReturnType<typeof getActiveDraftSession>;
-      let liveMatchPromise: ReturnType<typeof getLatestStreamMatch>;
-
-      if (currentPhase === 'draft') {
-        draftSessionPromise = getActiveDraftSession();
-      } else {
-        draftSessionPromise = Promise.resolve({ session: null });
-      }
-
       const isActivePlayPhase = currentPhase && currentPhase !== 'postseason' && currentPhase !== 'draft';
-      if (isActivePlayPhase) {
-        liveMatchPromise = getLatestStreamMatch();
-      } else {
-        liveMatchPromise = Promise.resolve({ match: null });
-      }
       
-      const [
-        teamsResult, 
-        newsResult, 
-        picksResult, 
-        timerResult, 
-        draftSessionResult, 
-        streamResult
-      ] = await Promise.all([
+      const liveMatchPromise = isActivePlayPhase ? getLatestStreamMatch() : Promise.resolve({ match: null });
+
+      const [teamsResult, newsResult, timerResult, streamResult] = await Promise.all([
         getTeamsWithDetails(),
         getAdminNews(3),
-        getRecentDraftPicks(20),
         getActiveCountdownTimer(),
-        draftSessionPromise,
         liveMatchPromise,
       ]);
       
-      // --- FIX: Use strict type intersection instead of 'any' ---
-      const activeTeamCount = teamsResult.teams?.filter(t => !(t as { is_hidden?: boolean }).is_hidden).length || 8;
-      
+      setActiveTeamCount(teamsResult.teams?.filter(t => !(t as { is_hidden?: boolean }).is_hidden).length || 8);
       setAdminNews(newsResult.news);
-      setRecentPicks(picksResult.picks.slice(0, activeTeamCount));
       setCountdownTimer(timerResult.timer);
-      setDraftSessionId(draftSessionResult.session?.id || null);
       setLiveMatch(streamResult.match);
     } catch (error) {
-      console.error("Error loading home page data:", error);
+      console.error("Error loading core home page data:", error);
     } finally {
-      setLoading(false);
+      // Unblock the main UI immediately!
+      setLoadingCore(false); 
     }
   }, []);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  // 2. Load Draft Data (Runs in the background, updates dynamically)
+  const loadDraftData = useCallback(async () => {
+    try {
+      const [draftSessionResult, picksResult] = await Promise.all([
+        getActiveDraftSession(),
+        getRecentDraftPicks(20)
+      ]);
+      setDraftSessionId(draftSessionResult.session?.id || null);
+      setRecentPicks(picksResult.picks);
+    } catch (error) {
+      console.error("Error loading background draft data:", error);
+    } finally {
+      setLoadingDraft(false);
+    }
+  }, []);
 
+  // Initial Load
+  useEffect(() => {
+    loadCoreData();
+    loadDraftData();
+  }, [loadCoreData, loadDraftData]);
+
+  // Background Polling for Draft Picks (Every 15 seconds)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadDraftData();
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [loadDraftData]);
+
+  // Background Panning Effect
   useEffect(() => {
     const moveBackground = () => setBgPosition({ x: Math.floor(Math.random() * 100), y: Math.floor(Math.random() * 100) });
     const initialTimeout = setTimeout(moveBackground, 100);
     const panInterval = setInterval(moveBackground, 60000);
-    
     return () => {
       clearTimeout(initialTimeout);
       clearInterval(panInterval);
     };
   }, []);
 
-  if (loading) {
+  // Only block the UI if the CORE data is loading
+  if (loadingCore) {
     return (
       <div className="container max-w-7xl mx-auto px-4 py-16 text-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
@@ -129,10 +135,9 @@ export default function HomePage() {
   }
 
   const liveDraftLink = draftSessionId ? `/draft/${draftSessionId}/live` : "#";
-  
-  // --- FIX: Calculate Phase safely with strict types ---
   const currentPhase = (season as CurrentSeason & { phase?: string })?.phase || season?.status;
   const isPlayActive = currentPhase && currentPhase !== 'postseason' && currentPhase !== 'draft';
+  const visiblePicks = recentPicks.slice(0, activeTeamCount);
 
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8 space-y-12">
@@ -152,7 +157,6 @@ export default function HomePage() {
           <div className="max-w-2xl">
             {season && (
               <div className="mb-3">
-                {/* --- FIX: Safe type casting for is_active --- */}
                 <Badge variant="secondary" className="text-[10px] bg-black/50 text-white border-white/20 backdrop-blur-md">
                   {season.name} {(season as CurrentSeason & { is_active?: boolean }).is_active || season.status === "active" ? "Active" : ""}
                 </Badge>
@@ -191,7 +195,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {isPlayActive && liveMatch && <LiveStreamWidget initialMatch={liveMatch} onStreamEnd={loadData} />}
+      {isPlayActive && liveMatch && <LiveStreamWidget initialMatch={liveMatch} onStreamEnd={loadCoreData} />}
       
       <section className="space-y-4">
         <div className="flex items-center justify-between">
@@ -255,9 +259,14 @@ export default function HomePage() {
         </div>
         <Card>
           <CardContent className="p-0">
-            {recentPicks.length > 0 ? (
+            {loadingDraft ? (
+               <div className="p-12 text-center text-muted-foreground flex items-center justify-center gap-3">
+                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
+                 Checking draft board...
+               </div>
+            ) : visiblePicks.length > 0 ? (
               <div className="flex flex-col">
-                {recentPicks.map((pick) => (
+                {visiblePicks.map((pick) => (
                   <CardPreview key={pick.id} card={{ card_name: pick.card_name, image_url: pick.image_url, oldest_image_url: pick.oldest_image_url }}>
                     <div className="p-4 hover:bg-accent/50 transition-colors cursor-pointer border-b border-border/50 last:border-0">
                       <div className="flex items-center justify-between">
