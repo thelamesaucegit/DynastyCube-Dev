@@ -791,29 +791,30 @@ async function generateInitialPlayoffBracket(seasonId: string, isTestSeason: boo
 
 
 async function triggerOffseason(seasonId: string, isTestSeason: boolean, supabase: SupabaseClient) {
-    console.log(`[AUTOMATION] 👑 Championship Concluded! Triggering Offseason for Season: ${seasonId}`);
-    await logSystemEvent("SeasonEnd", "info", `Championship concluded. Starting offseason timer for season ${seasonId}.`);
-
-    await supabase.from('seasons').update({ phase: 'posteason' }).eq('id', seasonId);
+    console.log(`[AUTOMATION] 👑 Championship Concluded! Triggering Postseason for Season: ${seasonId}`);
+    
+    await logSystemEvent("SeasonEnd", "info", `Championship concluded. Starting postseason timer for season ${seasonId}.`);
+    
+    // FIX 1: Use valid phase 'postseason'
+    const { error: phaseErr } = await supabase.from('seasons').update({ phase: 'postseason' }).eq('id', seasonId);
+    if (phaseErr) console.error("[AUTOMATION] Failed to update season phase to postseason:", phaseErr);
 
     let offSeasonEnd: Date;
     if (isTestSeason) {
         offSeasonEnd = new Date(Date.now() + 2 * 60000); // 2 minute offseason for testing
     } else {
         const d = new Date();
-        // Logic to find the second Thursday from now at 12:00 PM CT
         let daysToThu = (4 - d.getUTCDay() + 7) % 7;
-        if (daysToThu <= 1) { // If today is Wed or Thu, go to *next* week's Thu
+        if (daysToThu <= 1) { 
             daysToThu += 7;
         }
         const targetDate = new Date(d.getTime() + (daysToThu + 7) * 86400000);
         offSeasonEnd = getTargetDateCT(targetDate, 0, 12);
     }
 
-    // Clear any old active timers and insert the new one
     await supabase.from('countdown_timers').update({ is_active: false }).eq('is_active', true);
     await supabase.from('countdown_timers').insert({
-        title: 'Offseason & Next Draft',
+        title: 'Offseason Curation & Next Draft', // Standardized title
         end_time: offSeasonEnd.toISOString(),
         link_text: 'View Final Standings',
         link_url: '/teams',
@@ -837,40 +838,41 @@ export async function advancePlayoffBracket(seasonId: string, isTestSeason: bool
         console.warn(`[PlayoffGen] ⚠️ Could not find last playoff round!`);
         return;
     }
-
     const currentRoundNum = lastRound.week_number;
     console.log(`[PlayoffGen] Current Round is ${currentRoundNum}. Fetching winners...`);
+
     const { data: currentMatchups } = await supabase.from('weekly_matchups')
         .select('winner_team_id').eq('season_id', seasonId).eq('week_number', currentRoundNum);
-
     const advancingTeams = currentMatchups?.map(m => m.winner_team_id).filter(Boolean) || [];
 
-        if (advancingTeams.length <= 1) {
+    // --- CHAMPIONSHIP ENDS HERE ---
+    if (advancingTeams.length <= 1) {
         console.log(`[PLAYOFFS] 👑 Championship complete! Winner: ${advancingTeams[0]}`);
         await logSystemEvent("Playoffs", "info", `Championship complete! Winner: ${advancingTeams[0]}`);
-        await supabase.from('seasons').update({ phase: 'postseason' }).eq('id', seasonId);
+        
+        // FIX 2: Use valid phase 'postseason'
+        const { error: phaseErr } = await supabase.from('seasons').update({ phase: 'postseason' }).eq('id', seasonId);
+        if (phaseErr) console.error("[AUTOMATION] Failed to update season phase to postseason:", phaseErr);
         
         let offSeasonEnd: Date;
         if (isTestSeason) {
             offSeasonEnd = new Date(Date.now() + 5 * 60000);
         } else {
-            // Find NEXT Thursday + 1 week (11 days if today is Sunday) at 12 PM CT
             const d = new Date();
             let daysToThu = (4 - d.getUTCDay() + 7) % 7;
-            if (daysToThu === 0) daysToThu = 7; // Forces *next* Thursday
+            if (daysToThu === 0) daysToThu = 7; 
             const targetDate = new Date(d.getTime() + (daysToThu + 7) * 86400000);
-            offSeasonEnd = getTargetDateCT(targetDate, 0, 12); // Sets absolute UTC to hit 12 PM CT
+            offSeasonEnd = getTargetDateCT(targetDate, 0, 12); 
         }
         
         await supabase.from('countdown_timers').update({ is_active: false }).eq('is_active', true);
         await supabase.from('countdown_timers').insert({
-            title: 'Offseason Curation & Next Draft',
+            title: 'Offseason Curation & Next Draft', // Standardized title
             end_time: offSeasonEnd.toISOString(),
             link_text: 'View Final Standings',
             link_url: '/teams',
             is_active: true
         });
-
         return;
     }
 
