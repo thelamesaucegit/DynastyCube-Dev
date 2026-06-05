@@ -91,15 +91,31 @@ export default function TeamsPage() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
         {teams.map((team) => {
-          const badge = getTeamDraftBadge(draftStatus, team.id);
+      const badge = getTeamDraftBadge(draftStatus, team.id);
           const primaryColor = team.primary_color || "#71717a";
           const secondaryColor = team.secondary_color || "#e4e4e7";
+          const isEliminated = team.is_escaped; // Catch the elimination status
           return (
             <Link key={team.short_name} href={`/teams/${team.short_name}`}>
-              <Card className={`group relative hover:shadow-xl hover:z-50 transition-all hover:-translate-y-1 cursor-pointer h-full flex flex-col ${
+              <Card className={`group relative transition-all cursor-pointer h-full flex flex-col overflow-hidden ${
                 badge === "clock" ? "ring-2 ring-green-500" : badge === "deck" ? "ring-2 ring-yellow-500" : ""
-              }`}>
-                <CardHeader className="flex flex-col items-center text-center gap-2 pb-2">
+              } ${isEliminated ? "opacity-40 grayscale-[0.2]" : "hover:shadow-xl hover:z-50 hover:-translate-y-1"}`}>
+                
+                {/* --- PARTY TIME BACKGROUND FOR ELIMINATED TEAMS --- */}
+                {isEliminated && (
+                  <div className="absolute inset-0 pointer-events-none z-0">
+                     <span className="absolute top-2 left-2 text-3xl rotate-12 opacity-80">🎉</span>
+                     <span className="absolute bottom-4 right-4 text-2xl -rotate-12 opacity-80">🥳</span>
+                     <span className="absolute top-1/2 left-4 text-3xl rotate-45 opacity-80">🎈</span>
+                     <span className="absolute top-4 right-6 text-2xl opacity-80">✨</span>
+                     <span className="absolute bottom-1/3 left-1/2 text-xl opacity-80">🎊</span>
+                     {/* Subtle dark wash so the text is still legible over the emojis */}
+                     <div className="absolute inset-0 bg-black/10 backdrop-blur-[1px]" />
+                  </div>
+                )}
+                
+                {/* Add relative and z-10 to the CardHeader and CardContent so they float above the party! */}
+                <CardHeader className="flex flex-col items-center text-center gap-2 pb-2 relative z-10">
                   <div className="relative size-16 flex-shrink-0 flex items-center justify-center mb-2">
                     <div
                       className="absolute size-16 rounded-full"
