@@ -54,7 +54,6 @@ export function TrophyCase({ teamId }: TrophyCaseProps) {
                 return;
             }
 
-            // Type the incoming data
             const typedMatches = finalMatches as RawMatchup[];
 
             // 2. Filter to only the highest week number per season (The actual Championship)
@@ -71,15 +70,17 @@ export function TrophyCase({ teamId }: TrophyCaseProps) {
             const enrichedChampionships: EnrichedChampionship[] = [];
 
             for (const champ of validChampionships) {
+                // FIX: Request 'season_name' instead of 'name' from the seasons table!
                 const [{ data: seasonData }, { data: teamData }] = await Promise.all([
-                    supabase.from('seasons').select('name').eq('id', champ.season_id).single(),
+                    supabase.from('seasons').select('season_name').eq('id', champ.season_id).single(),
                     supabase.from('teams').select('name, emoji, primary_color, secondary_color').eq('id', teamId).single()
                 ]);
 
                 if (seasonData && teamData) {
                     enrichedChampionships.push({
                         ...champ,
-                        season: seasonData as TrophySeason,
+                        // Map the season_name back to the standard interface name
+                        season: { name: seasonData.season_name } as TrophySeason,
                         team: teamData as TrophyTeam
                     });
                 }
@@ -115,12 +116,9 @@ export function TrophyCase({ teamId }: TrophyCaseProps) {
                             {champ.season.name} Champion
                         </h2>
                         
-                        {/* CUSTOM DYNAMIC TROPHY IMAGE:
-                            <img src={`/images/trophies/${champ.season.name.toLowerCase().replace(/\s+/g, '-')}-trophy.png`} alt={`${champ.season.name} Trophy`} className="w-24 h-24 mb-6 object-contain drop-shadow-xl" onError={(e) => e.currentTarget.src = '/images/trophies/default-trophy.png'} />
-                        */}
                         <div className="text-5xl mb-4 drop-shadow-xl">🏆</div>
-                        
                         <div className="text-5xl mb-3 drop-shadow-md">{champ.team.emoji}</div>
+                        
                         <h1 
                             className="text-2xl font-black uppercase text-center tracking-tighter"
                             style={{ 
