@@ -160,9 +160,13 @@ export async function recordSimGameResult(
     } else if (winnerTeamId === matchup.team1_id) {
         sim_team1_wins++;
         console.log(`[Action/recordSimGame] Recording win for Team 1 (${winnerTeamId}).`);
+        // Trigger ELO: Team 1 won, Team 2 lost
+        await triggerSmartEloUpdate(matchup.season_id, matchup.week_number, matchup.team1_id, matchup.team2_id);
     } else {
         sim_team2_wins++;
         console.log(`[Action/recordSimGame] Recording win for Team 2 (${winnerTeamId}).`);
+        // Trigger ELO: Team 2 won, Team 1 lost
+        await triggerSmartEloUpdate(matchup.season_id, matchup.week_number, matchup.team2_id, matchup.team1_id);
     }
 
     console.log(`[Action/recordSimGame] Saving new score -> T1: ${sim_team1_wins}, T2: ${sim_team2_wins}, Games: ${sim_completed_games}`);
@@ -263,7 +267,8 @@ export async function recordSimGameResult(
 
 /**
  * Record a PvP match result for a weekly matchup.
- * Updates pvp win counts and checks if the weekly outcome can be determined.
+ * Updates pvp win counts, applies Smart ELO once for the overall winner, 
+ * and checks if the weekly outcome can be determined.
  */
 export async function recordPvpResult(
     weeklyMatchupId: string,
@@ -273,10 +278,11 @@ export async function recordPvpResult(
     pvpDraws: number
 ): Promise<{ success: boolean; matchupFinalized: boolean; error?: string }> {
     const supabase = createServiceClient();
-
+    
+    // 1. Fetch the necessary context for both Finalization and Smart ELO
     const { data: matchup, error: fetchError } = await supabase
         .from('weekly_matchups')
-        .select('sim_completed_games')
+        .select('sim_completed_games, season_id, week_number, team1_id, team2_id')
         .eq('id', weeklyMatchupId)
         .single();
 
@@ -284,6 +290,7 @@ export async function recordPvpResult(
         return { success: false, matchupFinalized: false, error: 'Matchup not found' };
     }
 
+    // 2. Update the PvP scores in the database
     const { error: updateError } = await supabase
         .from('weekly_matchups')
         .update({
@@ -298,7 +305,19 @@ export async function recordPvpResult(
         return { success: false, matchupFinalized: false, error: updateError.message };
     }
 
-    // Finalize if all 5 sims are also done
+    // --- 3. SMART ELO INTEGRATION ---
+    // Apply weights a single time based on the overall PvP match winner
+    if (team1PvpWins > team2PvpWins) {
+        console.log(`[Action/recordPvpResult] Team 1 won PvP. Applying ELO weights.`);
+        await triggerSmartEloUpdate(matchup.season_id, matchup.week_number, matchup.team1_id, matchup.team2_id);
+    } else if (team2PvpWins > team1PvpWins) {
+        console.log(`[Action/recordPvpResult] Team 2 won PvP. Applying ELO weights.`);
+        await triggerSmartEloUpdate(matchup.season_id, matchup.week_number, matchup.team2_id, matchup.team1_id);
+    }
+    // If PvP was an exact tie, no weights are applied.
+
+    // 4. Finalize if all sim games are also done
+    // Note: adjust the '5' if your regular season game count differs
     if (matchup.sim_completed_games >= 5) {
         const finalized = await finalizeWeeklyOutcome(weeklyMatchupId);
         return { success: true, matchupFinalized: finalized };
@@ -1013,4 +1032,86 @@ async function buildSequentialAlternatingSchedule(
     await logSystemEvent("Playoffs", "info", `Scheduled ${successCount}/${totalGames} games for Week ${weekNum}`);
 }
     
-  
+  // --- SMART ELO WEIGHTING HELPERS ---
+
+/**
+ * Parses MTGO/Forge style decklists and extracts unique card names.
+ */
+function parseDecklistNames(deckText: string): string[] {
+    const lines = deckText.split('\n');
+    const cardNames = new Set<string>();
+    
+    for (const line of lines) {
+        const trimmed = line.trim();
+        // Skip empty lines or Forge metadata headers
+        if (!trimmed || trimmed.startsWith('[') || trimmed.startsWith('Name=')) continue;
+        
+        // Regex matches "1 Mox Sapphire" and captures "Mox Sapphire"
+        const match = trimmed.match(/^\d+\s+(.+)$/);
+        if (match && match[1]) {
+            cardNames.add(match[1].trim());
+        }
+    }
+    
+    return Array.from(cardNames);
+}
+
+/**
+ * Fetches the active decklists for the match and applies ELO weights.
+ */
+async function triggerSmartEloUpdate(
+    seasonId: string, 
+    weekNumber: number, 
+    winnerTeamId: string, 
+    loserTeamId: string
+) {
+    const supabase = createServiceClient();
+    
+    try {
+        console.log(`[Smart ELO] Fetching decks for Week ${weekNumber} to apply weights...`);
+
+        // 1. Get the specific week ID
+        const { data: weekData } = await supabase
+            .from('schedule_weeks')
+            .select('id')
+            .eq('season_id', seasonId)
+            .eq('week_number', weekNumber)
+            .single();
+
+        if (!weekData) return;
+
+        // 2. Fetch the current deck submissions for both teams
+        const { data: decks } = await supabase
+            .from('deck_submissions')
+            .select('team_id, deck_list')
+            .eq('week_id', weekData.id)
+            .eq('is_current', true)
+            .in('team_id', [winnerTeamId, loserTeamId]);
+
+        if (!decks || decks.length === 0) return;
+
+        // 3. Extract and parse the lists
+        const winnerDeck = decks.find(d => d.team_id === winnerTeamId)?.deck_list || "";
+        const loserDeck = decks.find(d => d.team_id === loserTeamId)?.deck_list || "";
+
+        const winnerCardNames = parseDecklistNames(winnerDeck);
+        const loserCardNames = parseDecklistNames(loserDeck);
+
+        // 4. Send the arrays of names to Postgres
+        if (winnerCardNames.length > 0 || loserCardNames.length > 0) {
+            const { error } = await supabase.rpc('apply_match_elo_weights', {
+                p_winner_card_names: winnerCardNames,
+                p_loser_card_names: loserCardNames
+            });
+
+            if (error) {
+                console.error("[Smart ELO] Database RPC Error:", error);
+            } else {
+                console.log(`[Smart ELO] Successfully applied weights for ${winnerCardNames.length} winning cards and ${loserCardNames.length} losing cards.`);
+            }
+        }
+    } catch (e) {
+        console.error("[Smart ELO] Unexpected error executing ELO update:", e);
+    }
+}
+

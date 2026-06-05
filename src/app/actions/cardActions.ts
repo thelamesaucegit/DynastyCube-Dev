@@ -200,6 +200,8 @@ export async function getAvailableCardsForDraft(poolName: string = "draft", admi
     return { cards: [], error: message };
   }
 }
+
+
 export async function addCardToPool(
   card: CardData,
   tableName: PoolTableName = "card_pools"

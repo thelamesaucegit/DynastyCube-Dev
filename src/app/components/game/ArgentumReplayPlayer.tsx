@@ -1,8 +1,8 @@
 // src/app/components/game/ArgentumReplayPlayer.tsx
-
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation'; // Added for redirect
 import { GameBoard } from '@/components/game/GameBoard';
 import type { SpectatorStateUpdate, ReplayCardData } from '@/types';
 import { Button } from '@/app/components/ui/button';
@@ -10,36 +10,44 @@ import { Slider } from '@/app/components/ui/slider';
 import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
 
 interface ArgentumReplayPlayerProps {
+    matchId?: string; // Added to enable redirect
     initialGameStates: SpectatorStateUpdate[];
     cardDataMap: Record<string, ReplayCardData>;
     currentIndex: number;
     onIndexChange: (index: number) => void;
 }
 
-export function ArgentumReplayPlayer({ initialGameStates, cardDataMap, currentIndex, onIndexChange }: ArgentumReplayPlayerProps) {
+export function ArgentumReplayPlayer({ matchId, initialGameStates, cardDataMap, currentIndex, onIndexChange }: ArgentumReplayPlayerProps) {
+    const router = useRouter(); // Initialize router
     const [isPlaying, setIsPlaying] = useState(false);
     const [playbackSpeed, setPlaybackSpeed] = useState<1 | 2 | 4 >(1);
     const totalStates = initialGameStates.length;
     
     const currentSnapshot = useMemo(() => initialGameStates[currentIndex], [currentIndex, initialGameStates]);
-
-    // Responsive logic has been moved to the parent page component.
     
     useEffect(() => {
         if (!isPlaying) return;
+
         const baseDelay = 750;
         const currentDelay = baseDelay / playbackSpeed;
+
         const interval = setInterval(() => {
             if (currentIndex < totalStates - 1) {
-                onIndexChange(currentIndex + 1); // Use the callback to update state in the parent
+                onIndexChange(currentIndex + 1);
             } else {
                 setIsPlaying(false);
+                // Redirect when replay finishes
+                if (matchId) {
+                    router.push(`/match/${matchId}/summary`);
+                }
             }
         }, currentDelay);
+
         return () => clearInterval(interval);
-    }, [isPlaying, totalStates, currentIndex, playbackSpeed, onIndexChange]);
+    }, [isPlaying, totalStates, currentIndex, playbackSpeed, onIndexChange, matchId, router]);
 
     const handleSliderChange = (value: number[]) => onIndexChange(value[0]);
+    
     const handleSpeedToggle = () => {
         setPlaybackSpeed(current => (current === 4 ? 1 : (current * 2)) as 1 | 2 | 4);
     };

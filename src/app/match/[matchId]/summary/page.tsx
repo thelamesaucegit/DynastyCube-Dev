@@ -1,5 +1,4 @@
-//src/app/match/[matchId]/summary/page.tsx
-
+// src/app/match/[matchId]/summary/page.tsx
 import React from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -18,13 +17,14 @@ export default async function MatchSummaryPage({ params }: SummaryPageProps) {
     const supabase = await createServerClient();
 
     // Fetch the match details, the weekly matchup context, and both teams
+    // Added weekly_matchup_id to the select statement to fetch history!
     const { data: match, error } = await supabase
         .from('schedule')
         .select(`
-            id, status, winner_team_id, sim_match_id, match_date,
+            id, status, winner_team_id, sim_match_id, match_date, weekly_matchup_id,
             team1:teams!team1_id(id, name, emoji),
             team2:teams!team2_id(id, name, emoji),
-            weekly_matchup:weekly_matchups(id, sim_team1_wins, sim_team2_wins, sim_completed_games, is_playoff, is_outcome_final)
+            weekly_matchup:weekly_matchups(id, is_playoff, is_outcome_final, sim_completed_games)
         `)
         .eq('sim_match_id', matchId)
         .single();
@@ -37,11 +37,33 @@ export default async function MatchSummaryPage({ params }: SummaryPageProps) {
     const team2 = Array.isArray(match.team2) ? match.team2[0] : match.team2;
     const matchup = Array.isArray(match.weekly_matchup) ? match.weekly_matchup[0] : match.weekly_matchup;
 
-    const t1Wins = matchup?.sim_team1_wins || 0;
-    const t2Wins = matchup?.sim_team2_wins || 0;
+    // --- SPOILER-FREE LOGIC ---
+    // Fetch all completed games in this weekly series that occurred ON OR BEFORE this specific match's date.
+    const { data: historyGames } = await supabase
+        .from('schedule')
+        .select('winner_team_id')
+        .eq('weekly_matchup_id', match.weekly_matchup_id)
+        .eq('status', 'completed')
+        .lte('match_date', match.match_date);
+
+    let t1Wins = 0;
+    let t2Wins = 0;
+    let gamesPlayedSoFar = 0;
+
+    if (historyGames) {
+        gamesPlayedSoFar = historyGames.length;
+        historyGames.forEach(g => {
+            if (g.winner_team_id === team1?.id) t1Wins++;
+            if (g.winner_team_id === team2?.id) t2Wins++;
+        });
+    }
+
     const isT1Winner = match.winner_team_id === team1?.id;
     const isT2Winner = match.winner_team_id === team2?.id;
     const isDraw = !isT1Winner && !isT2Winner;
+
+    // Only show the "Series Finalized" banner if THIS specific game was the final game of the series
+    const showFinalized = matchup?.is_outcome_final && gamesPlayedSoFar === matchup.sim_completed_games;
 
     return (
         <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
@@ -75,7 +97,7 @@ export default async function MatchSummaryPage({ params }: SummaryPageProps) {
                                 {isT1Winner && <Badge className="mt-2 bg-green-500 hover:bg-green-600">Winner</Badge>}
                             </div>
 
-                            {/* VS & Score */}
+                            {/* VS & Spoiler-Free Score */}
                             <div className="flex flex-col items-center justify-center px-4">
                                 <div className="text-muted-foreground font-black text-3xl italic mb-6">VS</div>
                                 <div className="flex items-center gap-6 bg-background px-6 py-4 rounded-2xl shadow-inner border">
@@ -85,7 +107,7 @@ export default async function MatchSummaryPage({ params }: SummaryPageProps) {
                                 </div>
                                 {matchup && (
                                     <p className="text-sm text-muted-foreground mt-4 font-medium uppercase tracking-wider">
-                                        Game {matchup.sim_completed_games} {matchup.is_playoff ? 'of Playoffs' : 'of Series'}
+                                        Game {gamesPlayedSoFar} {matchup.is_playoff ? 'of Playoffs' : 'of Series'}
                                     </p>
                                 )}
                             </div>
@@ -107,10 +129,10 @@ export default async function MatchSummaryPage({ params }: SummaryPageProps) {
                         </div>
                     </div>
                     
-                    {matchup?.is_outcome_final && (
+                    {showFinalized && (
                         <div className="bg-primary/10 border-t border-primary/20 p-4 text-center">
                             <p className="text-primary font-bold tracking-wide uppercase text-sm">
-                                🏆 Series Finalized!
+                                🏆 Series Complete!
                             </p>
                         </div>
                     )}
@@ -130,7 +152,6 @@ export default async function MatchSummaryPage({ params }: SummaryPageProps) {
                         </Link>
                     </Button>
                 </div>
-
             </div>
         </div>
     );

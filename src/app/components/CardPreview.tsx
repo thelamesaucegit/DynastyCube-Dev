@@ -1,5 +1,4 @@
-//src/app/components/CardPreview.tsx
-
+// src/app/components/CardPreview.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -38,9 +37,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-const imageUrl = getCardImageUrl(card, useOldestArt);
-
-  const scryfallUrl = `https://scryfall.com/search?as=grid&order=name&q=${encodeURIComponent('"' + card.card_name + '"')}`;
+  const imageUrl = getCardImageUrl(card, useOldestArt);
+  const scryfallUrl = `https://scryfall.com/search?as=grid&order=name&q=${encodeURIComponent('!"' + card.card_name + '"')}`;
 
   const handleMobileClick = (e: React.MouseEvent) => {
     if (isMobile) {
@@ -50,26 +48,26 @@ const imageUrl = getCardImageUrl(card, useOldestArt);
   };
 
   const portalContent =
-    isHovered && imageUrl && mounted
-      ? createPortal(
-          <div 
-            className="fixed inset-0 pointer-events-none flex items-center justify-center z-[99999]"
-            onClick={() => isMobile && setIsHovered(false)} // Tap anywhere to dismiss on mobile
-          >
-            <div className="bg-black/95 rounded-xl p-2 shadow-[0_0_50px_rgba(0,0,0,0.8)] border border-gray-600 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-100">
-              <img
-                src={imageUrl}
-                alt={card.card_name}
-                className="w-[320px] h-[446px] rounded-lg block object-contain"
-              />
-              <div className="text-center text-white text-sm font-bold mt-2 pb-1 px-2 truncate border-t border-white/10 pt-2">
-                {card.card_name}
-              </div>
-            </div>
-          </div>,
-          document.body
-        )
-      : null;
+    isHovered && imageUrl && mounted ? createPortal(
+      <div 
+        // FIX: Use pointer-events-auto on mobile so the onClick actually fires!
+        // Added a subtle bg-black/40 on mobile to indicate the background is clickable to dismiss.
+        className={`fixed inset-0 flex items-center justify-center z-[99999] ${isMobile ? "pointer-events-auto bg-black/40 backdrop-blur-sm" : "pointer-events-none"}`} 
+        onClick={() => isMobile && setIsHovered(false)} // Tap anywhere to dismiss on mobile
+      >
+        <div className="bg-black/95 rounded-xl p-2 shadow-[0_0_50px_rgba(0,0,0,0.8)] border border-gray-600 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-100">
+          <img 
+            src={imageUrl} 
+            alt={card.card_name} 
+            className="w-[320px] h-[446px] rounded-lg block object-contain" 
+          />
+          <div className="text-center text-white text-sm font-bold mt-2 pb-1 px-2 truncate border-t border-white/10 pt-2">
+            {card.card_name}
+          </div>
+        </div>
+      </div>,
+      document.body
+    ) : null;
 
   return (
     <>
