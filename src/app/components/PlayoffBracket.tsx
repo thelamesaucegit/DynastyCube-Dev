@@ -1,20 +1,19 @@
 // src/app/components/PlayoffBracket.tsx
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { getPlayoffData } from "@/app/actions/playoffActions";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { Trophy, CalendarRange } from "lucide-react";
 
-// --- STRICT TYPES FOR SUPABASE DATA ---
 export interface PlayoffTeam {
     id: string;
     name: string;
     emoji: string;
-    primary_color?: string;
-    secondary_color?: string;
+    primary_color?: string | null;
+    secondary_color?: string | null;
 }
 
 export interface PlayoffGame {
@@ -33,8 +32,8 @@ export interface PlayoffMatchup {
     team1: PlayoffTeam | PlayoffTeam[];
     team2: PlayoffTeam | PlayoffTeam[];
     schedule: PlayoffGame[];
+    isDummy?: boolean; // Added for TBD rounds
 }
-// ---------------------------------------
 
 interface PlayoffBracketProps {
     seasonId: string;
@@ -44,40 +43,121 @@ interface PlayoffBracketProps {
 export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
     const [matchups, setMatchups] = useState<PlayoffMatchup[]>([]);
     const [loading, setLoading] = useState(true);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [lines, setLines] = useState<React.ReactNode[]>([]);
 
     const loadBracket = useCallback(async () => {
         if (!seasonId) return;
         const result = await getPlayoffData(seasonId);
-        if (result.success) {
-            // Safely cast the returned data to our strict interface
-            setMatchups(result.matchups as unknown as PlayoffMatchup[]);
-        }
+        if (result.success) setMatchups(result.matchups as unknown as PlayoffMatchup[]);
         setLoading(false);
     }, [seasonId]);
 
     useEffect(() => {
         loadBracket();
-        // Update every 10 minutes
         const interval = setInterval(loadBracket, 600000);
         return () => clearInterval(interval);
     }, [loadBracket]);
 
+    // Group matchups and PAD FUTURE ROUNDS
+    const rounds = React.useMemo(() => {
+        if (matchups.length === 0) return [];
+        
+        const roundsMap = matchups.reduce<Record<number, PlayoffMatchup[]>>((acc, match) => {
+            if (!acc[match.week_number]) acc[match.week_number] = [];
+            acc[match.week_number].push(match);
+            return acc;
+        }, {});
+        
+        const completeRounds = Object.values(roundsMap);
+        
+        // If we only have Round 1 (e.g. 4 matches), we need to draw Round 2 (2 matches) and Round 3 (1 match)
+        if (completeRounds.length > 0) {
+            let currentMatchesInRound = completeRounds[completeRounds.length - 1].length;
+            let currentWeekNumber = completeRounds[completeRounds.length - 1][0].week_number;
+            
+            while (currentMatchesInRound > 1) {
+                currentMatchesInRound = Math.ceil(currentMatchesInRound / 2);
+                currentWeekNumber++;
+                
+                const dummyMatches = Array.from({ length: currentMatchesInRound }).map((_, i) => ({
+                    id: `dummy-${currentWeekNumber}-${i}`,
+                    week_number: currentWeekNumber,
+                    is_outcome_final: false,
+                    team1: [] as PlayoffTeam[],
+                    team2: [] as PlayoffTeam[],
+                    schedule: [],
+                    isDummy: true
+                } as PlayoffMatchup));
+                
+                completeRounds.push(dummyMatches);
+            }
+        }
+        return completeRounds;
+    }, [matchups]);
+
+    useEffect(() => {
+        if (loading || rounds.length === 0 || !containerRef.current) return;
+
+        const drawLines = () => {
+            const newLines: React.ReactNode[] = [];
+            const roundColumns = containerRef.current?.querySelectorAll('.bracket-round');
+            if (!roundColumns || roundColumns.length < 2) return;
+
+            for (let i = 0; i < roundColumns.length - 1; i++) {
+                const currentRound = roundColumns[i];
+                const nextRound = roundColumns[i + 1];
+
+                const currentCards = Array.from(currentRound.querySelectorAll('.bracket-card')) as HTMLElement[];
+                const nextCards = Array.from(nextRound.querySelectorAll('.bracket-card')) as HTMLElement[];
+
+                const containerRect = containerRef.current!.getBoundingClientRect();
+
+                currentCards.forEach((card, cardIndex) => {
+                    const nextCardIndex = Math.floor(cardIndex / 2);
+                    const targetCard = nextCards[nextCardIndex];
+
+                    if (targetCard) {
+                        const startRect = card.getBoundingClientRect();
+                        const endRect = targetCard.getBoundingClientRect();
+
+                        const startX = startRect.right - containerRect.left;
+                        const startY = startRect.top + (startRect.height / 2) - containerRect.top;
+
+                        const endX = endRect.left - containerRect.left;
+                        const endY = endRect.top + (endRect.height / 2) - containerRect.top;
+
+                        const midX = startX + (endX - startX) / 2;
+
+                        newLines.push(
+                            <path
+                                key={`line-${i}-${cardIndex}`}
+                                d={`M ${startX} ${startY} L ${midX} ${startY} L ${midX} ${endY} L ${endX} ${endY}`}
+                                fill="transparent"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                className="text-border/60"
+                                strokeLinejoin="round"
+                            />
+                        );
+                    }
+                });
+            }
+            setLines(newLines);
+        };
+
+        setTimeout(drawLines, 100); 
+        window.addEventListener('resize', drawLines);
+        return () => window.removeEventListener('resize', drawLines);
+    }, [rounds, loading]);
+
+
     if (loading || matchups.length === 0) return null;
 
-    // Group matchups by week_number (Rounds) using strict generic Record type
-    const roundsMap = matchups.reduce<Record<number, PlayoffMatchup[]>>((acc, match) => {
-        if (!acc[match.week_number]) acc[match.week_number] = [];
-        acc[match.week_number].push(match);
-        return acc;
-    }, {});
-    const rounds = Object.values(roundsMap);
-
-    // --- SPOILER-FREE CHAMPION DETECTION ---
     const finalMatchup = matchups[matchups.length - 1];
     let champion: PlayoffTeam | null = null;
 
     if (finalMatchup?.is_outcome_final) {
-        // Ensure all games in the final matchup have finished broadcasting
         const streamCaughtUp = finalMatchup.schedule?.every((g: PlayoffGame) => 
             Date.now() > (new Date(g.match_date).getTime() + (30 * 60000) + ((g.total_steps || 300) * 2000))
         );
@@ -90,42 +170,23 @@ export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
 
     return (
         <section className="space-y-6 animate-in fade-in duration-700">
-                        {/* --- CHAMPION REVEAL (Rendered ABOVE the bracket if a champion exists) --- */}
+            <style dangerouslySetInnerHTML={{__html: `
+                @keyframes diagonal-shimmer { 0% { background-position: 200% center; } 100% { background-position: -200% center; } }
+                .animate-shimmer { background-size: 200% auto; animation: diagonal-shimmer 8s linear infinite; }
+            `}} />
+
             {champion && (
-                <Card className="border-2 border-yellow-500/50 bg-gradient-to-b from-yellow-500/10 to-background overflow-hidden">
-                    <CardContent className="flex flex-col items-center justify-center py-12 px-4">
-                        <h2 className="text-xl md:text-3xl font-black tracking-widest text-center text-muted-foreground uppercase mb-6">
+                <Card className="border-2 border-yellow-500/50 bg-gradient-to-br from-yellow-500/10 via-background to-yellow-500/10 overflow-hidden animate-shimmer relative">
+                    <div className="absolute inset-0 bg-background/40 backdrop-blur-[1px] pointer-events-none" />
+                    <CardContent className="flex flex-col items-center justify-center py-12 px-4 relative z-10">
+                        <h2 className="text-xl md:text-3xl font-black tracking-widest text-center text-muted-foreground uppercase mb-6 drop-shadow-sm">
                             {seasonName} Champion
                         </h2>
-                        
-                        {/* CUSTOM DYNAMIC TROPHY IMAGE: 
-                            To use season-specific PNGs, name your files like "season-1-trophy.png" in your public/images/trophies folder.
-                            Comment out the emoji div below and uncomment this img tag!
-                            
-                            <img 
-                                src={`/images/trophies/${seasonName.toLowerCase().replace(/\s+/g, '-')}-trophy.png`} 
-                                alt={`${seasonName} Trophy`} 
-                                className="w-24 h-24 md:w-32 md:h-32 mb-6 object-contain drop-shadow-xl" 
-                                onError={(e) => { 
-                                    // If the specific season PNG isn't found, fallback to a default image
-                                    e.currentTarget.src = '/images/trophies/default-trophy.png'; 
-                                }}
-                            /> 
-                        */}
-                        <div className="text-7xl md:text-9xl mb-6 drop-shadow-2xl">
-                            🏆
-                        </div>
-                        
-                        <div className="text-7xl md:text-8xl mb-4 drop-shadow-xl">
-                            {champion.emoji}
-                        </div>
-                        
+                        <div className="text-7xl md:text-9xl mb-6 drop-shadow-2xl">🏆</div>
+                        <div className="text-7xl md:text-8xl mb-4 drop-shadow-xl">{champion.emoji}</div>
                         <h1 
                             className="text-4xl md:text-6xl font-black uppercase text-center tracking-tighter mt-4"
-                            style={{ 
-                                color: champion.primary_color || '#ffffff', 
-                                textShadow: `2px 2px 0px ${champion.secondary_color || '#555555'}, 4px 4px 10px rgba(0,0,0,0.5)` 
-                            }}
+                            style={{ color: champion.primary_color || '#ffffff', textShadow: `2px 2px 0px ${champion.secondary_color || '#555555'}, 4px 4px 10px rgba(0,0,0,0.5)` }}
                         >
                             {champion.name}
                         </h1>
@@ -133,11 +194,9 @@ export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
                 </Card>
             )}
 
-
-            {/* --- THE PLAYOFF BRACKET --- */}
-            <Card className="border-primary/20 bg-muted/10">
+            <Card className="border-primary/20 bg-muted/10 overflow-hidden">
                 <CardContent className="p-6">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 relative z-10">
                         <div className="flex items-center gap-2">
                             <Trophy className="h-5 w-5 text-yellow-500" />
                             <h2 className="text-xl font-bold tracking-tight uppercase">Playoff Bracket</h2>
@@ -150,54 +209,71 @@ export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
                         </Button>
                     </div>
                     
-                    <div className="flex flex-col md:flex-row justify-center items-center md:items-stretch gap-8 md:gap-12 overflow-x-auto pb-4">
-                        {rounds.map((round: PlayoffMatchup[], roundIdx: number) => (
-                            <div key={roundIdx} className="flex flex-col justify-center gap-6 min-w-[140px]">
-                                {round.map((match: PlayoffMatchup) => {
-                                    const team1 = Array.isArray(match.team1) ? match.team1[0] : match.team1;
-                                    const team2 = Array.isArray(match.team2) ? match.team2[0] : match.team2;
-                                    
-                                    // Calculate Safe Wins to protect spoilers
-                                    let t1SafeWins = 0;
-                                    let t2SafeWins = 0;
-                                    
-                                    match.schedule?.forEach((game: PlayoffGame) => {
-                                        if (game.status === 'completed') {
-                                            const broadcastEndTime = new Date(game.match_date).getTime() + (30 * 60000) + ((game.total_steps || 300) * 2000);
-                                            if (Date.now() > broadcastEndTime) {
-                                                if (game.winner_team_id === team1?.id) t1SafeWins++;
-                                                if (game.winner_team_id === team2?.id) t2SafeWins++;
+                    <div className="relative w-full overflow-x-auto pb-4" ref={containerRef}>
+                        <svg className="absolute inset-0 w-full h-full pointer-events-none z-0" style={{ minWidth: '100%' }}>
+                            {lines}
+                        </svg>
+
+                        <div className="flex flex-row justify-center items-stretch gap-12 md:gap-24 relative z-10 mx-auto px-4 min-w-max">
+                            {rounds.map((round: PlayoffMatchup[], roundIdx: number) => {
+                                const isFinalRound = roundIdx === rounds.length - 1;
+                                const roundTitle = isFinalRound ? "Championship" : `Round ${roundIdx + 1}`;
+
+                                return (
+                                    <div key={roundIdx} className="bracket-round flex flex-col justify-center gap-8 min-w-[160px]">
+                                        <h3 className="text-center font-bold text-xs uppercase tracking-widest text-muted-foreground mb-[-1rem]">
+                                            {roundTitle}
+                                        </h3>
+                                        
+                                        {round.map((match: PlayoffMatchup) => {
+                                            if (match.isDummy) {
+                                                return (
+                                                    <div key={match.id} className="bracket-card flex flex-col bg-background/50 border border-dashed border-border/50 rounded-lg p-4 h-[120px] justify-center opacity-50">
+                                                        <div className="flex items-center justify-between gap-4 mb-2"><span className="text-xl font-bold text-muted-foreground">TBD</span></div>
+                                                        <div className="h-px bg-border/30 w-full my-3" />
+                                                        <div className="flex items-center justify-between gap-4 mt-2"><span className="text-xl font-bold text-muted-foreground">TBD</span></div>
+                                                    </div>
+                                                );
                                             }
-                                        }
-                                    });
 
-                                    // Determine Elimination (Only if outcome is final AND stream has caught up)
-                                    const isFinal = match.is_outcome_final && match.schedule?.every((g: PlayoffGame) => Date.now() > (new Date(g.match_date).getTime() + (30 * 60000) + ((g.total_steps || 300) * 2000)));
-                                    const t1Eliminated = isFinal && match.winner_team_id !== team1?.id;
-                                    const t2Eliminated = isFinal && match.winner_team_id !== team2?.id;
+                                            const team1 = Array.isArray(match.team1) ? match.team1[0] : match.team1;
+                                            const team2 = Array.isArray(match.team2) ? match.team2[0] : match.team2;
+                                            
+                                            let t1SafeWins = 0; let t2SafeWins = 0;
+                                            match.schedule?.forEach((game: PlayoffGame) => {
+                                                if (game.status === 'completed') {
+                                                    const broadcastEndTime = new Date(game.match_date).getTime() + (30 * 60000) + ((game.total_steps || 300) * 2000);
+                                                    if (Date.now() > broadcastEndTime) {
+                                                        if (game.winner_team_id === team1?.id) t1SafeWins++;
+                                                        if (game.winner_team_id === team2?.id) t2SafeWins++;
+                                                    }
+                                                }
+                                            });
 
-                                    return (
-                                        <div key={match.id} className="flex flex-col bg-background border border-border/50 rounded-lg p-3 shadow-sm">
-                                            {/* Team 1 */}
-                                            <div className={`flex items-center justify-between gap-4 mb-2 ${t1Eliminated ? 'opacity-40 grayscale' : ''}`}>
-                                                <span className="text-3xl" title={team1?.name}>{team1?.emoji || '❔'}</span>
-                                                <div className="flex gap-0.5 text-xs">
-                                                    {Array.from({ length: t1SafeWins }).map((_, i) => <span key={i}>👑</span>)}
+                                            const isFinal = match.is_outcome_final && match.schedule?.every((g: PlayoffGame) => Date.now() > (new Date(g.match_date).getTime() + (30 * 60000) + ((g.total_steps || 300) * 2000)));
+                                            const t1Eliminated = isFinal && match.winner_team_id !== team1?.id;
+                                            const t2Eliminated = isFinal && match.winner_team_id !== team2?.id;
+                                            const t1Winner = isFinal && !t1Eliminated;
+                                            const t2Winner = isFinal && !t2Eliminated;
+
+                                            return (
+                                                <div key={match.id} className={`bracket-card flex flex-col bg-background border rounded-lg p-4 shadow-sm relative h-[120px] justify-center transition-all ${isFinal ? 'border-border' : 'border-primary/30 shadow-[0_0_15px_rgba(var(--primary),0.1)]'}`}>
+                                                    <div className={`flex items-center justify-between gap-4 transition-all duration-500 ${t1Eliminated ? 'opacity-30 grayscale' : ''}`}>
+                                                        <span className={`text-3xl transition-all ${t1Winner ? 'drop-shadow-[0_0_8px_rgba(250,204,21,0.6)] scale-110' : ''}`} title={team1?.name}>{team1?.emoji || '❔'}</span>
+                                                        <div className="flex gap-0.5 text-xs">{Array.from({ length: t1SafeWins }).map((_, i) => <span key={i}>👑</span>)}</div>
+                                                    </div>
+                                                    <div className="h-px bg-border/50 w-full my-3" />
+                                                    <div className={`flex items-center justify-between gap-4 transition-all duration-500 ${t2Eliminated ? 'opacity-30 grayscale' : ''}`}>
+                                                        <span className={`text-3xl transition-all ${t2Winner ? 'drop-shadow-[0_0_8px_rgba(250,204,21,0.6)] scale-110' : ''}`} title={team2?.name}>{team2?.emoji || '❔'}</span>
+                                                        <div className="flex gap-0.5 text-xs">{Array.from({ length: t2SafeWins }).map((_, i) => <span key={i}>👑</span>)}</div>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                            <div className="h-px bg-border/50 w-full my-1" />
-                                            {/* Team 2 */}
-                                            <div className={`flex items-center justify-between gap-4 mt-2 ${t2Eliminated ? 'opacity-40 grayscale' : ''}`}>
-                                                <span className="text-3xl" title={team2?.name}>{team2?.emoji || '❔'}</span>
-                                                <div className="flex gap-0.5 text-xs">
-                                                    {Array.from({ length: t2SafeWins }).map((_, i) => <span key={i}>👑</span>)}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        ))}
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                 </CardContent>
             </Card>

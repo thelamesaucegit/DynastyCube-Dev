@@ -742,6 +742,28 @@ export async function completeDraft(
                                      currentMatchCursor = new Date(currentMatchCursor.getTime() + 30 * 60000);
                                  }
                              }
+
+                             // --- NEW: TIGHTEN WEEK BOUNDARIES (TEST SEASONS ONLY) ---
+                             const { data: latestMatch } = await supabase
+                                .from('schedule')
+                                .select('match_date')
+                                .eq('week_id', weekData.id)
+                                .order('match_date', { ascending: false })
+                                .limit(1)
+                                .single();
+                                
+                             if (latestMatch?.match_date) {
+                                 // The week ends exactly 90 minutes after the start of the final game
+                                 const finalGameStart = new Date(latestMatch.match_date);
+                                 const preciseWeekEnd = new Date(finalGameStart.getTime() + (90 * 60000));
+                                 
+                                 await supabase.from("schedule_weeks").update({
+                                     end_date: preciseWeekEnd.toISOString(),
+                                     match_completion_deadline: preciseWeekEnd.toISOString()
+                                 }).eq('id', weekData.id);
+                             }
+                             // ---------------------------------------------------------
+
                          } else {
                              // Production: 5 games, interleaved, Thu-Tue, on the hour streams
                              const requiredGames = 5;
@@ -755,14 +777,11 @@ export async function completeDraft(
                              // Interleave matchups to prevent back-to-back games
                              const counts = new Map();
                              matchupRecords.forEach(m => counts.set(m.recordId, requiredGames));
-
                              const finalSchedule: typeof matchupRecords = [];
                              let lastRecordId: string | null = null;
-
                              
                              for (let i = 0; i < weekTotalGames; i++) {
                                  const available = matchupRecords.filter(m => counts.get(m.recordId) > 0 && m.recordId !== lastRecordId);
-                                 // Fallback to any available if we get stuck at the very end
                                  const chosen = available.length > 0 
                                      ? available[Math.floor(Math.random() * available.length)] 
                                      : matchupRecords.find(m => counts.get(m.recordId) > 0)!;
