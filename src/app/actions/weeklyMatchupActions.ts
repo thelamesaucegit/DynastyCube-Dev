@@ -1013,4 +1013,86 @@ async function buildSequentialAlternatingSchedule(
     await logSystemEvent("Playoffs", "info", `Scheduled ${successCount}/${totalGames} games for Week ${weekNum}`);
 }
     
-  
+  // --- SMART ELO WEIGHTING HELPERS ---
+
+/**
+ * Parses MTGO/Forge style decklists and extracts unique card names.
+ */
+function parseDecklistNames(deckText: string): string[] {
+    const lines = deckText.split('\n');
+    const cardNames = new Set<string>();
+    
+    for (const line of lines) {
+        const trimmed = line.trim();
+        // Skip empty lines or Forge metadata headers
+        if (!trimmed || trimmed.startsWith('[') || trimmed.startsWith('Name=')) continue;
+        
+        // Regex matches "1 Mox Sapphire" and captures "Mox Sapphire"
+        const match = trimmed.match(/^\d+\s+(.+)$/);
+        if (match && match[1]) {
+            cardNames.add(match[1].trim());
+        }
+    }
+    
+    return Array.from(cardNames);
+}
+
+/**
+ * Fetches the active decklists for the match and applies ELO weights.
+ */
+async function triggerSmartEloUpdate(
+    seasonId: string, 
+    weekNumber: number, 
+    winnerTeamId: string, 
+    loserTeamId: string
+) {
+    const supabase = createServiceClient();
+    
+    try {
+        console.log(`[Smart ELO] Fetching decks for Week ${weekNumber} to apply weights...`);
+
+        // 1. Get the specific week ID
+        const { data: weekData } = await supabase
+            .from('schedule_weeks')
+            .select('id')
+            .eq('season_id', seasonId)
+            .eq('week_number', weekNumber)
+            .single();
+
+        if (!weekData) return;
+
+        // 2. Fetch the current deck submissions for both teams
+        const { data: decks } = await supabase
+            .from('deck_submissions')
+            .select('team_id, deck_list')
+            .eq('week_id', weekData.id)
+            .eq('is_current', true)
+            .in('team_id', [winnerTeamId, loserTeamId]);
+
+        if (!decks || decks.length === 0) return;
+
+        // 3. Extract and parse the lists
+        const winnerDeck = decks.find(d => d.team_id === winnerTeamId)?.deck_list || "";
+        const loserDeck = decks.find(d => d.team_id === loserTeamId)?.deck_list || "";
+
+        const winnerCardNames = parseDecklistNames(winnerDeck);
+        const loserCardNames = parseDecklistNames(loserDeck);
+
+        // 4. Send the arrays of names to Postgres
+        if (winnerCardNames.length > 0 || loserCardNames.length > 0) {
+            const { error } = await supabase.rpc('apply_match_elo_weights', {
+                p_winner_card_names: winnerCardNames,
+                p_loser_card_names: loserCardNames
+            });
+
+            if (error) {
+                console.error("[Smart ELO] Database RPC Error:", error);
+            } else {
+                console.log(`[Smart ELO] Successfully applied weights for ${winnerCardNames.length} winning cards and ${loserCardNames.length} losing cards.`);
+            }
+        }
+    } catch (e) {
+        console.error("[Smart ELO] Unexpected error executing ELO update:", e);
+    }
+}
+
