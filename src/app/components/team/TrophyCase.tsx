@@ -14,17 +14,9 @@ interface TrophyTeam {
     secondary_color?: string | null;
 }
 
-interface TrophySeason {
-    name: string;
-}
-
-interface RawMatchup {
+interface EnrichedChampionship {
     season_id: string;
-    week_number: number;
-}
-
-interface EnrichedChampionship extends RawMatchup {
-    season: TrophySeason;
+    season_name: string;
     team: TrophyTeam;
 }
 // -------------------------
@@ -41,46 +33,72 @@ export function TrophyCase({ teamId }: TrophyCaseProps) {
         async function fetchChampionships() {
             const supabase = createClient();
             
-            // 1. Fetch the raw matchups without the complex joins to bypass FK confusion
-            const { data: finalMatches, error: matchesError } = await supabase
+            // 1. Fetch all matchups where this team is the finalized winner
+            const { data: teamWins, error: winsError } = await supabase
                 .from('weekly_matchups')
-                .select('season_id, week_number')
+                .select('id, season_id, week_number')
                 .eq('winner_team_id', teamId)
-                .eq('is_playoff', true)
                 .eq('is_outcome_final', true);
 
-            if (matchesError || !finalMatches || finalMatches.length === 0) {
+            if (winsError || !teamWins || teamWins.length === 0) {
                 setLoading(false);
                 return;
             }
 
-            const typedMatches = finalMatches as RawMatchup[];
+            // 2. Fetch all Schedule Weeks designated explicitly as Championships
+            const { data: champWeeks, error: champError } = await supabase
+                .from('schedule_weeks')
+                .select('season_id, week_number, seasons(season_name)')
+                .eq('is_championship_week', true);
 
-            // 2. Filter to only the highest week number per season (The actual Championship)
-            const seasonWinners = new Map<string, RawMatchup>();
-            typedMatches.forEach((match: RawMatchup) => {
-                const currentMaxWeek = seasonWinners.get(match.season_id)?.week_number || 0;
-                if (match.week_number > currentMaxWeek) {
-                    seasonWinners.set(match.season_id, match);
-                }
-            });
+            if (champError || !champWeeks || champWeeks.length === 0) {
+                setLoading(false);
+                return;
+            }
 
-            // 3. Fetch the Season and Team details safely
-            const validChampionships = Array.from(seasonWinners.values());
+            // 3. Intersect the data: Find the wins that occurred during a Championship Week
+            const championshipMatchups = teamWins.filter(win => 
+                champWeeks.some(cw => cw.season_id === win.season_id && cw.week_number === win.week_number)
+            );
+
+            if (championshipMatchups.length === 0) {
+                setLoading(false);
+                return;
+            }
+
+            // 4. Fetch the schedule games for these specific matchups to verify stream delays
+            const { data: schedules } = await supabase
+                .from('schedule')
+                .select('weekly_matchup_id, match_date, total_steps')
+                .in('weekly_matchup_id', championshipMatchups.map(m => m.id));
+
+            // 5. Fetch Team details for styling
+            const { data: teamData } = await supabase
+                .from('teams')
+                .select('name, emoji, primary_color, secondary_color')
+                .eq('id', teamId)
+                .single();
+
+            // 6. Build the final array, applying the spoiler-free stream delay check
             const enrichedChampionships: EnrichedChampionship[] = [];
 
-            for (const champ of validChampionships) {
-                // FIX: Request 'season_name' instead of 'name' from the seasons table!
-                const [{ data: seasonData }, { data: teamData }] = await Promise.all([
-                    supabase.from('seasons').select('season_name').eq('id', champ.season_id).single(),
-                    supabase.from('teams').select('name, emoji, primary_color, secondary_color').eq('id', teamId).single()
-                ]);
+            for (const match of championshipMatchups) {
+                const games = schedules?.filter(s => s.weekly_matchup_id === match.id) || [];
+                
+                // Ensure ALL games in the championship match have finished broadcasting
+                const streamCaughtUp = games.length > 0 && games.every(g => {
+                    const broadcastEndTime = new Date(g.match_date).getTime() + (30 * 60000) + ((g.total_steps || 300) * 2000);
+                    return Date.now() > broadcastEndTime;
+                });
 
-                if (seasonData && teamData) {
+                // If there are no games found (legacy data) or the stream has finished, award the trophy!
+                if (streamCaughtUp || games.length === 0) {
+                    const cw = champWeeks.find(cw => cw.season_id === match.season_id && cw.week_number === match.week_number);
+                    const seasonData = Array.isArray(cw?.seasons) ? cw?.seasons[0] : cw?.seasons;
+                    
                     enrichedChampionships.push({
-                        ...champ,
-                        // Map the season_name back to the standard interface name
-                        season: { name: seasonData.season_name } as TrophySeason,
+                        season_id: match.season_id,
+                        season_name: seasonData?.season_name || "Unknown Season",
                         team: teamData as TrophyTeam
                     });
                 }
@@ -113,12 +131,15 @@ export function TrophyCase({ teamId }: TrophyCaseProps) {
                 <Card key={champ.season_id} className="border-2 border-yellow-500/30 bg-gradient-to-b from-yellow-500/10 to-background overflow-hidden hover:border-yellow-500/60 transition-colors">
                     <CardContent className="flex flex-col items-center justify-center p-8">
                         <h2 className="text-sm font-bold tracking-widest text-center text-muted-foreground uppercase mb-4">
-                            {champ.season.name} Champion
+                            {champ.season_name} Champion
                         </h2>
                         
+                        {/* CUSTOM DYNAMIC TROPHY IMAGE:
+                            <img src={`/images/trophies/${champ.season_name.toLowerCase().replace(/\s+/g, '-')}-trophy.png`} alt={`${champ.season_name} Trophy`} className="w-24 h-24 mb-6 object-contain drop-shadow-xl" onError={(e) => e.currentTarget.src = '/images/trophies/default-trophy.png'} />
+                        */}
                         <div className="text-5xl mb-4 drop-shadow-xl">🏆</div>
-                        <div className="text-5xl mb-3 drop-shadow-md">{champ.team.emoji}</div>
                         
+                        <div className="text-5xl mb-3 drop-shadow-md">{champ.team.emoji}</div>
                         <h1 
                             className="text-2xl font-black uppercase text-center tracking-tighter"
                             style={{ 
