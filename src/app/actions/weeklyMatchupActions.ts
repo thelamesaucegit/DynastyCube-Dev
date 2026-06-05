@@ -160,9 +160,13 @@ export async function recordSimGameResult(
     } else if (winnerTeamId === matchup.team1_id) {
         sim_team1_wins++;
         console.log(`[Action/recordSimGame] Recording win for Team 1 (${winnerTeamId}).`);
+        // Trigger ELO: Team 1 won, Team 2 lost
+        await triggerSmartEloUpdate(matchup.season_id, matchup.week_number, matchup.team1_id, matchup.team2_id);
     } else {
         sim_team2_wins++;
         console.log(`[Action/recordSimGame] Recording win for Team 2 (${winnerTeamId}).`);
+        // Trigger ELO: Team 2 won, Team 1 lost
+        await triggerSmartEloUpdate(matchup.season_id, matchup.week_number, matchup.team2_id, matchup.team1_id);
     }
 
     console.log(`[Action/recordSimGame] Saving new score -> T1: ${sim_team1_wins}, T2: ${sim_team2_wins}, Games: ${sim_completed_games}`);
