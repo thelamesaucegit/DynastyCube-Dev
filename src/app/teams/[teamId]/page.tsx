@@ -8,6 +8,8 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 
+import { TrophyCase } from "@/app/components/team/TrophyCase";
+
 import { getTeamByShortName } from "@/app/actions/teamActions";
 import { getTeamDraftPicks, getTeamDecks, toggleKeeperStatus } from "@/app/actions/draftActions";
 import { refundDraftPick } from "@/app/actions/cubucksActions";
@@ -55,7 +57,7 @@ interface Team {
   members?: TeamMember[];
 }
 
-type TabType = "picks" | "decks" | "members" | "draft" | "stats" | "roles" | "trades" | "matches" | "votes";
+type TabType = "picks" | "decks" | "members" | "draft" | "stats" | "roles" | "trades" | "matches" | "votes" | "trophies";
 
 export default function TeamPage() {
   const params = useParams();
@@ -268,6 +270,7 @@ export default function TeamPage() {
     { id: "decks" as TabType, label: "Decks", icon: <BookOpen className="size-4" />, count: decks.length },
     { id: "trades" as TabType, label: "Trades", icon: <ArrowLeftRight className="size-4" />, count: undefined },
     { id: "matches" as TabType, label: "Matches", icon: <Swords className="size-4" />, count: undefined },
+        { id: "trophies" as TabType, label: "Trophy Case", icon: <Crown className="size-4 text-yellow-500" />, count: undefined },
     ...(isUserTeamMember ? [{ id: "votes" as TabType, label: "Votes", icon: <Vote className="size-4" />, count: undefined }] : []),
     { id: "stats" as TabType, label: "Statistics", icon: <BarChart3 className="size-4" />, count: undefined },
     ...(isUserTeamMember ? [{ id: "roles" as TabType, label: "Team Roles", icon: <Crown className="size-4" />, count: undefined }] : []),
@@ -716,7 +719,20 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
-
+  <TabsContent value="trophies">
+              {activeTab === "trophies" && (
+                <div>
+                  <div className="mb-6">
+                    <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
+                      <Crown className="size-5 text-yellow-500" />
+                      Trophy Case
+                    </h2>
+                    <p className="text-sm text-muted-foreground">Historical championships won by {team.name}</p>
+                  </div>
+                  <TrophyCase teamId={team.id} />
+                </div>
+              )}
+            </TabsContent>
           </CardContent>
         </Card>
       </Tabs>
