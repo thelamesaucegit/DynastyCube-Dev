@@ -115,38 +115,23 @@ export async function recordSimGameResult(
 ): Promise<{ success: boolean; matchupFinalized: boolean; error?: string }> {
     const supabase = createServiceClient();
     
-    console.log(`[Action/recordSimGame] Starting for Matchup: ${weeklyMatchupId}`);
-
+    await logSystemEvent("RecordSimGame", "info", `Starting for Matchup: ${weeklyMatchupId}`);
     const { data: matchup, error: fetchError } = await supabase
         .from('weekly_matchups')
         .select(`*, season:seasons (season_name, phase)`)
         .eq('id', weeklyMatchupId)
         .single();
 
-    if (fetchError) {
-        console.error(`[Action/recordSimGame] DB Fetch Error: ${fetchError.message}`);
-        return { success: false, matchupFinalized: false, error: fetchError.message };
+    if (fetchError || !matchup) {
+        await logSystemEvent("RecordSimGame", "error", `Failed to fetch matchup ${weeklyMatchupId}`);
+        return { success: false, matchupFinalized: false, error: fetchError?.message || 'Not found' };
     }
-    
-    if (!matchup) {
-        console.error(`[Action/recordSimGame] Matchup not found in DB!`);
-        return { success: false, matchupFinalized: false, error: 'Matchup not found' };
-    }
-
-    console.log(`[Action/recordSimGame] Found matchup! Current Score -> T1: ${matchup.sim_team1_wins}, T2: ${matchup.sim_team2_wins}, Games: ${matchup.sim_completed_games}`);
 
     const seasonData = Array.isArray(matchup.season) ? matchup.season[0] : matchup.season;
-    const seasonName = seasonData?.season_name || "";
-    const currentPhase = seasonData?.phase || "";
-    const isTestSeason = seasonName.toUpperCase().includes("TEST");
+    const isTestSeason = (seasonData?.season_name || "").toUpperCase().includes("TEST");
     
-    console.log(`[Action/recordSimGame] Season: ${seasonName} | Phase: ${currentPhase} | isTestSeason: ${isTestSeason}`);
-
-    // --- AUTOMATION: Preseason -> Season Transition ---
-    if (currentPhase === 'preseason' && matchup.week_number === 1 && matchup.sim_completed_games === 0) {
-        console.log(`[Action/recordSimGame] First game of the season! Transitioning phase to 'season'...`);
-        const { error: phaseErr } = await supabase.from('seasons').update({ phase: 'season' }).eq('id', matchup.season_id);
-        if (phaseErr) console.error(`[Action/recordSimGame] Failed to update season phase:`, phaseErr);
+    if (seasonData?.phase === 'preseason' && matchup.week_number === 1 && matchup.sim_completed_games === 0) {
+        await supabase.from('seasons').update({ phase: 'season' }).eq('id', matchup.season_id);
     }
 
     let sim_team1_wins = matchup.sim_team1_wins || 0;
@@ -156,63 +141,42 @@ export async function recordSimGameResult(
 
     if (winnerTeamId === null) {
         sim_draws++;
-        console.log(`[Action/recordSimGame] Recording a DRAW.`);
     } else if (winnerTeamId === matchup.team1_id) {
         sim_team1_wins++;
-        console.log(`[Action/recordSimGame] Recording win for Team 1 (${winnerTeamId}).`);
-        // Trigger ELO: Team 1 won, Team 2 lost
         await triggerSmartEloUpdate(matchup.season_id, matchup.week_number, matchup.team1_id, matchup.team2_id);
     } else {
         sim_team2_wins++;
-        console.log(`[Action/recordSimGame] Recording win for Team 2 (${winnerTeamId}).`);
-        // Trigger ELO: Team 2 won, Team 1 lost
         await triggerSmartEloUpdate(matchup.season_id, matchup.week_number, matchup.team2_id, matchup.team1_id);
     }
 
-    console.log(`[Action/recordSimGame] Saving new score -> T1: ${sim_team1_wins}, T2: ${sim_team2_wins}, Games: ${sim_completed_games}`);
-
-    const { error: updateError } = await supabase.from('weekly_matchups')
+    await supabase.from('weekly_matchups')
         .update({ sim_team1_wins, sim_team2_wins, sim_draws, sim_completed_games })
         .eq('id', weeklyMatchupId);
 
-    if (updateError) {
-        console.error(`[Action/recordSimGame] FATAL: DB Update failed!`, updateError);
-        return { success: false, matchupFinalized: false, error: updateError.message };
-    }
+    // --- DETERMINE REQUIRED GAMES ---
+    let requiredGames = isTestSeason ? 3 : 5; // Regular Season
 
-    // --- AUTOMATION: Early Championship Termination ---
-    if (matchup.is_playoff && (sim_team1_wins >= 5 || sim_team2_wins >= 5)) {
-        console.log(`[PLAYOFFS] Team reached 5 wins. Cancelling remaining games for Matchup ${matchup.id}.`);
-        await supabase.from('schedule')
-            .update({ status: 'cancelled' })
-            .eq('weekly_matchup_id', matchup.id)
-            .eq('status', 'scheduled');
-    }
-
-  let requiredGames = isTestSeason ? 3 : 5; // Regular Season: BO5
     if (matchup.is_playoff) {
-        // Championship week vs Standard Playoff Week
-        if (matchup.season?.phase === 'playoffs' && matchup.week_number > 100) {
-            requiredGames = isTestSeason ? 3 : 9; // Championship: BO9
+        if (seasonData?.phase === 'playoffs' && matchup.week_number > 100) {
+            requiredGames = isTestSeason ? 3 : 9; // Championship
         } else {
-            requiredGames = isTestSeason ? 3 : 7; // Playoffs (Round 1 & 2): BO7
+            requiredGames = isTestSeason ? 3 : 7; // Playoff Round
         }
     }
 
+    // --- ROBUST FINALIZATION CHECK ---
+    // Only count games that actually produced a winner (ignoring failed games/draws)
+    const totalDeterminedGames = sim_team1_wins + sim_team2_wins;
     let finalized = false;
     
-    console.log(`[Action/recordSimGame] Checking finalization. Games completed: ${sim_completed_games}/${requiredGames}`);
-    
-    if ((sim_completed_games >= requiredGames || (matchup.is_playoff && (sim_team1_wins >= 5 || sim_team2_wins >= 5))) && !matchup.pvp_match_id) {
-        console.log(`[Action/recordSimGame] Threshold reached! Finalizing matchup...`);
+    // We strictly wait until the full number of required games have concluded with a winner
+    if (totalDeterminedGames >= requiredGames && !matchup.pvp_match_id) {
+        await logSystemEvent("RecordSimGame", "info", `Required games (${requiredGames}) reached with determined winners! Finalizing matchup...`);
         finalized = await finalizeWeeklyOutcome(weeklyMatchupId);
-        console.log(`[Action/recordSimGame] Matchup finalization result: ${finalized}`);
     }
 
     // --- AUTOMATION: Schedule Progression ---
      if (finalized) {
-        console.log(`[Action/recordSimGame] Checking if entire week ${matchup.week_number} is finished...`);
-
         const { data: unfinishedThisWeek } = await supabase
             .from('weekly_matchups')
             .select('id')
@@ -222,12 +186,11 @@ export async function recordSimGameResult(
             .limit(1);
 
         if (!unfinishedThisWeek || unfinishedThisWeek.length === 0) {
-            console.log(`[AUTOMATION] Week ${matchup.week_number} is completely finished!`);
-
+            await logSystemEvent("Automation", "info", `Week ${matchup.week_number} is completely finished!`);
             const { data: endedWeek } = await supabase
                 .from('schedule_weeks')
                 .select('is_championship_week, is_playoff_week')
-                .eq('id', matchup.week_id) // Use the week_id from the matchup for precision
+                .eq('id', matchup.week_id) 
                 .single();
 
             if (endedWeek?.is_championship_week) {
@@ -235,34 +198,27 @@ export async function recordSimGameResult(
             } else if (endedWeek?.is_playoff_week) {
                 await advancePlayoffBracket(matchup.season_id, isTestSeason);
             } else {
-                // Regular season week is over, check for next week or start playoffs
                 const { data: nextWeek } = await supabase
                     .from('schedule_weeks')
                     .select('id, week_number')
                     .eq('season_id', matchup.season_id)
                     .gt('week_number', matchup.week_number)
-                    .lt('week_number', 100) // Ensure it's not a playoff week
+                    .lt('week_number', 100) 
                     .order('week_number', { ascending: true })
                     .limit(1)
                     .single();
 
                 if (nextWeek) {
-                    if (isTestSeason) {
-                        console.log(`[AUTOMATION] Test Season: Advancing to week ${nextWeek.week_number}...`);
-                        await scheduleNextWeekJIT(matchup.season_id, nextWeek.week_number);
-                    }
+                    if (isTestSeason) await scheduleNextWeekJIT(matchup.season_id, nextWeek.week_number);
                 } else {
-                    console.log(`[AUTOMATION] Regular season complete! Generating Playoff Bracket.`);
                     await generateInitialPlayoffBracket(matchup.season_id, isTestSeason);
                 }
             }
-        } else {
-            console.log(`[Action/recordSimGame] Week ${matchup.week_number} still has ongoing matches.`);
         }
     }
-
     return { success: true, matchupFinalized: finalized };
 }
+
 
 
 /**
