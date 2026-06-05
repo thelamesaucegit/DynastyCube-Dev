@@ -90,8 +90,19 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
         const { error: promoteErr } = await supabase.rpc('promote_staging_pools');
         if (promoteErr) throw new Error(`Promote Staging Pools RPC failed: ${promoteErr.message}`);
 
+ // ---  STEP 5.5: CALCULATE DYNAMIC SEASON CAP ---
+        console.log("[SeasonRollover] Calculating dynamic season cap...");
+        const { data: dynamicCap, error: capErr } = await supabase.rpc('calculate_season_cap');
+        if (capErr) throw new Error(`Calculate Season Cap RPC failed: ${capErr.message}`);
+        
+        const { error: capUpdateErr } = await supabase
+            .from('seasons')
+            .update({ cubucks_allocation: dynamicCap })
+            .eq('id', newSeason.id);
+            
+        if (capUpdateErr) throw new Error(`Failed to update season cap: ${JSON.stringify(capUpdateErr)}`);
+        console.log(`[SeasonRollover] 💰 Dynamic cap calculated and set to: ${dynamicCap} Cubucks.`);
 
-        // --- STEP 6: REFILL THE CHAMBER (EXTERNAL API) ---
        // --- STEP 6: REFILL THE CHAMBER & BACKFILL METADATA ---
         console.log("[SeasonRollover] Refilling The Chamber...");
         const importResult = await importNextSetToChamber();
