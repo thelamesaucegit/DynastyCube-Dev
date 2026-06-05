@@ -239,7 +239,12 @@ export default function LiveDraftBoard({ serverPicks, sessionId }: LiveDraftBoar
           </Button>
         </div>
       </div>
-      {viewMode === 'list' && <ListView picks={sortedPicks} newestPickId={newestPickId} />}
+{viewMode === 'list' && (
+        <ListView 
+          picks={sortedPicks.filter(p => p.card_name !== 'SKIPPED')} 
+          newestPickId={newestPickId} 
+        />
+      )}
       {viewMode === 'team' && draftOrder.length > 0 && <TeamView picks={picks} draftOrder={draftOrder} newestPickId={newestPickId} />}
     </div>
   );
