@@ -1,5 +1,4 @@
-//src/app/actions/liveStreamActions.ts
-
+// src/app/actions/liveStreamActions.ts
 "use server";
 
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
@@ -50,14 +49,14 @@ function createServiceClient() {
 export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | null }> {
     const supabase = createServiceClient();
     
-    // Fetch the last 15 matches, including the total_steps we added earlier AND the matchup context!
+    // Fetch the last 15 matches, including total_steps, week_number, and the matchup context!
     const { data, error } = await supabase
         .from('schedule')
         .select(`
-            id, match_date, status, sim_match_id, total_steps,
+            id, match_date, status, sim_match_id, total_steps, week_number,
             team1:teams!team1_id(id, name, emoji),
             team2:teams!team2_id(id, name, emoji),
-            weekly_matchup:weekly_matchups(sim_team1_wins, sim_team2_wins, sim_completed_games, is_playoff),
+            weekly_matchup:weekly_matchups(sim_team1_wins, sim_team2_wins, sim_completed_games, is_playoff, week_number),
             sim_match:sim_matches!sim_match_id(argentum_game_states, game_states)
         `)
         .not('sim_match_id', 'is', null)
@@ -67,12 +66,12 @@ export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | nul
     if (error || !data || data.length === 0) return { match: null };
 
     const now = Date.now();
-        const BROADCAST_DELAY_MS = 30 * 60000; 
+    const BROADCAST_DELAY_MS = 30 * 60000; 
     const STEP_DURATION_MS = 3000; // NEW 3-second stream steps!
 
     const chronologicalMatches = [...data].sort((a, b) => new Date(a.match_date).getTime() - new Date(b.match_date).getTime());
+    
     let targetMatch = data[0]; 
-
     const liveMatch = chronologicalMatches.find(m => {
         const broadcastStartTime = new Date(m.match_date).getTime() + BROADCAST_DELAY_MS;
         // Dynamically calculate the exact end time based on the step count
@@ -99,13 +98,22 @@ export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | nul
         sim_team2_wins?: number;
         sim_completed_games?: number;
         is_playoff?: boolean;
+        week_number?: number;
     } | undefined;
 
-    const { data: records } = await supabase
-        .from('team_records_view')
-        .select('team_id, wins, losses')
-        .in('team_id', [t1.id, t2.id]);
-    const recordMap = new Map((records || []).map(r => [r.team_id, r]));
+    // --- SEEDING FIX: Fetch all teams, calculate Win % locally to strictly rank them ---
+    const { data: allRecords } = await supabase.from('team_records_view').select('team_id, wins, losses');
+    const sortedRecords = (allRecords || []).sort((a, b) => {
+        const aPct = a.wins / Math.max(1, a.wins + a.losses);
+        const bPct = b.wins / Math.max(1, b.wins + b.losses);
+        return bPct - aPct || b.wins - a.wins; // Tiebreaker: total wins
+    });
+    
+    const recordMap = new Map();
+    sortedRecords.forEach((r, idx) => {
+        recordMap.set(r.team_id, { wins: r.wins, losses: r.losses, seed: idx + 1 });
+    });
+    // ---------------------------------------------------------------------------------
 
     let lifeTimeline: [number, number][] = [];
     const simMatchArray = Array.isArray(targetMatch.sim_match) ? targetMatch.sim_match : [targetMatch.sim_match];
@@ -131,7 +139,6 @@ export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | nul
     let matchupContext = null;
     if (matchupRaw) {
         // Because the match we are viewing has not finished broadcasting, we must ADD 1 to the completed games 
-        // to represent the current game being played/about to be played!
         const gameNumber = (matchupRaw.sim_completed_games || 0) + 1;
         const totalGamesRequired = matchupRaw.is_playoff ? 9 : 5; // Best of 9 vs Best of 5
         
@@ -140,6 +147,9 @@ export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | nul
             total_games: totalGamesRequired,
             t1_wins: matchupRaw.sim_team1_wins || 0,
             t2_wins: matchupRaw.sim_team2_wins || 0,
+            is_playoff: matchupRaw.is_playoff || false,
+            // Fallback safely to either the schedule table's week_number or the matchup's week_number
+            week_number: targetMatch.week_number || matchupRaw.week_number || 1
         };
     }
 
@@ -154,7 +164,7 @@ export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | nul
             team1_record: recordMap.get(t1.id) || { wins: 0, losses: 0 },
             team2_record: recordMap.get(t2.id) || { wins: 0, losses: 0 },
             life_timeline: lifeTimeline,
-            total_steps: targetMatch.total_steps || 300, // Read from DB directly!
+            total_steps: targetMatch.total_steps || 300, 
             matchup: matchupContext
         } 
     };
