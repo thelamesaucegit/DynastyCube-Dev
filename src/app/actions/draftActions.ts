@@ -496,16 +496,47 @@ export async function removeCardFromDeck(cardId: string): Promise<{ success: boo
 export async function toggleKeeperStatus(pickId: string, isKeeper: boolean): Promise<{ success: boolean; error?: string }> {
   const supabase = await createServerClient();
   try {
-    const { error } = await supabase
+    // 1. Fetch the pick to get its associated card_pool_id
+    const { data: pick, error: fetchError } = await supabase
+      .from('team_draft_picks')
+      .select('card_pool_id, team_id')
+      .eq('id', pickId)
+      .single();
+
+    if (fetchError || !pick) {
+      return { success: false, error: "Draft pick not found." };
+    }
+
+    // (Optional but recommended) Verify auth to ensure only team members/admins can toggle
+    const authCheck = await verifyTeamMembership(pick.team_id, supabase);
+    if (!authCheck.authorized) return { success: false, error: authCheck.error };
+
+    // 2. Update the keeper status on the roster
+    const { error: updatePickError } = await supabase
       .from('team_draft_picks')
       .update({ is_keeper: isKeeper })
       .eq('id', pickId);
 
-    if (error) throw error;
+    if (updatePickError) throw updatePickError;
+
+    // 3. Update the pool_name in the central card_pools ledger
+    if (pick.card_pool_id) {
+        const newPoolName = isKeeper ? 'keeper' : 'draft';
+        const { error: updatePoolError } = await supabase
+            .from('card_pools')
+            .update({ pool_name: newPoolName })
+            .eq('id', pick.card_pool_id);
+
+        if (updatePoolError) {
+            console.error("Critical error: Roster keeper toggled, but failed to update card_pools:", updatePoolError);
+            throw updatePoolError;
+        }
+    }
+
     return { success: true };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("Unexpected error in toggleKeeperStatus:", errorMessage);
     return { success: false, error: errorMessage };
   }
 }
-
