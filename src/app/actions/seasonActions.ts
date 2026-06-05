@@ -90,20 +90,27 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
         const { error: promoteErr } = await supabase.rpc('promote_staging_pools');
         if (promoteErr) throw new Error(`Promote Staging Pools RPC failed: ${promoteErr.message}`);
 
- // ---  STEP 5.5: CALCULATE DYNAMIC SEASON CAP ---
-        console.log("[SeasonRollover] Calculating dynamic season cap...");
-        const { data: dynamicCap, error: capErr } = await supabase.rpc('calculate_season_cap');
-        if (capErr) throw new Error(`Calculate Season Cap RPC failed: ${capErr.message}`);
-        
-        const { error: capUpdateErr } = await supabase
-            .from('seasons')
-            .update({ cubucks_allocation: dynamicCap })
-            .eq('id', newSeason.id);
-            
-        if (capUpdateErr) throw new Error(`Failed to update season cap: ${JSON.stringify(capUpdateErr)}`);
-        console.log(`[SeasonRollover] 💰 Dynamic cap calculated and set to: ${dynamicCap} Cubucks.`);
 
-       // --- STEP 6: REFILL THE CHAMBER & BACKFILL METADATA ---
+
+// --- STEP 6: CALCULATE AND SET DYNAMIC CAP ---
+        console.log("[SeasonRollover] Calculating dynamic salary cap...");
+        const { data: dynamicCap, error: capErr } = await supabase.rpc('update_season_dynamic_cap', {
+            p_season_id: newSeason.id
+        });
+        if (capErr) throw new Error(`Dynamic Cap RPC failed: ${capErr.message}`);
+        console.log(`[SeasonRollover] 💰 Dynamic Cap set to: ${dynamicCap} Cubucks`);
+
+        // --- STEP 6.5: ALLOCATE TEAM BUDGETS ---
+        console.log("[SeasonRollover] Allocating budgets to teams...");
+        const { error: allocErr } = await supabase.rpc('allocate_season_budgets', {
+            p_season_id: newSeason.id
+        });
+        if (allocErr) throw new Error(`Budget Allocation RPC failed: ${allocErr.message}`);
+        console.log("[SeasonRollover] 🏦 Team budgets allocated and ledger updated.");
+
+      
+
+       // --- STEP 7: REFILL THE CHAMBER & BACKFILL METADATA ---
         console.log("[SeasonRollover] Refilling The Chamber...");
         const importResult = await importNextSetToChamber();
         if (!importResult.success) {
@@ -123,7 +130,7 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
             console.log("[SeasonRollover] Metadata backfill complete for new chamber set.");
         }
 
-        // --- STEP 7: DRAFT ORDER & SCHEDULING ---
+        // --- STEP 8: DRAFT ORDER & SCHEDULING ---
         console.log("[SeasonRollover] Generating Draft Order...");
         const draftOrderResult = await generateDraftOrder(newSeason.id, { orderType: 'previous_season' });
         if (!draftOrderResult.success) throw new Error(`Draft order generation failed: ${draftOrderResult.error}`);
