@@ -40,28 +40,58 @@ export function LiveStreamWidget({ initialMatch, onStreamEnd }: LiveStreamWidget
       } else {
         setStreamStatus('replay');
         clearInterval(interval);
-        onStreamEnd(); // Notify parent to reload data
+        onStreamEnd(); 
       }
     }, 100);
-
     return () => clearInterval(interval);
   }, [liveMatch, onStreamEnd]);
+
+  // Derived Playoff Data
+  const isPlayoff = liveMatch.matchup?.is_playoff || false;
+  let roundTitle = "";
+  if (isPlayoff) {
+      if (liveMatch.matchup?.week_number === 101) roundTitle = "Championship Match";
+      else if (liveMatch.matchup?.week_number === 100) roundTitle = "Playoff Round 1";
+      else roundTitle = `Playoff Round ${(liveMatch.matchup?.week_number || 100) - 99}`;
+  }
 
   return (
     <section className="max-w-5xl mx-auto w-full">
       <Card className={`overflow-hidden relative border ${streamStatus === 'live' ? 'border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.2)] bg-red-950/10' : 'border-blue-500/30 bg-blue-950/10'}`}>
         {streamStatus === 'live' && <div className="absolute top-0 left-0 w-1 h-full bg-red-500 animate-pulse" />}
         <CardContent className="p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6">
+          
           <div className="flex-1 text-center md:text-left">
-            {/* ... (Badge and Title logic) ... */}
+             {isPlayoff && <div className="text-sm font-black text-yellow-500 uppercase tracking-widest mb-2 drop-shadow-md">{roundTitle}</div>}
+             <Badge variant={streamStatus === 'live' ? 'destructive' : 'outline'} className={`mb-3 ${streamStatus === 'live' ? 'animate-pulse' : ''} ${streamStatus === 'replay' ? 'bg-emerald-600 border-emerald-500' : ''}`}>
+               {streamStatus === 'replay' ? 'COMPLETED' : streamStatus === 'live' ? 'LIVE NOW' : 'UPCOMING'}
+             </Badge>
+             <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight mb-2">Featured Match</h2>
+             {liveMatch.matchup && (
+                 <p className="text-muted-foreground text-sm font-medium">Game {liveMatch.matchup.game_number} of {liveMatch.matchup.total_games}</p>
+             )}
           </div>
+
           <div className="flex items-center gap-6 flex-1 justify-center bg-background/50 px-8 py-4 rounded-xl border border-border/50 shadow-inner">
+            {/* TEAM 1 */}
             <div className="text-center">
               <div className="text-4xl mb-1 drop-shadow-md">{liveMatch.team1.emoji}</div>
               <div className="font-bold text-sm truncate max-w-[100px]">{liveMatch.team1.name}</div>
-              <div className="text-xs text-muted-foreground font-mono mt-1 mb-2">{liveMatch.team1_record.wins} - {liveMatch.team1_record.losses}</div>
+              
+              <div className="text-xs text-muted-foreground font-mono mt-1 mb-2 flex items-center justify-center gap-1">
+                {isPlayoff && liveMatch.team1_record.seed && <span className="text-yellow-500 font-bold">#{liveMatch.team1_record.seed}</span>}
+                {isPlayoff ? (
+                    <div className="flex justify-center gap-0.5 ml-1">
+                        {Array.from({length: liveMatch.matchup?.t1_wins || 0}).map((_, i) => <span key={i} className="drop-shadow-md">👑</span>)}
+                    </div>
+                ) : (
+                    <span>{liveMatch.team1_record.wins} - {liveMatch.team1_record.losses}</span>
+                )}
+              </div>
+              
               {streamStatus === 'live' && liveLife && <Badge variant="outline" className="text-lg px-3 py-1 border-red-500/30 bg-red-950/20 text-red-400 shadow-sm">♥ {liveLife.t1}</Badge>}
             </div>
+
             <div className="flex flex-col items-center justify-center">
                 <div className="text-2xl font-black text-muted-foreground/30 px-4 italic mb-1">VS</div>
                 <div className="flex flex-col items-center text-[10px] text-muted-foreground bg-muted/80 px-2 py-1 rounded border border-border/50">
@@ -69,13 +99,27 @@ export function LiveStreamWidget({ initialMatch, onStreamEnd }: LiveStreamWidget
                     <span>{formattedStreamTime || new Date(new Date(liveMatch.match_date).getTime() + (30 * 60000)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
                 </div>
             </div>
+
+            {/* TEAM 2 */}
             <div className="text-center">
-                <div className="text-4xl mb-1 drop-shadow-md">{liveMatch.team2.emoji}</div>
-                <div className="font-bold text-sm truncate max-w-[100px]">{liveMatch.team2.name}</div>
-                <div className="text-xs text-muted-foreground font-mono mt-1 mb-2">{liveMatch.team2_record.wins} - {liveMatch.team2_record.losses}</div>
-                {streamStatus === 'live' && liveLife && <Badge variant="outline" className="text-lg px-3 py-1 border-red-500/30 bg-red-950/20 text-red-400 shadow-sm">♥ {liveLife.t2}</Badge>}
+              <div className="text-4xl mb-1 drop-shadow-md">{liveMatch.team2.emoji}</div>
+              <div className="font-bold text-sm truncate max-w-[100px]">{liveMatch.team2.name}</div>
+              
+              <div className="text-xs text-muted-foreground font-mono mt-1 mb-2 flex items-center justify-center gap-1">
+                {isPlayoff && liveMatch.team2_record.seed && <span className="text-yellow-500 font-bold">#{liveMatch.team2_record.seed}</span>}
+                {isPlayoff ? (
+                    <div className="flex justify-center gap-0.5 ml-1">
+                        {Array.from({length: liveMatch.matchup?.t2_wins || 0}).map((_, i) => <span key={i} className="drop-shadow-md">👑</span>)}
+                    </div>
+                ) : (
+                    <span>{liveMatch.team2_record.wins} - {liveMatch.team2_record.losses}</span>
+                )}
+              </div>
+              
+              {streamStatus === 'live' && liveLife && <Badge variant="outline" className="text-lg px-3 py-1 border-red-500/30 bg-red-950/20 text-red-400 shadow-sm">♥ {liveLife.t2}</Badge>}
             </div>
           </div>
+
           <div className="flex-1 flex justify-center md:justify-end">
             <Button asChild size="lg" className={`${streamStatus === 'live' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'} text-white font-bold w-full md:w-auto h-14 px-8 text-lg shadow-xl hover:scale-105 transition-transform`}>
               <Link href={`/stream/${liveMatch.sim_match_id}`}>
@@ -83,6 +127,7 @@ export function LiveStreamWidget({ initialMatch, onStreamEnd }: LiveStreamWidget
               </Link>
             </Button>
           </div>
+
         </CardContent>
       </Card>
     </section>
