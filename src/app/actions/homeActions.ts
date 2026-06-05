@@ -167,6 +167,7 @@ export async function getRecentDraftPicks(limit: number = 10): Promise<{
           emoji
         )
       `)
+      .neq("card_id", "skipped-pick") // <-- FIX: Do not fetch skipped picks for the homepage
       .order("drafted_at", { ascending: false })
       .limit(limit);
 
@@ -183,7 +184,7 @@ export async function getRecentDraftPicks(limit: number = 10): Promise<{
         card_name: pick.card_name || "Unknown Card",
         card_type: pick.card_type,
         image_url: pick.image_url,
-        oldest_image_url: pick.oldest_image_url, // <-- ADDED
+        oldest_image_url: pick.oldest_image_url,
         team_id: pick.team_id,
         team_name: team?.name || "Unknown Team",
         team_emoji: team?.emoji || "❓",
@@ -191,7 +192,6 @@ export async function getRecentDraftPicks(limit: number = 10): Promise<{
         drafted_at: pick.drafted_at,
       };
     });
-
     return { picks };
   } catch (error) {
     console.error("Unexpected error fetching recent draft picks:", error);
