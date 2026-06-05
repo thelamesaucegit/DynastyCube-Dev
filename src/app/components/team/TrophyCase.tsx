@@ -6,12 +6,32 @@ import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Loader2 } from "lucide-react";
 
+// --- STRICT INTERFACES FOR SUPABASE DATA ---
+interface ChampionshipTeam {
+    name: string;
+    emoji: string;
+    primary_color?: string | null;
+    secondary_color?: string | null;
+}
+
+interface ChampionshipSeason {
+    name: string;
+}
+
+interface ChampionshipMatch {
+    season_id: string;
+    week_number: number;
+    season: ChampionshipSeason | ChampionshipSeason[];
+    team: ChampionshipTeam | ChampionshipTeam[];
+}
+// -------------------------------------------
+
 interface TrophyCaseProps {
     teamId: string;
 }
 
 export function TrophyCase({ teamId }: TrophyCaseProps) {
-    const [championships, setChampionships] = useState<any[]>([]);
+    const [championships, setChampionships] = useState<ChampionshipMatch[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -37,18 +57,20 @@ export function TrophyCase({ teamId }: TrophyCaseProps) {
                 return;
             }
 
+            // STRICT TYPING FIX: Cast the raw DB response to our interface array
+            const typedMatches = (finalMatches || []) as unknown as ChampionshipMatch[];
+
             // 2. We only want the FINAL match of the playoffs for each season
             // So we group by season and take the highest week number
-            const seasonWinners = new Map();
-            finalMatches?.forEach((match: any) => {
+            const seasonWinners = new Map<string, ChampionshipMatch>();
+            
+            typedMatches.forEach((match: ChampionshipMatch) => {
                 const currentMaxWeek = seasonWinners.get(match.season_id)?.week_number || 0;
                 if (match.week_number > currentMaxWeek) {
                     seasonWinners.set(match.season_id, match);
                 }
             });
 
-            // Note: If you have a cleaner way to query "champions" (e.g. a dedicated table),
-            // replace this logic with that query!
             setChampionships(Array.from(seasonWinners.values()));
             setLoading(false);
         }
