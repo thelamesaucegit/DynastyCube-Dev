@@ -32,6 +32,7 @@ export interface PlayoffMatchup {
     team1: PlayoffTeam | PlayoffTeam[];
     team2: PlayoffTeam | PlayoffTeam[];
     schedule: PlayoffGame[];
+    isDummy?: boolean; // Added for TBD rounds
 }
 
 interface PlayoffBracketProps {
@@ -58,17 +59,51 @@ export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
         return () => clearInterval(interval);
     }, [loadBracket]);
 
-    // --- SVG LINE CALCULATION ---
-    // This effect calculates where to draw the connecting lines between rounds.
+    // Group matchups and PAD FUTURE ROUNDS
+    const rounds = React.useMemo(() => {
+        if (matchups.length === 0) return [];
+        
+        const roundsMap = matchups.reduce<Record<number, PlayoffMatchup[]>>((acc, match) => {
+            if (!acc[match.week_number]) acc[match.week_number] = [];
+            acc[match.week_number].push(match);
+            return acc;
+        }, {});
+        
+        const completeRounds = Object.values(roundsMap);
+        
+        // If we only have Round 1 (e.g. 4 matches), we need to draw Round 2 (2 matches) and Round 3 (1 match)
+        if (completeRounds.length > 0) {
+            let currentMatchesInRound = completeRounds[completeRounds.length - 1].length;
+            let currentWeekNumber = completeRounds[completeRounds.length - 1][0].week_number;
+            
+            while (currentMatchesInRound > 1) {
+                currentMatchesInRound = Math.ceil(currentMatchesInRound / 2);
+                currentWeekNumber++;
+                
+                const dummyMatches = Array.from({ length: currentMatchesInRound }).map((_, i) => ({
+                    id: `dummy-${currentWeekNumber}-${i}`,
+                    week_number: currentWeekNumber,
+                    is_outcome_final: false,
+                    team1: [] as PlayoffTeam[],
+                    team2: [] as PlayoffTeam[],
+                    schedule: [],
+                    isDummy: true
+                } as PlayoffMatchup));
+                
+                completeRounds.push(dummyMatches);
+            }
+        }
+        return completeRounds;
+    }, [matchups]);
+
     useEffect(() => {
-        if (loading || matchups.length === 0 || !containerRef.current) return;
+        if (loading || rounds.length === 0 || !containerRef.current) return;
 
         const drawLines = () => {
             const newLines: React.ReactNode[] = [];
             const roundColumns = containerRef.current?.querySelectorAll('.bracket-round');
             if (!roundColumns || roundColumns.length < 2) return;
 
-            // Iterate through each round (except the last one) to connect it to the next
             for (let i = 0; i < roundColumns.length - 1; i++) {
                 const currentRound = roundColumns[i];
                 const nextRound = roundColumns[i + 1];
@@ -78,7 +113,6 @@ export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
 
                 const containerRect = containerRef.current!.getBoundingClientRect();
 
-                // Connect pairs of cards in the current round to a single card in the next round
                 currentCards.forEach((card, cardIndex) => {
                     const nextCardIndex = Math.floor(cardIndex / 2);
                     const targetCard = nextCards[nextCardIndex];
@@ -87,15 +121,12 @@ export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
                         const startRect = card.getBoundingClientRect();
                         const endRect = targetCard.getBoundingClientRect();
 
-                        // Start from middle-right of current card
                         const startX = startRect.right - containerRect.left;
                         const startY = startRect.top + (startRect.height / 2) - containerRect.top;
 
-                        // End at middle-left of target card
                         const endX = endRect.left - containerRect.left;
                         const endY = endRect.top + (endRect.height / 2) - containerRect.top;
 
-                        // Calculate intermediate points for an angular connector line
                         const midX = startX + (endX - startX) / 2;
 
                         newLines.push(
@@ -115,21 +146,13 @@ export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
             setLines(newLines);
         };
 
-        // Draw immediately, and redraw if the window resizes
         setTimeout(drawLines, 100); 
         window.addEventListener('resize', drawLines);
         return () => window.removeEventListener('resize', drawLines);
-    }, [matchups, loading]);
+    }, [rounds, loading]);
 
 
     if (loading || matchups.length === 0) return null;
-
-    const roundsMap = matchups.reduce<Record<number, PlayoffMatchup[]>>((acc, match) => {
-        if (!acc[match.week_number]) acc[match.week_number] = [];
-        acc[match.week_number].push(match);
-        return acc;
-    }, {});
-    const rounds = Object.values(roundsMap);
 
     const finalMatchup = matchups[matchups.length - 1];
     let champion: PlayoffTeam | null = null;
@@ -147,39 +170,23 @@ export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
 
     return (
         <section className="space-y-6 animate-in fade-in duration-700">
-            
-            {/* INJECT SHIMMER ANIMATION CSS */}
             <style dangerouslySetInnerHTML={{__html: `
-                @keyframes diagonal-shimmer {
-                    0% { background-position: 200% center; }
-                    100% { background-position: -200% center; }
-                }
-                .animate-shimmer {
-                    background-size: 200% auto;
-                    animation: diagonal-shimmer 8s linear infinite;
-                }
+                @keyframes diagonal-shimmer { 0% { background-position: 200% center; } 100% { background-position: -200% center; } }
+                .animate-shimmer { background-size: 200% auto; animation: diagonal-shimmer 8s linear infinite; }
             `}} />
 
-            {/* --- CHAMPION REVEAL --- */}
             {champion && (
                 <Card className="border-2 border-yellow-500/50 bg-gradient-to-br from-yellow-500/10 via-background to-yellow-500/10 overflow-hidden animate-shimmer relative">
-                    {/* Subtle overlay to ensure the shimmer isn't overpowering */}
                     <div className="absolute inset-0 bg-background/40 backdrop-blur-[1px] pointer-events-none" />
-                    
                     <CardContent className="flex flex-col items-center justify-center py-12 px-4 relative z-10">
                         <h2 className="text-xl md:text-3xl font-black tracking-widest text-center text-muted-foreground uppercase mb-6 drop-shadow-sm">
                             {seasonName} Champion
                         </h2>
-                        
                         <div className="text-7xl md:text-9xl mb-6 drop-shadow-2xl">🏆</div>
                         <div className="text-7xl md:text-8xl mb-4 drop-shadow-xl">{champion.emoji}</div>
-                        
                         <h1 
                             className="text-4xl md:text-6xl font-black uppercase text-center tracking-tighter mt-4"
-                            style={{ 
-                                color: champion.primary_color || '#ffffff', 
-                                textShadow: `2px 2px 0px ${champion.secondary_color || '#555555'}, 4px 4px 10px rgba(0,0,0,0.5)` 
-                            }}
+                            style={{ color: champion.primary_color || '#ffffff', textShadow: `2px 2px 0px ${champion.secondary_color || '#555555'}, 4px 4px 10px rgba(0,0,0,0.5)` }}
                         >
                             {champion.name}
                         </h1>
@@ -187,7 +194,6 @@ export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
                 </Card>
             )}
 
-            {/* --- PLAYOFF BRACKET WITH SVG LINES --- */}
             <Card className="border-primary/20 bg-muted/10 overflow-hidden">
                 <CardContent className="p-6">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 relative z-10">
@@ -203,10 +209,7 @@ export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
                         </Button>
                     </div>
                     
-                    {/* Bracket Container - Relative positioning allows the absolute SVG to sit behind it */}
                     <div className="relative w-full overflow-x-auto pb-4" ref={containerRef}>
-                        
-                        {/* SVG Drawing Layer */}
                         <svg className="absolute inset-0 w-full h-full pointer-events-none z-0" style={{ minWidth: '100%' }}>
                             {lines}
                         </svg>
@@ -223,12 +226,20 @@ export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
                                         </h3>
                                         
                                         {round.map((match: PlayoffMatchup) => {
+                                            if (match.isDummy) {
+                                                return (
+                                                    <div key={match.id} className="bracket-card flex flex-col bg-background/50 border border-dashed border-border/50 rounded-lg p-4 h-[120px] justify-center opacity-50">
+                                                        <div className="flex items-center justify-between gap-4 mb-2"><span className="text-xl font-bold text-muted-foreground">TBD</span></div>
+                                                        <div className="h-px bg-border/30 w-full my-3" />
+                                                        <div className="flex items-center justify-between gap-4 mt-2"><span className="text-xl font-bold text-muted-foreground">TBD</span></div>
+                                                    </div>
+                                                );
+                                            }
+
                                             const team1 = Array.isArray(match.team1) ? match.team1[0] : match.team1;
                                             const team2 = Array.isArray(match.team2) ? match.team2[0] : match.team2;
                                             
-                                            let t1SafeWins = 0;
-                                            let t2SafeWins = 0;
-                                            
+                                            let t1SafeWins = 0; let t2SafeWins = 0;
                                             match.schedule?.forEach((game: PlayoffGame) => {
                                                 if (game.status === 'completed') {
                                                     const broadcastEndTime = new Date(game.match_date).getTime() + (30 * 60000) + ((game.total_steps || 300) * 2000);
@@ -246,28 +257,15 @@ export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
                                             const t2Winner = isFinal && !t2Eliminated;
 
                                             return (
-                                                <div 
-                                                    key={match.id} 
-                                                    className={`bracket-card flex flex-col bg-background border rounded-lg p-4 shadow-sm relative h-[120px] justify-center transition-all ${
-                                                        isFinal ? 'border-border' : 'border-primary/30 shadow-[0_0_15px_rgba(var(--primary),0.1)]'
-                                                    }`}
-                                                >
-                                                    {/* Team 1 */}
+                                                <div key={match.id} className={`bracket-card flex flex-col bg-background border rounded-lg p-4 shadow-sm relative h-[120px] justify-center transition-all ${isFinal ? 'border-border' : 'border-primary/30 shadow-[0_0_15px_rgba(var(--primary),0.1)]'}`}>
                                                     <div className={`flex items-center justify-between gap-4 transition-all duration-500 ${t1Eliminated ? 'opacity-30 grayscale' : ''}`}>
                                                         <span className={`text-3xl transition-all ${t1Winner ? 'drop-shadow-[0_0_8px_rgba(250,204,21,0.6)] scale-110' : ''}`} title={team1?.name}>{team1?.emoji || '❔'}</span>
-                                                        <div className="flex gap-0.5 text-xs">
-                                                            {Array.from({ length: t1SafeWins }).map((_, i) => <span key={i}>👑</span>)}
-                                                        </div>
+                                                        <div className="flex gap-0.5 text-xs">{Array.from({ length: t1SafeWins }).map((_, i) => <span key={i}>👑</span>)}</div>
                                                     </div>
-                                                    
                                                     <div className="h-px bg-border/50 w-full my-3" />
-                                                    
-                                                    {/* Team 2 */}
                                                     <div className={`flex items-center justify-between gap-4 transition-all duration-500 ${t2Eliminated ? 'opacity-30 grayscale' : ''}`}>
                                                         <span className={`text-3xl transition-all ${t2Winner ? 'drop-shadow-[0_0_8px_rgba(250,204,21,0.6)] scale-110' : ''}`} title={team2?.name}>{team2?.emoji || '❔'}</span>
-                                                        <div className="flex gap-0.5 text-xs">
-                                                            {Array.from({ length: t2SafeWins }).map((_, i) => <span key={i}>👑</span>)}
-                                                        </div>
+                                                        <div className="flex gap-0.5 text-xs">{Array.from({ length: t2SafeWins }).map((_, i) => <span key={i}>👑</span>)}</div>
                                                     </div>
                                                 </div>
                                             );
