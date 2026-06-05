@@ -155,7 +155,9 @@ export default function SchedulePage() {
         setupDefaultOpenWeeks(weeksWithData);
         
         // Auto-switch to bracket view if this season has reached playoffs
-        if (['playoffs', 'postseason'].includes(season.status)) {
+          // Auto-switch to bracket view if this season has reached playoffs historically or currently
+        const hasPlayoffs = weeksWithData.some(w => w.is_playoff_week);
+        if (hasPlayoffs || ['playoffs', 'postseason'].includes(season.status)) {
             setViewMode("bracket");
         } else {
             setViewMode("regular");
@@ -172,6 +174,7 @@ export default function SchedulePage() {
   const toggleWeek = (weekId: string) => setOpenWeeks(prev => ({ ...prev, [weekId]: !prev[weekId] }));
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   const formatDeadline = (dateString: string) => new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const seasonHasPlayoffs = weeks.some(w => w.is_playoff_week);
 
   if (loading) {
     return (
@@ -212,8 +215,8 @@ export default function SchedulePage() {
         )}
       </div>
 
-      {/* NEW: View Mode Toggle (Only visible if the season has reached playoffs) */}
-      {selectedSeason && ['playoffs', 'postseason'].includes(selectedSeason.status) && (
+     {/* NEW: View Mode Toggle (Visible if in playoffs, OR if the season historically had playoffs) */}
+      {selectedSeason && (seasonHasPlayoffs || ['playoffs', 'postseason'].includes(selectedSeason.status)) && (
         <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "regular" | "bracket")} className="mb-6 w-full max-w-md">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="regular">Regular Season</TabsTrigger>
