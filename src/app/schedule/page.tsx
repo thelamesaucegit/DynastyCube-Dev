@@ -20,6 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/app/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/app/components/ui/tabs"; // ADDED TABS
+import { PlayoffBracket } from "@/app/components/PlayoffBracket"; // ADDED BRACKET
 import { Calendar, Clock, Loader2, AlertCircle, PlayCircle, Bot, Swords, ChevronDown, ChevronUp, Radio } from "lucide-react";
 import { formatDateTime } from "@/app/utils/timezoneUtils";
 import { useUserTimezone } from "@/hooks/useUserTimezone";
@@ -46,11 +48,8 @@ const getWeekStatus = (week: ScheduleWeek) => {
 
 // HELPER: Attach Broadcast Timings to matches!
 function enhanceMatchWithStreamTiming(match: UnifiedMatch): StreamMatchUI {
-    // 1. Calculate Broadcast Start (Match Date + 30 mins)
     const baseTime = new Date(match.scheduled_for || Date.now()).getTime();
     const broadcastStartTime = baseTime + (30 * 60000);
-    
-    // 2. Calculate Broadcast End (Start + (Steps * 2s)). Fallback to 10 mins if steps aren't provided.
     const steps = match.total_steps || 300; 
     const broadcastEndTime = broadcastStartTime + (steps * 2000);
     
@@ -76,6 +75,9 @@ export default function SchedulePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openWeeks, setOpenWeeks] = useState<Record<string, boolean>>({});
+  
+  // NEW: State to track which view the user is looking at
+  const [viewMode, setViewMode] = useState<"regular" | "bracket">("regular");
 
   useEffect(() => { loadData(); }, []);
 
@@ -108,9 +110,15 @@ export default function SchedulePage() {
         setWeeks(weeksWithData);
         setSelectedSeason(scheduleResult.season);
         setupDefaultOpenWeeks(weeksWithData); 
+        
+        // Auto-show bracket if the season is in playoffs or finished
+        if (['playoffs', 'postseason'].includes(scheduleResult.season.status)) {
+            setViewMode("bracket");
+        }
       } else {
         setError(scheduleResult.error || "No active season found");
       }
+
       const seasonsResult = await getAllSeasons();
       if (seasonsResult.success) setSeasons(seasonsResult.seasons);
     } catch (err) {
@@ -125,8 +133,10 @@ export default function SchedulePage() {
     if (!seasonId) return;
     const season = seasons.find((s) => s.id === seasonId);
     if (!season) return;
+
     setLoading(true);
     setError(null);
+    
     try {
       const result = await getScheduleWeeks(seasonId);
       if (result.error) {
@@ -143,6 +153,13 @@ export default function SchedulePage() {
         setWeeks(weeksWithData);
         setSelectedSeason(season);
         setupDefaultOpenWeeks(weeksWithData);
+        
+        // Auto-switch to bracket view if this season has reached playoffs
+        if (['playoffs', 'postseason'].includes(season.status)) {
+            setViewMode("bracket");
+        } else {
+            setViewMode("regular");
+        }
       }
     } catch (err) {
       console.error("Error loading season schedule:", err);
@@ -179,6 +196,7 @@ export default function SchedulePage() {
               : "View match schedules and deadlines"}
           </p>
         </div>
+
         {seasons.length > 0 && (
           <div className="w-full md:w-64">
             <label className="block text-sm font-medium text-muted-foreground mb-2">Select Season</label>
@@ -194,6 +212,16 @@ export default function SchedulePage() {
         )}
       </div>
 
+      {/* NEW: View Mode Toggle (Only visible if the season has reached playoffs) */}
+      {selectedSeason && ['playoffs', 'postseason'].includes(selectedSeason.status) && (
+        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "regular" | "bracket")} className="mb-6 w-full max-w-md">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="regular">Regular Season</TabsTrigger>
+            <TabsTrigger value="bracket">Playoff Bracket</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
+
       {error && (
         <Card className="mb-6 border-yellow-500/50">
           <CardContent className="pt-6 flex items-center gap-3">
@@ -203,7 +231,10 @@ export default function SchedulePage() {
         </Card>
       )}
 
-      {weeks.length === 0 ? (
+      {/* --- CONTENT AREA: Conditionally render Bracket or Regular Weeks --- */}
+      {viewMode === "bracket" && selectedSeason ? (
+        <PlayoffBracket seasonId={selectedSeason.id} seasonName={selectedSeason.name} />
+      ) : weeks.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center">
             <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -280,7 +311,6 @@ export default function SchedulePage() {
                       ) : (
                         <div className="space-y-3">
                           {week.matches.map((match) => {
-                            // NEW: Destructure the dynamic statuses we calculated at the top
                             const { streamStatus, broadcastStartTime, broadcastEndTime } = match;
                             const isMasked = streamStatus === 'upcoming' || streamStatus === 'live';
 
@@ -322,7 +352,6 @@ export default function SchedulePage() {
                                     {/* Status & Actions Section */}
                                     <div className="flex flex-row lg:flex-col items-center justify-between lg:justify-center gap-3 lg:gap-1 lg:ml-6 lg:pl-6 lg:border-l border-border/50 min-w-[140px]">
                                       <div className="flex flex-col items-center">
-                                        {/* Status Badge is purely based on the Stream Time! */}
                                         <Badge
                                           variant={streamStatus === 'replay' ? "default" : streamStatus === "live" ? "destructive" : "outline"}
                                           className={`mb-1 ${streamStatus === 'replay' ? 'bg-emerald-600' : ''} ${streamStatus === 'live' ? 'animate-pulse' : ''}`}
@@ -332,12 +361,10 @@ export default function SchedulePage() {
                                         
                                         <span className="text-xs text-muted-foreground whitespace-nowrap flex items-center gap-1">
                                           {match.matchType === 'sim' ? <Bot className="h-3 w-3"/> : <Swords className="h-3 w-3"/>}
-                                          {/* Format the BROADCAST time, not the DB time */}
                                           {formatDateTime(new Date(broadcastStartTime).toISOString(), timezone)}
                                         </span>
                                       </div>
                                       
-                                      {/* Replay or Live Stream Button based on window */}
                                       {match.sim_match_id && (
                                         <Link href={isMasked ? `/stream/${match.sim_match_id}` : `/argentum-viewer/${match.sim_match_id}`}>
                                           <Button size="sm" variant={streamStatus === 'live' ? 'default' : 'secondary'} className={`w-full mt-2 flex items-center gap-1.5 ${streamStatus === 'live' ? 'bg-red-600 hover:bg-red-700 text-white' : ''}`}>
