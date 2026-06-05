@@ -191,7 +191,7 @@ async function executeConfirmedTeamPick(teamId: string, cardPoolId: string, draf
     return { success: true, pick: newPick };
 }
 
-// Updated to accept the exclusion list
+// Updated to accept the exclusion list and use the new Smart ELO + Budget Tax logic
 export async function computeAutoDraftPick(
   teamId: string,
   draftSessionId: string,
@@ -203,48 +203,41 @@ export async function computeAutoDraftPick(
   error?: string;
 }> {
   try {
-    const { cards: availableCards, error: cardsError } = await getAvailableCardsForDraft("draft", adminClient);
-    if (cardsError) return { recommendation: null, algorithmDetails: null, error: cardsError };
-    if (availableCards.length === 0) return { recommendation: null, algorithmDetails: null, error: "No available cards in the pool" };
+    const supabase = adminClient ?? createServiceClient();
 
-    const { picks: teamPicks } = await getTeamDraftPicks(teamId, draftSessionId, adminClient);
-    const { team: teamBalance } = await getTeamBalance(teamId, adminClient);
-    const balance = teamBalance?.cubucks_balance ?? 0;
+    // 1. Get Team Context for Budget Math
+    const { picks: teamPicks } = await getTeamDraftPicks(teamId, draftSessionId, supabase);
+    const { team: teamBalanceData } = await getTeamBalance(teamId, supabase);
+    const balance = teamBalanceData?.cubucks_balance ?? 0;
+    
+    // Calculate Target Average Cost (TAC)
+    // Adjust '40' if your drafts have a different total round count
+    const totalRounds = 40; 
+    const picksMade = teamPicks.length;
+    const remainingPicks = Math.max(1, totalRounds - picksMade);
+    const targetAvgCost = Math.max(0, balance) / remainingPicks;
 
-    const alreadyDraftedCardConcepts = new Set(teamPicks.map(p => p.card_id));
+    // 2. Fetch the Top 100 Smart Targets from the DB (Base ELO + Match Weights)
+    const { data: smartTargets, error: targetError } = await supabase
+        .rpc('get_smart_draft_targets', { p_limit: 100 });
 
-    // 1. Filter out un-affordable, drafted, or excluded cards
-    const candidatePool = availableCards
-      .filter(card => 
+    if (targetError) return { recommendation: null, algorithmDetails: null, error: targetError.message };
+    if (!smartTargets || smartTargets.length === 0) return { recommendation: null, algorithmDetails: null, error: "No available cards in the pool" };
+
+    // 3. Filter out un-affordable cards or excluded cards
+    const candidatePool = smartTargets.filter(card => 
         card.id && 
         !excludedCardPoolIds.includes(card.id) &&
-        !alreadyDraftedCardConcepts.has(card.card_id) &&
         (card.cubucks_cost || 0) <= balance
-      );
+    );
       
     if (candidatePool.length === 0) {
         return { recommendation: null, algorithmDetails: null, error: "No valid or affordable cards available." };
     }
 
-    // --- RAW ELO TOP N SLICE ---
-    const DEFAULT_ELO = 1000;
-    const TOP_N_POOL_SIZE = 20; 
-
-    // Sort the entire valid pool strictly by RAW ELO (no multipliers yet)
-    const rawSortedPool = [...candidatePool].sort((a, b) => 
-        (b.cubecobra_elo || DEFAULT_ELO) - (a.cubecobra_elo || DEFAULT_ELO)
-    );
-
-    // Slice the top N cards to be our actual evaluation pool
-    const evaluationPool = rawSortedPool.slice(0, TOP_N_POOL_SIZE);
-    // ---------------------------
-
     const LAND_ELO_MODIFIER = 0.80; 
-
-    // --- EXPONENTIAL DECAY CONSTANTS ---
     const BASE_BONUS = 0.03; 
     const BONUS_DECAY = 0.90; 
-
     const colorModifiers: Record<string, number> = { W: 1, U: 1, B: 1, R: 1, G: 1 };
     const allColors = ["W", "U", "B", "R", "G"];
     
@@ -260,69 +253,62 @@ export async function computeAutoDraftPick(
       }
     }
 
-    // Calculate Team Affinity using geometric series
     for (const color of allColors) { 
         let bonus = 0;
         for (let i = 0; i < colorCounts[color]; i++) {
-            // e.g. 1st: +0.05, 2nd: +0.0495, 3rd: +0.0490...
             bonus += BASE_BONUS * Math.pow(BONUS_DECAY, i);
         }
         colorModifiers[color] = 1 + bonus; 
     }
-
     const maxTeamAffinity = Math.max(...Object.values(colorModifiers), 1);
 
-    // 2. Evaluate Candidates (ONLY the Top N from the raw pool!)
-    const sortedCandidates = evaluationPool
+    // 4. Evaluate Candidates using BUDGET TAX and AFFINITY
+    const sortedCandidates = candidatePool
         .map(card => {
-            let elo = card.cubecobra_elo || DEFAULT_ELO;
-             // --- NEW: ELO FUZZING ---
-            // Introduce a random variance between -15 and +15 to the base ELO.
-            // This blurs the lines between mathematically identical cards, 
-            // making the bot pick less rigidly and more like a human with slight preferences.
-            const fuzzAmount = Math.floor(Math.random() * 101) - 50; // Random integer between -50 and 50
+            // DB already calculated: Base ELO + Match Weight
+            let elo = card.smart_elo; 
+            
+            const cost = card.cubucks_cost || 0;
+
+            // --- THE PROGRESSIVE BUDGET TAX ---
+            // If the card is cheaper than the TAC, give a slight reward (Bonus)
+            if (cost < targetAvgCost) {
+                elo += (targetAvgCost - cost) * 10;
+            } 
+            // If the card is more expensive than the TAC, apply an exponential penalty (Tax)
+            else if (cost > targetAvgCost) {
+                elo -= Math.pow(cost - targetAvgCost, 1.5) * 15;
+            }
+            // ----------------------------------
+
+            const fuzzAmount = Math.floor(Math.random() * 101) - 50; 
             elo += fuzzAmount;
             
-            // Slight, flat penalty on lands so teams prioritize 
-            // spells over fixing in round 1, but let affinity do the rest of the work.
             const isLand = card.card_type?.toLowerCase().includes('land');
             if (isLand) elo *= LAND_ELO_MODIFIER; 
 
             const castColors = card.colors || [];
             const identityColors = card.color_identity || castColors;
-
             let affinity = 1;
 
-                        if (isLand) {
-                // LANDS: Start at 1.0 base, and add the excess (or deficit) for each color.
-                // This brilliantly rewards overlapping colors while organically penalizing dead colors.
+            if (isLand) {
                 if (identityColors.length > 0) {
-                    affinity = 1.0 + identityColors.reduce((sum, c) => {
+                    affinity = 1.0 + identityColors.reduce((sum: number, c: string) => {
                         const mod = colorModifiers[c] || 1;
-                        return sum + (mod - 1.0); // Add the amount it exceeds or falls short of 1.0
+                        return sum + (mod - 1.0); 
                     }, 0);
-                    
-                    // Clamp to a safe minimum to prevent 0 or negative ELOs on totally off-color lands
                     affinity = Math.max(0.25, affinity);
                 } else {
-                    // True colorless utility lands
                     affinity = maxTeamAffinity;
                 }
             } else {
- 
-                // NON-LAND SPELLS: They *require* mana.
                 if (castColors.length > 1) {
-                    // Multi-colored cast: Constrained by your WEAKEST affinity among its casting colors
-                    affinity = Math.min(...castColors.map(c => colorModifiers[c] || 1));
+                    affinity = Math.min(...castColors.map((c: string) => colorModifiers[c] || 1));
                 } else if (castColors.length === 1) {
-                    // Mono-colored cast
                     affinity = colorModifiers[castColors[0]] || 1;
                 } else if (identityColors.length > 0) {
-                    // Colorless to cast, but has a colored identity (e.g. colored activated ability)
-                    affinity = Math.max(...identityColors.map(c => colorModifiers[c] || 1));
+                    affinity = Math.max(...identityColors.map((c: string) => colorModifiers[c] || 1));
                 } else {
-                    // True Colorless (e.g. generic artifacts, Eldrazi)
-                    // They fit perfectly into any deck, so they scale with your best color
                     affinity = maxTeamAffinity; 
                 }
             }
@@ -331,11 +317,11 @@ export async function computeAutoDraftPick(
         })
         .sort((a, b) => b.effective_elo - a.effective_elo);
 
-     const bestPick = sortedCandidates[0] || null;
+    const bestPick = sortedCandidates[0] || null;
     
     let algoDetails: AlgorithmDetails | null = null;
     if (bestPick) {
-        const baseElo = bestPick.cubecobra_elo || DEFAULT_ELO;
+        const baseElo = bestPick.cubecobra_elo;
         const isLand = bestPick.card_type?.toLowerCase().includes('land') || false;
         const landPenalty = isLand ? LAND_ELO_MODIFIER : 1;
         const affinityMultiplier = bestPick.effective_elo / (baseElo * landPenalty);
@@ -351,12 +337,14 @@ export async function computeAutoDraftPick(
         };
     }
 
-    return { recommendation: bestPick, algorithmDetails: algoDetails };
+    // BestPick is cast as CardData to satisfy the return type safely
+    return { recommendation: bestPick as unknown as CardData, algorithmDetails: algoDetails };
   } catch (error) {
     console.error("Error computing auto-draft pick:", error);
     return { recommendation: null, algorithmDetails: null, error: "Failed to compute auto-draft pick" };
   }
 }
+
 
 
 export async function getAutoDraftPreview(
