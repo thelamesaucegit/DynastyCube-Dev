@@ -105,15 +105,14 @@ export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
                             <img 
                                 src={`/images/trophies/${seasonName.toLowerCase().replace(/\s+/g, '-')}-trophy.png`} 
                                 alt={`${seasonName} Trophy`} 
-                                className="w-24 h-24 md:w-32 md:h-32 mb-6 object-contain drop-shadow-xl animate-bounce" 
-                                style={{ animationDuration: '3s' }} 
+                                className="w-24 h-24 md:w-32 md:h-32 mb-6 object-contain drop-shadow-xl" 
                                 onError={(e) => { 
                                     // If the specific season PNG isn't found, fallback to a default image
                                     e.currentTarget.src = '/images/trophies/default-trophy.png'; 
                                 }}
                             /> 
                         */}
-                        <div className="text-7xl md:text-9xl mb-6 drop-shadow-2xl animate-bounce" style={{ animationDuration: '3s' }}>
+                        <div className="text-7xl md:text-9xl mb-6 drop-shadow-2xl">
                             🏆
                         </div>
                         
