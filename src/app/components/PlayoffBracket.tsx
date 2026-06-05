@@ -154,14 +154,26 @@ export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
 
     if (loading || matchups.length === 0) return null;
 
-    const finalMatchup = matchups[matchups.length - 1];
+   const finalMatchup = matchups[matchups.length - 1];
     let champion: PlayoffTeam | null = null;
 
     if (finalMatchup?.is_outcome_final) {
-        const streamCaughtUp = finalMatchup.schedule?.every((g: PlayoffGame) => 
-            Date.now() > (new Date(g.match_date).getTime() + (30 * 60000) + ((g.total_steps || 300) * 2000))
-        );
-        if (streamCaughtUp) {
+        // 1. Verify this is ACTUALLY the championship round (only 1 match in this week)
+        const isChampionshipRound = matchups.filter(m => m.week_number === finalMatchup.week_number).length === 1;
+        
+        // 2. Safely check schedule array
+        const schedule = finalMatchup.schedule || [];
+        
+        // 3. Ensure we have games, they are all marked completed, AND the broadcast timer has fully elapsed
+        const streamCaughtUp = schedule.length > 0 && schedule.every((g: PlayoffGame) => {
+            if (g.status !== 'completed') return false;
+            
+            const broadcastEndTime = new Date(g.match_date).getTime() + (30 * 60000) + ((g.total_steps || 300) * 2000);
+            return Date.now() > broadcastEndTime;
+        });
+
+        // Only crown the winner if ALL conditions are met perfectly
+        if (isChampionshipRound && streamCaughtUp) {
             const team1 = Array.isArray(finalMatchup.team1) ? finalMatchup.team1[0] : finalMatchup.team1;
             const team2 = Array.isArray(finalMatchup.team2) ? finalMatchup.team2[0] : finalMatchup.team2;
             champion = finalMatchup.winner_team_id === team1?.id ? team1 : team2;
