@@ -90,7 +90,7 @@ export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
 
     return (
         <section className="space-y-6 animate-in fade-in duration-700">
-            {/* --- CHAMPION REVEAL (Rendered ABOVE the bracket if a champion exists) --- */}
+                        {/* --- CHAMPION REVEAL (Rendered ABOVE the bracket if a champion exists) --- */}
             {champion && (
                 <Card className="border-2 border-yellow-500/50 bg-gradient-to-b from-yellow-500/10 to-background overflow-hidden">
                     <CardContent className="flex flex-col items-center justify-center py-12 px-4">
@@ -98,9 +98,20 @@ export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
                             {seasonName} Champion
                         </h2>
                         
-                        {/* CUSTOM TROPHY IMAGE: 
-                            To use your own PNG, comment out the emoji div below and uncomment the img tag!
-                            <img src="/images/your-trophy-file.png" alt="Trophy" className="w-24 h-24 md:w-32 md:h-32 mb-6 drop-shadow-xl animate-bounce" style={{ animationDuration: '3s' }} /> 
+                        {/* CUSTOM DYNAMIC TROPHY IMAGE: 
+                            To use season-specific PNGs, name your files like "season-1-trophy.png" in your public/images/trophies folder.
+                            Comment out the emoji div below and uncomment this img tag!
+                            
+                            <img 
+                                src={`/images/trophies/${seasonName.toLowerCase().replace(/\s+/g, '-')}-trophy.png`} 
+                                alt={`${seasonName} Trophy`} 
+                                className="w-24 h-24 md:w-32 md:h-32 mb-6 object-contain drop-shadow-xl animate-bounce" 
+                                style={{ animationDuration: '3s' }} 
+                                onError={(e) => { 
+                                    // If the specific season PNG isn't found, fallback to a default image
+                                    e.currentTarget.src = '/images/trophies/default-trophy.png'; 
+                                }}
+                            /> 
                         */}
                         <div className="text-7xl md:text-9xl mb-6 drop-shadow-2xl animate-bounce" style={{ animationDuration: '3s' }}>
                             🏆
@@ -122,6 +133,7 @@ export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
                     </CardContent>
                 </Card>
             )}
+
 
             {/* --- THE PLAYOFF BRACKET --- */}
             <Card className="border-primary/20 bg-muted/10">
