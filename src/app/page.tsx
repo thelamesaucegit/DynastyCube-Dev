@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
+import { PlayoffBracket } from "@/app/components/PlayoffBracket";
 import { Badge } from "@/app/components/ui/badge";
 import { ArrowRight, Info } from "lucide-react";
 import CountdownTimer from "@/app/components/CountdownTimer";
@@ -196,7 +197,9 @@ export default function HomePage() {
       </section>
 
       {isPlayActive && liveMatch && <LiveStreamWidget initialMatch={liveMatch} onStreamEnd={loadCoreData} />}
-      
+       {(currentPhase === 'playoffs' || currentPhase === 'postseason') && season && (
+        <PlayoffBracket seasonId={season.id} seasonName={season.name} />
+      )}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">Latest News</h2>
