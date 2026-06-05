@@ -11,17 +11,19 @@ export interface StreamMatch {
     sim_match_id: string;
     team1: { id: string; name: string; emoji: string };
     team2: { id: string; name: string; emoji: string };
-    team1_record: { wins: number; losses: number };
-    team2_record: { wins: number; losses: number };
+    team1_record: { wins: number; losses: number; seed?: number };
+    team2_record: { wins: number; losses: number; seed?: number };
     life_timeline: [number, number][]; 
     total_steps: number;
     
-    // NEW: Matchup Context
+    // UPDATED: Added is_playoff and week_number for the UI
     matchup: {
         game_number: number;
         total_games: number;
         t1_wins: number;
         t2_wins: number;
+        is_playoff: boolean;
+        week_number: number;
     } | null;
 }
 
