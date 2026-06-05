@@ -267,7 +267,8 @@ export async function recordSimGameResult(
 
 /**
  * Record a PvP match result for a weekly matchup.
- * Updates pvp win counts and checks if the weekly outcome can be determined.
+ * Updates pvp win counts, applies Smart ELO once for the overall winner, 
+ * and checks if the weekly outcome can be determined.
  */
 export async function recordPvpResult(
     weeklyMatchupId: string,
@@ -277,10 +278,11 @@ export async function recordPvpResult(
     pvpDraws: number
 ): Promise<{ success: boolean; matchupFinalized: boolean; error?: string }> {
     const supabase = createServiceClient();
-
+    
+    // 1. Fetch the necessary context for both Finalization and Smart ELO
     const { data: matchup, error: fetchError } = await supabase
         .from('weekly_matchups')
-        .select('sim_completed_games')
+        .select('sim_completed_games, season_id, week_number, team1_id, team2_id')
         .eq('id', weeklyMatchupId)
         .single();
 
@@ -288,6 +290,7 @@ export async function recordPvpResult(
         return { success: false, matchupFinalized: false, error: 'Matchup not found' };
     }
 
+    // 2. Update the PvP scores in the database
     const { error: updateError } = await supabase
         .from('weekly_matchups')
         .update({
@@ -302,7 +305,19 @@ export async function recordPvpResult(
         return { success: false, matchupFinalized: false, error: updateError.message };
     }
 
-    // Finalize if all 5 sims are also done
+    // --- 3. SMART ELO INTEGRATION ---
+    // Apply weights a single time based on the overall PvP match winner
+    if (team1PvpWins > team2PvpWins) {
+        console.log(`[Action/recordPvpResult] Team 1 won PvP. Applying ELO weights.`);
+        await triggerSmartEloUpdate(matchup.season_id, matchup.week_number, matchup.team1_id, matchup.team2_id);
+    } else if (team2PvpWins > team1PvpWins) {
+        console.log(`[Action/recordPvpResult] Team 2 won PvP. Applying ELO weights.`);
+        await triggerSmartEloUpdate(matchup.season_id, matchup.week_number, matchup.team2_id, matchup.team1_id);
+    }
+    // If PvP was an exact tie, no weights are applied.
+
+    // 4. Finalize if all sim games are also done
+    // Note: adjust the '5' if your regular season game count differs
     if (matchup.sim_completed_games >= 5) {
         const finalized = await finalizeWeeklyOutcome(weeklyMatchupId);
         return { success: true, matchupFinalized: finalized };
