@@ -205,6 +205,7 @@ export default function ReplayPage(props: PageProps) {
                 <SettingsProvider>
                     <ArgentumReplayPlayer
                         initialGameStates={data.gameStates}
+                        matchId={matchId}
                         cardDataMap={data.cardDataMap}
                         currentIndex={currentIndex}
                         onIndexChange={setCurrentIndex}
