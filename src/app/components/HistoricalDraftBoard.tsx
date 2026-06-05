@@ -176,7 +176,9 @@ export default function HistoricalDraftBoard({ serverPicks, sessionId }: { serve
           </div>
       )}
 
-      {serverPicks.length > 0 && viewMode === 'list' && <ListView picks={serverPicks} />}
+ {serverPicks.length > 0 && viewMode === 'list' && (
+        <ListView picks={serverPicks.filter(p => p.card_name !== 'SKIPPED')} />
+      )}
       {serverPicks.length > 0 && viewMode === 'team' && draftOrder.length > 0 && <TeamView picks={serverPicks} draftOrder={draftOrder} />}
       {serverPicks.length > 0 && viewMode === 'team' && draftOrder.length === 0 && <div className="text-center text-muted-foreground py-8">Loading teams...</div>}
     </div>
