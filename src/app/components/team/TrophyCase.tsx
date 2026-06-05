@@ -6,12 +6,35 @@ import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Loader2 } from "lucide-react";
 
+// --- STRICT INTERFACES ---
+interface TrophyTeam {
+    name: string;
+    emoji: string;
+    primary_color?: string | null;
+    secondary_color?: string | null;
+}
+
+interface TrophySeason {
+    name: string;
+}
+
+interface RawMatchup {
+    season_id: string;
+    week_number: number;
+}
+
+interface EnrichedChampionship extends RawMatchup {
+    season: TrophySeason;
+    team: TrophyTeam;
+}
+// -------------------------
+
 interface TrophyCaseProps {
     teamId: string;
 }
 
 export function TrophyCase({ teamId }: TrophyCaseProps) {
-    const [championships, setChampionships] = useState<any[]>([]);
+    const [championships, setChampionships] = useState<EnrichedChampionship[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -31,9 +54,12 @@ export function TrophyCase({ teamId }: TrophyCaseProps) {
                 return;
             }
 
+            // Type the incoming data
+            const typedMatches = finalMatches as RawMatchup[];
+
             // 2. Filter to only the highest week number per season (The actual Championship)
-            const seasonWinners = new Map();
-            finalMatches.forEach((match: any) => {
+            const seasonWinners = new Map<string, RawMatchup>();
+            typedMatches.forEach((match: RawMatchup) => {
                 const currentMaxWeek = seasonWinners.get(match.season_id)?.week_number || 0;
                 if (match.week_number > currentMaxWeek) {
                     seasonWinners.set(match.season_id, match);
@@ -42,7 +68,7 @@ export function TrophyCase({ teamId }: TrophyCaseProps) {
 
             // 3. Fetch the Season and Team details safely
             const validChampionships = Array.from(seasonWinners.values());
-            const enrichedChampionships = [];
+            const enrichedChampionships: EnrichedChampionship[] = [];
 
             for (const champ of validChampionships) {
                 const [{ data: seasonData }, { data: teamData }] = await Promise.all([
@@ -53,8 +79,8 @@ export function TrophyCase({ teamId }: TrophyCaseProps) {
                 if (seasonData && teamData) {
                     enrichedChampionships.push({
                         ...champ,
-                        season: seasonData,
-                        team: teamData
+                        season: seasonData as TrophySeason,
+                        team: teamData as TrophyTeam
                     });
                 }
             }
@@ -88,7 +114,12 @@ export function TrophyCase({ teamId }: TrophyCaseProps) {
                         <h2 className="text-sm font-bold tracking-widest text-center text-muted-foreground uppercase mb-4">
                             {champ.season.name} Champion
                         </h2>
+                        
+                        {/* CUSTOM DYNAMIC TROPHY IMAGE:
+                            <img src={`/images/trophies/${champ.season.name.toLowerCase().replace(/\s+/g, '-')}-trophy.png`} alt={`${champ.season.name} Trophy`} className="w-24 h-24 mb-6 object-contain drop-shadow-xl" onError={(e) => e.currentTarget.src = '/images/trophies/default-trophy.png'} />
+                        */}
                         <div className="text-5xl mb-4 drop-shadow-xl">🏆</div>
+                        
                         <div className="text-5xl mb-3 drop-shadow-md">{champ.team.emoji}</div>
                         <h1 
                             className="text-2xl font-black uppercase text-center tracking-tighter"
