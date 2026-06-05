@@ -132,7 +132,7 @@ export default async function MatchSummaryPage({ params }: SummaryPageProps) {
                     {showFinalized && (
                         <div className="bg-primary/10 border-t border-primary/20 p-4 text-center">
                             <p className="text-primary font-bold tracking-wide uppercase text-sm">
-                                🏆 Series Finalized!
+                                🏆 Series Complete!
                             </p>
                         </div>
                     )}
