@@ -25,6 +25,27 @@ function createServiceClient() {
 // ============================================================================
 // TYPES
 // ============================================================================
+
+export interface SmartDraftTarget {
+    id: string;
+    card_id: string;
+    card_name: string;
+    card_set?: string;
+    card_type?: string;
+    rarity?: string;
+    colors?: string[];
+    image_url?: string;
+    oldest_image_url?: string;
+    mana_cost?: string;
+    cmc?: number;
+    cubucks_cost?: number;
+    color_identity?: string[];
+    cubecobra_elo?: number;
+    match_weight?: number;
+    smart_elo: number;
+    effective_elo?: number; 
+}
+
 export interface AlgorithmDetails {
   // --- Legacy Properties (Kept to prevent UI/Frontend TS errors) ---
   top50CardIds?: string[];
@@ -210,22 +231,24 @@ export async function computeAutoDraftPick(
     const { team: teamBalanceData } = await getTeamBalance(teamId, supabase);
     const balance = teamBalanceData?.cubucks_balance ?? 0;
     
-    // Calculate Target Average Cost (TAC)
-    // Adjust '40' if your drafts have a different total round count
     const totalRounds = 40; 
     const picksMade = teamPicks.length;
     const remainingPicks = Math.max(1, totalRounds - picksMade);
     const targetAvgCost = Math.max(0, balance) / remainingPicks;
 
-    // 2. Fetch the Top 100 Smart Targets from the DB (Base ELO + Match Weights)
-    const { data: smartTargets, error: targetError } = await supabase
+    // 2. Fetch the Top 100 Smart Targets
+    const { data: rawTargets, error: targetError } = await supabase
         .rpc('get_smart_draft_targets', { p_limit: 100 });
 
     if (targetError) return { recommendation: null, algorithmDetails: null, error: targetError.message };
-    if (!smartTargets || smartTargets.length === 0) return { recommendation: null, algorithmDetails: null, error: "No available cards in the pool" };
+    
+    // STRICT TYPING FIX: Cast the unknown RPC response to our new interface
+    const smartTargets = (rawTargets || []) as SmartDraftTarget[];
+    
+    if (smartTargets.length === 0) return { recommendation: null, algorithmDetails: null, error: "No available cards in the pool" };
 
-    // 3. Filter out un-affordable cards or excluded cards
-    const candidatePool = smartTargets.filter(card => 
+    // STRICT TYPING FIX: explicitly type 'card' in the filter
+    const candidatePool = smartTargets.filter((card: SmartDraftTarget) => 
         card.id && 
         !excludedCardPoolIds.includes(card.id) &&
         (card.cubucks_cost || 0) <= balance
@@ -235,13 +258,13 @@ export async function computeAutoDraftPick(
         return { recommendation: null, algorithmDetails: null, error: "No valid or affordable cards available." };
     }
 
+    const DEFAULT_ELO = 1000;
     const LAND_ELO_MODIFIER = 0.80; 
     const BASE_BONUS = 0.03; 
     const BONUS_DECAY = 0.90; 
     const colorModifiers: Record<string, number> = { W: 1, U: 1, B: 1, R: 1, G: 1 };
     const allColors = ["W", "U", "B", "R", "G"];
     
-    // Tally the raw count of how many times a color was picked
     const colorCounts: Record<string, number> = { W: 0, U: 0, B: 0, R: 0, G: 0 };
     
     for (const pick of teamPicks) {
@@ -263,23 +286,17 @@ export async function computeAutoDraftPick(
     const maxTeamAffinity = Math.max(...Object.values(colorModifiers), 1);
 
     // 4. Evaluate Candidates using BUDGET TAX and AFFINITY
+    // STRICT TYPING FIX: explicitly type 'card' in the map
     const sortedCandidates = candidatePool
-        .map(card => {
-            // DB already calculated: Base ELO + Match Weight
+        .map((card: SmartDraftTarget) => {
             let elo = card.smart_elo; 
-            
             const cost = card.cubucks_cost || 0;
 
-            // --- THE PROGRESSIVE BUDGET TAX ---
-            // If the card is cheaper than the TAC, give a slight reward (Bonus)
             if (cost < targetAvgCost) {
                 elo += (targetAvgCost - cost) * 10;
-            } 
-            // If the card is more expensive than the TAC, apply an exponential penalty (Tax)
-            else if (cost > targetAvgCost) {
+            } else if (cost > targetAvgCost) {
                 elo -= Math.pow(cost - targetAvgCost, 1.5) * 15;
             }
-            // ----------------------------------
 
             const fuzzAmount = Math.floor(Math.random() * 101) - 50; 
             elo += fuzzAmount;
@@ -321,7 +338,7 @@ export async function computeAutoDraftPick(
     
     let algoDetails: AlgorithmDetails | null = null;
     if (bestPick) {
-        const baseElo = bestPick.cubecobra_elo;
+        const baseElo = bestPick.cubecobra_elo || DEFAULT_ELO;
         const isLand = bestPick.card_type?.toLowerCase().includes('land') || false;
         const landPenalty = isLand ? LAND_ELO_MODIFIER : 1;
         const affinityMultiplier = bestPick.effective_elo / (baseElo * landPenalty);
@@ -337,7 +354,7 @@ export async function computeAutoDraftPick(
         };
     }
 
-    // BestPick is cast as CardData to satisfy the return type safely
+    // STRICT TYPING FIX: Safe cast via unknown avoids the 'any' linter error
     return { recommendation: bestPick as unknown as CardData, algorithmDetails: algoDetails };
   } catch (error) {
     console.error("Error computing auto-draft pick:", error);
