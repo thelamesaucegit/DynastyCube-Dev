@@ -8,19 +8,50 @@ import { Card, CardContent } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { Trophy, CalendarRange } from "lucide-react";
 
+// --- STRICT TYPES FOR SUPABASE DATA ---
+export interface PlayoffTeam {
+    id: string;
+    name: string;
+    emoji: string;
+    primary_color?: string;
+    secondary_color?: string;
+}
+
+export interface PlayoffGame {
+    id: string;
+    status: string;
+    winner_team_id?: string;
+    match_date: string;
+    total_steps?: number;
+}
+
+export interface PlayoffMatchup {
+    id: string;
+    week_number: number;
+    is_outcome_final: boolean;
+    winner_team_id?: string;
+    team1: PlayoffTeam | PlayoffTeam[];
+    team2: PlayoffTeam | PlayoffTeam[];
+    schedule: PlayoffGame[];
+}
+// ---------------------------------------
+
 interface PlayoffBracketProps {
     seasonId: string;
     seasonName: string;
 }
 
 export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
-    const [matchups, setMatchups] = useState<any[]>([]);
+    const [matchups, setMatchups] = useState<PlayoffMatchup[]>([]);
     const [loading, setLoading] = useState(true);
 
     const loadBracket = useCallback(async () => {
         if (!seasonId) return;
         const result = await getPlayoffData(seasonId);
-        if (result.success) setMatchups(result.matchups);
+        if (result.success) {
+            // Safely cast the returned data to our strict interface
+            setMatchups(result.matchups as unknown as PlayoffMatchup[]);
+        }
         setLoading(false);
     }, [seasonId]);
 
@@ -33,8 +64,8 @@ export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
 
     if (loading || matchups.length === 0) return null;
 
-    // Group matchups by week_number (Rounds)
-    const roundsMap = matchups.reduce((acc: any, match: any) => {
+    // Group matchups by week_number (Rounds) using strict generic Record type
+    const roundsMap = matchups.reduce<Record<number, PlayoffMatchup[]>>((acc, match) => {
         if (!acc[match.week_number]) acc[match.week_number] = [];
         acc[match.week_number].push(match);
         return acc;
@@ -43,15 +74,17 @@ export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
 
     // --- SPOILER-FREE CHAMPION DETECTION ---
     const finalMatchup = matchups[matchups.length - 1];
-    let champion = null;
+    let champion: PlayoffTeam | null = null;
 
     if (finalMatchup?.is_outcome_final) {
         // Ensure all games in the final matchup have finished broadcasting
-        const streamCaughtUp = finalMatchup.schedule?.every((g: any) => 
+        const streamCaughtUp = finalMatchup.schedule?.every((g: PlayoffGame) => 
             Date.now() > (new Date(g.match_date).getTime() + (30 * 60000) + ((g.total_steps || 300) * 2000))
         );
         if (streamCaughtUp) {
-            champion = finalMatchup.winner_team_id === finalMatchup.team1?.id ? finalMatchup.team1 : finalMatchup.team2;
+            const team1 = Array.isArray(finalMatchup.team1) ? finalMatchup.team1[0] : finalMatchup.team1;
+            const team2 = Array.isArray(finalMatchup.team2) ? finalMatchup.team2[0] : finalMatchup.team2;
+            champion = finalMatchup.winner_team_id === team1?.id ? team1 : team2;
         }
     }
 
@@ -107,9 +140,9 @@ export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
                     </div>
                     
                     <div className="flex flex-col md:flex-row justify-center items-center md:items-stretch gap-8 md:gap-12 overflow-x-auto pb-4">
-                        {rounds.map((round: any, roundIdx: number) => (
+                        {rounds.map((round: PlayoffMatchup[], roundIdx: number) => (
                             <div key={roundIdx} className="flex flex-col justify-center gap-6 min-w-[140px]">
-                                {round.map((match: any) => {
+                                {round.map((match: PlayoffMatchup) => {
                                     const team1 = Array.isArray(match.team1) ? match.team1[0] : match.team1;
                                     const team2 = Array.isArray(match.team2) ? match.team2[0] : match.team2;
                                     
@@ -117,7 +150,7 @@ export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
                                     let t1SafeWins = 0;
                                     let t2SafeWins = 0;
                                     
-                                    match.schedule?.forEach((game: any) => {
+                                    match.schedule?.forEach((game: PlayoffGame) => {
                                         if (game.status === 'completed') {
                                             const broadcastEndTime = new Date(game.match_date).getTime() + (30 * 60000) + ((game.total_steps || 300) * 2000);
                                             if (Date.now() > broadcastEndTime) {
@@ -128,7 +161,7 @@ export function PlayoffBracket({ seasonId, seasonName }: PlayoffBracketProps) {
                                     });
 
                                     // Determine Elimination (Only if outcome is final AND stream has caught up)
-                                    const isFinal = match.is_outcome_final && match.schedule?.every((g: any) => Date.now() > (new Date(g.match_date).getTime() + (30 * 60000) + ((g.total_steps || 300) * 2000)));
+                                    const isFinal = match.is_outcome_final && match.schedule?.every((g: PlayoffGame) => Date.now() > (new Date(g.match_date).getTime() + (30 * 60000) + ((g.total_steps || 300) * 2000)));
                                     const t1Eliminated = isFinal && match.winner_team_id !== team1?.id;
                                     const t2Eliminated = isFinal && match.winner_team_id !== team2?.id;
 
