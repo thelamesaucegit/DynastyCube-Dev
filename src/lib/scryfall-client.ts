@@ -141,6 +141,11 @@ export interface ScryfallCard {
   color_identity?: string[];
   mana_cost?: string;
   cmc: number;
+  oracle_text?: string;
+  card_faces?: Array<{
+    name?: string;
+    oracle_text?: string;
+  }>;
   released_at: string;
   edhrec_rank?: number; // Lower is more popular
     legalities: {
