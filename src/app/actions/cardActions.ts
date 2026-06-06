@@ -421,7 +421,12 @@ export async function getPoolNames(): Promise<{ pools: string[]; error?: string;
 export async function backfillImportedCards(tableName: PoolTableName = "card_pools_next"): Promise<{ success: boolean; updated: number; error?: string }> {
     const supabase = await createClient();
     try {
-        const { data: cardsToFix, error: fetchError } = await supabase.from(tableName).select("id, card_name").is("oracle_id", null); 
+        // --- THE MAGIC FIX: Check for missing oracle_text too! ---
+        const { data: cardsToFix, error: fetchError } = await supabase
+            .from(tableName)
+            .select("id, card_name")
+            .or('oracle_id.is.null,oracle_text.is.null'); 
+            
         if (fetchError) throw fetchError;
         if (!cardsToFix || cardsToFix.length === 0) return { success: true, updated: 0 };
 
@@ -432,11 +437,10 @@ export async function backfillImportedCards(tableName: PoolTableName = "card_poo
         scryfallResults.forEach(card => scryfallCardMap.set(card.name.toLowerCase(), card));
 
         const oracleIds = scryfallResults.map(c => c.oracle_id).filter(Boolean);
-        const oldestImageMap = await fetchOldestPrintings(oracleIds);
+        const oldestImageMap = await fetchOldestPrintings(oracleIds as string[]);
 
         let updatedCount = 0;
         
-                    // Helper
         interface ScryfallFace { oracle_text?: string; }
         interface ScryfallData { oracle_text?: string; card_faces?: ScryfallFace[]; }
 
@@ -447,8 +451,6 @@ export async function backfillImportedCards(tableName: PoolTableName = "card_poo
             return null;
         };
 
-
-
         for (const dbCard of cardsToFix) {
             const scryData = scryfallCardMap.get(dbCard.card_name.toLowerCase());
             if (scryData) {
@@ -457,9 +459,9 @@ export async function backfillImportedCards(tableName: PoolTableName = "card_poo
                     .update({
                         card_id: scryData.id,
                         oracle_id: scryData.oracle_id,
-                        oracle_text: extractOracleText(scryData), // <-- BACKFILLED
+                        oracle_text: extractOracleText(scryData), 
                         image_url: scryData.image_uris?.normal || scryData.image_uris?.small,
-                        oldest_image_url: oldestImageMap.get(scryData.oracle_id) || scryData.image_uris?.normal,
+                        oldest_image_url: oldestImageMap.get(scryData.oracle_id || "") || scryData.image_uris?.normal,
                         color_identity: scryData.color_identity || [],
                         cmc: scryData.cmc || 0,
                         hidden: scryData.type_line.toLowerCase().includes('basic land')
@@ -473,6 +475,7 @@ export async function backfillImportedCards(tableName: PoolTableName = "card_poo
         return { success: false, updated: 0, error: String(error) };
     }
 }
+
 
 export async function promoteSeasonData(): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
