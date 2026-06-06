@@ -287,17 +287,19 @@ export async function bulkImportAndSync(
 
         const cardsToInsert: Array<Omit<CardData, "id" | "created_at" | "rating_updated_at">> = [];
         
-              // --- HELPER TO EXTRACT ORACLE TEXT ---
+                    // --- HELPER TO EXTRACT ORACLE TEXT ---
         interface ScryfallFace { oracle_text?: string; }
         interface ScryfallData { oracle_text?: string; card_faces?: ScryfallFace[]; }
 
-        const extractOracleText = (card: ScryfallData) => {
+        const extractOracleText = (rawCard: unknown) => {
+            const card = rawCard as ScryfallData;
             if (card.oracle_text) return card.oracle_text;
             if (card.card_faces) {
                 return card.card_faces.map((face: ScryfallFace) => face.oracle_text).filter(Boolean).join('\n//\n');
             }
             return null;
         };
+
 
         for (const request of requestedCards) {
             const cardData = scryfallCardMap.get(request.name.toLowerCase());
@@ -434,15 +436,17 @@ export async function backfillImportedCards(tableName: PoolTableName = "card_poo
 
         let updatedCount = 0;
         
-                // Helper
+                    // Helper
         interface ScryfallFace { oracle_text?: string; }
         interface ScryfallData { oracle_text?: string; card_faces?: ScryfallFace[]; }
 
-        const extractOracleText = (card: ScryfallData) => {
+        const extractOracleText = (rawCard: unknown) => {
+            const card = rawCard as ScryfallData;
             if (card.oracle_text) return card.oracle_text;
             if (card.card_faces) return card.card_faces.map((face: ScryfallFace) => face.oracle_text).filter(Boolean).join('\n//\n');
             return null;
         };
+
 
 
         for (const dbCard of cardsToFix) {
