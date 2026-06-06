@@ -71,7 +71,18 @@ export async function importNextSetToChamber(): Promise<{
     if (scryfallResults.length === 0) {
         console.warn(`No cards found for set ${nextSet.set_name} matching the criteria.`);
     }
+// --- HELPER TO EXTRACT ORACLE TEXT ---
+        interface ScryfallFace { oracle_text?: string; }
+        interface ScryfallData { oracle_text?: string; card_faces?: ScryfallFace[]; }
 
+        const extractOracleText = (rawCard: unknown) => {
+            const card = rawCard as ScryfallData;
+            if (card.oracle_text) return card.oracle_text;
+            if (card.card_faces) {
+                return card.card_faces.map((face: ScryfallFace) => face.oracle_text).filter(Boolean).join('\n//\n');
+            }
+            return null;
+        };
     // 4. Prepare card data for insertion...
     const cardsToInsert: Array<Omit<CardData, "id" | "created_at" | "rating_updated_at">> = scryfallResults.map(card => {
         const finalCost = calculateCubucksCost(card);
@@ -81,7 +92,7 @@ export async function importNextSetToChamber(): Promise<{
             card_set: card.set_name,
             card_type: card.type_line,
             rarity: card.rarity,
-          oracle_text: card.oracle_text|| [],
+          oracle_text: extractOracleText(card),
             colors: card.colors || [],
             color_identity: card.color_identity || [],
             image_url: card.image_uris?.normal || card.image_uris?.small,
