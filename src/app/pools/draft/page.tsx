@@ -1,6 +1,4 @@
-
-//src/app/pools/draft/page.tsx
-
+// src/app/pools/draft/page.tsx
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
@@ -17,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/app/components/ui/select";
-import { Search, Layers, CheckCircle2, CircleDashed, BarChart3, Loader2, ArrowUp, ArrowDown } from "lucide-react";
+import { Search, Layers, CheckCircle2, CircleDashed, Loader2, ArrowUp, ArrowDown } from "lucide-react";
 import { useSettings } from "@/contexts/SettingsContext";
 import { getCardImageUrl } from "@/app/utils/cardUtils";
 
@@ -44,13 +42,19 @@ export default function PoolsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "available" | "drafted">("all");
   const [filterColors, setFilterColors] = useState<string[]>([]);
+  
+  // NEW: Granular Color Logic States
+  const [matchAllColors, setMatchAllColors] = useState(false);
+  const [excludeUnselected, setExcludeUnselected] = useState(false);
+  
   const [filterType, setFilterType] = useState("all");
+  const [filterRarity, setFilterRarity] = useState("all"); // NEW: Rarity Filter
   const [filterCmc, setFilterCmc] = useState("all");
   const [filterCubucks, setFilterCubucks] = useState("all");
   const [sortBy, setSortBy] = useState("card_name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
-
   const [currentPage, setCurrentPage] = useState(1);
+
   const [stats, setStats] = useState<{
     totalCards: number;
     draftedCards: number;
@@ -64,7 +68,7 @@ export default function PoolsPage() {
   useEffect(() => {
     applyFiltersAndSorting();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cards, searchTerm, filterStatus, filterColors, filterType, filterCmc, filterCubucks, sortBy, sortOrder]);
+  }, [cards, searchTerm, filterStatus, filterColors, matchAllColors, excludeUnselected, filterType, filterRarity, filterCmc, filterCubucks, sortBy, sortOrder]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -94,30 +98,65 @@ export default function PoolsPage() {
   const applyFiltersAndSorting = () => {
     // 1. Filtering
     let filtered = [...cards];
+
     if (searchTerm) {
       filtered = filtered.filter((card) =>
         card.card_name.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
+
     if (filterStatus === "available") {
       filtered = filtered.filter((card) => !card.is_drafted);
     } else if (filterStatus === "drafted") {
       filtered = filtered.filter((card) => card.is_drafted);
     }
+
+    // --- NEW: Granular Color Logic ---
     if (filterColors.length > 0) {
       const wantColorless = filterColors.includes("colorless");
       const wantedColors = filterColors.filter((c) => c !== "colorless");
+
       filtered = filtered.filter((card) => {
-        const cardIsColorless = !card.colors || card.colors.length === 0;
-        const cardMatchesColor = wantedColors.some((c) => card.colors?.includes(c));
-        return (wantColorless && cardIsColorless) || cardMatchesColor;
+        const cardColors = card.colors || [];
+        const isColorless = cardColors.length === 0;
+
+        // If they ONLY selected colorless
+        if (wantColorless && wantedColors.length === 0) {
+            return isColorless;
+        }
+
+        // If the card is colorless, but they also selected colors
+        if (isColorless) {
+            return wantColorless && !matchAllColors;
+        }
+
+        // If card has colors, check against our strict toggles
+        const hasAll = wantedColors.every(c => cardColors.includes(c));
+        const hasAny = wantedColors.some(c => cardColors.includes(c));
+        const hasOnly = cardColors.every(c => wantedColors.includes(c));
+
+        if (matchAllColors && excludeUnselected) return hasAll && hasOnly;
+        if (matchAllColors) return hasAll;
+        if (excludeUnselected) return hasOnly;
+        
+        // Default OR logic
+        return hasAny || (wantColorless && isColorless);
       });
     }
+
     if (filterType !== "all") {
       filtered = filtered.filter((card) =>
         card.card_type && card.card_type.toLowerCase().includes(filterType.toLowerCase())
       );
     }
+
+    // --- NEW: Rarity Filter ---
+    if (filterRarity !== "all") {
+        filtered = filtered.filter((card) =>
+            card.rarity && card.rarity.toLowerCase() === filterRarity.toLowerCase()
+        );
+    }
+
     if (filterCmc !== "all") {
         filtered = filtered.filter((card) => {
             const cmc = card.cmc ?? 0;
@@ -128,13 +167,14 @@ export default function PoolsPage() {
             return true;
         });
     }
+
     if (filterCubucks !== "all") {
         filtered = filtered.filter((card) => {
             const cost = card.cubucks_cost ?? 1;
-            if (filterCubucks === "0-1") return cost <= 1;
-            if (filterCubucks === "2-3") return cost >= 2 && cost <= 3;
-            if (filterCubucks === "4-6") return cost >= 4 && cost <= 6;
-            if (filterCubucks === "7+") return cost >= 7;
+            if (filterCubucks === "0-50") return cost <= 50;
+            if (filterCubucks === "51-100") return cost >= 51 && cost <= 100;
+            if (filterCubucks === "101-200") return cost >= 101 && cost <= 200;
+            if (filterCubucks === "201+") return cost >= 201;
             return true;
         });
     }
@@ -155,7 +195,7 @@ export default function PoolsPage() {
           valA = a.cubecobra_elo ?? 0;
           valB = b.cubecobra_elo ?? 0;
           break;
-        default: // 'card_name'
+        default: 
           valA = a.card_name.toLowerCase();
           valB = b.card_name.toLowerCase();
       }
@@ -171,12 +211,11 @@ export default function PoolsPage() {
 
     setFilteredAndSortedCards(sorted);
   };
-  
+
   const uniqueTypes = useMemo(() => {
     const types = new Set<string>();
     cards.forEach((card) => {
         if (card.card_type) {
-            // Get the primary type before '—', '–', or '//'
             const mainType = card.card_type.split(/[\s—–\/]+/)[0];
             types.add(mainType);
         }
@@ -244,39 +283,71 @@ export default function PoolsPage() {
           <h1 className="text-4xl font-bold tracking-tight mb-2">The Draft Pool</h1>
           <p className="text-muted-foreground text-lg">Browse all cards in The Draft Pool</p>
       </div>
+
       {/* Statistics */}
       {stats && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
               <Card><CardContent className="pt-6 text-center"><Layers className="h-5 w-5 text-primary mx-auto mb-2" /><div className="text-3xl font-bold mb-1">{stats.totalCards}</div><div className="text-sm text-muted-foreground">Total Cards</div></CardContent></Card>
               <Card><CardContent className="pt-6 text-center"><CircleDashed className="h-5 w-5 text-emerald-500 mx-auto mb-2" /><div className="text-3xl font-bold mb-1">{stats.availableCards}</div><div className="text-sm text-muted-foreground">Available</div></CardContent></Card>
               <Card><CardContent className="pt-6 text-center"><CheckCircle2 className="h-5 w-5 text-orange-500 mx-auto mb-2" /><div className="text-3xl font-bold mb-1">{stats.draftedCards}</div><div className="text-sm text-muted-foreground">Drafted</div></CardContent></Card>
-             
           </div>
       )}
+
       {/* Filters */}
       <Card className="mb-8">
-          <CardContent className="pt-6 space-y-4">
-              <div>
-                  <label className="block text-sm font-medium text-muted-foreground mb-2">Search</label>
-                  <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Card name..." className="pl-10" />
+          <CardContent className="pt-6 space-y-6">
+              
+              {/* Row 1: Search & Colors */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                      <label className="block text-sm font-medium text-muted-foreground mb-2">Search</label>
+                      <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Card name..." className="pl-10" />
+                      </div>
+                  </div>
+                  <div>
+                      <label className="block text-sm font-medium text-muted-foreground mb-2">Color <span className="text-xs font-normal opacity-60">(select multiple)</span></label>
+                      <div className="flex flex-wrap gap-2">
+                          {COLOR_OPTIONS.map((color) => {
+                              const isActive = color.value === "all" ? filterColors.length === 0 : filterColors.includes(color.value);
+                              return (
+                                  <button key={color.value} onClick={() => toggleColor(color.value)} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation ${isActive ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
+                                      {color.emoji} {color.label}
+                                  </button>
+                              );
+                          })}
+                      </div>
+                      {/* NEW: Strict Color Toggles */}
+                      {filterColors.length > 0 && (
+                          <div className="mt-3 flex flex-col sm:flex-row gap-4 sm:gap-6">
+                              <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={matchAllColors} 
+                                    onChange={(e) => setMatchAllColors(e.target.checked)} 
+                                    className="rounded border-border text-primary focus:ring-primary" 
+                                  />
+                                  Must include ALL selected
+                              </label>
+                              <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={excludeUnselected} 
+                                    onChange={(e) => setExcludeUnselected(e.target.checked)} 
+                                    className="rounded border-border text-primary focus:ring-primary" 
+                                  />
+                                  Exclude unselected colors
+                              </label>
+                          </div>
+                      )}
                   </div>
               </div>
-              <div>
-                  <label className="block text-sm font-medium text-muted-foreground mb-2">Color <span className="text-xs font-normal opacity-60">(select multiple)</span></label>
-                  <div className="flex flex-wrap gap-2">
-                      {COLOR_OPTIONS.map((color) => {
-                          const isActive = color.value === "all" ? filterColors.length === 0 : filterColors.includes(color.value);
-                          return (
-                              <button key={color.value} onClick={() => toggleColor(color.value)} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation ${isActive ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
-                                  {color.emoji} {color.label}
-                              </button>
-                          );
-                      })}
-                  </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+              <div className="h-px bg-border/50 w-full" />
+
+              {/* Row 2: Select Filters */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                   <div>
                       <label className="block text-sm font-medium text-muted-foreground mb-2">Status</label>
                       <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as "all" | "available" | "drafted")}>
@@ -291,21 +362,39 @@ export default function PoolsPage() {
                           <SelectContent><SelectItem value="all">All Types</SelectItem>{uniqueTypes.map((type) => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent>
                       </Select>
                   </div>
+                  {/* NEW: Rarity Dropdown */}
                   <div>
-                      <label className="block text-sm font-medium text-muted-foreground mb-2">Mana Cost (CMC)</label>
+                      <label className="block text-sm font-medium text-muted-foreground mb-2">Rarity</label>
+                      <Select value={filterRarity} onValueChange={setFilterRarity}>
+                          <SelectTrigger><SelectValue placeholder="All Rarities" /></SelectTrigger>
+                          <SelectContent>
+                              <SelectItem value="all">All Rarities</SelectItem>
+                              <SelectItem value="common">Common</SelectItem>
+                              <SelectItem value="uncommon">Uncommon</SelectItem>
+                              <SelectItem value="rare">Rare</SelectItem>
+                              <SelectItem value="mythic">Mythic</SelectItem>
+                          </SelectContent>
+                      </Select>
+                  </div>
+                  <div>
+                      <label className="block text-sm font-medium text-muted-foreground mb-2">Mana Cost</label>
                       <Select value={filterCmc} onValueChange={setFilterCmc}>
                           <SelectTrigger><SelectValue placeholder="All CMC" /></SelectTrigger>
                           <SelectContent><SelectItem value="all">All CMC</SelectItem><SelectItem value="0-1">0–1 Mana</SelectItem><SelectItem value="2-3">2–3 Mana</SelectItem><SelectItem value="4-5">4–5 Mana</SelectItem><SelectItem value="6+">6+ Mana</SelectItem></SelectContent>
                       </Select>
                   </div>
                   <div>
-                      <label className="block text-sm font-medium text-muted-foreground mb-2">Cubucks Cost</label>
+                      <label className="block text-sm font-medium text-muted-foreground mb-2">Cubucks</label>
                       <Select value={filterCubucks} onValueChange={setFilterCubucks}>
                           <SelectTrigger><SelectValue placeholder="All Costs" /></SelectTrigger>
                           <SelectContent><SelectItem value="all">All Costs</SelectItem><SelectItem value="0-50">0–50</SelectItem><SelectItem value="51-100">51–100</SelectItem><SelectItem value="101-200">101–200</SelectItem><SelectItem value="201+">201+</SelectItem></SelectContent>
                       </Select>
                   </div>
-                  <div>
+              </div>
+
+              {/* Row 3: Sorting */}
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                  <div className="col-span-1 md:col-span-2 lg:col-span-1">
                     <label className="block text-sm font-medium text-muted-foreground mb-2">Sort By</label>
                     <Select value={sortBy} onValueChange={setSortBy}>
                         <SelectTrigger><SelectValue placeholder="Sort by..." /></SelectTrigger>
@@ -317,7 +406,7 @@ export default function PoolsPage() {
                         </SelectContent>
                     </Select>
                   </div>
-                  <div>
+                  <div className="col-span-1 md:col-span-2 lg:col-span-1">
                       <label className="block text-sm font-medium text-muted-foreground mb-2">Order</label>
                       <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as "asc" | "desc")}>
                           <SelectTrigger>
@@ -333,6 +422,7 @@ export default function PoolsPage() {
                       </Select>
                   </div>
               </div>
+
               <div className="text-sm text-muted-foreground pt-2 border-t border-border/50">
                   {filteredAndSortedCards.length === 0
                       ? `0 of ${cards.length} cards`
@@ -341,6 +431,7 @@ export default function PoolsPage() {
               </div>
           </CardContent>
       </Card>
+
       {/* Cards Grid */}
       {filteredAndSortedCards.length === 0 ? (
           <Card><CardContent className="py-16 text-center"><p className="text-lg text-muted-foreground mb-2">No cards found</p><p className="text-sm text-muted-foreground">Try adjusting your filters</p></CardContent></Card>
@@ -350,11 +441,12 @@ export default function PoolsPage() {
                   <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
                       <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1} className="flex items-center gap-2 px-5 py-3 rounded-lg font-medium bg-muted text-muted-foreground hover:bg-muted/80 disabled:opacity-40 disabled:cursor-not-allowed min-w-[100px] justify-center touch-manipulation">← Prev</button>
                       <div className="flex items-center gap-1 flex-wrap justify-center">
-                          {getPageNumbers().map((page, idx) => page === "ellipsis" ? (<span key={`el-${idx}`} className="px-2 text-muted-foreground select-none">…</span>) : (<button key={page} onClick={() => setCurrentPage(page)} className={`min-w-[2.75rem] h-11 px-2 rounded-lg font-medium transition-colors touch-manipulation ${currentPage === page ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>{page}</button>))}
+                          {getPageNumbers().map((page, idx) => page === "ellipsis" ? (<span key={`el-${idx}`} className="px-2 text-muted-foreground select-none">…</span>) : (<button key={page} onClick={() => setCurrentPage(page as number)} className={`min-w-[2.75rem] h-11 px-2 rounded-lg font-medium transition-colors touch-manipulation ${currentPage === page ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>{page}</button>))}
                       </div>
                       <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="flex items-center gap-2 px-5 py-3 rounded-lg font-medium bg-muted text-muted-foreground hover:bg-muted/80 disabled:opacity-40 disabled:cursor-not-allowed min-w-[100px] justify-center touch-manipulation">Next →</button>
                   </div>
               )}
+
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
                   {paginatedCards.map((card) => {
                       const imageUrl = getCardImageUrl(card, useOldestArt);
@@ -382,6 +474,7 @@ export default function PoolsPage() {
                       );
                   })}
               </div>
+
               {totalPages > 1 && (
                   <div className="flex items-center justify-between gap-2 mt-6 flex-wrap">
                       <button onClick={() => { setCurrentPage((p) => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }} disabled={currentPage === 1} className="flex items-center gap-2 px-5 py-3 rounded-lg font-medium bg-muted text-muted-foreground hover:bg-muted/80 disabled:opacity-40 disabled:cursor-not-allowed min-w-[100px] justify-center touch-manipulation">← Prev</button>
