@@ -12,6 +12,12 @@
 const SCRYFALL_API_BASE = "https://api.scryfall.com";
 const REQUEST_DELAY_MS = 100; // 100ms between requests
 
+// --- NEW: Custom Headers to satisfy Scryfall's strict User-Agent policy ---
+const SCRYFALL_HEADERS = {
+  "User-Agent": "DynastyCube/1.0",
+  "Accept": "application/json"
+};
+
 // Track last request time to enforce rate limiting
 let lastRequestTime = 0;
 
@@ -87,7 +93,9 @@ export async function searchAllCards(
     while (next_page) {
       await waitForRateLimit();
       
-      const response: Response = await fetch(next_page);
+      // Inject Headers
+      const response: Response = await fetch(next_page, { headers: SCRYFALL_HEADERS });
+      
       if (!response.ok) {
         let errorDetails = response.statusText;
         try {
@@ -121,7 +129,6 @@ export async function searchAllCards(
 }
 
 export async function fetchOldestPrintings(oracleIds: string[]): Promise<Map<string, string>> {
-  // --- THE FIX: SANITIZE ORACLE IDS TO PREVENT 400 BAD REQUEST ---
   const validIds = oracleIds.filter(id => id && typeof id === 'string' && id.trim().length > 0);
 
   if (validIds.length === 0) {
@@ -137,7 +144,8 @@ export async function fetchOldestPrintings(oracleIds: string[]): Promise<Map<str
     const url = `${SCRYFALL_API_BASE}/cards/collection`;
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // Inject Headers + Content-Type
+      headers: { ...SCRYFALL_HEADERS, "Content-Type": "application/json" },
       body: JSON.stringify({ identifiers }),
     });
 
@@ -186,7 +194,9 @@ export async function searchCardByName(cardName: string): Promise<ScryfallCard |
   await waitForRateLimit();
   try {
     const url = `${SCRYFALL_API_BASE}/cards/named?exact=${encodeURIComponent(cardName)}`;
-    const response = await fetch(url);
+    
+    // Inject Headers
+    const response = await fetch(url, { headers: SCRYFALL_HEADERS });
 
     if (!response.ok) {
       if (response.status === 404) {
@@ -213,7 +223,6 @@ export async function searchCardByName(cardName: string): Promise<ScryfallCard |
 export async function fetchCardCollection(
   cardNames: string[]
 ): Promise<{ data: ScryfallCard[]; not_found: Array<{ name: string }> }> {
-  // Sanitize to be absolutely safe
   const validNames = cardNames.filter(name => name && typeof name === 'string' && name.trim().length > 0);
   if (validNames.length === 0) return { data: [], not_found: [] };
 
@@ -227,9 +236,8 @@ export async function fetchCardCollection(
 
     const response = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      // Inject Headers + Content-Type
+      headers: { ...SCRYFALL_HEADERS, "Content-Type": "application/json" },
       body: JSON.stringify({ identifiers }),
     });
 
@@ -280,7 +288,6 @@ export async function fetchAllCards(
   const notFoundCards: string[] = [];
   const errors: string[] = [];
 
-  // --- THE FIX: SANITIZE CARD NAMES TO PREVENT 400 BAD REQUEST ---
   const validNames = [...new Set(cardNames.filter(name => name && typeof name === 'string' && name.trim().length > 0))];
 
   console.log(`[Scryfall] 🚀 Starting fetchAllCards batch process for ${validNames.length} valid cards...`);
@@ -315,7 +322,9 @@ export async function getCardById(scryfallId: string): Promise<ScryfallCard | nu
   await waitForRateLimit();
   try {
     const url = `${SCRYFALL_API_BASE}/cards/${scryfallId}`;
-    const response = await fetch(url);
+    
+    // Inject Headers
+    const response = await fetch(url, { headers: SCRYFALL_HEADERS });
 
     if (!response.ok) {
       if (response.status === 404) {
@@ -341,7 +350,4 @@ export async function getCardById(scryfallId: string): Promise<ScryfallCard | nu
 export function extractRatingData(card: ScryfallCard) {
   return {
     scryfallId: card.id,
-    edhrecRank: card.edhrec_rank || null,
-    updatedAt: new Date().toISOString(),
-  };
-}
+    edhrecRank: card.edhrec_rank || 
