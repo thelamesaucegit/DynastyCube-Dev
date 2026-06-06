@@ -100,8 +100,11 @@ export default function PoolsPage() {
     let filtered = [...cards];
 
     if (searchTerm) {
+      const lowerSearch = searchTerm.toLowerCase();
       filtered = filtered.filter((card) =>
-        card.card_name.toLowerCase().includes(searchTerm.toLowerCase())
+        card.card_name.toLowerCase().includes(lowerSearch) ||
+        // Safely check if oracle_text exists and matches!
+        (card.oracle_text && card.oracle_text.toLowerCase().includes(lowerSearch))
       );
     }
 
