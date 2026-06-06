@@ -46,7 +46,6 @@ export interface ScryfallCard {
   card_faces?: Array<{
     name?: string;
     oracle_text?: string;
-    // Removed the [key: string]: any; to satisfy strict typing!
   }>;
   // --------------------------------
 
@@ -90,8 +89,13 @@ export async function searchAllCards(
       
       const response: Response = await fetch(next_page);
       if (!response.ok) {
-        const errorBody = await response.json();
-        const errorMessage = `Scryfall API error on page ${next_page}: ${response.status} - ${errorBody?.details || response.statusText}`;
+        let errorDetails = response.statusText;
+        try {
+            const errBody = await response.json();
+            errorDetails = errBody?.details || JSON.stringify(errBody);
+        } catch (e) { /* ignore json parse error */ }
+
+        const errorMessage = `Scryfall API error on page ${next_page}: ${response.status} - ${errorDetails}`;
         console.error("[Scryfall] ❌", errorMessage);
         errors.push(errorMessage);
         break; // Stop pagination on error
@@ -117,13 +121,17 @@ export async function searchAllCards(
 }
 
 export async function fetchOldestPrintings(oracleIds: string[]): Promise<Map<string, string>> {
-  if (oracleIds.length === 0) {
+  // --- THE FIX: SANITIZE ORACLE IDS TO PREVENT 400 BAD REQUEST ---
+  const validIds = oracleIds.filter(id => id && typeof id === 'string' && id.trim().length > 0);
+
+  if (validIds.length === 0) {
     return new Map();
   }
+
   await waitForRateLimit();
   const imageUrlMap = new Map<string, string>();
   
-  const identifiers = oracleIds.map(id => ({ oracle_id: id }));
+  const identifiers = validIds.map(id => ({ oracle_id: id }));
   
   try {
     const url = `${SCRYFALL_API_BASE}/cards/collection`;
@@ -134,7 +142,12 @@ export async function fetchOldestPrintings(oracleIds: string[]): Promise<Map<str
     });
 
     if (!response.ok) {
-      throw new Error(`Scryfall API error fetching collection by oracle_id: ${response.status}`);
+      let errorDetails = response.statusText;
+      try {
+          const errBody = await response.json();
+          errorDetails = errBody?.details || JSON.stringify(errBody);
+      } catch (e) { /* ignore */ }
+      throw new Error(`Scryfall API error fetching collection by oracle_id: ${response.status} - ${errorDetails}`);
     }
     
     const result = await response.json();
@@ -168,6 +181,8 @@ export async function fetchOldestPrintings(oracleIds: string[]): Promise<Map<str
  * Search for a card by exact name
  */
 export async function searchCardByName(cardName: string): Promise<ScryfallCard | null> {
+  if (!cardName || cardName.trim() === "") return null;
+
   await waitForRateLimit();
   try {
     const url = `${SCRYFALL_API_BASE}/cards/named?exact=${encodeURIComponent(cardName)}`;
@@ -198,9 +213,13 @@ export async function searchCardByName(cardName: string): Promise<ScryfallCard |
 export async function fetchCardCollection(
   cardNames: string[]
 ): Promise<{ data: ScryfallCard[]; not_found: Array<{ name: string }> }> {
+  // Sanitize to be absolutely safe
+  const validNames = cardNames.filter(name => name && typeof name === 'string' && name.trim().length > 0);
+  if (validNames.length === 0) return { data: [], not_found: [] };
+
   await waitForRateLimit();
   try {
-    const batch = cardNames.slice(0, 75);
+    const batch = validNames.slice(0, 75);
     const identifiers = batch.map(name => ({ name }));
     const url = `${SCRYFALL_API_BASE}/cards/collection`;
     
@@ -215,7 +234,12 @@ export async function fetchCardCollection(
     });
 
     if (!response.ok) {
-      throw new Error(`Scryfall API error: ${response.status} ${response.statusText}`);
+      let errorDetails = response.statusText;
+      try {
+          const errBody = await response.json();
+          errorDetails = errBody?.details || errBody?.warnings?.join(', ') || JSON.stringify(errBody);
+      } catch (e) { /* ignore */ }
+      throw new Error(`Scryfall API error: ${response.status} - ${errorDetails}`);
     }
 
     const result = await response.json();
@@ -256,10 +280,13 @@ export async function fetchAllCards(
   const notFoundCards: string[] = [];
   const errors: string[] = [];
 
-  console.log(`[Scryfall] 🚀 Starting fetchAllCards batch process for ${cardNames.length} total cards...`);
+  // --- THE FIX: SANITIZE CARD NAMES TO PREVENT 400 BAD REQUEST ---
+  const validNames = [...new Set(cardNames.filter(name => name && typeof name === 'string' && name.trim().length > 0))];
 
-  for (let i = 0; i < cardNames.length; i += 75) {
-    const batch = cardNames.slice(i, i + 75);
+  console.log(`[Scryfall] 🚀 Starting fetchAllCards batch process for ${validNames.length} valid cards...`);
+
+  for (let i = 0; i < validNames.length; i += 75) {
+    const batch = validNames.slice(i, i + 75);
     try {
       const result = await fetchCardCollection(batch);
       allCards.push(...result.data);
