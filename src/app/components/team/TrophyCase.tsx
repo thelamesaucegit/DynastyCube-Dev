@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Loader2 } from "lucide-react";
 
+// --- STRICT INTERFACES ---
 interface TrophyTeam {
     name: string;
     emoji: string;
@@ -13,13 +14,22 @@ interface TrophyTeam {
     secondary_color?: string | null;
 }
 
+interface DbSeasonData {
+    season_name: string;
+}
+
 interface EnrichedChampionship {
     season_id: string;
     season_name: string;
     team: TrophyTeam;
 }
+// -------------------------
 
-export function TrophyCase({ teamId }: { teamId: string }) {
+interface TrophyCaseProps {
+    teamId: string;
+}
+
+export function TrophyCase({ teamId }: TrophyCaseProps) {
     const [championships, setChampionships] = useState<EnrichedChampionship[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -35,7 +45,6 @@ export function TrophyCase({ teamId }: { teamId: string }) {
                 .eq('is_championship_week', true);
 
             console.log(`[TrophyCase DEBUG] 1. Championship Weeks Found:`, champWeeks?.length);
-            if (champWeeks) console.log(champWeeks);
             if (weeksErr) console.error(`[TrophyCase DEBUG] Weeks Error:`, weeksErr);
 
             // 2. Get Team Wins
@@ -46,7 +55,6 @@ export function TrophyCase({ teamId }: { teamId: string }) {
                 .eq('is_outcome_final', true);
 
             console.log(`[TrophyCase DEBUG] 2. Finalized Wins for this Team:`, teamWins?.length);
-            if (teamWins) console.log(teamWins);
             if (winsErr) console.error(`[TrophyCase DEBUG] Wins Error:`, winsErr);
 
             // 3. Get Team Data
@@ -67,7 +75,6 @@ export function TrophyCase({ teamId }: { teamId: string }) {
                 champWeeks.some(cw => cw.season_id === win.season_id && cw.week_number === win.week_number)
             );
             console.log(`[TrophyCase DEBUG] 3. Intersected Matchups (Wins that happened in a Champ Week):`, championshipMatchups.length);
-            if (championshipMatchups) console.log(championshipMatchups);
 
             if (championshipMatchups.length === 0) {
                 setLoading(false);
@@ -101,10 +108,15 @@ export function TrophyCase({ teamId }: { teamId: string }) {
 
                 if (streamCaughtUp || games.length === 0) {
                     console.log(`[TrophyCase DEBUG] ✅ Awarding Trophy for Matchup ${match.id}!`);
-                    const seasonObj = Array.isArray(championshipWeek.seasons) ? championshipWeek.seasons[0] : championshipWeek.seasons;
+                    
+                    // --- STRICT TYPING APPLIED HERE ---
+                    const seasonObj = (Array.isArray(championshipWeek.seasons) 
+                        ? championshipWeek.seasons[0] 
+                        : championshipWeek.seasons) as unknown as DbSeasonData | undefined;
+
                     validTrophies.push({
                         season_id: match.season_id,
-                        season_name: (seasonObj as any)?.season_name || "Unknown Season",
+                        season_name: seasonObj?.season_name || "Unknown Season",
                         team: teamData as TrophyTeam
                     });
                 } else {
