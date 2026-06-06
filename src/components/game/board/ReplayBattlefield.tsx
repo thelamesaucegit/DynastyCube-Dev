@@ -63,8 +63,8 @@ function ReplayGroupWithAttachments({
                     group={group} 
                     cardDataMap={cardDataMap} 
                     useOldestArt={useOldestArt} 
-                    overrideWidth={overrideWidth}    {/* ADD THIS */}
-                    overrideHeight={overrideHeight}  {/* ADD THIS */}
+                    overrideWidth={overrideWidth}    
+                    overrideHeight={overrideHeight} 
                 />
             </div>
         );
@@ -106,8 +106,8 @@ function ReplayGroupWithAttachments({
             group={group} 
             cardDataMap={cardDataMap} 
             useOldestArt={useOldestArt} 
-            overrideWidth={overrideWidth}    {/* ADD THIS */}
-            overrideHeight={overrideHeight}  {/* ADD THIS */}
+            overrideWidth={overrideWidth}    
+            overrideHeight={overrideHeight} 
         />
     </div>
     );
