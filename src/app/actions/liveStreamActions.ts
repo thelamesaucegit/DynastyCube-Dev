@@ -27,6 +27,10 @@ export interface StreamMatch {
 
 // Local interfaces to satisfy TypeScript
 interface DbTeam { id: string; name: string; emoji: string; }
+interface DbSeason { 
+    season_name: string; 
+    phase: string; 
+}
 interface PlayerState { name?: string; life?: number; }
 interface GameStateUpdate {
     gameState?: { players?: Record<string, PlayerState>; };
@@ -93,11 +97,12 @@ export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | nul
     const t1 = (Array.isArray(targetMatch.team1) ? targetMatch.team1[0] : targetMatch.team1) as unknown as DbTeam;
     const t2 = (Array.isArray(targetMatch.team2) ? targetMatch.team2[0] : targetMatch.team2) as unknown as DbTeam;
     
-    // Check if it's a test season using the newly joined table
-    const seasonData = Array.isArray(targetMatch.season) ? targetMatch.season[0] : targetMatch.season;
-    const seasonName = (seasonData as any)?.season_name || "";
-    const currentPhase = (seasonData as any)?.phase || "";
+        // Check if it's a test season using the newly joined table
+    const seasonData = (Array.isArray(targetMatch.season) ? targetMatch.season[0] : targetMatch.season) as unknown as DbSeason | undefined;
+    const seasonName = seasonData?.season_name || "";
+    const currentPhase = seasonData?.phase || "";
     const isTestSeason = seasonName.toUpperCase().includes("TEST");
+
 
     const matchupRaw = (Array.isArray(targetMatch.weekly_matchup) ? targetMatch.weekly_matchup[0] : targetMatch.weekly_matchup) as {
         sim_team1_wins?: number;
