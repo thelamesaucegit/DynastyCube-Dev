@@ -46,7 +46,7 @@ export interface ScryfallCard {
   card_faces?: Array<{
     name?: string;
     oracle_text?: string;
-    [key: string]: any;
+    // Removed the [key: string]: any; to satisfy strict typing!
   }>;
   // --------------------------------
 
@@ -220,7 +220,6 @@ export async function fetchCardCollection(
 
     const result = await response.json();
     
-    // --- HEAVY LOGGING ADDED HERE ---
     if (result.data && result.data.length > 0) {
         console.log(`[Scryfall] ✅ Successfully fetched ${result.data.length} cards.`);
         const sample = result.data[0] as ScryfallCard;
