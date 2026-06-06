@@ -6,7 +6,6 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { fetchAllCards } from "@/lib/scryfall-client";
 import { GameState } from "@/app/types";
-import { invalidateDraftCache } from "@/lib/draftCache";
 import { createDeckVotePoll } from "@/app/actions/deckVoteActions";
 
 interface Team {
@@ -49,25 +48,6 @@ interface MatchReplayData {
   team2: Team | null;
 }
 
-async function createClient() {
-  const cookieStore = await cookies();
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll(); },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
-          } catch { /* Ignore */ }
-        },
-      },
-    }
-  );
-}
 
 function createServiceRoleClient() {
   return createSupabaseJsClient(
@@ -257,11 +237,14 @@ export async function backfillOracleData(tableName: string = 'card_pools'): Prom
     const { data: cardsMissingOracleId, error: fetchError1 } = await supabase.from(tableName).select('id, card_id').is('oracle_id', null);
     if (fetchError1) throw new Error(`Failed to fetch cards missing oracle_id from ${tableName}: ${fetchError1.message}`);
 
-    // --- NEW HELPER TO EXTRACT ORACLE TEXT ---
-    const extractOracleText = (card: any) => {
+     // --- NEW HELPER TO EXTRACT ORACLE TEXT ---
+    interface ScryfallFace { oracle_text?: string; }
+    interface ScryfallData { oracle_text?: string; card_faces?: ScryfallFace[]; }
+
+    const extractOracleText = (card: ScryfallData) => {
         if (card.oracle_text) return card.oracle_text;
         if (card.card_faces) {
-            return card.card_faces.map((face: any) => face.oracle_text).filter(Boolean).join('\n//\n');
+            return card.card_faces.map((face: ScryfallFace) => face.oracle_text).filter(Boolean).join('\n//\n');
         }
         return null;
     };
