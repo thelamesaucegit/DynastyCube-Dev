@@ -42,8 +42,8 @@ export function ReplayCardStack({
           cardData={{ name: group.card.name, card_type: cardImageData.card_type, image_url: cardImageData.image_url, oldest_image_url: cardImageData.oldest_image_url }}
           isTapped={group.card.isTapped}
           useOldestArt={useOldestArt}
-          width={`${baseWidth}px`}   {/* CRITICAL: Force the card to scale */}
-          height={`${baseHeight}px`} {/* CRITICAL: Force the card to scale */}
+          width={`${baseWidth}px`}   
+          height={`${baseHeight}px`} 
         />
       </CardPreview>
     );
@@ -67,8 +67,8 @@ export function ReplayCardStack({
                 cardData={{ name: card.name, card_type: individualCardImageData.card_type, image_url: individualCardImageData.image_url, oldest_image_url: individualCardImageData.oldest_image_url }}
                 isTapped={card.isTapped}
                 useOldestArt={useOldestArt}
-                width={`${baseWidth}px`}   {/* CRITICAL: Force the card to scale */}
-                height={`${baseHeight}px`} {/* CRITICAL: Force the card to scale */}
+                width={`${baseWidth}px`}   
+                height={`${baseHeight}px`} 
               />
             </CardPreview>
           </div>
