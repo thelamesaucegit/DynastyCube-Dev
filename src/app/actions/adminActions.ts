@@ -1,17 +1,13 @@
 // src/app/actions/adminActions.ts
-
 "use server";
 
 import { createClient as createSupabaseJsClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-
 import { fetchAllCards } from "@/lib/scryfall-client";
 import { GameState } from "@/app/types";
 import { invalidateDraftCache } from "@/lib/draftCache";
 import { createDeckVotePoll } from "@/app/actions/deckVoteActions";
-
-
 
 interface Team {
   id: string;
@@ -36,6 +32,7 @@ export interface CardData {
   image_url?: string | null;
   oldest_image_url?: string | null;
   oracle_id?: string | null;
+  oracle_text?: string | null; // <-- ADDED
   hidden?: boolean;
   mana_cost?: string;
   cmc?: number;
@@ -45,7 +42,6 @@ export interface CardData {
   cubecobra_elo?: number;
   rating_updated_at?: string;
 }
-
 
 interface MatchReplayData {
   gameStates: GameState[] | null;
@@ -79,6 +75,7 @@ function createServiceRoleClient() {
     process.env.SUPABASE_SERVICE_KEY! 
   );
 }
+
 /**
  * Manual override to generate deck vote polls for a specific week.
  * Use this to recover if the cron job or chaining logic fails.
@@ -90,7 +87,6 @@ export async function manuallyTriggerDeckVotesForWeek(
     const supabase = createServiceRoleClient();
     
     try {
-        // 1. Find the target week to get its ID and exact deadline
         const { data: targetWeek, error: weekError } = await supabase
             .from('schedule_weeks')
             .select('id, deck_submission_deadline, is_playoff_week')
@@ -106,8 +102,6 @@ export async function manuallyTriggerDeckVotesForWeek(
              return { success: false, createdCount: 0, error: `Cannot generate polls for playoff weeks.` };
         }
 
-        // 2. Find all active teams in the season
-        // We use draft_order as a proxy for "teams in this season" 
         const { data: teams, error: teamsError } = await supabase
             .from("draft_order")
             .select("team_id")
@@ -117,7 +111,6 @@ export async function manuallyTriggerDeckVotesForWeek(
             return { success: false, createdCount: 0, error: "No teams found for the season." };
         }
 
-        // 3. Create the polls using the EXACT deadline stored on the schedule_weeks row
         let createdCount = 0;
         const pollEndsAt = targetWeek.deck_submission_deadline;
 
@@ -130,24 +123,15 @@ export async function manuallyTriggerDeckVotesForWeek(
             }
         }
 
-        return { 
-            success: true, 
-            createdCount 
-        };
-
+        return { success: true, createdCount };
     } catch (e) {
-        return { 
-            success: false, 
-            createdCount: 0, 
-            error: e instanceof Error ? e.message : 'Unexpected error' 
-        };
+        return { success: false, createdCount: 0, error: e instanceof Error ? e.message : 'Unexpected error' };
     }
 }
+
 export async function manuallyInitiateFirstDeckVotes(): Promise<{ success: boolean; message: string }> {
     const supabase =  createServiceRoleClient();
-
     try {
-        // 1. Find the active season
         const { data: activeSeason, error: seasonError } = await supabase
             .from("seasons")
             .select("id")
@@ -158,7 +142,6 @@ export async function manuallyInitiateFirstDeckVotes(): Promise<{ success: boole
             return { success: false, message: "No active season found." };
         }
 
-        // 2. Find Week 1 of that season
          const { data: firstWeek, error: weekError } = await supabase
             .from("schedule_weeks") 
             .select("id, start_date") 
@@ -170,28 +153,23 @@ export async function manuallyInitiateFirstDeckVotes(): Promise<{ success: boole
             return { success: false, message: "Could not find Week 1 for the active season." };
         }
 
-        // 3. Calculate the poll's end date (Wednesday before Week 1 starts)
         const week1StartDate = new Date(firstWeek.start_date);
-        const dayOfWeek = week1StartDate.getUTCDay(); // Sunday = 0, Thursday = 4
-
-        // Find the most recent Wednesday. If start day is Thurs (4), Wednesday is 1 day before.
-        // If start day is Wed (3), it's the same day.
+        const dayOfWeek = week1StartDate.getUTCDay(); 
         const daysToSubtract = (dayOfWeek + 7 - 3) % 7;
+        
         const pollEndDate = new Date(week1StartDate);
         pollEndDate.setUTCDate(pollEndDate.getUTCDate() - daysToSubtract);
+        pollEndDate.setUTCHours(27, 0, 0, 0); 
         
-        // Set time to 10 PM Central Time, which is 3 AM UTC the next day during Daylight Time
-        // This is a simplification; a library like `date-fns-tz` would be more robust.
-        pollEndDate.setUTCHours(27, 0, 0, 0); // Corresponds to 10 PM CDT the day before
-
         let pollEndsAtISO = pollEndDate.toISOString();
-if (pollEndDate < new Date()) {
+
+        if (pollEndDate < new Date()) {
             console.warn(`Calculated poll end date (${pollEndsAtISO}) is in the past. Defaulting to 24 hours from now.`);
             const fallbackDate = new Date();
             fallbackDate.setHours(fallbackDate.getHours() + 24);
             pollEndsAtISO = fallbackDate.toISOString();
         }
-        // 4. Get all teams for the season
+
         const { data: teams, error: teamsError } = await supabase
             .from("draft_order")
             .select("team_id")
@@ -201,9 +179,9 @@ if (pollEndDate < new Date()) {
             return { success: false, message: "No teams found for the active season." };
         }
 
-        // 5. Initiate a vote for each team
         let successCount = 0;
         let errorCount = 0;
+
         for (const team of teams) {
             const result = await createDeckVotePoll(team.team_id, firstWeek.id, pollEndsAtISO);
             if (result.success) {
@@ -215,21 +193,17 @@ if (pollEndDate < new Date()) {
         }
 
         if (errorCount > 0) {
-            return { 
-                success: false, 
-                message: `Processed all teams. Succeeded for ${successCount}, but failed for ${errorCount}. Check server logs for details.`
-            };
+            return { success: false, message: `Processed all teams. Succeeded for ${successCount}, but failed for ${errorCount}. Check server logs for details.` };
         }
 
         return { success: true, message: `Successfully initiated Week 1 deck votes for all ${successCount} teams.` };
-
     } catch (error) {
         const message = error instanceof Error ? error.message : "An unexpected error occurred.";
         console.error("Error in manuallyInitiateFirstDeckVotes:", message);
         return { success: false, message };
     }
 }
-// --- NEW FUNCTION TO FETCH TEST DECKLISTS ---
+
 export async function getTestDecklists(): Promise<{ p1_deck: string, p2_deck: string }> {
 const supabase = createServiceRoleClient();
     try {
@@ -246,13 +220,9 @@ const supabase = createServiceRoleClient();
     }
 }
 
-
 export async function getMatchReplay(matchId: string): Promise<MatchReplayData | null> {
 const supabase = createServiceRoleClient();
-    if (!matchId) {
-        console.error("getMatchReplay called with invalid matchId");
-        return null;
-    }
+    if (!matchId) return null;
 
     const { data: matchData, error: matchError } = await supabase
         .from('sim_matches')
@@ -260,32 +230,15 @@ const supabase = createServiceRoleClient();
         .eq('id', matchId)
         .single();
 
-    if (matchError || !matchData) {
-        console.error(`Error fetching match data for ${matchId}:`, matchError?.message);
-        return null;
-    }
+    if (matchError || !matchData) return null;
 
     const { game_states, team1_id, team2_id } = matchData;
-
     if (!team1_id || !team2_id) {
-        console.error(`Match ${matchId} is missing team IDs.`);
         return { gameStates: game_states || null, team1: null, team2: null };
     }
 
-    const { data: team1Data, error: team1Error } = await supabase
-        .from('teams')
-        .select('id, name, emoji')
-        .eq('id', team1_id)
-        .single();
-
-    const { data: team2Data, error: team2Error } = await supabase
-        .from('teams')
-        .select('id, name, emoji')
-        .eq('id', team2_id)
-        .single();
-
-    if (team1Error) console.error(`Error fetching team1 data for id ${team1_id}:`, team1Error.message);
-    if (team2Error) console.error(`Error fetching team2 data for id ${team2_id}:`, team2Error.message);
+    const { data: team1Data } = await supabase.from('teams').select('id, name, emoji').eq('id', team1_id).single();
+    const { data: team2Data } = await supabase.from('teams').select('id, name, emoji').eq('id', team2_id).single();
 
     return {
         gameStates: game_states || null,
@@ -293,7 +246,6 @@ const supabase = createServiceRoleClient();
         team2: team2Data || null,
     };
 }
-
 
 export async function backfillOracleData(tableName: string = 'card_pools'): Promise<{ success: boolean; updated: number; failed: number; errors: string[] }> {
   const supabase = createServiceRoleClient();
@@ -305,6 +257,15 @@ export async function backfillOracleData(tableName: string = 'card_pools'): Prom
     const { data: cardsMissingOracleId, error: fetchError1 } = await supabase.from(tableName).select('id, card_id').is('oracle_id', null);
     if (fetchError1) throw new Error(`Failed to fetch cards missing oracle_id from ${tableName}: ${fetchError1.message}`);
 
+    // --- NEW HELPER TO EXTRACT ORACLE TEXT ---
+    const extractOracleText = (card: any) => {
+        if (card.oracle_text) return card.oracle_text;
+        if (card.card_faces) {
+            return card.card_faces.map((face: any) => face.oracle_text).filter(Boolean).join('\n//\n');
+        }
+        return null;
+    };
+
     for (const card of cardsMissingOracleId) {
       try {
         await new Promise(r => setTimeout(r, 100));
@@ -312,8 +273,14 @@ export async function backfillOracleData(tableName: string = 'card_pools'): Prom
         if (!response.ok) throw new Error(`Scryfall API error for card ${card.card_id}: ${response.statusText}`);
         
         const scryfallData = await response.json();
+        
         if (scryfallData.oracle_id) {
-          const { error: updateError } = await supabase.from(tableName).update({ oracle_id: scryfallData.oracle_id }).eq('id', card.id);
+          // --- FIX: WE NOW UPDATE ORACLE TEXT AT THE SAME TIME ---
+          const { error: updateError } = await supabase.from(tableName).update({ 
+              oracle_id: scryfallData.oracle_id,
+              oracle_text: extractOracleText(scryfallData) 
+          }).eq('id', card.id);
+          
           if (updateError) throw new Error(`DB update error for card ${card.id}: ${updateError.message}`);
         } else {
             failedCount++;
@@ -329,7 +296,6 @@ export async function backfillOracleData(tableName: string = 'card_pools'): Prom
     if (fetchError2) throw new Error(`Failed to fetch distinct oracle_ids from ${tableName}: ${fetchError2.message}`);
     
     const uniqueOracleIds = [...new Set(distinctOracleIds.map(o => o.oracle_id))];
-
     for (const oracleId of uniqueOracleIds) {
          try {
             await new Promise(r => setTimeout(r, 100));
@@ -352,6 +318,7 @@ export async function backfillOracleData(tableName: string = 'card_pools'): Prom
             errors.push(e instanceof Error ? e.message : String(e));
          }
     }
+
     return { success: true, updated: updatedCount, failed: failedCount, errors };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "An unknown error occurred.";
@@ -360,13 +327,13 @@ export async function backfillOracleData(tableName: string = 'card_pools'): Prom
   }
 }
 
-
 export async function validateAndCanonicalizeDeck(cardNames: string[]): Promise<{ valid: Map<string, string>; invalid: string[]; }> {
 const supabase = createServiceRoleClient();
   const BASIC_LANDS = new Map<string, string>([["mountain", "Mountain"],["forest", "Forest"],["island", "Island"],["plains", "Plains"],["swamp", "Swamp"],]);
   const lowerCaseNames = [...new Set(cardNames.map(name => name.trim().toLowerCase()).filter(Boolean))];
   const validCanonicalMap = new Map<string, string>();
   const namesForDbCheck: string[] = [];
+
   for (const name of lowerCaseNames) {
     if (BASIC_LANDS.has(name)) {
       validCanonicalMap.set(name, BASIC_LANDS.get(name)!);
@@ -374,6 +341,7 @@ const supabase = createServiceRoleClient();
       namesForDbCheck.push(name);
     }
   }
+
   if (namesForDbCheck.length > 0) {
     const { data: dbData, error: dbError } = await supabase.rpc('get_canonical_card_names', { names_to_check: namesForDbCheck });
     if (dbError) {
@@ -385,12 +353,13 @@ const supabase = createServiceRoleClient();
       validCanonicalMap.set(item.canonical_name.toLowerCase(), item.canonical_name);
     });
   }
+
   const invalidNames = lowerCaseNames.filter(name => !validCanonicalMap.has(name));
   return { valid: validCanonicalMap, invalid: invalidNames };
 }
 
 export async function backfillColorIdentity(tableName: string = 'card_pools'): Promise<{ success: boolean; updated: number; failed: number; errors: string[]; }> {
-    const supabase = createServiceRoleClient(); // Use service role for backend processing
+    const supabase = createServiceRoleClient(); 
     let updatedCount = 0;
     let failedCount = 0;
     const errors: string[] = [];
@@ -436,15 +405,19 @@ export async function backfillCMCForDraftPicks(): Promise<{ success: boolean; up
     let updatedCount = 0;
     let failedCount = 0;
     const errors: string[] = [];
+
     try {
         const { data: picks, error: fetchError } = await supabase.from("team_draft_picks").select("id, card_name, cmc").or("cmc.is.null,cmc.eq.0");
         if (fetchError) return { success: false, updated: 0, failed: 0, errors: [`Failed to fetch draft picks: ${fetchError.message}`] };
         if (!picks || picks.length === 0) return { success: true, updated: 0, failed: 0, errors: ["No draft picks found missing CMC data"] };
+
         const cardNames = [...new Set(picks.map((p) => p.card_name))];
         const { cards: scryfallCards, notFound } = await fetchAllCards(cardNames);
         const cmcMap = new Map<string, number>();
         scryfallCards.forEach((card) => { cmcMap.set(card.name, card.cmc); });
+
         if (notFound.length > 0) errors.push(`Cards not found in Scryfall: ${notFound.join(", ")}`);
+
         for (const pick of picks) {
             const cmc = cmcMap.get(pick.card_name);
             if (cmc !== undefined) {
@@ -505,6 +478,7 @@ export async function backfillCMCForCardPools(tableName: string = 'card_pools'):
         return { success: false, updated: updatedCount, failed: failedCount, errors: [`Unexpected error: ${errorMessage}`] };
     }
 }
+
 export async function backfillAllCMCData(): Promise<{ success: boolean; draftPicksUpdated: number; cardPoolsUpdated: number; totalFailed: number; errors: string[]; }> {
     const poolsResult = await backfillCMCForCardPools();
     const picksResult = await backfillCMCForDraftPicks();
