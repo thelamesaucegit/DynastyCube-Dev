@@ -350,4 +350,7 @@ export async function getCardById(scryfallId: string): Promise<ScryfallCard | nu
 export function extractRatingData(card: ScryfallCard) {
   return {
     scryfallId: card.id,
-    edhrecRank: card.edhrec_rank || 
+    edhrecRank: card.edhrec_rank || null,
+    updatedAt: new Date().toISOString(),
+  };
+}
