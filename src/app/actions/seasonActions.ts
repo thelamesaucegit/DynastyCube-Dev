@@ -523,46 +523,63 @@ export async function checkAndExecuteSeasonRollover(): Promise<{
   message: string;
   error?: string;
 }> {
-  console.log("[RolloverCheck] Checking for expired postseason timer...");
+  // --- ADDED THIS HUGE LOG SO YOU CAN SEE IT IN YOUR SERVER CONSOLE ---
+  console.log("======================================================");
+  console.log("[RolloverCron] ⏰ EXECUTED: checkAndExecuteSeasonRollover()");
+  console.log("======================================================");
+
   try {
     const { createClient } = await import("@supabase/supabase-js");
     const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.SUPABASE_SERVICE_KEY!
     );
-
-    // FIX 3: Use .ilike() for robust matching against the actual timer title in the DB!
+    
     const { data: timer, error: timerError } = await supabase
       .from("countdown_timers")
       .select("id, end_time, title")
-      .ilike("title", "%Offseason Curation%") // Matches "Offseason Curation & Next Draft"
+      .ilike("title", "%Offseason Curation%") 
       .eq("is_active", true)
       .single();
 
     if (timerError && timerError.code !== "PGRST116") {
+      console.error("[RolloverCron] DB Error fetching timer:", timerError);
       throw new Error(`Database error checking timer: ${timerError.message}`);
     }
 
     if (!timer) {
+      console.log("[RolloverCron] No active offseason timer found.");
       return { success: true, message: "No active postseason timer found. No action taken." };
     }
 
     const now = new Date();
     const endTime = new Date(timer.end_time);
 
+    console.log(`[RolloverCron] Timer Found: '${timer.title}'. Ends at: ${endTime.toISOString()}`);
+
     if (now >= endTime) {
-      console.log(`[RolloverCheck] Timer '${timer.title}' has expired. Executing full season rollover...`);
+      console.log(`[RolloverCron] 🚨 Timer has expired! Triggering executeSeasonRollover()...`);
+      
+      // Also log it to the DB so you don't have to rely on Vercel logs
+      await logSystemEvent("SeasonRollover", "info", `Cron detected expired timer. Starting rollover pipeline.`);
+      
       const rolloverResult = await executeSeasonRollover();
+      
       if (!rolloverResult.success) {
         throw new Error(rolloverResult.error || "Rollover function failed without a specific error.");
       }
       return { success: true, message: "Season rollover executed successfully." };
     } else {
-      return { success: true, message: `Timer '${timer.title}' has not expired yet. Ends at: ${endTime.toISOString()}` };
+      console.log(`[RolloverCron] ⏳ Timer still ticking. Exiting.`);
+      return { success: true, message: `Timer '${timer.title}' has not expired yet.` };
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("[RolloverCheck] ❌ Failed to check or execute season rollover:", msg);
+    
+    // Log failure to DB
+    await logSystemEvent("SeasonRollover", "error", `Cron check failed: ${msg}`);
+    
     return { success: false, message: "Failed to process season rollover.", error: msg };
   }
 }

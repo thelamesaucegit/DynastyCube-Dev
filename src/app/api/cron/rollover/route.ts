@@ -1,52 +1,43 @@
-//src/app/api/cron/rollover/route.ts
-
+// src/app/api/cron/rollover/route.ts
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { executeSeasonRollover } from '@/app/actions/seasonActions';
+import { checkAndExecuteSeasonRollover } from '@/app/actions/seasonActions';
+import { logSystemEvent } from '@/lib/systemLogger';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
-    const { searchParams } = new URL(request.url);
-
-    if (searchParams.get('token') !== process.env.SUPABASE_SERVICE_KEY?.substring(0, 10)) {
-        return new NextResponse('Unauthorized', { status: 401 });
-    }
-
     try {
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_KEY!
-        );
+        const { searchParams } = new URL(request.url);
+        
+        // Check for custom token OR standard Vercel Cron Secret
+        const providedToken = searchParams.get('token');
+        const expectedToken = process.env.SUPABASE_SERVICE_KEY?.substring(0, 10);
+        
+        const authHeader = request.headers.get('authorization');
+        const isVercelCron = authHeader === `Bearer ${process.env.CRON_SECRET}`;
 
-        // FIX 4: Ensure the cron job uses the same fuzzy match
-        const { data: timer } = await supabase
-            .from('countdown_timers')
-            .select('*')
-            .eq('is_active', true)
-            .ilike('title', '%Offseason Curation%')
-            .single();
-
-        if (!timer) {
-            return NextResponse.json({ status: 'No active offseason timer found' });
+        if (providedToken !== expectedToken && !isVercelCron) {
+            // Log unauthorized attempts so you know if your cron service is configured incorrectly!
+            await logSystemEvent("CronSecurity", "warn", `Unauthorized hit on rollover cron route. Token provided: ${providedToken ? 'Yes' : 'No'}`);
+            return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        if (new Date() < new Date(timer.end_time)) {
-            return NextResponse.json({ status: 'Offseason timer is still ticking' });
-        }
-
-        console.log("[CRON] Offseason timer expired! Initiating Rollover...");
-        const result = await executeSeasonRollover();
+        // Delegate entirely to our robust action function!
+        const result = await checkAndExecuteSeasonRollover();
 
         if (!result.success) {
-            throw new Error(result.error);
+            return NextResponse.json({ error: result.error || result.message }, { status: 500 });
         }
 
-        return NextResponse.json({ status: 'Rollover executed successfully!' });
+        return NextResponse.json({ status: result.message });
 
     } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        console.error("[CRON] Rollover failed:", msg);
+        console.error("[CRON] Fatal Rollover route failure:", msg);
+        
+        // Attempt a last-resort DB log
+        await logSystemEvent("CronFatal", "error", `Rollover route crashed: ${msg}`);
+        
         return NextResponse.json({ error: msg }, { status: 500 });
     }
 }

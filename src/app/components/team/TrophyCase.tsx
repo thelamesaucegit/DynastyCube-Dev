@@ -6,15 +6,11 @@ import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Loader2 } from "lucide-react";
 
-// --- STRICT INTERFACES ---
 interface TrophyTeam {
     name: string;
     emoji: string;
     primary_color?: string | null;
     secondary_color?: string | null;
-}
-interface DbSeasonData {
-    season_name: string;
 }
 
 interface EnrichedChampionship {
@@ -22,34 +18,38 @@ interface EnrichedChampionship {
     season_name: string;
     team: TrophyTeam;
 }
-// -------------------------
 
-interface TrophyCaseProps {
-    teamId: string;
-}
-
-export function TrophyCase({ teamId }: TrophyCaseProps) {
+export function TrophyCase({ teamId }: { teamId: string }) {
     const [championships, setChampionships] = useState<EnrichedChampionship[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         async function fetchChampionships() {
+            console.log(`[TrophyCase DEBUG] 🚀 Starting fetch for Team ID: ${teamId}`);
             const supabase = createClient();
             
-            // 1. Get all Championship Weeks from the database
+            // 1. Get Championship Weeks
             const { data: champWeeks, error: weeksErr } = await supabase
                 .from('schedule_weeks')
                 .select('season_id, week_number, end_date, seasons(season_name)')
                 .eq('is_championship_week', true);
 
-            // 2. Get all matchups where THIS team won
+            console.log(`[TrophyCase DEBUG] 1. Championship Weeks Found:`, champWeeks?.length);
+            if (champWeeks) console.log(champWeeks);
+            if (weeksErr) console.error(`[TrophyCase DEBUG] Weeks Error:`, weeksErr);
+
+            // 2. Get Team Wins
             const { data: teamWins, error: winsErr } = await supabase
                 .from('weekly_matchups')
-                .select('season_id, week_number')
+                .select('id, season_id, week_number')
                 .eq('winner_team_id', teamId)
                 .eq('is_outcome_final', true);
 
-            // 3. Get the team's visual details
+            console.log(`[TrophyCase DEBUG] 2. Finalized Wins for this Team:`, teamWins?.length);
+            if (teamWins) console.log(teamWins);
+            if (winsErr) console.error(`[TrophyCase DEBUG] Wins Error:`, winsErr);
+
+            // 3. Get Team Data
             const { data: teamData } = await supabase
                 .from('teams')
                 .select('name, emoji, primary_color, secondary_color')
@@ -57,40 +57,62 @@ export function TrophyCase({ teamId }: TrophyCaseProps) {
                 .single();
 
             if (weeksErr || winsErr || !champWeeks || !teamWins || !teamData) {
+                console.log(`[TrophyCase DEBUG] ❌ Aborting early due to missing base data.`);
                 setLoading(false);
                 return;
             }
 
+            // 4. Intersect
+            const championshipMatchups = teamWins.filter(win => 
+                champWeeks.some(cw => cw.season_id === win.season_id && cw.week_number === win.week_number)
+            );
+            console.log(`[TrophyCase DEBUG] 3. Intersected Matchups (Wins that happened in a Champ Week):`, championshipMatchups.length);
+            if (championshipMatchups) console.log(championshipMatchups);
+
+            if (championshipMatchups.length === 0) {
+                setLoading(false);
+                return;
+            }
+
+            // 5. Schedules (Stream Delay check)
+            const { data: schedules } = await supabase
+                .from('schedule')
+                .select('weekly_matchup_id, match_date, total_steps')
+                .in('weekly_matchup_id', championshipMatchups.map(m => m.id));
+
+            console.log(`[TrophyCase DEBUG] 4. Schedule rows found for these matchups:`, schedules?.length);
+
             const validTrophies: EnrichedChampionship[] = [];
             const now = Date.now();
 
-            // 4. Intersect the two lists!
-            for (const win of teamWins) {
-                const championshipWeek = champWeeks.find(cw => 
-                    cw.season_id === win.season_id && cw.week_number === win.week_number
-                );
+            for (const match of championshipMatchups) {
+                const championshipWeek = champWeeks.find(cw => cw.season_id === match.season_id && cw.week_number === match.week_number);
+                if (!championshipWeek) continue;
 
-                if (championshipWeek) {
-                    // Anti-Spoiler Check: We only award the trophy if the week's end_date 
-                    // (which marks the end of the final broadcast) has safely passed.
-                    const isStreamDone = now > new Date(championshipWeek.end_date).getTime();
-                    
-                                        if (isStreamDone) {
-                        // STRICT TYPING FIX: Cast via unknown to our new interface
-                        const seasonObj = (Array.isArray(championshipWeek.seasons) 
-                            ? championshipWeek.seasons[0] 
-                            : championshipWeek.seasons) as unknown as DbSeasonData | undefined;
+                const games = schedules?.filter(s => s.weekly_matchup_id === match.id) || [];
+                console.log(`[TrophyCase DEBUG] Matchup ${match.id} has ${games.length} games. Evaluating stream delay...`);
 
-                        validTrophies.push({
-                            season_id: win.season_id,
-                            season_name: seasonObj?.season_name || "Unknown Season",
-                            team: teamData as TrophyTeam
-                        });
-                    }
+                const streamCaughtUp = games.length > 0 && games.every(g => {
+                    const broadcastEndTime = new Date(g.match_date).getTime() + (30 * 60000) + ((g.total_steps || 300) * 2000);
+                    const isDone = now > broadcastEndTime;
+                    console.log(`   -> Game on ${g.match_date}: Ends at ${new Date(broadcastEndTime).toLocaleTimeString()}. Is Done? ${isDone}`);
+                    return isDone;
+                });
 
+                if (streamCaughtUp || games.length === 0) {
+                    console.log(`[TrophyCase DEBUG] ✅ Awarding Trophy for Matchup ${match.id}!`);
+                    const seasonObj = Array.isArray(championshipWeek.seasons) ? championshipWeek.seasons[0] : championshipWeek.seasons;
+                    validTrophies.push({
+                        season_id: match.season_id,
+                        season_name: (seasonObj as any)?.season_name || "Unknown Season",
+                        team: teamData as TrophyTeam
+                    });
+                } else {
+                    console.log(`[TrophyCase DEBUG] ⏳ Holding Trophy for Matchup ${match.id} - Stream still pending.`);
                 }
             }
 
+            console.log(`[TrophyCase DEBUG] Final Trophies Awarded:`, validTrophies.length);
             setChampionships(validTrophies);
             setLoading(false);
         }
@@ -98,9 +120,7 @@ export function TrophyCase({ teamId }: TrophyCaseProps) {
         fetchChampionships();
     }, [teamId]);
 
-    if (loading) {
-        return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-muted-foreground" /></div>;
-    }
+    if (loading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-muted-foreground" /></div>;
 
     if (championships.length === 0) {
         return (
@@ -120,9 +140,7 @@ export function TrophyCase({ teamId }: TrophyCaseProps) {
                         <h2 className="text-sm font-bold tracking-widest text-center text-muted-foreground uppercase mb-4">
                             {champ.season_name} Champion
                         </h2>
-                        
                         <div className="text-5xl mb-4 drop-shadow-xl">🏆</div>
-                        
                         <div className="text-5xl mb-3 drop-shadow-md">{champ.team.emoji}</div>
                         <h1 
                             className="text-2xl font-black uppercase text-center tracking-tighter"
