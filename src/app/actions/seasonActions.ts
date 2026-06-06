@@ -59,7 +59,7 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
             phase: 'draft',
             start_date: now.toISOString(),
             end_date: nextEndDate.toISOString(),
-            cubucks_allocation: oldSeason.cubucks_allocation || 100 
+            cubucks_allocation: oldSeason.cubucks_allocation || 40 
         }).select('id').single();
         
         if (seasonErr || !newSeason) throw new Error(`Failed to create new season: ${JSON.stringify(seasonErr)}`);
