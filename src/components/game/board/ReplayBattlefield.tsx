@@ -56,11 +56,16 @@ function ReplayGroupWithAttachments({
     const linkedExile = group.card.linkedExile ? group.card.linkedExile.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [];
     const allDecorations = [...attachments, ...linkedExile];
     
-    if (allDecorations.length === 0) {
-        // We pass the styles down to the container holding ReplayCardStack
+     if (allDecorations.length === 0) {
         return (
             <div style={{ width: overrideWidth, height: overrideHeight }}>
-                <ReplayCardStack group={group} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
+                <ReplayCardStack 
+                    group={group} 
+                    cardDataMap={cardDataMap} 
+                    useOldestArt={useOldestArt} 
+                    overrideWidth={overrideWidth}    {/* ADD THIS */}
+                    overrideHeight={overrideHeight}  {/* ADD THIS */}
+                />
             </div>
         );
     }
@@ -97,9 +102,14 @@ function ReplayGroupWithAttachments({
                 );
             })}
             <div style={{ position: 'absolute', left: parentTapped ? totalPeek : 0, top: parentTapped ? 0 : totalPeek, zIndex: allDecorations.length + 1, width: cardWidth, height: cardHeight }}>
-                <ReplayCardStack group={group} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
-            </div>
-        </div>
+        <ReplayCardStack 
+            group={group} 
+            cardDataMap={cardDataMap} 
+            useOldestArt={useOldestArt} 
+            overrideWidth={overrideWidth}    {/* ADD THIS */}
+            overrideHeight={overrideHeight}  {/* ADD THIS */}
+        />
+    </div>
     );
 }
 
