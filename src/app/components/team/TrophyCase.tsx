@@ -13,6 +13,9 @@ interface TrophyTeam {
     primary_color?: string | null;
     secondary_color?: string | null;
 }
+interface DbSeasonData {
+    season_name: string;
+}
 
 interface EnrichedChampionship {
     season_id: string;
@@ -72,17 +75,19 @@ export function TrophyCase({ teamId }: TrophyCaseProps) {
                     // (which marks the end of the final broadcast) has safely passed.
                     const isStreamDone = now > new Date(championshipWeek.end_date).getTime();
                     
-                    if (isStreamDone) {
-                        const seasonObj = Array.isArray(championshipWeek.seasons) 
+                                        if (isStreamDone) {
+                        // STRICT TYPING FIX: Cast via unknown to our new interface
+                        const seasonObj = (Array.isArray(championshipWeek.seasons) 
                             ? championshipWeek.seasons[0] 
-                            : championshipWeek.seasons;
+                            : championshipWeek.seasons) as unknown as DbSeasonData | undefined;
 
                         validTrophies.push({
                             season_id: win.season_id,
-                            season_name: (seasonObj as any)?.season_name || "Unknown Season",
+                            season_name: seasonObj?.season_name || "Unknown Season",
                             team: teamData as TrophyTeam
                         });
                     }
+
                 }
             }
 
