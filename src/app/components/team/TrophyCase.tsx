@@ -38,10 +38,10 @@ export function TrophyCase({ teamId }: TrophyCaseProps) {
             console.log(`[TrophyCase DEBUG] 🚀 Starting fetch for Team ID: ${teamId}`);
             const supabase = createClient();
             
-            // 1. Get Championship Weeks
+            // 1. Get Championship Weeks (FIXED AMBIGUOUS JOIN)
             const { data: champWeeks, error: weeksErr } = await supabase
                 .from('schedule_weeks')
-                .select('season_id, week_number, end_date, seasons(season_name)')
+                .select('season_id, week_number, end_date, seasons:seasons!schedule_weeks_season_id_fkey(season_name)')
                 .eq('is_championship_week', true);
 
             console.log(`[TrophyCase DEBUG] 1. Championship Weeks Found:`, champWeeks?.length);
@@ -109,7 +109,6 @@ export function TrophyCase({ teamId }: TrophyCaseProps) {
                 if (streamCaughtUp || games.length === 0) {
                     console.log(`[TrophyCase DEBUG] ✅ Awarding Trophy for Matchup ${match.id}!`);
                     
-                    // --- STRICT TYPING APPLIED HERE ---
                     const seasonObj = (Array.isArray(championshipWeek.seasons) 
                         ? championshipWeek.seasons[0] 
                         : championshipWeek.seasons) as unknown as DbSeasonData | undefined;
