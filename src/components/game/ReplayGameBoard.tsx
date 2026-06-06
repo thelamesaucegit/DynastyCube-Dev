@@ -37,26 +37,27 @@ export function ReplayGameBoard({ topOffset = 0, snapshot, cardDataMap }: Replay
     if (!responsive) return <div style={{ color: 'red', padding: '20px', textAlign: 'center' }}>Error: Responsive layout context not found.</div>;
 
     return (
-        // Add topOffset to the top padding to account for site headers
         <div style={{ ...styles.container, padding: `${topOffset}px ${responsive.containerPadding}px 0`, gap: responsive.sectionGap }}>
             <FullscreenButton />
             
-            {/* ROW 1: Opponent Hand */}
-            <div style={styles.opponentHandArea} data-zone="opponent-hand">
-                {/* FIX: useOldestArt is now passed in */}
-                <CardRow zoneId={hand(entityId(player2.playerId))} faceDown small inverted snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
+            {/* FLOATING ROW: Opponent Hand (Absolute Top) */}
+            <div data-zone="opponent-hand" style={{ position: 'absolute', top: topOffset, left: 0, right: 0, display: 'flex', justifyContent: 'center', zIndex: 150, pointerEvents: 'none' }}>
+                <div style={{ pointerEvents: 'auto' }}>
+                    <CardRow zoneId={hand(entityId(player2.playerId))} faceDown small inverted snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
+                </div>
             </div>
             
-            {/* ROW 2: Opponent Battlefield */}
+            {/* ROW 1: Opponent Battlefield */}
             <div style={styles.opponentArea}>
-                <div style={{...styles.spectatorNameLabel, position: 'absolute', top: 0, left: 16 }}>
-                    {player2.name}
-                </div>
-                <div style={styles.playerRowWithZones}>
+                {/* Notice the top padding is added here so cards don't hide under the floating hand */}
+                <div style={{ ...styles.playerRowWithZones, paddingTop: responsive.smallCardHeight + 8 }}>
                     <div style={styles.playerMainArea}>
                         <ReplayBattlefield isOpponent={true} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
                     </div>
                     <ReplayZonePile player={player2} isOpponent={true} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
+                </div>
+                <div style={{...styles.spectatorNameLabel, position: 'absolute', top: 8, left: 16 }}>
+                    {player2.name}
                 </div>
             </div>
 
@@ -85,23 +86,25 @@ export function ReplayGameBoard({ topOffset = 0, snapshot, cardDataMap }: Replay
             
             <ReplayStackDisplay snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
             
-            {/* ROW 4: Player Battlefield */}
+           {/* ROW 3: Player Battlefield */}
             <div style={styles.playerArea}>
-                <div style={styles.playerRowWithZones}>
+                {/* Notice the bottom padding is added here so cards don't hide under the floating hand */}
+                <div style={{ ...styles.playerRowWithZones, paddingBottom: responsive.smallCardHeight + 8 }}>
                     <div style={styles.playerMainArea}>
                         <ReplayBattlefield isOpponent={false} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
                     </div>
                     <ReplayZonePile player={player1} isOpponent={false} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
                 </div>
-                <div style={{...styles.spectatorNameLabel, position: 'absolute', bottom: 0, left: 16 }}>
+                <div style={{...styles.spectatorNameLabel, position: 'absolute', bottom: responsive.smallCardHeight + 16, left: 16 }}>
                     {player1.name}
                 </div>
             </div>
             
-            {/* ROW 5: Player Hand */}
-            <div style={styles.playerHandArea} data-zone="hand">
-                {/* FIX: useOldestArt is now passed in */}
-                <CardRow zoneId={hand(entityId(player1.playerId))} faceDown={true} small={true} interactive={false} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
+            {/* FLOATING ROW: Player Hand (Absolute Bottom) */}
+            <div data-zone="hand" style={{ position: 'absolute', bottom: 0, left: 0, right: 0, display: 'flex', justifyContent: 'center', zIndex: 150, pointerEvents: 'none' }}>
+                <div style={{ pointerEvents: 'auto' }}>
+                    <CardRow zoneId={hand(entityId(player1.playerId))} faceDown={true} small={true} interactive={false} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} />
+                </div>
             </div>
             
             <ReplayTargetingArrows snapshot={snapshot} />
