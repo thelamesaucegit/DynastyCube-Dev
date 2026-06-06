@@ -15,7 +15,6 @@ export interface StreamMatch {
     life_timeline: [number, number][]; 
     total_steps: number;
     
-    // UPDATED: Added is_playoff and week_number for the UI
     matchup: {
         game_number: number;
         total_games: number;
@@ -49,7 +48,7 @@ function createServiceClient() {
 export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | null }> {
     const supabase = createServiceClient();
     
-    // Fetch the last 15 matches, including total_steps, week_number, and the matchup context!
+    // Fetch the last 15 matches, now including the season to check for test environments
     const { data, error } = await supabase
         .from('schedule')
         .select(`
@@ -57,7 +56,8 @@ export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | nul
             team1:teams!team1_id(id, name, emoji),
             team2:teams!team2_id(id, name, emoji),
             weekly_matchup:weekly_matchups(sim_team1_wins, sim_team2_wins, sim_completed_games, is_playoff, week_number),
-            sim_match:sim_matches!sim_match_id(argentum_game_states, game_states)
+            sim_match:sim_matches!sim_match_id(argentum_game_states, game_states),
+            season:seasons(season_name, phase)
         `)
         .not('sim_match_id', 'is', null)
         .order('match_date', { ascending: false })
@@ -67,14 +67,13 @@ export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | nul
 
     const now = Date.now();
     const BROADCAST_DELAY_MS = 30 * 60000; 
-    const STEP_DURATION_MS = 3000; // NEW 3-second stream steps!
+    const STEP_DURATION_MS = 3000; 
 
     const chronologicalMatches = [...data].sort((a, b) => new Date(a.match_date).getTime() - new Date(b.match_date).getTime());
     
     let targetMatch = data[0]; 
     const liveMatch = chronologicalMatches.find(m => {
         const broadcastStartTime = new Date(m.match_date).getTime() + BROADCAST_DELAY_MS;
-        // Dynamically calculate the exact end time based on the step count
         const broadcastDuration = (m.total_steps || 300) * STEP_DURATION_MS;
         const broadcastEndTime = broadcastStartTime + broadcastDuration;
         
@@ -93,6 +92,13 @@ export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | nul
 
     const t1 = (Array.isArray(targetMatch.team1) ? targetMatch.team1[0] : targetMatch.team1) as unknown as DbTeam;
     const t2 = (Array.isArray(targetMatch.team2) ? targetMatch.team2[0] : targetMatch.team2) as unknown as DbTeam;
+    
+    // Check if it's a test season using the newly joined table
+    const seasonData = Array.isArray(targetMatch.season) ? targetMatch.season[0] : targetMatch.season;
+    const seasonName = (seasonData as any)?.season_name || "";
+    const currentPhase = (seasonData as any)?.phase || "";
+    const isTestSeason = seasonName.toUpperCase().includes("TEST");
+
     const matchupRaw = (Array.isArray(targetMatch.weekly_matchup) ? targetMatch.weekly_matchup[0] : targetMatch.weekly_matchup) as {
         sim_team1_wins?: number;
         sim_team2_wins?: number;
@@ -101,19 +107,19 @@ export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | nul
         week_number?: number;
     } | undefined;
 
-    // --- SEEDING FIX: Fetch all teams, calculate Win % locally to strictly rank them ---
+    // --- SEEDING FIX ---
     const { data: allRecords } = await supabase.from('team_records_view').select('team_id, wins, losses');
     const sortedRecords = (allRecords || []).sort((a, b) => {
         const aPct = a.wins / Math.max(1, a.wins + a.losses);
         const bPct = b.wins / Math.max(1, b.wins + b.losses);
-        return bPct - aPct || b.wins - a.wins; // Tiebreaker: total wins
+        return bPct - aPct || b.wins - a.wins; 
     });
     
     const recordMap = new Map();
     sortedRecords.forEach((r, idx) => {
         recordMap.set(r.team_id, { wins: r.wins, losses: r.losses, seed: idx + 1 });
     });
-    // ---------------------------------------------------------------------------------
+    // -------------------
 
     let lifeTimeline: [number, number][] = [];
     const simMatchArray = Array.isArray(targetMatch.sim_match) ? targetMatch.sim_match : [targetMatch.sim_match];
@@ -138,9 +144,20 @@ export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | nul
 
     let matchupContext = null;
     if (matchupRaw) {
-        // Because the match we are viewing has not finished broadcasting, we must ADD 1 to the completed games 
         const gameNumber = (matchupRaw.sim_completed_games || 0) + 1;
-        const totalGamesRequired = matchupRaw.is_playoff ? 9 : 5; // Best of 9 vs Best of 5
+        const weekNum = targetMatch.week_number || matchupRaw.week_number || 1;
+
+        // --- NEW: DYNAMIC REQUIRED GAMES CALCULATION ---
+        let totalGamesRequired = isTestSeason ? 3 : 5; 
+
+        if (matchupRaw.is_playoff) {
+            if (currentPhase === 'playoffs' && weekNum > 100) {
+                totalGamesRequired = isTestSeason ? 3 : 9; // Championship
+            } else {
+                totalGamesRequired = isTestSeason ? 3 : 7; // Playoff Round
+            }
+        }
+        // -----------------------------------------------
         
         matchupContext = {
             game_number: gameNumber,
@@ -148,8 +165,7 @@ export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | nul
             t1_wins: matchupRaw.sim_team1_wins || 0,
             t2_wins: matchupRaw.sim_team2_wins || 0,
             is_playoff: matchupRaw.is_playoff || false,
-            // Fallback safely to either the schedule table's week_number or the matchup's week_number
-            week_number: targetMatch.week_number || matchupRaw.week_number || 1
+            week_number: weekNum
         };
     }
 
