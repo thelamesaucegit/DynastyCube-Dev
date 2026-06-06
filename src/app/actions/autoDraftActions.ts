@@ -163,7 +163,7 @@ export async function toggleQueuePickVote(teamId: string, cardPoolId: string, dr
             }
         }
         return { success: true, pickExecuted: false };
-    } catch (error) {
+    } catch (_error) {
         return { success: false, pickExecuted: false, error: "An unexpected error occurred" };
     }
 }
