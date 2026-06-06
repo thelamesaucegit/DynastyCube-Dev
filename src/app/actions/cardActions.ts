@@ -238,7 +238,7 @@ export async function addCardsToPool(cards: CardData[], poolName: string = "draf
 
 export async function bulkImportAndSync(
   lines: string[],
-  defaultCubucksCost: number = 1,
+  _defaultCubucksCost: number = 1,
   tableName: PoolTableName = "card_pools"
 ): Promise<{
   success: boolean;
@@ -287,11 +287,14 @@ export async function bulkImportAndSync(
 
         const cardsToInsert: Array<Omit<CardData, "id" | "created_at" | "rating_updated_at">> = [];
         
-        // --- HELPER TO EXTRACT ORACLE TEXT ---
-        const extractOracleText = (card: any) => {
+              // --- HELPER TO EXTRACT ORACLE TEXT ---
+        interface ScryfallFace { oracle_text?: string; }
+        interface ScryfallData { oracle_text?: string; card_faces?: ScryfallFace[]; }
+
+        const extractOracleText = (card: ScryfallData) => {
             if (card.oracle_text) return card.oracle_text;
             if (card.card_faces) {
-                return card.card_faces.map((face: any) => face.oracle_text).filter(Boolean).join('\n//\n');
+                return card.card_faces.map((face: ScryfallFace) => face.oracle_text).filter(Boolean).join('\n//\n');
             }
             return null;
         };
@@ -431,12 +434,16 @@ export async function backfillImportedCards(tableName: PoolTableName = "card_poo
 
         let updatedCount = 0;
         
-        // Helper
-        const extractOracleText = (card: any) => {
+                // Helper
+        interface ScryfallFace { oracle_text?: string; }
+        interface ScryfallData { oracle_text?: string; card_faces?: ScryfallFace[]; }
+
+        const extractOracleText = (card: ScryfallData) => {
             if (card.oracle_text) return card.oracle_text;
-            if (card.card_faces) return card.card_faces.map((face: any) => face.oracle_text).filter(Boolean).join('\n//\n');
+            if (card.card_faces) return card.card_faces.map((face: ScryfallFace) => face.oracle_text).filter(Boolean).join('\n//\n');
             return null;
         };
+
 
         for (const dbCard of cardsToFix) {
             const scryData = scryfallCardMap.get(dbCard.card_name.toLowerCase());
