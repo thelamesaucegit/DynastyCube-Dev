@@ -33,78 +33,60 @@ export function TrophyCase({ teamId }: TrophyCaseProps) {
         async function fetchChampionships() {
             const supabase = createClient();
             
-            // 1. Fetch all matchups where this team is the finalized winner
-            const { data: teamWins, error: winsError } = await supabase
+            // 1. Get all Championship Weeks from the database
+            const { data: champWeeks, error: weeksErr } = await supabase
+                .from('schedule_weeks')
+                .select('season_id, week_number, end_date, seasons(season_name)')
+                .eq('is_championship_week', true);
+
+            // 2. Get all matchups where THIS team won
+            const { data: teamWins, error: winsErr } = await supabase
                 .from('weekly_matchups')
-                .select('id, season_id, week_number')
+                .select('season_id, week_number')
                 .eq('winner_team_id', teamId)
                 .eq('is_outcome_final', true);
 
-            if (winsError || !teamWins || teamWins.length === 0) {
-                setLoading(false);
-                return;
-            }
-
-            // 2. Fetch all Schedule Weeks designated explicitly as Championships
-            const { data: champWeeks, error: champError } = await supabase
-                .from('schedule_weeks')
-                .select('season_id, week_number, seasons(season_name)')
-                .eq('is_championship_week', true);
-
-            if (champError || !champWeeks || champWeeks.length === 0) {
-                setLoading(false);
-                return;
-            }
-
-            // 3. Intersect the data: Find the wins that occurred during a Championship Week
-            const championshipMatchups = teamWins.filter(win => 
-                champWeeks.some(cw => cw.season_id === win.season_id && cw.week_number === win.week_number)
-            );
-
-            if (championshipMatchups.length === 0) {
-                setLoading(false);
-                return;
-            }
-
-            // 4. Fetch the schedule games for these specific matchups to verify stream delays
-            const { data: schedules } = await supabase
-                .from('schedule')
-                .select('weekly_matchup_id, match_date, total_steps')
-                .in('weekly_matchup_id', championshipMatchups.map(m => m.id));
-
-            // 5. Fetch Team details for styling
+            // 3. Get the team's visual details
             const { data: teamData } = await supabase
                 .from('teams')
                 .select('name, emoji, primary_color, secondary_color')
                 .eq('id', teamId)
                 .single();
 
-            // 6. Build the final array, applying the spoiler-free stream delay check
-            const enrichedChampionships: EnrichedChampionship[] = [];
+            if (weeksErr || winsErr || !champWeeks || !teamWins || !teamData) {
+                setLoading(false);
+                return;
+            }
 
-            for (const match of championshipMatchups) {
-                const games = schedules?.filter(s => s.weekly_matchup_id === match.id) || [];
-                
-                // Ensure ALL games in the championship match have finished broadcasting
-                const streamCaughtUp = games.length > 0 && games.every(g => {
-                    const broadcastEndTime = new Date(g.match_date).getTime() + (30 * 60000) + ((g.total_steps || 300) * 2000);
-                    return Date.now() > broadcastEndTime;
-                });
+            const validTrophies: EnrichedChampionship[] = [];
+            const now = Date.now();
 
-                // If there are no games found (legacy data) or the stream has finished, award the trophy!
-                if (streamCaughtUp || games.length === 0) {
-                    const cw = champWeeks.find(cw => cw.season_id === match.season_id && cw.week_number === match.week_number);
-                    const seasonData = Array.isArray(cw?.seasons) ? cw?.seasons[0] : cw?.seasons;
+            // 4. Intersect the two lists!
+            for (const win of teamWins) {
+                const championshipWeek = champWeeks.find(cw => 
+                    cw.season_id === win.season_id && cw.week_number === win.week_number
+                );
+
+                if (championshipWeek) {
+                    // Anti-Spoiler Check: We only award the trophy if the week's end_date 
+                    // (which marks the end of the final broadcast) has safely passed.
+                    const isStreamDone = now > new Date(championshipWeek.end_date).getTime();
                     
-                    enrichedChampionships.push({
-                        season_id: match.season_id,
-                        season_name: seasonData?.season_name || "Unknown Season",
-                        team: teamData as TrophyTeam
-                    });
+                    if (isStreamDone) {
+                        const seasonObj = Array.isArray(championshipWeek.seasons) 
+                            ? championshipWeek.seasons[0] 
+                            : championshipWeek.seasons;
+
+                        validTrophies.push({
+                            season_id: win.season_id,
+                            season_name: (seasonObj as any)?.season_name || "Unknown Season",
+                            team: teamData as TrophyTeam
+                        });
+                    }
                 }
             }
 
-            setChampionships(enrichedChampionships);
+            setChampionships(validTrophies);
             setLoading(false);
         }
 
@@ -134,9 +116,6 @@ export function TrophyCase({ teamId }: TrophyCaseProps) {
                             {champ.season_name} Champion
                         </h2>
                         
-                        {/* CUSTOM DYNAMIC TROPHY IMAGE:
-                            <img src={`/images/trophies/${champ.season_name.toLowerCase().replace(/\s+/g, '-')}-trophy.png`} alt={`${champ.season_name} Trophy`} className="w-24 h-24 mb-6 object-contain drop-shadow-xl" onError={(e) => e.currentTarget.src = '/images/trophies/default-trophy.png'} />
-                        */}
                         <div className="text-5xl mb-4 drop-shadow-xl">🏆</div>
                         
                         <div className="text-5xl mb-3 drop-shadow-md">{champ.team.emoji}</div>
