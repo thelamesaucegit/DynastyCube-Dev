@@ -10,6 +10,7 @@ type BasePoolCard = {
     card_id: string;
     card_name: string;
     card_set: string | null;
+        oracle_text?: string | null; // <-- ADDED
     card_type: string | null;
     rarity: string | null;
     colors: string[] | null;
@@ -46,6 +47,7 @@ export interface PoolCard {
   rarity?: string;
   colors?: string[];
   image_url?: string;
+      oracle_text?: string | null; // <-- ADDED
   oldest_image_url?: string; // Added field
   mana_cost?: string;
   cmc?: number;
@@ -71,15 +73,11 @@ export async function getPoolCardsWithStatus(): Promise<{
       .select(`*, team_draft_picks ( id, drafted_at, team_id, teams ( id, name, emoji ) )`)
       .order("card_name", { ascending: true });
 
-    if (cardsError) {
-      console.error("Error fetching card pool:", cardsError.message);
-      return { cards: [], error: cardsError.message };
-    }
+    if (cardsError) return { cards: [], error: cardsError.message };
 
     const cards: PoolCard[] = (allCards || []).map((card: CardWithDraftInfo) => {
       const pick = Array.isArray(card.team_draft_picks) ? card.team_draft_picks[0] : card.team_draft_picks;
       const team = pick?.teams ? (Array.isArray(pick.teams) ? pick.teams[0] : pick.teams) : null;
-
       return {
         id: card.id,
         card_id: card.card_id,
@@ -90,6 +88,7 @@ export async function getPoolCardsWithStatus(): Promise<{
         colors: card.colors ?? undefined,
         image_url: card.image_url ?? undefined,
         oldest_image_url: card.oldest_image_url ?? undefined,
+        oracle_text: card.oracle_text ?? undefined, // <-- ADDED
         mana_cost: card.mana_cost ?? undefined,
         cmc: card.cmc ?? undefined,
         cubucks_cost: card.cubucks_cost ?? undefined,
@@ -99,10 +98,8 @@ export async function getPoolCardsWithStatus(): Promise<{
         drafted_at: pick?.drafted_at ?? undefined,
       };
     });
-
     return { cards };
   } catch (error) {
-    console.error("Unexpected error in getPoolCardsWithStatus:", error);
     return { cards: [], error: "An unexpected error occurred" };
   }
 }
@@ -111,7 +108,6 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
   const supabase = await createServerClient();
   try {
     let query;
-
     if (poolIdentifier === 'draft' || poolIdentifier === 'free' || poolIdentifier === 'wire') {
       query = supabase
         .from('card_pools')
@@ -126,20 +122,13 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
     }
 
     const { data, error } = await query;
-
-    if (error) {
-      console.error(`Error fetching cards for pool "${poolIdentifier}":`, error);
-      return { cards: [], error: error.message };
-    }
+    if (error) return { cards: [], error: error.message };
     
-    // --- THIS IS THE FIX ---
-    // Use the explicit union type to satisfy the linter instead of 'any'.
     const cards: PoolCard[] = (data || []).map((card: CardWithDraftInfo | BasePoolCard) => {
       const isDraftableCard = 'team_draft_picks' in card;
       const pick = isDraftableCard && Array.isArray(card.team_draft_picks) ? card.team_draft_picks[0] : null;
       const team = pick?.teams;
 
-      // This mapping logic now works safely for both data shapes.
       return {
           id: card.id,
           card_id: card.card_id,
@@ -150,6 +139,7 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
           colors: card.colors ?? undefined,
           image_url: card.image_url ?? undefined,
           oldest_image_url: card.oldest_image_url ?? undefined,
+          oracle_text: card.oracle_text ?? undefined, // <-- ADDED
           mana_cost: card.mana_cost ?? undefined,
           cmc: card.cmc ?? undefined,
           cubucks_cost: card.cubucks_cost ?? undefined,
@@ -159,15 +149,12 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
           drafted_at: pick?.drafted_at ?? undefined,
       };
     });
-
     return { cards };
-      
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
-    console.error(`Unexpected error in getCardsForPool for identifier "${poolIdentifier}":`, message);
-    return { cards: [], error: message };
+    return { cards: [], error: String(err) };
   }
 }
+
 
 
 export interface PoolStatistics {
