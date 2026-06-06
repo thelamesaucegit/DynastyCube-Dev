@@ -7,7 +7,6 @@ import { ReplayCardStack } from '../card/ReplayCardStack';
 import { ReplayGameCard } from '../card/ReplayGameCard';
 import { CardPreview } from '@/app/components/CardPreview';
 import { useResponsiveContext } from '@/components/game/board/shared';
-// FIX 1: Import the calculation function
 import { calculateFittingCardWidth } from '@/hooks/useResponsive';
 import type { SpectatorStateUpdate, ReplayCardData, ClientCard, EntityId } from '@/types';
 import { entityId, zoneIdEquals, battlefield } from '@/types';
@@ -45,7 +44,6 @@ function groupCards(cards: readonly ClientCard[], snapshot: SpectatorStateUpdate
     return [...standardGroups, ...standaloneGroups];
 }
 
-// FIX 2: Accept explicit sizing props so it stops grabbing the static desktop size
 function ReplayGroupWithAttachments({ 
     group, snapshot, cardDataMap, useOldestArt, overrideWidth, overrideHeight 
 }: { 
@@ -63,8 +61,8 @@ function ReplayGroupWithAttachments({
                     group={group} 
                     cardDataMap={cardDataMap} 
                     useOldestArt={useOldestArt} 
-                    overrideWidth={overrideWidth}    
-                    overrideHeight={overrideHeight} 
+                    overrideWidth={overrideWidth}
+                    overrideHeight={overrideHeight}
                 />
             </div>
         );
@@ -73,7 +71,6 @@ function ReplayGroupWithAttachments({
     const parentTapped = group.card.isTapped;
     const attachmentPeek = responsive.isMobile ? 12 : 16;
     
-    // FIX 3: Use the dynamically calculated sizes instead of responsive.battlefieldCardHeight
     const cardHeight = overrideHeight;
     const cardWidth = overrideWidth;
     
@@ -102,14 +99,15 @@ function ReplayGroupWithAttachments({
                 );
             })}
             <div style={{ position: 'absolute', left: parentTapped ? totalPeek : 0, top: parentTapped ? 0 : totalPeek, zIndex: allDecorations.length + 1, width: cardWidth, height: cardHeight }}>
-        <ReplayCardStack 
-            group={group} 
-            cardDataMap={cardDataMap} 
-            useOldestArt={useOldestArt} 
-            overrideWidth={overrideWidth}    
-            overrideHeight={overrideHeight} 
-        />
-    </div>
+                <ReplayCardStack 
+                    group={group} 
+                    cardDataMap={cardDataMap} 
+                    useOldestArt={useOldestArt} 
+                    overrideWidth={overrideWidth}
+                    overrideHeight={overrideHeight}
+                />
+            </div>
+        </div>
     );
 }
 
@@ -180,21 +178,16 @@ export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldest
         };
     }, [snapshot, isOpponent]);
 
-    // FIX 4: The Math Way. Calculate exactly how wide cards can be without wrapping.
     const { fittingWidth, fittingHeight } = useMemo(() => {
-        // Space available = total window width - padding - pile width - safety margin
         const availableWidth = responsive.viewportWidth - (responsive.containerPadding * 2) - responsive.pileWidth - 64; 
-        
-        // Find whichever row has the MOST cards
         const maxCardsInAnyRow = Math.max(groupedFrontRow.length, groupedBackRowTop.length, groupedBackRowBottom.length, 1);
         
-        // Calculate the maximum width each card can be
         const width = calculateFittingCardWidth(
             maxCardsInAnyRow, 
             availableWidth, 
-            8, // 8px gap between cards
+            8,
             responsive.battlefieldCardWidth, 
-            40 // min width
+            40 
         );
         
         return { fittingWidth: width, fittingHeight: Math.round(width * 1.4) };
@@ -202,21 +195,18 @@ export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldest
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '8px', width: '100%', alignItems: 'center' }}>
-            {/* FRONT ROW */}
             <div data-row="front" style={{ display: 'flex', flexWrap: 'nowrap', gap: '8px', justifyContent: 'center', width: '100%', order: isOpponent ? 2 : 1 }}>
                 {groupedFrontRow?.map((group) => (
                     <ReplayGroupWithAttachments key={group.cardIds[0]} group={group} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} overrideWidth={fittingWidth} overrideHeight={fittingHeight} />
                 ))}
             </div>
             
-            {/* BACK ROW TOP */}
             <div data-row="back-top" style={{ display: 'flex', flexWrap: 'nowrap', gap: '8px', justifyContent: 'center', width: '100%', order: isOpponent ? 1 : 2 }}>
                 {groupedBackRowTop?.map((group) => (
                     <ReplayGroupWithAttachments key={group.cardIds[0]} group={group} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} overrideWidth={fittingWidth} overrideHeight={fittingHeight} />
                 ))}
             </div>
 
-            {/* BACK ROW BOTTOM */}
             <div data-row="back-bottom" style={{ display: 'flex', flexWrap: 'nowrap', gap: '8px', justifyContent: 'center', width: '100%', order: isOpponent ? 0 : 3 }}>
                 {groupedBackRowBottom?.map((group) => (
                     <ReplayGroupWithAttachments key={group.cardIds[0]} group={group} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} overrideWidth={fittingWidth} overrideHeight={fittingHeight} />
