@@ -81,6 +81,7 @@ export async function importNextSetToChamber(): Promise<{
             card_set: card.set_name,
             card_type: card.type_line,
             rarity: card.rarity,
+          oracle_text: card.oracle_text|| [],
             colors: card.colors || [],
             color_identity: card.color_identity || [],
             image_url: card.image_uris?.normal || card.image_uris?.small,
