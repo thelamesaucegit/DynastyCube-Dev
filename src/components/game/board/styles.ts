@@ -4,79 +4,35 @@ import React from 'react';
 import { TARGET_COLOR, TARGET_COLOR_BRIGHT } from '../../../styles/targetingColors';
 
 export const styles: Record<string, React.CSSProperties> = {
-  container: {
+ container: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
     display: 'grid',
-    // --- THE FIX: Explicitly define the 5 vertical zones ---
-    // Row 1: Opponent Hand (shrink-to-fit)
-    // Row 2: Opponent Battlefield (takes remaining space)
-    // Row 3: Center HUD (shrink-to-fit)
-    // Row 4: Player Battlefield (takes remaining space)
-    // Row 5: Player Hand (shrink-to-fit)
-    gridTemplateRows: 'auto minmax(0, 1fr) auto minmax(0, 1fr) auto',
+    // --- THE FIX: 3 vertical zones. Hands will float over them. ---
+    // Row 1: Opponent Battlefield
+    // Row 2: Center HUD
+    // Row 3: Player Battlefield
+    gridTemplateRows: 'minmax(0, 1fr) auto minmax(0, 1fr)',
     gridTemplateColumns: '100%',
     backgroundColor: '#0a0a15',
     overflow: 'hidden',
   },
-  playerRowWithZones: {
-    display: 'flex',
-    alignItems: 'center',
-    width: '100%',
-    // FIX: Instead of 'center', this pushes the battlefield to the left and the zones to the right
-    justifyContent: 'space-between', 
-    minHeight: 0,
-    minWidth: 0, // CRITICAL: Allows flex container to shrink inside CSS Grid
-    flex: 1,
-  },
-  playerMainArea: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center', // Centers the battlefield vertically
-    flex: 1, // CRITICAL: Tells the battlefield to expand and take up all horizontal space
-    minWidth: 0, // CRITICAL: Prevents cards from pushing the screen wider than 100%
-    minHeight: 0,
-    alignSelf: 'stretch',
-    overflow: 'visible', // Allow tooltips/hover effects to break out if needed
-  },
-  // --- NEW: Grid wrappers for the Hands ---
-  opponentHandArea: {
-    gridRow: 1,
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    width: '100%',
-    zIndex: 50,
-    minHeight: 0, 
-  },
-  playerHandArea: {
-    gridRow: 5,
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    width: '100%',
-    zIndex: 50,
-    minHeight: 0, 
-  },
-
   opponentArea: {
-    gridRow: 2,
+    gridRow: 1, // Changed to 1
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    // Push the opponent's battlefield down towards the center HUD
     justifyContent: 'flex-end', 
     minHeight: 0, 
     overflow: 'hidden',
     width: '100%',
-    position: 'relative', // Context for the name label
+    position: 'relative', 
   },
   centerArea: {
-    gridRow: 3,
+    gridRow: 2, // Changed to 2
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
     alignItems: 'center',
@@ -87,21 +43,17 @@ export const styles: Record<string, React.CSSProperties> = {
     zIndex: 100, 
   },
   playerArea: {
-    gridRow: 4,
+    gridRow: 3, // Changed to 3
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    // Push the player's battlefield up towards the center HUD
     justifyContent: 'flex-start', 
     minHeight: 0, 
     overflow: 'hidden',
     width: '100%',
-    position: 'relative', // Context for the name label
+    position: 'relative', 
   },
 
-  // ... (The rest of the file from your "current version" is correct and remains unchanged)
-  // I am omitting it here for clarity, but you should keep it in your file.
-  // The styles from zonePile onwards are not part of this specific fix.
 
   zonePile: {
     display: 'flex',
