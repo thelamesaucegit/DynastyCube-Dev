@@ -75,6 +75,7 @@ function Arrow({ start, end, color, damageLabel }: ArrowProps) {
 }
 
 function getCardCenter(cardId: EntityId | string): Point | null {
+    if (!cardId) return null;
     const element = document.querySelector(`[data-card-id="${cardId}"]`);
     if (!element) return null;
     const rect = element.getBoundingClientRect();
@@ -82,37 +83,43 @@ function getCardCenter(cardId: EntityId | string): Point | null {
 }
 
 function getPlayerCenter(playerId: EntityId | string): Point | null {
+    if (!playerId) return null;
     const element = document.querySelector(`[data-player-id="${playerId}"]`);
     if (!element) return null;
     const rect = element.getBoundingClientRect();
     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }
 
-function getTargetEntityId(target: ClientChosenTarget | Record<string, unknown>): string | null {
-    if (!target || typeof target !== 'object') return null;
-    const targetRecord = target as Record<string, unknown>;
+function extractIdSafely(obj: unknown): EntityId | null {
+    if (!obj) return null;
     
-    const possibleProperties: unknown[] = [
-        targetRecord.playerId, targetRecord.id, targetRecord.entityId, 
-        targetRecord.permanentId, targetRecord.cardId, targetRecord.spellEntityId, 
-        targetRecord.spellId, targetRecord.targetId
-    ];
-    
-    for (const propertyValue of possibleProperties) {
-        if (typeof propertyValue === 'string' && propertyValue.trim() !== '') return propertyValue;
+    if (typeof obj === 'string') {
+        return obj as EntityId;
+    }
+
+    if (typeof obj === 'object') {
+        const record = obj as Record<string, unknown>;
+        const possibleProperties = [
+            record.playerId, record.id, record.entityId, record.permanentId, 
+            record.cardId, record.spellEntityId, record.spellId, record.targetId,
+            record.creatureId, record.attackerId
+        ];
+        
+        for (const prop of possibleProperties) {
+            if (typeof prop === 'string' && prop.trim() !== '') {
+                return prop as EntityId;
+            }
+        }
     }
     return null;
 }
 
-function getTargetPosition(target: ClientChosenTarget | Record<string, unknown>): Point | null {
-    if (!target || typeof target !== 'object') return null;
-    const id = getTargetEntityId(target);
+function getTargetPosition(target: unknown): Point | null {
+    const id = extractIdSafely(target);
     if (!id) return null;
 
-    const targetRecord = target as Record<string, unknown>;
-    if (targetRecord.type === 'Player') return getPlayerCenter(id);
-    
-    return getCardCenter(id);
+    // Check player avatars first, then fall back to cards
+    return getPlayerCenter(id) || getCardCenter(id);
 }
 
 interface TargetArrow {
@@ -142,7 +149,7 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
     }).filter((c): c is ClientCard => c !== null) : [];
     
     const combat = snapshot.gameState.combat || snapshot.combat;
-    const cAttackers = combat?.attackers ?? [];
+    const cAttackers: unknown[] = combat?.attackers ?? [];
     
     return { stackCards: sCards, combatAttackers: cAttackers };
   }, [snapshot]);
@@ -150,36 +157,22 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
   useEffect(() => {
     const updateArrows = () => {
       const newArrows: TargetArrow[] = [];
+      
       const cardsOnStack = stackCards.filter(card => (card.targets && card.targets.length > 0) || card.triggeringEntityId);
-      const attackingCreatures = combatAttackers.filter(attacker => attacker.attackingTarget);
-
-      // --- FORENSICS CHECK ---
-      if (cardsOnStack.length > 0 || attackingCreatures.length > 0) {
-          console.groupCollapsed('[Targeting Forensics] Source Material Validation');
-          console.log('RAW Stack Cards With Targets:', JSON.parse(JSON.stringify(cardsOnStack)));
-          console.log('RAW Attacking Creatures:', JSON.parse(JSON.stringify(attackingCreatures)));
-      }
 
       // 1. Spells/Abilities on the Stack
       for (const card of cardsOnStack) {
         const stackPos = getCardCenter(card.id);
-        if (!stackPos) {
-            console.warn(`[Targeting Forensics] Aborted Stack Arrow: Source Card DOM missing for ID ${card.id}`);
-            continue;
-        }
+        if (!stackPos) continue;
 
         if (card.targets && card.targets.length > 0) {
              card.targets.forEach((target, i) => {
               const targetPos = getTargetPosition(target);
-              const targetId = getTargetEntityId(target);
-              
-              if (!targetPos) {
-                  console.warn(`[Targeting Forensics] Aborted Stack Arrow: Target DOM missing for Target ID ${targetId}`);
-              }
-              
               if (targetPos) {
+                const targetId = extractIdSafely(target);
                 const dmgDict = card.damageDistribution as Record<string, number> | undefined;
-                const damageLabel = targetId && dmgDict ? dmgDict[targetId] ?? null : null;
+                const damageLabel = targetId && dmgDict ? dmgDict[targetId as string] ?? null : null;
+                
                 newArrows.push({ targetKey: `${card.id}-target-${i}`, start: stackPos, end: targetPos, color: '#ff8800', damageLabel });
               }
             });
@@ -194,39 +187,45 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
       }
 
       // 2. Combat Targeting (Attackers)
-      for (const attacker of attackingCreatures) {
-        const sourcePos = getCardCenter(attacker.creatureId);
-        if (!sourcePos) {
-            console.warn(`[Targeting Forensics] Aborted Attack Arrow: Attacker DOM missing for ID ${attacker.creatureId}`);
-            continue;
+      // FIX: Removed the strict filter so we can inspect every attacker
+      for (const attacker of combatAttackers) {
+        if (!attacker || typeof attacker !== 'object') continue;
+        
+        const sourceId = extractIdSafely(attacker);
+        if (!sourceId) continue;
+        
+        const sourcePos = getCardCenter(sourceId);
+        if (!sourcePos) continue;
+        
+        // FIX: Extract the target ID directly from the attacker object if attackingTarget doesn't exist
+        const record = attacker as Record<string, unknown>;
+        
+        let targetId = extractIdSafely(record.attackingTarget);
+        
+        // If there is no dedicated attackingTarget object, look for a target ID directly on the attacker
+        if (!targetId) {
+             const possibleTargetIds = [record.targetId, record.defenderId, record.blockingId];
+             for (const id of possibleTargetIds) {
+                 if (typeof id === 'string' && id.trim() !== '') {
+                     targetId = id as EntityId;
+                     break;
+                 }
+             }
         }
         
-        const targetId = getTargetEntityId(attacker.attackingTarget);
-        if (!targetId) {
-            console.warn(`[Targeting Forensics] Aborted Attack Arrow: No ID found on attackingTarget object`, attacker.attackingTarget);
-            continue;
-        }
+        if (!targetId) continue;
         
         const targetPos = getPlayerCenter(targetId) || getCardCenter(targetId);
-        if (!targetPos) {
-            console.warn(`[Targeting Forensics] Aborted Attack Arrow: Target DOM missing for Target ID ${targetId}`);
-        }
-
         if (targetPos) {
-          newArrows.push({ targetKey: `combat-${attacker.creatureId}`, start: sourcePos, end: targetPos, color: '#ef4444' });
+          newArrows.push({ targetKey: `combat-${sourceId}`, start: sourcePos, end: targetPos, color: '#ef4444' });
         }
       }
       
-      if (cardsOnStack.length > 0 || attackingCreatures.length > 0) {
-          console.log('FINAL Generated Arrows:', newArrows);
-          console.groupEnd();
-      }
-
       setArrows(newArrows);
     };
 
     updateArrows();
-    const interval = setInterval(updateArrows, 100); 
+    const interval = setInterval(updateArrows, 50); 
     return () => clearInterval(interval);
   }, [stackCards, combatAttackers]);
 
