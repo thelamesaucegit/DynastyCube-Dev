@@ -63,7 +63,7 @@ export function ReplayGameBoard({ topOffset = 0, snapshot, cardDataMap }: Replay
 
             {/* ROW 3: Center Area (HUD) */}
             <div style={styles.centerArea}>
-                <div style={styles.centerLifeSection}>
+<div data-player-id={player2.playerId} style={styles.centerLifeSection}>
                     <LifeDisplay life={player2.life} playerId={entityId(player2.playerId)} playerName={player2.name} spectatorMode={true} theme={player2.theme} />
                 </div>
                 <StepStrip
@@ -79,7 +79,7 @@ export function ReplayGameBoard({ topOffset = 0, snapshot, cardDataMap }: Replay
                     onToggleStop={() => {}}
                     activePlayerName={activePlayer?.name}
                 />
-                <div style={styles.centerLifeSection}>
+                <div data-player-id={player1.playerId} style={styles.centerLifeSection}>
                     <LifeDisplay life={player1.life} isPlayer playerId={entityId(player1.playerId)} playerName={player1.name} spectatorMode={true} theme={player1.theme} />
                 </div>
             </div>
