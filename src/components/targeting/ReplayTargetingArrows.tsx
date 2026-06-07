@@ -88,32 +88,58 @@ function getPlayerCenter(playerId: EntityId): Point | null {
     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }
 
-// CRITICAL FIX: Linter-safe ID extraction. It safely casts to a Record to check for 
-// missing properties without triggering TypeScript's "any" rules.
+/**
+ * Extracts a branded EntityId from a target object of variable schema.
+ * Safely inspects the runtime object for any known ID keys and casts the 
+ * result back to the strict nominal EntityId type required by the linter.
+ */
 function getTargetEntityId(target: ClientChosenTarget | Record<string, unknown>): EntityId | null {
-    if (!target || typeof target !== 'object') return null;
-    const t = target as Record<string, unknown>;
+    if (!target || typeof target !== 'object') {
+        return null;
+    }
+
+    const targetRecord = target as Record<string, unknown>;
     
-    const possibleIds = [
-        t.playerId, t.id, t.entityId, t.permanentId, 
-        t.cardId, t.spellEntityId, t.spellId, t.targetId
+    // Ordered list of potential property keys where the ID might reside
+    const possibleProperties: unknown[] = [
+        targetRecord.playerId, 
+        targetRecord.id, 
+        targetRecord.entityId, 
+        targetRecord.permanentId, 
+        targetRecord.cardId, 
+        targetRecord.spellEntityId, 
+        targetRecord.spellId, 
+        targetRecord.targetId
     ];
     
-    for (const id of possibleIds) {
-        if (typeof id === 'string') return id;
+    for (const propertyValue of possibleProperties) {
+        if (typeof propertyValue === 'string' && propertyValue.trim() !== '') {
+            // Explicitly assert the raw string back into the branded EntityId type
+            return propertyValue as EntityId;
+        }
     }
+
     return null;
 }
 
+/**
+ * Determines whether the target is a player or a card, extracts the ID, 
+ * and calculates its precise center coordinates in the DOM.
+ */
 function getTargetPosition(target: ClientChosenTarget | Record<string, unknown>): Point | null {
-    if (!target || typeof target !== 'object') return null;
+    if (!target || typeof target !== 'object') {
+        return null;
+    }
+
     const id = getTargetEntityId(target);
     if (!id) return null;
 
-    const t = target as Record<string, unknown>;
-    if (t.type === 'Player') {
+    const targetRecord = target as Record<string, unknown>;
+    if (targetRecord.type === 'Player') {
         return getPlayerCenter(id);
     }
+    
+    // Default fallback to searching for a card
     return getCardCenter(id);
 }
 
@@ -138,7 +164,7 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
     const stackTargetId = stack(entityId('game'));
     const stackZone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, stackTargetId));
     
-    // Explicitly use ClientCard in the type guard to satisfy the linter
+    // Map IDs explicitly into the returned ClientCard objects
     const sCards = stackZone ? stackZone.cardIds.map(id => {
         const card = snapshot.gameState.cards[id];
         return card ? { ...card, id: id } as ClientCard : null;
@@ -153,6 +179,7 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
   useEffect(() => {
     const updateArrows = () => {
       const newArrows: TargetArrow[] = [];
+      
       const cardsOnStack = stackCards.filter(card => (card.targets && card.targets.length > 0) || card.triggeringEntityId);
       const attackingCreatures = combatAttackers.filter(attacker => attacker.attackingTarget);
 
@@ -161,14 +188,16 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
         const stackPos = getCardCenter(card.id);
         if (!stackPos) continue;
 
-        card.targets?.forEach((target, i) => {
-          const targetPos = getTargetPosition(target);
-          if (targetPos) {
-            const targetId = getTargetEntityId(target);
-            const damageLabel = targetId ? card.damageDistribution?.[targetId] ?? null : null;
-            newArrows.push({ targetKey: `${card.id}-target-${i}`, start: stackPos, end: targetPos, color: '#ff8800', damageLabel });
-          }
-        });
+        if (card.targets && card.targets.length > 0) {
+             card.targets.forEach((target, i) => {
+              const targetPos = getTargetPosition(target);
+              if (targetPos) {
+                const targetId = getTargetEntityId(target);
+                const damageLabel = targetId && card.damageDistribution ? card.damageDistribution[targetId as string] ?? null : null;
+                newArrows.push({ targetKey: `${card.id}-target-${i}`, start: stackPos, end: targetPos, color: '#ff8800', damageLabel });
+              }
+            });
+        }
 
         if (card.triggeringEntityId) {
           const triggerPos = getCardCenter(card.triggeringEntityId);
@@ -186,6 +215,7 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
         const targetId = getTargetEntityId(attacker.attackingTarget);
         if (!targetId) continue;
         
+        // Combat target could be a Player (avatar) or a Permanent (planeswalker/battle)
         const targetPos = getPlayerCenter(targetId) || getCardCenter(targetId);
         if (targetPos) {
           newArrows.push({ targetKey: `combat-${attacker.creatureId}`, start: sourcePos, end: targetPos, color: '#ef4444' });

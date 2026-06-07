@@ -1,10 +1,8 @@
 // src/app/actions/draftSessionActions.ts
-
 "use server";
 
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { logSystemEvent } from "@/lib/systemLogger";
-
 import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 import { getDraftStatus, type DraftStatus } from "@/app/actions/draftOrderActions";
 import { generateFullSeasonSchedule, generateSeasonMatchups } from "@/app/actions/seasonSchedulerActions"; 
@@ -29,7 +27,6 @@ function shuffleArray<T>(array: T[]): T[] {
 // ============================================================================
 // TYPES
 // ============================================================================
-
 export interface DraftSession {
   id: string;
   season_id: string;
@@ -56,13 +53,13 @@ export interface DraftSessionWithStatus extends DraftSession {
 // ============================================================================
 // HELPERS
 // ============================================================================
-
 function createServiceClient() {
   return createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_KEY!
   );
 }
+
 /**
  * Resets the consecutive skip counter for a draft session.
  * This should be called after a successful, non-skipped pick is made.
@@ -79,6 +76,7 @@ export async function resetSkipCounter(sessionId: string, adminClient?: AnySupab
     console.error(`Failed to reset skip counter for session ${sessionId}:`, error);
   }
 }
+
 async function verifyAdmin(supabase: Awaited<ReturnType<typeof createServerClient>>): Promise<{
   authorized: boolean;
   userId?: string;
@@ -88,11 +86,9 @@ async function verifyAdmin(supabase: Awaited<ReturnType<typeof createServerClien
     data: { user },
     error: authError,
   } = await supabase.auth.getUser();
-
   if (authError || !user) {
     return { authorized: false, error: "Not authenticated" };
   }
-
   const { data: userData, error: userError } = await supabase
     .from("users")
     .select("is_admin")
@@ -102,14 +98,12 @@ async function verifyAdmin(supabase: Awaited<ReturnType<typeof createServerClien
   if (userError || !userData?.is_admin) {
     return { authorized: false, userId: user.id, error: "Unauthorized: Admin access required" };
   }
-
   return { authorized: true, userId: user.id };
 }
 
 // ============================================================================
 // DRAFT SESSION CRUD
 // ============================================================================
-
 export async function createDraftSession(config: {
   totalRounds: number;
   hoursPerPick: number;
@@ -128,6 +122,7 @@ export async function createDraftSession(config: {
       .select("id")
       .eq("is_active", true)
       .single();
+
     if (!activeSeason) {
       return { success: false, error: "No active season found. Please activate a season first." };
     }
@@ -137,6 +132,7 @@ export async function createDraftSession(config: {
       .select("id")
       .eq("season_id", activeSeason.id)
       .limit(1);
+
     if (!draftOrder || draftOrder.length === 0) {
       return { success: false, error: "No draft order found for the active season. Please generate a draft order first." };
     }
@@ -147,6 +143,7 @@ export async function createDraftSession(config: {
       .eq("season_id", activeSeason.id)
       .in("status", ["scheduled", "active", "paused"])
       .limit(1);
+
     if (existingSession && existingSession.length > 0) {
       return {
         success: false,
@@ -202,6 +199,7 @@ export async function getActiveDraftSession(): Promise<{
       .select("id")
       .eq("is_active", true)
       .single();
+
     if (!activeSeason) {
       return { session: null };
     }
@@ -275,11 +273,13 @@ export async function updateDraftSession(
   try {
     const supabase = await createServerClient();
     const admin = await verifyAdmin(supabase);
+
     if (!admin.authorized) {
       return { success: false, error: admin.error };
     }
 
     const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
+
     if (updates.totalRounds !== undefined) updateData.total_rounds = updates.totalRounds;
     if (updates.hoursPerPick !== undefined) updateData.hours_per_pick = updates.hoursPerPick;
     if (updates.startTime !== undefined) updateData.start_time = updates.startTime;
@@ -313,6 +313,7 @@ export async function deleteDraftSession(
   try {
     const supabase = await createServerClient();
     const admin = await verifyAdmin(supabase);
+
     if (!admin.authorized) {
       return { success: false, error: admin.error };
     }
@@ -322,6 +323,7 @@ export async function deleteDraftSession(
       .select("status")
       .eq("id", sessionId)
       .single();
+
     if (!session) {
       return { success: false, error: "Draft session not found" };
     }
@@ -355,18 +357,19 @@ export async function deleteDraftSession(
  * Resets the consecutive skip counter for a draft session.
  * This should be called after a successful, non-skipped pick is made.
  */
-
 export async function activateDraft(
   sessionId: string,
   adminClient?: AnySupabaseClient
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = adminClient ?? await createServerClient();
+
     const { data: session, error: sessionError } = await supabase
       .from("draft_sessions")
       .select("*")
       .eq("id", sessionId)
       .single();
+
     if (sessionError || !session) {
       return { success: false, error: "Draft session not found" };
     }
@@ -438,6 +441,7 @@ export async function advanceDraft(adminClient?: AnySupabaseClient): Promise<{
 }> {
   try {
     const supabase = adminClient ?? await createServerClient();
+
     const { data: session } = await supabase
       .from("draft_sessions")
       .select("*")
@@ -458,12 +462,14 @@ export async function advanceDraft(adminClient?: AnySupabaseClient): Promise<{
     const allTeamsReachedRounds = draftStatus.draftOrder.every(
       (team) => team.picksMade >= session.total_rounds
     );
+
     const pastEndTime = session.end_time && new Date() >= new Date(session.end_time);
 
     // Check if all teams have spent all their cubucks
     const { data: teamBalances } = await supabase
       .from("teams")
       .select("id, cubucks_balance");
+
     const allTeamsOutOfCubucks =
       teamBalances != null &&
       teamBalances.length > 0 &&
@@ -565,7 +571,6 @@ export async function resumeDraft(
   }
 }
 
-
 export async function completeDraft(
   sessionId: string,
   adminClient?: AnySupabaseClient
@@ -654,11 +659,9 @@ export async function completeDraft(
                  if (activeTeams.length < 2) {
                      await logSystemEvent("TestScheduleGen", "error", `Not enough teams for test schedule.`);
                  } else {
-                                         // Generate 5 weeks + 1 Rivals week = 6 total weeks
                      const allMatchups = await generateSeasonMatchups(activeTeams, 5, true); 
                      await logSystemEvent("ScheduleGenTrace", "info", `[4] Generated ${allMatchups.length} matchups.`);
 
-                     // HELPER: Calculates dynamic CT dates (handles DST via UTC interpretation)
                      function getTargetDateCT(baseDate: Date, addDays: number, targetHourCT: number): Date {
                          const d = new Date(baseDate);
                          d.setUTCDate(d.getUTCDate() + addDays);
@@ -674,14 +677,10 @@ export async function completeDraft(
                      
                      let week1Start: Date;
                      if (isTestSeason) {
-                         week1Start = new Date(Date.now() + 60 * 60000); // 1 hour preseason
+                         week1Start = new Date(Date.now() + 60 * 60000); 
                      } else {
-                         // Production: Draft starts Thu 12PM CT. Scheduled length = 7 days.
-                         // Preseason ends 6 days later = 13 days after Draft Start (Wednesday 12PM CT).
-                         // Pull the start_time from the draft session that was just completed
                          const { data: sessionInfo } = await supabase.from('draft_sessions').select('start_time').eq('id', sessionId).single();
                          const draftStart = sessionInfo?.start_time ? new Date(sessionInfo.start_time) : new Date();
-
                        week1Start = getTargetDateCT(draftStart, 13, 12); 
                      }
 
@@ -710,7 +709,6 @@ export async function completeDraft(
                          const weekMatchups = allMatchups.filter(m => m.week === week);
                          const matchupRecords = [];
 
-                         // 1. Create all matchups for the week first
                           for (const matchup of weekMatchups) {
                              const result = await supabase.from('weekly_matchups').insert({
                                  season_id: sessionData.season_id, week_number: week, team1_id: matchup.teamAId, team2_id: matchup.teamBId, is_playoff: false
@@ -727,9 +725,7 @@ export async function completeDraft(
                              }
                          }
                          
-                         // 2. Generate games
                          if (isTestSeason) {
-                             // Rapid 30-min sequential layout
                              for (const matchup of matchupRecords) {
                                  for (let i = 0; i < 3; i++) {
                                      const insertRes = await supabase.from('schedule').insert({
@@ -742,8 +738,7 @@ export async function completeDraft(
                                      currentMatchCursor = new Date(currentMatchCursor.getTime() + 30 * 60000);
                                  }
                              }
-
-                             // --- NEW: TIGHTEN WEEK BOUNDARIES (TEST SEASONS ONLY) ---
+                             
                              const { data: latestMatch } = await supabase
                                 .from('schedule')
                                 .select('match_date')
@@ -753,7 +748,6 @@ export async function completeDraft(
                                 .single();
                                 
                              if (latestMatch?.match_date) {
-                                 // The week ends exactly 90 minutes after the start of the final game
                                  const finalGameStart = new Date(latestMatch.match_date);
                                  const preciseWeekEnd = new Date(finalGameStart.getTime() + (90 * 60000));
                                  
@@ -762,19 +756,14 @@ export async function completeDraft(
                                      match_completion_deadline: preciseWeekEnd.toISOString()
                                  }).eq('id', weekData.id);
                              }
-                             // ---------------------------------------------------------
-
                          } else {
-                             // Production: 5 games, interleaved, Thu-Tue, on the hour streams
                              const requiredGames = 5;
                              const weekTotalGames = matchupRecords.length * requiredGames;
                              
-                             // Generate 144 hourly slots (Thu 00:00 CT to Tue 23:00 CT)
                              const firstSlotTimeCT = getTargetDateCT(weekStart, 1, 0); 
                              const availableSlots = Array.from({length: 144}, (_, i) => i);
                              const shuffledSlots = shuffleArray(availableSlots).slice(0, weekTotalGames).sort((a,b) => a-b);
                              
-                             // Interleave matchups to prevent back-to-back games
                              const counts = new Map();
                              matchupRecords.forEach(m => counts.set(m.recordId, requiredGames));
                              const finalSchedule: typeof matchupRecords = [];
@@ -791,7 +780,6 @@ export async function completeDraft(
                                  finalSchedule.push(chosen);
                              }
                              
-                             // Insert games into exact DB slots (sim 30 mins before stream)
                              for (let i = 0; i < weekTotalGames; i++) {
                                  const matchup = finalSchedule[i];
                                  const streamTime = new Date(firstSlotTimeCT.getTime() + shuffledSlots[i] * 3600000);
@@ -808,8 +796,6 @@ export async function completeDraft(
                          }
                      }
                      await logSystemEvent("ScheduleGenTrace", "info", `[6] Schedule Complete! ${totalMatchups} matchups, ${totalGames} games.`);
-
-                    
                  }
               } else {
                  const regWeeks = weeks.filter((w: { is_playoff_week: boolean; is_championship_week: boolean }) => !w.is_playoff_week && !w.is_championship_week).length;
@@ -825,18 +811,17 @@ export async function completeDraft(
         }
 
         // =========================================================================================
-        // STEP 2: GENERATE PLACEHOLDER DECKS AND POLLS (Weeks now exist!)
+        // STEP 2: GENERATE PLACEHOLDER DECKS AND POLLS 
         // =========================================================================================
         await logSystemEvent("ScheduleGenTrace", "info", `[7] Moving to Step 2: Decks and Polls.`);
         const { data: firstWeek } = await supabase.from('schedule_weeks').select('id, end_date').eq('season_id', sessionData.season_id).order('start_date', { ascending: true }).limit(1).single();
-
         const { data: teams } = await supabase.from('draft_order').select('team_id').eq('season_id', sessionData.season_id);
+
         if (teams) {
           console.log(`Starting post-draft actions for ${teams.length} teams...`);
-
- // --- THE FIX: WIPE OLD DECKS BEFORE GENERATING NEW ONES ---
           const teamIds = teams.map(t => t.team_id);
           console.log(`[Draft Complete] Wiping old deck submissions for participating teams...`);
+          
           const { error: wipeError } = await supabase
               .from('deck_submissions')
               .delete()
@@ -877,7 +862,6 @@ export async function completeDraft(
   }
 }
 
-
 // ============================================================================
 // AUTO-DRAFT TIMER CHECK
 // ============================================================================
@@ -895,11 +879,10 @@ export async function handleDraftTimerCron(): Promise<{
 }> {
   const supabase = createServiceClient();   
   try {
-    // 1. Perform a highly efficient check for any active OR scheduled draft sessions.
     const { data: activeSession, error: checkError } = await supabase
       .from("draft_sessions")
       .select("id")
-      .in("status", ["active", "scheduled"]) // <--- CHANGED THIS LINE
+      .in("status", ["active", "scheduled"]) 
       .limit(1)
       .single();
       
@@ -907,11 +890,10 @@ export async function handleDraftTimerCron(): Promise<{
       console.error("Cron check for active session failed:", checkError);
       return { status: "error", error: "Failed to check for active sessions." };
     }
-
     if (!activeSession) {
       return { status: "skipped", details: "No active or scheduled draft session found." };
     }
-
+    
     console.log(`Draft session found (${activeSession.id}). Running full draft timer check.`);
     const result = await checkDraftTimer(supabase);
     return { status: "processed", details: result.action, error: result.error };
@@ -922,15 +904,8 @@ export async function handleDraftTimerCron(): Promise<{
   }
 }
 
-
 /**
  * Checks the state of an active or scheduled draft and takes action if needed.
- * This function should only be called by the `handleDraftTimerCron` gatekeeper
- * or in direct response to a user action to avoid unnecessary runs.
- *
- * It handles two primary cases:
- * 1. Activating a "scheduled" draft whose start time has passed.
- * 2. Processing a pick for an "active" draft whose deadline has passed (auto-draft or skip).
  */
 export async function checkDraftTimer(
   adminClient?: AnySupabaseClient
@@ -941,25 +916,22 @@ export async function checkDraftTimer(
 }> {
   const supabase = adminClient ?? createServiceClient();
   try {
-    // Fetch the session, ensuring we pull the 'status' column too
     const { data: session, error: sessionError } = await supabase
       .from("draft_sessions")
       .select("id, status, start_time, hours_per_pick, consecutive_skipped_picks, locked_at")
-      .in("status", ["active", "scheduled"]) // <--- CHANGED THIS LINE
+      .in("status", ["active", "scheduled"])
       .single();
 
     if (sessionError || !session) {
       return { action: "none", message: "No active or scheduled draft session found." };
     }
 
-    // --- NEW: HANDLE SCHEDULED DRAFTS ---
     if (session.status === "scheduled") {
         const now = new Date();
         const startTime = new Date(session.start_time);
         
         if (now >= startTime) {
             console.log(`[DraftTimer] Scheduled draft start time reached. Activating session ${session.id}.`);
-            // We already have a robust activateDraft function, let's just use it!
             const activateResult = await activateDraft(session.id, supabase);
             
             if (activateResult.success) {
@@ -971,11 +943,9 @@ export async function checkDraftTimer(
             }
         }
         
-        // If it's scheduled but the time hasn't passed, do nothing.
         return { action: "none", message: "Draft is scheduled but start time has not been reached." };
     }
-    // --- LOCK CHECK ---
-    // If locked_at is set, check if the lock is stale (older than 30 seconds).
+
     if (session.locked_at) {
         const lockTime = new Date(session.locked_at).getTime();
         const now = Date.now();
@@ -985,7 +955,6 @@ export async function checkDraftTimer(
         }
         console.warn(`[DraftTimer] Stale lock detected on session ${session.id}. Clearing lock and proceeding.`);
     }
-    // ------------------
 
     const { status: draftStatus, error: statusError } = await getDraftStatus(session.id, supabase);
     if (statusError || !draftStatus) {
@@ -1014,12 +983,11 @@ export async function checkDraftTimer(
       console.log(`Deadline passed for session ${session.id}. Executing auto-pick logic.`);
       const teamId = draftStatus.onTheClock.teamId;
       
-      // --- ACQUIRE LOCK ---
       const { data: lockResult, error: lockError } = await supabase
           .from("draft_sessions")
           .update({ locked_at: new Date().toISOString() })
           .eq("id", session.id)
-          .is("locked_at", null) // Only acquire if no one else has! (Or if it was cleared)
+          .is("locked_at", null) 
           .select("id")
           .single();
 
@@ -1027,7 +995,6 @@ export async function checkDraftTimer(
           console.log(`[DraftTimer] Failed to acquire lock for session ${session.id}. Another thread beat us. Yielding.`);
           return { action: "none", message: "Lost race for the lock." };
       }
-      // --------------------
 
       let actionResult: {
         action: "none" | "auto_drafted" | "completed" | "error";
@@ -1040,34 +1007,90 @@ export async function checkDraftTimer(
 
           if (!autoDraftResult.success) {
             console.error(`Auto-draft system error for ${teamId}: ${autoDraftResult.error}`);
-            
             await supabase.from("draft_sessions").update({ status: "paused" }).eq("id", session.id);
             await logSystemEvent("AutoDraft", "error", `System error during auto-draft for team ${teamId}. Draft automatically paused.`, { error: autoDraftResult.error });
             await supabase.rpc("notify_all_users_draft", {
               p_notification_type: "draft_paused",
               p_message: `The draft has been paused due to a system error on team ${draftStatus.onTheClock.teamName}'s pick.`
             });
-
             actionResult = { action: "error", error: `Auto-draft failed: ${autoDraftResult.error}` };
           } 
           else if (autoDraftResult.source === 'skipped') {
             const newSkipCount = (session.consecutive_skipped_picks || 0) + 1;
-
+            
             if (newSkipCount >= draftStatus.totalTeams) {
-              console.log(`Stall condition met: ${newSkipCount} consecutive skips. Pausing draft.`);
-              
-              await supabase.from("draft_sessions").update({ 
-                  status: "paused", 
-                  consecutive_skipped_picks: newSkipCount 
-              }).eq("id", session.id);
-              
-              await logSystemEvent("AutoDraftStall", "error", `Draft paused: All teams have run out of funds or valid cards (${newSkipCount} consecutive skips).`);
-              await supabase.rpc("notify_all_users_draft", {
-                p_notification_type: "draft_paused",
-                p_message: "The draft has been automatically PAUSED because all teams have run out of funds."
+              console.log(`[Draft Failsafe] Maximum consecutive skips reached. Evaluating auto-completion...`);
+
+              // 1. Fetch active teams and balances
+              const { data: activeTeams, error: teamsErr } = await supabase
+                  .from('teams')
+                  .select('id, cubucks_balance')
+                  .eq('is_hidden', false);
+
+              if (teamsErr || !activeTeams) {
+                  throw new Error("Failsafe could not fetch teams to verify balances.");
+              }
+
+              // 2. Fetch total card counts
+              const { data: rosterCounts, error: countErr } = await supabase
+                  .from('team_draft_picks')
+                  .select('team_id');
+
+              if (countErr) {
+                  throw new Error("Failsafe could not fetch rosters to verify card counts.");
+              }
+
+              const cardsPerTeam = new Map<string, number>();
+              rosterCounts?.forEach(pick => {
+                  cardsPerTeam.set(pick.team_id, (cardsPerTeam.get(pick.team_id) || 0) + 1);
               });
-              
-              actionResult = { action: "completed", message: `Draft paused due to all teams running out of funds.` };
+
+              // 3. Evaluate Conditions
+              let readyToComplete = true;
+              let failingReason = "";
+
+              for (const team of activeTeams) {
+                  const balance = team.cubucks_balance || 0;
+                  const totalCards = cardsPerTeam.get(team.id) || 0;
+
+                  if (balance > 0) {
+                      readyToComplete = false;
+                      failingReason = `Team ${team.id} still has ${balance} Cubucks.`;
+                      break;
+                  }
+                  if (totalCards < 25) {
+                      readyToComplete = false;
+                      failingReason = `Team ${team.id} only has ${totalCards} cards (needs 25).`;
+                      break;
+                  }
+              }
+
+              // 4. Auto-Complete or Pause
+              if (readyToComplete) {
+                  console.log("[Draft Failsafe] ✅ All teams broke with 25+ cards. Auto-completing draft!");
+                  
+                  await completeDraft(session.id, supabase);
+                  
+                  await logSystemEvent("AutoDraftFailsafe", "info", `Draft auto-completed successfully as all teams ran out of funds.`);
+                  actionResult = { action: "completed", message: "Draft auto-completed because all teams ran out of funds." };
+                  
+              } else {
+                  console.log(`[Draft Failsafe] ⏸️ Pausing draft. Criteria not met: ${failingReason}`);
+                  
+                  await supabase.from("draft_sessions").update({ 
+                      status: "paused", 
+                      consecutive_skipped_picks: newSkipCount 
+                  }).eq("id", session.id);
+                  
+                  await logSystemEvent("AutoDraftStall", "error", `Draft paused: All teams ran out of funds or valid cards, but completion criteria not met (${failingReason}).`);
+                  await supabase.rpc("notify_all_users_draft", {
+                    p_notification_type: "draft_paused",
+                    p_message: "The draft has been automatically PAUSED because all teams have run out of funds."
+                  });
+                  
+                  actionResult = { action: "completed", message: `Draft paused due to all teams running out of funds.` };
+              }
+
             } else {
               console.log(`Team ${teamId} skipped. Consecutive skips: ${newSkipCount}.`);
               await supabase.from("draft_sessions").update({ consecutive_skipped_picks: newSkipCount }).eq("id", session.id);
@@ -1081,7 +1104,6 @@ export async function checkDraftTimer(
             }
            } 
           else {
-            // Log FIRST, then advance, because advanceDraft might trigger completeDraft!
             actionResult = {
               action: "auto_drafted",
               message: `Auto-drafted ${autoDraftResult.pick?.cardName || "a card"} for team ${teamId}.`
@@ -1092,13 +1114,10 @@ export async function checkDraftTimer(
             await advanceDraft(supabase);
           }
       } finally {
-          // --- RELEASE LOCK UNCONDITIONALLY ---
           await supabase.from("draft_sessions").update({ locked_at: null }).eq("id", session.id);
       }
-
       return actionResult;
     }
-
     return { action: "none", message: "Active session found, but no action required at this time." };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error in draft timer check";
