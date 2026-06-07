@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import type { EntityId, SpectatorStateUpdate, ClientCard, ClientChosenTarget } from '@/types';
+import type { EntityId, ClientChosenTarget, SpectatorStateUpdate, ClientCard } from '@/types';
 import { zoneIdEquals, stack, entityId } from '@/types'; 
 
 // ========================================================================
@@ -88,20 +88,30 @@ function getPlayerCenter(playerId: EntityId): Point | null {
     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }
 
-// CRITICAL FIX: Bulletproof ID extraction that ignores strict Typescript interfaces
-// and aggressively hunts for ANY property that looks like an ID.
-function getTargetEntityId(target: any): string | null {
-    if (!target) return null;
-    if (target.type === 'Player') return target.playerId || target.id || null;
-    return target.entityId || target.permanentId || target.cardId || target.spellEntityId || target.spellId || target.targetId || target.id || null;
+// CRITICAL FIX: Linter-safe ID extraction. It safely casts to a Record to check for 
+// missing properties without triggering TypeScript's "any" rules.
+function getTargetEntityId(target: ClientChosenTarget | Record<string, unknown>): EntityId | null {
+    if (!target || typeof target !== 'object') return null;
+    const t = target as Record<string, unknown>;
+    
+    const possibleIds = [
+        t.playerId, t.id, t.entityId, t.permanentId, 
+        t.cardId, t.spellEntityId, t.spellId, t.targetId
+    ];
+    
+    for (const id of possibleIds) {
+        if (typeof id === 'string') return id;
+    }
+    return null;
 }
 
-function getTargetPosition(target: any): Point | null {
-    if (!target) return null;
+function getTargetPosition(target: ClientChosenTarget | Record<string, unknown>): Point | null {
+    if (!target || typeof target !== 'object') return null;
     const id = getTargetEntityId(target);
     if (!id) return null;
 
-    if (target.type === 'Player') {
+    const t = target as Record<string, unknown>;
+    if (t.type === 'Player') {
         return getPlayerCenter(id);
     }
     return getCardCenter(id);
@@ -128,11 +138,11 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
     const stackTargetId = stack(entityId('game'));
     const stackZone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, stackTargetId));
     
-    // Ensure IDs are injected into stack cards
+    // Explicitly use ClientCard in the type guard to satisfy the linter
     const sCards = stackZone ? stackZone.cardIds.map(id => {
         const card = snapshot.gameState.cards[id];
-        return card ? { ...card, id: id } : null;
-    }).filter(Boolean) : [];
+        return card ? { ...card, id: id } as ClientCard : null;
+    }).filter((c): c is ClientCard => c !== null) : [];
     
     const combat = snapshot.gameState.combat || snapshot.combat;
     const cAttackers = combat?.attackers ?? [];
@@ -176,7 +186,6 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
         const targetId = getTargetEntityId(attacker.attackingTarget);
         if (!targetId) continue;
         
-        // Target can be Player or Planeswalker, check both DOM elements
         const targetPos = getPlayerCenter(targetId) || getCardCenter(targetId);
         if (targetPos) {
           newArrows.push({ targetKey: `combat-${attacker.creatureId}`, start: sourcePos, end: targetPos, color: '#ef4444' });
@@ -187,7 +196,6 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
     };
 
     updateArrows();
-    // Re-check DOM positions frequently to stay attached during animations
     const interval = setInterval(updateArrows, 50); 
     return () => clearInterval(interval);
   }, [stackCards, combatAttackers]);
