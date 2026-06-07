@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import type { EntityId, ClientChosenTarget, SpectatorStateUpdate, ClientCard } from '@/types';
+import type { EntityId, SpectatorStateUpdate, ClientCard, ClientChosenTarget } from '@/types';
 import { zoneIdEquals, stack, entityId } from '@/types'; 
 
 // ========================================================================
@@ -76,42 +76,35 @@ function Arrow({ start, end, color, damageLabel }: ArrowProps) {
 
 function getCardCenter(cardId: EntityId): Point | null {
     const element = document.querySelector(`[data-card-id="${cardId}"]`);
-    if (!element) {
-        console.warn(`[Targeting Forensics] DOM MISSING: Could not find card element for ID: ${cardId}`);
-        return null;
-    }
+    if (!element) return null;
     const rect = element.getBoundingClientRect();
     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }
 
 function getPlayerCenter(playerId: EntityId): Point | null {
     const element = document.querySelector(`[data-player-id="${playerId}"]`);
-    if (!element) {
-        console.warn(`[Targeting Forensics] DOM MISSING: Could not find player element for ID: ${playerId}`);
-        return null;
-    }
+    if (!element) return null;
     const rect = element.getBoundingClientRect();
     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }
 
-function getTargetEntityId(target: ClientChosenTarget): EntityId | null {
-    switch (target.type) {
-        case 'Player': return target.playerId;
-        case 'Permanent': return target.entityId;
-        case 'Spell': return target.spellEntityId;
-        case 'Card': return target.cardId;
-        default: return null;
-    }
+// CRITICAL FIX: Bulletproof ID extraction that ignores strict Typescript interfaces
+// and aggressively hunts for ANY property that looks like an ID.
+function getTargetEntityId(target: any): string | null {
+    if (!target) return null;
+    if (target.type === 'Player') return target.playerId || target.id || null;
+    return target.entityId || target.permanentId || target.cardId || target.spellEntityId || target.spellId || target.targetId || target.id || null;
 }
 
-function getTargetPosition(target: ClientChosenTarget): Point | null {
-    switch (target.type) {
-        case 'Player': return getPlayerCenter(target.playerId);
-        case 'Permanent': return getCardCenter(target.entityId);
-        case 'Spell': return getCardCenter(target.spellEntityId);
-        case 'Card': return getCardCenter(target.cardId);
-        default: return null;
+function getTargetPosition(target: any): Point | null {
+    if (!target) return null;
+    const id = getTargetEntityId(target);
+    if (!id) return null;
+
+    if (target.type === 'Player') {
+        return getPlayerCenter(id);
     }
+    return getCardCenter(id);
 }
 
 interface TargetArrow {
@@ -122,7 +115,6 @@ interface TargetArrow {
   damageLabel?: number | null;
 }
 
-// --- PROPS FOR THE REPLAY COMPONENT ---
 interface ReplayTargetingArrowsProps {
   snapshot: SpectatorStateUpdate;
 }
@@ -130,17 +122,17 @@ interface ReplayTargetingArrowsProps {
 export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) {
   const [arrows, setArrows] = useState<TargetArrow[]>([]);
 
- const { stackCards, combatAttackers } = useMemo(() => {
+  const { stackCards, combatAttackers } = useMemo(() => {
     if (!snapshot.gameState) return { stackCards: [], combatAttackers: [] };
     
     const stackTargetId = stack(entityId('game'));
     const stackZone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, stackTargetId));
     
-    // CRITICAL FIX: Inject the ID from the dictionary key into the card object
+    // Ensure IDs are injected into stack cards
     const sCards = stackZone ? stackZone.cardIds.map(id => {
         const card = snapshot.gameState.cards[id];
         return card ? { ...card, id: id } : null;
-    }).filter((c): c is ClientCard => c !== null) : [];
+    }).filter(Boolean) : [];
     
     const combat = snapshot.gameState.combat || snapshot.combat;
     const cAttackers = combat?.attackers ?? [];
@@ -162,11 +154,9 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
         card.targets?.forEach((target, i) => {
           const targetPos = getTargetPosition(target);
           if (targetPos) {
-            const targetEntityId = getTargetEntityId(target);
-            const damageLabel = targetEntityId ? card.damageDistribution?.[targetEntityId] ?? null : null;
+            const targetId = getTargetEntityId(target);
+            const damageLabel = targetId ? card.damageDistribution?.[targetId] ?? null : null;
             newArrows.push({ targetKey: `${card.id}-target-${i}`, start: stackPos, end: targetPos, color: '#ff8800', damageLabel });
-          } else {
-             console.warn(`[Targeting Forensics] ARROW FAILED: Stack card ${card.name} has target, but target DOM element not found.`);
           }
         });
 
@@ -174,8 +164,6 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
           const triggerPos = getCardCenter(card.triggeringEntityId);
           if (triggerPos) {
             newArrows.push({ targetKey: `${card.id}-source`, start: triggerPos, end: stackPos, color: '#44ccdd' });
-          } else {
-             console.warn(`[Targeting Forensics] ARROW FAILED: Stack card ${card.name} has trigger source, but source DOM element not found.`);
           }
         }
       }
@@ -183,28 +171,15 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
       // 2. Combat Targeting (Attackers)
       for (const attacker of attackingCreatures) {
         const sourcePos = getCardCenter(attacker.creatureId);
-        if (!sourcePos) {
-             console.warn(`[Targeting Forensics] ARROW FAILED: Combat attacker ID ${attacker.creatureId} not found in DOM.`);
-             continue;
-        }
+        if (!sourcePos) continue;
         
-        let targetId: EntityId | null = null;
-        if (attacker.attackingTarget.type === 'Player') {
-            targetId = attacker.attackingTarget.playerId;
-        } else if (attacker.attackingTarget.type === 'Planeswalker') {
-            targetId = attacker.attackingTarget.permanentId;
-        }
+        const targetId = getTargetEntityId(attacker.attackingTarget);
+        if (!targetId) continue;
         
-        if (!targetId) {
-            console.warn(`[Targeting Forensics] ARROW FAILED: Combat attacker ID ${attacker.creatureId} is missing a valid targetId.`);
-            continue;
-        }
-        
+        // Target can be Player or Planeswalker, check both DOM elements
         const targetPos = getPlayerCenter(targetId) || getCardCenter(targetId);
         if (targetPos) {
           newArrows.push({ targetKey: `combat-${attacker.creatureId}`, start: sourcePos, end: targetPos, color: '#ef4444' });
-        } else {
-          console.warn(`[Targeting Forensics] ARROW FAILED: Combat target ID ${targetId} not found in DOM.`);
         }
       }
       
@@ -212,13 +187,12 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
     };
 
     updateArrows();
-    const interval = setInterval(updateArrows, 100); 
+    // Re-check DOM positions frequently to stay attached during animations
+    const interval = setInterval(updateArrows, 50); 
     return () => clearInterval(interval);
   }, [stackCards, combatAttackers]);
 
-  if (arrows.length === 0) {
-    return null;
-  }
+  if (arrows.length === 0) return null;
 
   return (
     <svg style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', pointerEvents: 'none', zIndex: 999 }}>
