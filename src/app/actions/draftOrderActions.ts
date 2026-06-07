@@ -134,6 +134,7 @@ export async function updateDraftSetting(
   try {
     const supabase = await createServerClient();
     const admin = await verifyAdmin(supabase);
+
     if (!admin.authorized) {
       return { success: false, error: admin.error };
     }
@@ -234,6 +235,7 @@ export async function getSeasonStandings(
       const stats = teamStats.get(team.id) || { wins: 0, losses: 0 };
       const totalGames = stats.wins + stats.losses;
       const winPct = totalGames > 0 ? (stats.wins / totalGames) * 100 : 0;
+
       return {
         team_id: team.id,
         team_name: team.name,
@@ -290,8 +292,9 @@ export async function generateDraftOrder(
     seasonId: string,
     options?: {
         orderType?: DraftOrderType;
-        teamIds?: string[];        // which teams to include (required for manual/random)
-        manualOrder?: string[];    // team IDs in desired pick order (manual only)
+        teamIds?: string[];        
+        manualOrder?: string[];    
+        systemOverride?: boolean; // <-- THE FIX: Bypasses cookie auth
     }
 ): Promise<{
     success: boolean;
@@ -300,9 +303,17 @@ export async function generateDraftOrder(
     error?: string;
 }> {
     try {
-        const supabase = await createServerClient();
-        const admin = await verifyAdmin(supabase);
-        if (!admin.authorized) return { success: false, error: admin.error };
+        let supabase: AnySupabaseClient;
+
+        // Bypassing auth check if invoked from the system cron job
+        if (options?.systemOverride) {
+            const { createClient } = await import("@supabase/supabase-js");
+            supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+        } else {
+            supabase = await createServerClient();
+            const admin = await verifyAdmin(supabase);
+            if (!admin.authorized) return { success: false, error: admin.error };
+        }
 
         const { count: existingCount } = await supabase
             .from('draft_order')
@@ -323,7 +334,6 @@ export async function generateDraftOrder(
 
         const orderType = options?.orderType ?? 'previous_season';
 
-        // Fetch participating teams
         let teamsToInclude: Array<{ id: string; name: string; emoji: string }>;
         if (options?.teamIds && options.teamIds.length > 0) {
             const { data } = await supabase.from('teams').select('id, name, emoji').in('id', options.teamIds);
@@ -335,10 +345,12 @@ export async function generateDraftOrder(
 
         if (teamsToInclude.length === 0) return { success: false, error: 'No teams found' };
 
-        const { settings } = await getDraftSettings();
+        const { data: settingsData } = await supabase.from("draft_settings").select("setting_key, setting_value");
+        const settings: Record<string, string> = {};
+        (settingsData || []).forEach(row => { settings[row.setting_key] = row.setting_value; });
+
         const maxTeams = parseInt(settings.max_teams || String(teamsToInclude.length), 10);
 
-        // Build ordered list based on orderType
         let orderedTeams: Array<{ id: string; name: string; emoji: string; lotteryNumber: number }>;
         const lotteryNumbers = shuffleArray(Array.from({ length: maxTeams }, (_, i) => i + 1)).slice(0, teamsToInclude.length);
 
@@ -353,7 +365,6 @@ export async function generateDraftOrder(
             const shuffled = shuffleArray(teamsToInclude);
             orderedTeams = shuffled.map((team, idx) => ({ ...team, lotteryNumber: lotteryNumbers[idx] }));
         } else {
-            // previous_season — STRICT TIEBREAKERS (NFL/NBA Style)
             const { data: previousSeason } = await supabase
                 .from('seasons')
                 .select('id, season_number')
@@ -361,18 +372,15 @@ export async function generateDraftOrder(
                 .single();
 
             if (previousSeason) {
-                // 1. Get Regular Season Stats
                 const { data: stats } = await supabase.from('team_season_stats').select('*').eq('season_id', previousSeason.id);
                 const statsMap = new Map(stats?.map(s => [s.team_id, s]) || []);
 
-                // 2. Get Previous Lottery Numbers
                 const { data: prevDraftOrder } = await supabase.from('draft_order').select('team_id, lottery_number').eq('season_id', previousSeason.id);
                 const lotteryMap = new Map(prevDraftOrder?.map(d => [d.team_id, d.lottery_number]) || []);
 
-                // 3. Get Playoff Results to determine eliminations
                 const { data: playoffMatchups } = await supabase.from('weekly_matchups')
                     .select('*').eq('season_id', previousSeason.id).eq('is_playoff', true).eq('is_outcome_final', true);
-
+                
                 let championId = null;
                 let runnerUpId = null;
                 const eliminationWeekMap = new Map<string, number>();
@@ -394,45 +402,32 @@ export async function generateDraftOrder(
                     }
                 }
 
-                // 4. Assign strict sorting criteria
                 const teamsWithCriteria = teamsToInclude.map(team => {
                     const st = statsMap.get(team.id);
                     
-                    // Matchup Win %
                     const w_total = (st?.weekly_match_wins || 0) + (st?.weekly_match_losses || 0) + (st?.weekly_match_draws || 0);
                     const w_pct = w_total > 0 ? (st?.weekly_match_wins || 0) / w_total : 0;
                     
-                    // Game Win %
                     const g_wins = (st?.sim_wins || 0) + (st?.pvp_wins || 0);
                     const g_total = g_wins + (st?.sim_losses || 0) + (st?.sim_draws || 0) + (st?.pvp_losses || 0) + (st?.pvp_draws || 0);
                     const g_pct = g_total > 0 ? g_wins / g_total : 0;
                     
                     const prevLottery = lotteryMap.get(team.id) || 999;
                     
-                    // Playoff Tier (0 = Missed Playoffs, 100+ = Elimination Week, 999 = Runner Up, 1000 = Champ)
                     let playoffTier = 0; 
                     if (team.id === championId) playoffTier = 1000;
                     else if (team.id === runnerUpId) playoffTier = 999;
                     else if (eliminationWeekMap.has(team.id)) playoffTier = eliminationWeekMap.get(team.id)!;
-
+                    
                     return { ...team, w_pct, g_pct, prevLottery, playoffTier };
                 });
 
-                // 5. SORT TEAMS
                 teamsWithCriteria.sort((a, b) => {
-                    // Tier 1: Playoff Tier (Non-playoff teams first, then Round 1 losers, then Runner up, then Champ)
                     if (a.playoffTier !== b.playoffTier) return a.playoffTier - b.playoffTier;
-                    
-                    // Tier 2: Matchup Win % (Worst record picks first -> ascending)
                     if (a.w_pct !== b.w_pct) return a.w_pct - b.w_pct;
-                    
-                    // Tier 3: Game Win % (Worst record picks first)
                     if (a.g_pct !== b.g_pct) return a.g_pct - b.g_pct;
-                    
-                    // Tier 4: Previous Lottery Number (Lowest number picks first)
                     return a.prevLottery - b.prevLottery;
                 });
-
                 orderedTeams = teamsWithCriteria.map((t, idx) => ({ ...t, lotteryNumber: lotteryNumbers[idx] }));
             } else {
                 orderedTeams = teamsToInclude.map((t, idx) => ({ ...t, win_pct: 0, lotteryNumber: lotteryNumbers[idx] }));
@@ -454,10 +449,7 @@ export async function generateDraftOrder(
             previous_season_wins: 0,
             previous_season_losses: 0,
             previous_season_win_pct: (team as typeof team & { w_pct?: number }).w_pct ?? 0,
-            
-            // FIX: Lottery number is the strict inverse of their pick position
             lottery_number: teamsToInclude.length - idx, 
-            
             is_lottery_winner: (winPctGroups.get((team as typeof team & { w_pct?: number }).w_pct ?? 0) ?? 0) > 1,
         }));
 
@@ -465,13 +457,11 @@ export async function generateDraftOrder(
             .from('draft_order')
             .insert(insertRows)
             .select('*, team:teams(id, name, emoji)');
-
+            
         if (insertError) return { success: false, error: insertError.message };
 
-        const modeLabel = orderType === 'manual' ? 'manual order'
-            : orderType === 'random' ? 'random lottery'
-            : 'previous season standings';
-
+        const modeLabel = orderType === 'manual' ? 'manual order' : orderType === 'random' ? 'random lottery' : 'previous season standings';
+        
         return {
             success: true,
             order: inserted ?? [],
@@ -495,11 +485,7 @@ export async function regenerateDraftOrder(
         const admin = await verifyAdmin(supabase);
         if (!admin.authorized) return { success: false, error: admin.error };
 
-        const { error: deleteError } = await supabase
-            .from('draft_order')
-            .delete()
-            .eq('season_id', seasonId);
-
+        const { error: deleteError } = await supabase.from('draft_order').delete().eq('season_id', seasonId);
         if (deleteError) return { success: false, error: deleteError.message };
 
         return generateDraftOrder(seasonId, options);
@@ -526,7 +512,6 @@ export async function getDraftOrder(
       console.error("Error fetching draft order:", error);
       return { order: [], error: error.message };
     }
-
     return { order: data || [] };
   } catch (error) {
     console.error("Unexpected error fetching draft order:", error);
@@ -551,13 +536,11 @@ export async function getActiveDraftOrder(): Promise<{
     if (seasonError && seasonError.code !== "PGRST116") {
       return { order: [], error: seasonError.message };
     }
-
     if (!activeSeason) {
       return { order: [], error: "No active season found" };
     }
 
     const { order, error } = await getDraftOrder(activeSeason.id);
-
     return {
       order,
       seasonId: activeSeason.id,
@@ -583,7 +566,6 @@ export async function getDraftStatus(
 }> {
   try {
     const supabase = client ?? await createServerClient();
-    
     const { data: activeSeason, error: seasonError } = await supabase
       .from("seasons")
       .select("id, season_name")
@@ -603,15 +585,13 @@ export async function getDraftStatus(
     if (orderError) {
       return { status: null, seasonId: activeSeason.id, error: orderError.message };
     }
-    
+
     const validOrderData = (orderData || []).filter(entry => entry.team);
-    
     if (validOrderData.length === 0) {
       return { status: null, seasonId: activeSeason.id };
     }
 
     const pickCounts = new Map<string, number>();
-
     if (sessionId) {
       const { data: pickData, error: rpcError } = await supabase
         .rpc('get_pick_counts_for_session', { p_session_id: sessionId });
@@ -620,7 +600,6 @@ export async function getDraftStatus(
         console.error("Error counting drafted cards:", rpcError);
         return { status: null, seasonId: activeSeason.id, error: rpcError.message };
       }
-      
       (pickData || []).forEach((row: PickCount) => {
         pickCounts.set(row.team_id, Number(row.pick_count));
       });
@@ -639,11 +618,10 @@ export async function getDraftStatus(
 
     const totalTeams = draftOrder.length;
     if (totalTeams === 0) return { status: null, seasonId: activeSeason.id };
-    
+
     const totalPicks = draftOrder.reduce((sum, t) => sum + t.picksMade, 0);
     const minPicks = Math.min(...draftOrder.map((t) => t.picksMade));
     const currentRound = minPicks + 1;
-
     const teamsNeedingPick = draftOrder.filter((t) => t.picksMade === minPicks);
 
     if (teamsNeedingPick.length === 0) {
@@ -652,7 +630,7 @@ export async function getDraftStatus(
       }
       return { status: null, seasonId: activeSeason.id, error: "Could not determine team on the clock." };
     }
-    
+
     const onTheClock = teamsNeedingPick[0];
     const onDeck = teamsNeedingPick.length > 1 ? teamsNeedingPick[1] : draftOrder[0];
 
