@@ -53,7 +53,27 @@ export const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     position: 'relative', 
   },
-
+ playerRowWithZones: {
+    display: 'flex',
+    alignItems: 'center',
+    width: '100%',
+    // This pushes the battlefield to the center-left and the zones to the far right
+    justifyContent: 'space-between', 
+    minHeight: 0,
+    minWidth: 0, // CRITICAL: Allows flex container to shrink inside CSS Grid
+    flex: 1,
+  },
+  playerMainArea: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center', // Centers the battlefield vertically
+    flex: 1, // CRITICAL: Tells the battlefield to expand and take up all horizontal space
+    minWidth: 0, // CRITICAL: Prevents cards from pushing the screen wider than 100%
+    minHeight: 0,
+    alignSelf: 'stretch',
+    overflow: 'visible', // Allow tooltips/hover effects to break out if needed
+  },
 
   zonePile: {
     display: 'flex',
