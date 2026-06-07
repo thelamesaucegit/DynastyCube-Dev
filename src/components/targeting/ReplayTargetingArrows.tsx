@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import type { EntityId, SpectatorStateUpdate, ClientCard } from '@/types';
+import type { EntityId, SpectatorStateUpdate, ClientCard, ClientChosenTarget } from '@/types';
 import { zoneIdEquals, stack, entityId } from '@/types'; 
 
 // ========================================================================
