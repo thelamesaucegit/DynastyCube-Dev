@@ -90,8 +90,6 @@ function getPlayerCenter(playerId: EntityId): Point | null {
 
 /**
  * Extracts a branded EntityId from a target object of variable schema.
- * Safely inspects the runtime object for any known ID keys and casts the 
- * result back to the strict nominal EntityId type required by the linter.
  */
 function getTargetEntityId(target: ClientChosenTarget | Record<string, unknown>): EntityId | null {
     if (!target || typeof target !== 'object') {
@@ -100,7 +98,6 @@ function getTargetEntityId(target: ClientChosenTarget | Record<string, unknown>)
 
     const targetRecord = target as Record<string, unknown>;
     
-    // Ordered list of potential property keys where the ID might reside
     const possibleProperties: unknown[] = [
         targetRecord.playerId, 
         targetRecord.id, 
@@ -114,7 +111,6 @@ function getTargetEntityId(target: ClientChosenTarget | Record<string, unknown>)
     
     for (const propertyValue of possibleProperties) {
         if (typeof propertyValue === 'string' && propertyValue.trim() !== '') {
-            // Explicitly assert the raw string back into the branded EntityId type
             return propertyValue as EntityId;
         }
     }
@@ -139,7 +135,6 @@ function getTargetPosition(target: ClientChosenTarget | Record<string, unknown>)
         return getPlayerCenter(id);
     }
     
-    // Default fallback to searching for a card
     return getCardCenter(id);
 }
 
@@ -164,7 +159,6 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
     const stackTargetId = stack(entityId('game'));
     const stackZone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, stackTargetId));
     
-    // Map IDs explicitly into the returned ClientCard objects
     const sCards = stackZone ? stackZone.cardIds.map(id => {
         const card = snapshot.gameState.cards[id];
         return card ? { ...card, id: id } as ClientCard : null;
@@ -193,7 +187,8 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
               const targetPos = getTargetPosition(target);
               if (targetPos) {
                 const targetId = getTargetEntityId(target);
-                const damageLabel = targetId && card.damageDistribution ? card.damageDistribution[targetId as string] ?? null : null;
+                // CRITICAL FIX: Ensure targetId is strictly cast to EntityId to satisfy the Record index
+                const damageLabel = targetId && card.damageDistribution ? card.damageDistribution[targetId as EntityId] ?? null : null;
                 newArrows.push({ targetKey: `${card.id}-target-${i}`, start: stackPos, end: targetPos, color: '#ff8800', damageLabel });
               }
             });
@@ -215,7 +210,6 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
         const targetId = getTargetEntityId(attacker.attackingTarget);
         if (!targetId) continue;
         
-        // Combat target could be a Player (avatar) or a Permanent (planeswalker/battle)
         const targetPos = getPlayerCenter(targetId) || getCardCenter(targetId);
         if (targetPos) {
           newArrows.push({ targetKey: `combat-${attacker.creatureId}`, start: sourcePos, end: targetPos, color: '#ef4444' });
