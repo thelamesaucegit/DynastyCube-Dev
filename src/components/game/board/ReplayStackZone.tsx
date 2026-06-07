@@ -21,9 +21,14 @@ export function ReplayStackDisplay({ snapshot, cardDataMap, useOldestArt }: Repl
   const responsive = useResponsiveContext();
 
   const stackCards = useMemo(() => {
-   const stackTargetId = stack(entityId('game'));
+    const stackTargetId = stack(entityId('game'));
     const stackZone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, stackTargetId));
-    return stackZone ? stackZone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [];
+    
+    // CRITICAL FIX: Inject the ID from the dictionary key into the card object
+    return stackZone ? stackZone.cardIds.map(id => {
+        const card = snapshot.gameState.cards[id];
+        return card ? { ...card, id: id } : null;
+    }).filter((c): c is ClientCard => c !== null) : [];
   }, [snapshot]);
 
   if (stackCards.length === 0) return null;
