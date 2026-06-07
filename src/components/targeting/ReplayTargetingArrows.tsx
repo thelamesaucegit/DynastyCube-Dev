@@ -3,8 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import type { EntityId, ClientChosenTarget, SpectatorStateUpdate } from '@/types';
-// FIX: Imported strict zone matching tools
+import type { EntityId, ClientChosenTarget, SpectatorStateUpdate, ClientCard } from '@/types';
 import { zoneIdEquals, stack, entityId } from '@/types'; 
 
 // ========================================================================
