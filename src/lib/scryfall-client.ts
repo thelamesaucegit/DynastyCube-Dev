@@ -12,6 +12,12 @@
 const SCRYFALL_API_BASE = "https://api.scryfall.com";
 const REQUEST_DELAY_MS = 100; // 100ms between requests
 
+// --- NEW: Custom Headers to satisfy Scryfall's strict User-Agent policy ---
+const SCRYFALL_HEADERS = {
+  "User-Agent": "DynastyCube/1.0",
+  "Accept": "application/json"
+};
+
 // Track last request time to enforce rate limiting
 let lastRequestTime = 0;
 
@@ -28,6 +34,50 @@ async function waitForRateLimit(): Promise<void> {
   lastRequestTime = Date.now();
 }
 
+/**
+ * Scryfall Card Object (simplified)
+ */
+export interface ScryfallCard {
+  id: string; // UUID
+  oracle_id: string;
+  name: string;
+  set: string;
+  set_name: string;
+  rarity: string;
+  type_line: string;
+  
+  // --- ADDED ORACLE TEXT FIELDS ---
+  oracle_text?: string;
+  card_faces?: Array<{
+    name?: string;
+    oracle_text?: string;
+  }>;
+  // --------------------------------
+
+  colors?: string[];
+  color_identity?: string[];
+  mana_cost?: string;
+  cmc: number;
+  released_at: string;
+  edhrec_rank?: number; // Lower is more popular
+  legalities: {
+    standard?: 'legal' | 'not_legal' | 'banned';
+    pioneer?: 'legal' | 'not_legal' | 'banned';
+    modern?: 'legal' | 'not_legal' | 'banned';
+    legacy?: 'legal' | 'not_legal' | 'banned' | 'restricted';
+    vintage?: 'legal' | 'not_legal' | 'banned' | 'restricted';
+    pauper?: 'legal' | 'not_legal' | 'banned';
+  };
+  image_uris?: {
+    small: string;
+    normal: string;
+    large: string;
+    png: string;
+    art_crop: string;
+    border_crop: string;
+  };
+}
+
 export async function searchAllCards(
   query: string
 ): Promise<{
@@ -42,14 +92,18 @@ export async function searchAllCards(
     while (next_page) {
       await waitForRateLimit();
       
-      // --- THIS IS THE FIX ---
-      // We explicitly type the 'response' variable as 'Response'.
-      const response: Response = await fetch(next_page);
-
+      // Inject Headers
+      const response: Response = await fetch(next_page, { headers: SCRYFALL_HEADERS });
+      
       if (!response.ok) {
-        const errorBody = await response.json();
-        const errorMessage = `Scryfall API error on page ${next_page}: ${response.status} - ${errorBody?.details || response.statusText}`;
-        console.error(errorMessage);
+        let errorDetails = response.statusText;
+        try {
+            const errBody = await response.json();
+            errorDetails = errBody?.details || JSON.stringify(errBody);
+        } catch (e) { /* ignore json parse error */ }
+
+        const errorMessage = `Scryfall API error on page ${next_page}: ${response.status} - ${errorDetails}`;
+        console.error("[Scryfall] ❌", errorMessage);
         errors.push(errorMessage);
         break; // Stop pagination on error
       }
@@ -76,25 +130,33 @@ export async function searchAllCards(
   };
 }
 export async function fetchOldestPrintings(oracleIds: string[]): Promise<Map<string, string>> {
-  if (oracleIds.length === 0) {
+  const validIds = oracleIds.filter(id => id && typeof id === 'string' && id.trim().length > 0);
+
+  if (validIds.length === 0) {
     return new Map();
   }
+
   await waitForRateLimit();
   const imageUrlMap = new Map<string, string>();
-
-  // Scryfall's `collection` endpoint can also fetch cards by oracle_id
-  const identifiers = oracleIds.map(id => ({ oracle_id: id }));
+  
+  const identifiers = validIds.map(id => ({ oracle_id: id }));
   
   try {
     const url = `${SCRYFALL_API_BASE}/cards/collection`;
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // Inject Headers + Content-Type
+      headers: { ...SCRYFALL_HEADERS, "Content-Type": "application/json" },
       body: JSON.stringify({ identifiers }),
     });
 
     if (!response.ok) {
-      throw new Error(`Scryfall API error fetching collection by oracle_id: ${response.status}`);
+      let errorDetails = response.statusText;
+      try {
+          const errBody = await response.json();
+          errorDetails = errBody?.details || JSON.stringify(errBody);
+      } catch (e) { /* ignore */ }
+      throw new Error(`Scryfall API error fetching collection by oracle_id: ${response.status} - ${errorDetails}`);
     }
     
     const result = await response.json();
@@ -170,10 +232,15 @@ export interface ScryfallCard {
  * Search for a card by exact name
  */
 export async function searchCardByName(cardName: string): Promise<ScryfallCard | null> {
+  if (!cardName || cardName.trim() === "") return null;
+
   await waitForRateLimit();
   try {
     const url = `${SCRYFALL_API_BASE}/cards/named?exact=${encodeURIComponent(cardName)}`;
-    const response = await fetch(url);
+    
+    // Inject Headers
+    const response = await fetch(url, { headers: SCRYFALL_HEADERS });
+
     if (!response.ok) {
       if (response.status === 404) {
         console.warn(`Card not found: ${cardName}`);
@@ -198,21 +265,28 @@ export async function searchCardByName(cardName: string): Promise<ScryfallCard |
 export async function fetchCardCollection(
   cardNames: string[]
 ): Promise<{ data: ScryfallCard[]; not_found: Array<{ name: string }> }> {
+  const validNames = cardNames.filter(name => name && typeof name === 'string' && name.trim().length > 0);
+  if (validNames.length === 0) return { data: [], not_found: [] };
+
   await waitForRateLimit();
   try {
-    const batch = cardNames.slice(0, 75);
+    const batch = validNames.slice(0, 75);
     const identifiers = batch.map(name => ({ name }));
     const url = `${SCRYFALL_API_BASE}/cards/collection`;
     const response = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      // Inject Headers + Content-Type
+      headers: { ...SCRYFALL_HEADERS, "Content-Type": "application/json" },
       body: JSON.stringify({ identifiers }),
     });
 
     if (!response.ok) {
-      throw new Error(`Scryfall API error: ${response.status} ${response.statusText}`);
+      let errorDetails = response.statusText;
+      try {
+          const errBody = await response.json();
+          errorDetails = errBody?.details || errBody?.warnings?.join(', ') || JSON.stringify(errBody);
+      } catch (e) { /* ignore */ }
+      throw new Error(`Scryfall API error: ${response.status} - ${errorDetails}`);
     }
     const result = await response.json();
     return {
@@ -242,8 +316,12 @@ export async function fetchAllCards(
   const notFoundCards: string[] = [];
   const errors: string[] = [];
 
-  for (let i = 0; i < cardNames.length; i += 75) {
-    const batch = cardNames.slice(i, i + 75);
+  const validNames = [...new Set(cardNames.filter(name => name && typeof name === 'string' && name.trim().length > 0))];
+
+  console.log(`[Scryfall] 🚀 Starting fetchAllCards batch process for ${validNames.length} valid cards...`);
+
+  for (let i = 0; i < validNames.length; i += 75) {
+    const batch = validNames.slice(i, i + 75);
     try {
       const result = await fetchCardCollection(batch);
       allCards.push(...result.data);
@@ -269,7 +347,10 @@ export async function getCardById(scryfallId: string): Promise<ScryfallCard | nu
   await waitForRateLimit();
   try {
     const url = `${SCRYFALL_API_BASE}/cards/${scryfallId}`;
-    const response = await fetch(url);
+    
+    // Inject Headers
+    const response = await fetch(url, { headers: SCRYFALL_HEADERS });
+
     if (!response.ok) {
       if (response.status === 404) {
         console.warn(`Card not found with ID: ${scryfallId}`);

@@ -234,14 +234,19 @@ export async function backfillOracleData(tableName: string = 'card_pools'): Prom
   let failedCount = 0;
 
   try {
-    const { data: cardsMissingOracleId, error: fetchError1 } = await supabase.from(tableName).select('id, card_id').is('oracle_id', null);
-    if (fetchError1) throw new Error(`Failed to fetch cards missing oracle_id from ${tableName}: ${fetchError1.message}`);
+    // --- THE MAGIC FIX: Check for missing oracle_text too! ---
+    const { data: cardsMissingData, error: fetchError1 } = await supabase
+        .from(tableName)
+        .select('id, card_id')
+        .or('oracle_id.is.null,oracle_text.is.null');
 
-     // --- NEW HELPER TO EXTRACT ORACLE TEXT ---
+    if (fetchError1) throw new Error(`Failed to fetch cards: ${fetchError1.message}`);
+
     interface ScryfallFace { oracle_text?: string; }
     interface ScryfallData { oracle_text?: string; card_faces?: ScryfallFace[]; }
 
-    const extractOracleText = (card: ScryfallData) => {
+    const extractOracleText = (rawCard: unknown) => {
+        const card = rawCard as ScryfallData;
         if (card.oracle_text) return card.oracle_text;
         if (card.card_faces) {
             return card.card_faces.map((face: ScryfallFace) => face.oracle_text).filter(Boolean).join('\n//\n');
@@ -249,22 +254,22 @@ export async function backfillOracleData(tableName: string = 'card_pools'): Prom
         return null;
     };
 
-    for (const card of cardsMissingOracleId) {
+    for (const card of cardsMissingData || []) {
       try {
-        await new Promise(r => setTimeout(r, 100));
+        await new Promise(r => setTimeout(r, 100)); // Respect Scryfall Rate Limit
         const response = await fetch(`https://api.scryfall.com/cards/${card.card_id}`);
         if (!response.ok) throw new Error(`Scryfall API error for card ${card.card_id}: ${response.statusText}`);
         
         const scryfallData = await response.json();
         
         if (scryfallData.oracle_id) {
-          // --- FIX: WE NOW UPDATE ORACLE TEXT AT THE SAME TIME ---
           const { error: updateError } = await supabase.from(tableName).update({ 
               oracle_id: scryfallData.oracle_id,
               oracle_text: extractOracleText(scryfallData) 
           }).eq('id', card.id);
           
           if (updateError) throw new Error(`DB update error for card ${card.id}: ${updateError.message}`);
+          else updatedCount++;
         } else {
             failedCount++;
             errors.push(`No oracle_id found for card_id ${card.card_id}`);
@@ -275,10 +280,11 @@ export async function backfillOracleData(tableName: string = 'card_pools'): Prom
       }
     }
 
+    // --- Oldest Image URL Backfill ---
     const { data: distinctOracleIds, error: fetchError2 } = await supabase.from(tableName).select('oracle_id').is('oldest_image_url', null).not('oracle_id', 'is', null);
     if (fetchError2) throw new Error(`Failed to fetch distinct oracle_ids from ${tableName}: ${fetchError2.message}`);
     
-    const uniqueOracleIds = [...new Set(distinctOracleIds.map(o => o.oracle_id))];
+    const uniqueOracleIds = [...new Set((distinctOracleIds || []).map(o => o.oracle_id))];
     for (const oracleId of uniqueOracleIds) {
          try {
             await new Promise(r => setTimeout(r, 100));
