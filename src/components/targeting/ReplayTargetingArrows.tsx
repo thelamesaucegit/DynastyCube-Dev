@@ -4,13 +4,14 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import type { EntityId, ClientChosenTarget, SpectatorStateUpdate } from '@/types';
+// FIX: Imported strict zone matching tools
+import { zoneIdEquals, stack, entityId } from '@/types'; 
 
 // ========================================================================
 // Helper functions
 // ========================================================================
 
 interface Point { x: number; y: number; }
-
 interface ArrowProps { start: Point; end: Point; color: string; damageLabel?: number | null; }
 
 function Arrow({ start, end, color, damageLabel }: ArrowProps) {
@@ -76,14 +77,20 @@ function Arrow({ start, end, color, damageLabel }: ArrowProps) {
 
 function getCardCenter(cardId: EntityId): Point | null {
     const element = document.querySelector(`[data-card-id="${cardId}"]`);
-    if (!element) return null;
+    if (!element) {
+        console.warn(`[Targeting Forensics] DOM MISSING: Could not find card element for ID: ${cardId}`);
+        return null;
+    }
     const rect = element.getBoundingClientRect();
     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }
 
 function getPlayerCenter(playerId: EntityId): Point | null {
     const element = document.querySelector(`[data-player-id="${playerId}"]`);
-    if (!element) return null;
+    if (!element) {
+        console.warn(`[Targeting Forensics] DOM MISSING: Could not find player element for ID: ${playerId}`);
+        return null;
+    }
     const rect = element.getBoundingClientRect();
     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }
@@ -127,13 +134,15 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
   const { stackCards, combatAttackers } = useMemo(() => {
     if (!snapshot.gameState) return { stackCards: [], combatAttackers: [] };
     
-    const stackZone = snapshot.gameState.zones.find(z => z.zoneId.zoneType === 'Stack');
-    const sCards = stackZone ? stackZone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [];
+    // FIX: Use the strict matching function to find the stack, just like ReplayStackZone does
+    const stackTargetId = stack(entityId('game'));
+    const stackZone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, stackTargetId));
     
-    // CRITICAL FIX: Add the fallback for snapshot.combat just like the battlefield does!
+    const sCards = stackZone ? stackZone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [];
     const combat = snapshot.gameState.combat || snapshot.combat;
     const cAttackers = combat?.attackers ?? [];
     
+    console.log(`[Targeting Forensics] DATA CHECK: Found ${sCards.length} cards on stack, ${cAttackers.length} combat attackers.`);
     return { stackCards: sCards, combatAttackers: cAttackers };
   }, [snapshot]);
 
@@ -154,6 +163,8 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
             const targetEntityId = getTargetEntityId(target);
             const damageLabel = targetEntityId ? card.damageDistribution?.[targetEntityId] ?? null : null;
             newArrows.push({ targetKey: `${card.id}-target-${i}`, start: stackPos, end: targetPos, color: '#ff8800', damageLabel });
+          } else {
+             console.warn(`[Targeting Forensics] ARROW FAILED: Stack card ${card.name} has target, but target DOM element not found.`);
           }
         });
 
@@ -161,6 +172,8 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
           const triggerPos = getCardCenter(card.triggeringEntityId);
           if (triggerPos) {
             newArrows.push({ targetKey: `${card.id}-source`, start: triggerPos, end: stackPos, color: '#44ccdd' });
+          } else {
+             console.warn(`[Targeting Forensics] ARROW FAILED: Stack card ${card.name} has trigger source, but source DOM element not found.`);
           }
         }
       }
@@ -168,7 +181,10 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
       // 2. Combat Targeting (Attackers)
       for (const attacker of attackingCreatures) {
         const sourcePos = getCardCenter(attacker.creatureId);
-        if (!sourcePos) continue;
+        if (!sourcePos) {
+             console.warn(`[Targeting Forensics] ARROW FAILED: Combat attacker ID ${attacker.creatureId} not found in DOM.`);
+             continue;
+        }
         
         let targetId: EntityId | null = null;
         if (attacker.attackingTarget.type === 'Player') {
@@ -177,11 +193,16 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
             targetId = attacker.attackingTarget.permanentId;
         }
         
-        if (!targetId) continue;
+        if (!targetId) {
+            console.warn(`[Targeting Forensics] ARROW FAILED: Combat attacker ID ${attacker.creatureId} is missing a valid targetId.`);
+            continue;
+        }
         
         const targetPos = getPlayerCenter(targetId) || getCardCenter(targetId);
         if (targetPos) {
           newArrows.push({ targetKey: `combat-${attacker.creatureId}`, start: sourcePos, end: targetPos, color: '#ef4444' });
+        } else {
+          console.warn(`[Targeting Forensics] ARROW FAILED: Combat target ID ${targetId} not found in DOM.`);
         }
       }
       
