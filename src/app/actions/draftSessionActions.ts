@@ -833,6 +833,19 @@ export async function completeDraft(
         const { data: teams } = await supabase.from('draft_order').select('team_id').eq('season_id', sessionData.season_id);
         if (teams) {
           console.log(`Starting post-draft actions for ${teams.length} teams...`);
+
+ // --- THE FIX: WIPE OLD DECKS BEFORE GENERATING NEW ONES ---
+          const teamIds = teams.map(t => t.team_id);
+          console.log(`[Draft Complete] Wiping old deck submissions for participating teams...`);
+          const { error: wipeError } = await supabase
+              .from('deck_submissions')
+              .delete()
+              .in('team_id', teamIds);
+              
+          if (wipeError) {
+              await logSystemEvent("CompleteDraft", "warn", `Failed to wipe old decks`, { error: wipeError.message });
+          }
+            
           for (const team of teams) {
              try {
                  const { success, deckId } = await generatePlaceholderDeck(team.team_id, sessionId, supabase);

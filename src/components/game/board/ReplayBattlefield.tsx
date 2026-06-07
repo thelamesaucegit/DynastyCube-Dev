@@ -121,9 +121,10 @@ interface ReplayBattlefieldProps {
 export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldestArt }: ReplayBattlefieldProps) {
     const responsive = useResponsiveContext();
 
-    const { groupedFrontRow, groupedBackRowTop, groupedBackRowBottom } = useMemo(() => { 
+    // FIX: Reverted to a unified back row instead of an artificially split Top/Bottom row
+    const { groupedFrontRow, groupedBackRow } = useMemo(() => { 
         const playerId = isOpponent ? snapshot.player2Id : snapshot.player1Id;
-        if (!playerId) return { groupedFrontRow: [], groupedBackRowTop: [], groupedBackRowBottom: [] };
+        if (!playerId) return { groupedFrontRow: [], groupedBackRow: [] };
         
         const targetZoneId = battlefield(entityId(playerId));
         const zone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, targetZoneId));
@@ -169,18 +170,16 @@ export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldest
             return a.name.localeCompare(b.name);
         });
         
-        const backRowSplitIndex = Math.ceil(backRowCards.length / 2);
-        
         return {
             groupedFrontRow: groupCards(frontRowCards, snapshot),
-            groupedBackRowTop: groupCards(backRowCards.slice(0, backRowSplitIndex), snapshot),
-            groupedBackRowBottom: groupCards(backRowCards.slice(backRowSplitIndex), snapshot),
+            groupedBackRow: groupCards(backRowCards, snapshot),
         };
     }, [snapshot, isOpponent]);
 
+    // FIX: Ensure math looks at the combined unified back row for scaling logic
     const { fittingWidth, fittingHeight } = useMemo(() => {
         const availableWidth = responsive.viewportWidth - (responsive.containerPadding * 2) - responsive.pileWidth - 64; 
-        const maxCardsInAnyRow = Math.max(groupedFrontRow.length, groupedBackRowTop.length, groupedBackRowBottom.length, 1);
+        const maxCardsInAnyRow = Math.max(groupedFrontRow.length, groupedBackRow.length, 1);
         
         const width = calculateFittingCardWidth(
             maxCardsInAnyRow, 
@@ -191,24 +190,20 @@ export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldest
         );
         
         return { fittingWidth: width, fittingHeight: Math.round(width * 1.4) };
-    }, [responsive, groupedFrontRow.length, groupedBackRowTop.length, groupedBackRowBottom.length]);
+    }, [responsive, groupedFrontRow.length, groupedBackRow.length]);
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '8px', width: '100%', alignItems: 'center' }}>
+            {/* FRONT ROW */}
             <div data-row="front" style={{ display: 'flex', flexWrap: 'nowrap', gap: '8px', justifyContent: 'center', width: '100%', order: isOpponent ? 2 : 1 }}>
                 {groupedFrontRow?.map((group) => (
                     <ReplayGroupWithAttachments key={group.cardIds[0]} group={group} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} overrideWidth={fittingWidth} overrideHeight={fittingHeight} />
                 ))}
             </div>
             
-            <div data-row="back-top" style={{ display: 'flex', flexWrap: 'nowrap', gap: '8px', justifyContent: 'center', width: '100%', order: isOpponent ? 1 : 2 }}>
-                {groupedBackRowTop?.map((group) => (
-                    <ReplayGroupWithAttachments key={group.cardIds[0]} group={group} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} overrideWidth={fittingWidth} overrideHeight={fittingHeight} />
-                ))}
-            </div>
-
-            <div data-row="back-bottom" style={{ display: 'flex', flexWrap: 'nowrap', gap: '8px', justifyContent: 'center', width: '100%', order: isOpponent ? 0 : 3 }}>
-                {groupedBackRowBottom?.map((group) => (
+            {/* BACK ROW */}
+            <div data-row="back" style={{ display: 'flex', flexWrap: 'nowrap', gap: '8px', justifyContent: 'center', width: '100%', order: isOpponent ? 1 : 2 }}>
+                {groupedBackRow?.map((group) => (
                     <ReplayGroupWithAttachments key={group.cardIds[0]} group={group} snapshot={snapshot} cardDataMap={cardDataMap} useOldestArt={useOldestArt} overrideWidth={fittingWidth} overrideHeight={fittingHeight} />
                 ))}
             </div>

@@ -90,7 +90,21 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
         const { error: promoteErr } = await supabase.rpc('promote_staging_pools');
         if (promoteErr) throw new Error(`Promote Staging Pools RPC failed: ${promoteErr.message}`);
 
+ // --- RESET TEAM STATUSES ---
+    console.log("[Rollover] Resetting team 'is_escaped' and 'locked_in' statuses...");
+    const { error: resetTeamsError } = await supabase
+        .from('teams')
+        .update({ 
+            is_escaped: false, 
+            locked_in: false 
+        })
+        .not('id', 'is', null); // Affects all teams
 
+    if (resetTeamsError) {
+        await logSystemEvent("SeasonRollover", "error", `Failed to reset team escape/locked status`, { error: resetTeamsError.message });
+        throw new Error(`Failed to reset team status: ${resetTeamsError.message}`);
+    }
+    // ---------------------------
 
 // --- STEP 6: CALCULATE AND SET DYNAMIC CAP ---
         console.log("[SeasonRollover] Calculating dynamic salary cap...");
