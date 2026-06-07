@@ -77,7 +77,7 @@ async function resolveDeckOverride(
  * 
  * Lookup priority:
  *   1. is_current=true submission for this team + target week (if weekId provided)
- *   2. Most recent is_current=true submission for this team (any week)
+ *   2. Most recent is_current=true submission for this team (ACTIVE SEASON ONLY)
  *   3. Returns source:'none' if nothing found — caller should require manual override.
  */
 export async function getTeamCurrentDecklist(
@@ -109,12 +109,20 @@ export async function getTeamCurrentDecklist(
             }
         }
 
-        // Tier 2: Most recent submission for this team, any week this season
-        const { data: latestSubmission } = await supabase
+        // Tier 2: Most recent submission for this team, ONLY in the active season
+        // We use !inner joins to strictly filter out dead seasons
+        const { data: latestSubmission, error: latestErr } = await supabase
             .from('deck_submissions')
-            .select('deck_list, submitted_at')
+            .select(`
+                deck_list, 
+                submitted_at,
+                week:schedule_weeks!inner(
+                    season:seasons!inner(is_active)
+                )
+            `)
             .eq('team_id', teamId)
             .eq('is_current', true)
+            .eq('week.season.is_active', true)
             .order('submitted_at', { ascending: false })
             .limit(1)
             .maybeSingle();
@@ -169,6 +177,7 @@ export async function getTeamCurrentDecklist(
         };
     }
 }
+
 // Add this helper to simScheduleActions.ts alongside countCardsInDecklist
 function formatAsDckFromCards(
     teamId: string,
