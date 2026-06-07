@@ -74,66 +74,43 @@ function Arrow({ start, end, color, damageLabel }: ArrowProps) {
     );
 }
 
-function getCardCenter(cardId: EntityId): Point | null {
+function getCardCenter(cardId: EntityId | string): Point | null {
     const element = document.querySelector(`[data-card-id="${cardId}"]`);
     if (!element) return null;
     const rect = element.getBoundingClientRect();
     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }
 
-function getPlayerCenter(playerId: EntityId): Point | null {
+function getPlayerCenter(playerId: EntityId | string): Point | null {
     const element = document.querySelector(`[data-player-id="${playerId}"]`);
     if (!element) return null;
     const rect = element.getBoundingClientRect();
     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }
 
-/**
- * Extracts a branded EntityId from a target object of variable schema.
- */
-function getTargetEntityId(target: ClientChosenTarget | Record<string, unknown>): EntityId | null {
-    if (!target || typeof target !== 'object') {
-        return null;
-    }
-
+function getTargetEntityId(target: ClientChosenTarget | Record<string, unknown>): string | null {
+    if (!target || typeof target !== 'object') return null;
     const targetRecord = target as Record<string, unknown>;
     
     const possibleProperties: unknown[] = [
-        targetRecord.playerId, 
-        targetRecord.id, 
-        targetRecord.entityId, 
-        targetRecord.permanentId, 
-        targetRecord.cardId, 
-        targetRecord.spellEntityId, 
-        targetRecord.spellId, 
-        targetRecord.targetId
+        targetRecord.playerId, targetRecord.id, targetRecord.entityId, 
+        targetRecord.permanentId, targetRecord.cardId, targetRecord.spellEntityId, 
+        targetRecord.spellId, targetRecord.targetId
     ];
     
     for (const propertyValue of possibleProperties) {
-        if (typeof propertyValue === 'string' && propertyValue.trim() !== '') {
-            return propertyValue as EntityId;
-        }
+        if (typeof propertyValue === 'string' && propertyValue.trim() !== '') return propertyValue;
     }
-
     return null;
 }
 
-/**
- * Determines whether the target is a player or a card, extracts the ID, 
- * and calculates its precise center coordinates in the DOM.
- */
 function getTargetPosition(target: ClientChosenTarget | Record<string, unknown>): Point | null {
-    if (!target || typeof target !== 'object') {
-        return null;
-    }
-
+    if (!target || typeof target !== 'object') return null;
     const id = getTargetEntityId(target);
     if (!id) return null;
 
     const targetRecord = target as Record<string, unknown>;
-    if (targetRecord.type === 'Player') {
-        return getPlayerCenter(id);
-    }
+    if (targetRecord.type === 'Player') return getPlayerCenter(id);
     
     return getCardCenter(id);
 }
@@ -173,22 +150,36 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
   useEffect(() => {
     const updateArrows = () => {
       const newArrows: TargetArrow[] = [];
-      
       const cardsOnStack = stackCards.filter(card => (card.targets && card.targets.length > 0) || card.triggeringEntityId);
       const attackingCreatures = combatAttackers.filter(attacker => attacker.attackingTarget);
+
+      // --- FORENSICS CHECK ---
+      if (cardsOnStack.length > 0 || attackingCreatures.length > 0) {
+          console.groupCollapsed('[Targeting Forensics] Source Material Validation');
+          console.log('RAW Stack Cards With Targets:', JSON.parse(JSON.stringify(cardsOnStack)));
+          console.log('RAW Attacking Creatures:', JSON.parse(JSON.stringify(attackingCreatures)));
+      }
 
       // 1. Spells/Abilities on the Stack
       for (const card of cardsOnStack) {
         const stackPos = getCardCenter(card.id);
-        if (!stackPos) continue;
+        if (!stackPos) {
+            console.warn(`[Targeting Forensics] Aborted Stack Arrow: Source Card DOM missing for ID ${card.id}`);
+            continue;
+        }
 
         if (card.targets && card.targets.length > 0) {
              card.targets.forEach((target, i) => {
               const targetPos = getTargetPosition(target);
+              const targetId = getTargetEntityId(target);
+              
+              if (!targetPos) {
+                  console.warn(`[Targeting Forensics] Aborted Stack Arrow: Target DOM missing for Target ID ${targetId}`);
+              }
+              
               if (targetPos) {
-                const targetId = getTargetEntityId(target);
-                // CRITICAL FIX: Ensure targetId is strictly cast to EntityId to satisfy the Record index
-                const damageLabel = targetId && card.damageDistribution ? card.damageDistribution[targetId as EntityId] ?? null : null;
+                const dmgDict = card.damageDistribution as Record<string, number> | undefined;
+                const damageLabel = targetId && dmgDict ? dmgDict[targetId] ?? null : null;
                 newArrows.push({ targetKey: `${card.id}-target-${i}`, start: stackPos, end: targetPos, color: '#ff8800', damageLabel });
               }
             });
@@ -205,29 +196,44 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
       // 2. Combat Targeting (Attackers)
       for (const attacker of attackingCreatures) {
         const sourcePos = getCardCenter(attacker.creatureId);
-        if (!sourcePos) continue;
+        if (!sourcePos) {
+            console.warn(`[Targeting Forensics] Aborted Attack Arrow: Attacker DOM missing for ID ${attacker.creatureId}`);
+            continue;
+        }
         
         const targetId = getTargetEntityId(attacker.attackingTarget);
-        if (!targetId) continue;
+        if (!targetId) {
+            console.warn(`[Targeting Forensics] Aborted Attack Arrow: No ID found on attackingTarget object`, attacker.attackingTarget);
+            continue;
+        }
         
         const targetPos = getPlayerCenter(targetId) || getCardCenter(targetId);
+        if (!targetPos) {
+            console.warn(`[Targeting Forensics] Aborted Attack Arrow: Target DOM missing for Target ID ${targetId}`);
+        }
+
         if (targetPos) {
           newArrows.push({ targetKey: `combat-${attacker.creatureId}`, start: sourcePos, end: targetPos, color: '#ef4444' });
         }
       }
       
+      if (cardsOnStack.length > 0 || attackingCreatures.length > 0) {
+          console.log('FINAL Generated Arrows:', newArrows);
+          console.groupEnd();
+      }
+
       setArrows(newArrows);
     };
 
     updateArrows();
-    const interval = setInterval(updateArrows, 50); 
+    const interval = setInterval(updateArrows, 100); 
     return () => clearInterval(interval);
   }, [stackCards, combatAttackers]);
 
   if (arrows.length === 0) return null;
 
   return (
-    <svg style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', pointerEvents: 'none', zIndex: 999 }}>
+    <svg style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', pointerEvents: 'none', zIndex: 9999 }}>
       {arrows.map(({ targetKey, start, end, color, damageLabel }) => (
         <Arrow key={targetKey} start={start} end={end} color={color} damageLabel={damageLabel} />
       ))}
