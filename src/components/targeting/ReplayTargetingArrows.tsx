@@ -131,18 +131,21 @@ interface ReplayTargetingArrowsProps {
 export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) {
   const [arrows, setArrows] = useState<TargetArrow[]>([]);
 
-  const { stackCards, combatAttackers } = useMemo(() => {
+ const { stackCards, combatAttackers } = useMemo(() => {
     if (!snapshot.gameState) return { stackCards: [], combatAttackers: [] };
     
-    // FIX: Use the strict matching function to find the stack, just like ReplayStackZone does
     const stackTargetId = stack(entityId('game'));
     const stackZone = snapshot.gameState.zones.find(z => zoneIdEquals(z.zoneId, stackTargetId));
     
-    const sCards = stackZone ? stackZone.cardIds.map(id => snapshot.gameState.cards[id]).filter(Boolean) : [];
+    // CRITICAL FIX: Inject the ID from the dictionary key into the card object
+    const sCards = stackZone ? stackZone.cardIds.map(id => {
+        const card = snapshot.gameState.cards[id];
+        return card ? { ...card, id: id } : null;
+    }).filter((c): c is ClientCard => c !== null) : [];
+    
     const combat = snapshot.gameState.combat || snapshot.combat;
     const cAttackers = combat?.attackers ?? [];
     
-    console.log(`[Targeting Forensics] DATA CHECK: Found ${sCards.length} cards on stack, ${cAttackers.length} combat attackers.`);
     return { stackCards: sCards, combatAttackers: cAttackers };
   }, [snapshot]);
 
