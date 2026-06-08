@@ -7,7 +7,6 @@ import { logSystemEvent } from "@/lib/systemLogger";
 // The exact string we tested, fully URI encoded
 const SCRYFALL_RESORT_QUERY = "t:land -is:basic (produces>=2 OR (o:search AND (o:land OR o:Plains OR o:Island OR o:Swamp OR o:Mountain OR o:Forest)) OR o:\"put a land\") -o:/search your library for an? (basic )?(Plains|Island|Swamp|Mountain|Forest) card/ -o:/^\\{T\\}: Add \\{[WUBRG]\\}\\.$/ -o:/Add \\{[CWUBRG]\\}\\{[CWUBRG]\\}/ -o:\"it's still a land\" -is:dfc -is:mdfc -st:funny -is:ub";
 
-// THE FIX: Made 'message' optional using '?' so early returns don't need it.
 export async function importResortPoolFromScryfall(): Promise<{ success: boolean; message?: string; count?: number; error?: string }> {
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -25,7 +24,14 @@ export async function importResortPoolFromScryfall(): Promise<{ success: boolean
         const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
         while (hasMore) {
-            const response = await fetch(url);
+            // THE FIX: Added a custom User-Agent to satisfy Scryfall API requirements
+            const response = await fetch(url, {
+                headers: {
+                    'User-Agent': 'DynastyCube/1.0',
+                    'Accept': 'application/json'
+                }
+            });
+
             if (!response.ok) {
                 const errData = await response.json();
                 throw new Error(`Scryfall API Error: ${errData.details || response.statusText}`);
