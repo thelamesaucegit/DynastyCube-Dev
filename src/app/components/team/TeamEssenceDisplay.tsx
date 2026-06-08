@@ -63,7 +63,7 @@ export function TeamEssenceDisplay({ teamId, isUserTeamMember }: Props) {
         <div className="flex flex-col sm:flex-row items-center justify-between gap-6 mb-6">
           
           <div className="text-center sm:text-left">
-            <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-1">Team Bank</p>
+            <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-1">Team Essence Bank</p>
             <div className="text-4xl font-black text-purple-600 dark:text-purple-400 drop-shadow-sm flex items-center justify-center sm:justify-start gap-2">
               {data?.teamBank || 0} ✨
             </div>
@@ -72,7 +72,7 @@ export function TeamEssenceDisplay({ teamId, isUserTeamMember }: Props) {
           {isUserTeamMember && (
             <div className="flex flex-col items-center sm:items-end gap-3 border-t sm:border-t-0 sm:border-l border-purple-500/20 pt-4 sm:pt-0 sm:pl-6">
               <div className="text-center sm:text-right">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Personal Balance</p>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Your Essence</p>
                 <p className="text-2xl font-bold text-foreground">{data?.personalBalance || 0} ✨</p>
               </div>
               
@@ -92,8 +92,8 @@ export function TeamEssenceDisplay({ teamId, isUserTeamMember }: Props) {
         <div className="bg-background/60 rounded-lg p-4 text-sm text-muted-foreground border border-purple-500/10 flex gap-3 shadow-inner">
           <Info className="size-5 shrink-0 text-purple-500 mt-0.5" />
           <div className="space-y-2">
-            <p><strong>Essence</strong> is a mystical currency used at the Marketplace to alter the rules of the league and unlock lore.</p>
-            <p>Every day, team members can claim <strong>1 Base Essence</strong>. If the Team Bank has Essence stored inside it, you will automatically drain 1 from the Team Bank to claim an <strong>Additional Bonus Essence</strong> for yourself!</p>
+            <p><strong>Essence</strong> is a currency used to alter The Cube and discover secrets.</p>
+            <p>Once a day, users can claim <strong>1 Base</strong>. If the Team Bank has any Essence stored, you will claim an <strong>Additional Bonus Essence</strong> for yourself!</p>
           </div>
         </div>
       </CardContent>
