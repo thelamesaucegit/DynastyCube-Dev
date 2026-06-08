@@ -10,6 +10,10 @@ import { useAuth } from "@/contexts/AuthContext";
 
 import { TrophyCase } from "@/app/components/team/TrophyCase";
 
+import { TeamCubucksDisplay } from "@/app/components/TeamCubucksDisplay";
+import { TeamEssenceDisplay } from "@/app/components/team/TeamEssenceDisplay"; // <-- ADD THIS
+import { MatchRecording } from "@/app/components/MatchRecording";
+
 import { getTeamByShortName } from "@/app/actions/teamActions";
 import { getTeamDraftPicks, getTeamDecks, toggleKeeperStatus } from "@/app/actions/draftActions";
 import { refundDraftPick } from "@/app/actions/cubucksActions";
@@ -333,8 +337,17 @@ export default function TeamPage() {
 
       <DraftStatusWidget variant="team" teamId={team.id} />
       
-      <div className="mb-6">
-        <TeamCubucksDisplay teamId={team.id} showTransactions={true} refreshKey={cubucksRefreshKey} isUserTeamMember={isUserTeamMember} />
+       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <TeamCubucksDisplay 
+            teamId={team.id} 
+            showTransactions={true} 
+            refreshKey={cubucksRefreshKey} 
+            isUserTeamMember={isUserTeamMember} 
+        />
+        <TeamEssenceDisplay 
+            teamId={team.id} 
+            isUserTeamMember={isUserTeamMember} 
+        />
       </div>
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabType)}>
