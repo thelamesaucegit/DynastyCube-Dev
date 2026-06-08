@@ -17,7 +17,7 @@ export interface ResortCard {
   oldest_image_url?: string | null;
   oracle_id?: string | null;
   oracle_text?: string | null; // <-- ADDED
-  hidden?: boolean;
+  hidden: boolean;
   mana_cost?: string;
   cmc?: number;
   pool_name?: string;
@@ -25,6 +25,7 @@ export interface ResortCard {
   created_at?: string;
   cubecobra_elo?: number;
   rating_updated_at?: string;
+    vote_count: number; 
 }
 
 export interface ResortCardWithVote extends ResortCard {
