@@ -174,6 +174,34 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
             
             console.log("[SeasonRollover] Metadata backfill complete for new chamber set.");
         }
+        // =====================================================================
+        // --- STEP 7.5: ROTATE THE RESORT POOL ---
+        // =====================================================================
+        console.log("[SeasonRollover] Rotating the Resort Pool...");
+        try {
+            // 1. Hide everything currently visible
+            await supabase.from('resort_pool').update({ hidden: true }).eq('hidden', false);
+
+            // 2. Randomly select 50 cards to reveal
+            // We use the RANDOM() trick by selecting all IDs, shuffling in JS, and updating the first 50.
+            const { data: allResortIds } = await supabase.from('resort_pool').select('id');
+            
+            if (allResortIds && allResortIds.length > 0) {
+                const shuffled = allResortIds.sort(() => 0.5 - Math.random());
+                const selected = shuffled.slice(0, 50).map(card => card.id);
+
+                const { error: revealErr } = await supabase
+                    .from('resort_pool')
+                    .update({ hidden: false })
+                    .in('id', selected);
+
+                if (revealErr) throw new Error(revealErr.message);
+                console.log(`[SeasonRollover] Successfully revealed 50 random Resort Pool lands!`);
+            }
+        } catch (resortErr) {
+            console.error("[SeasonRollover] Failed to rotate Resort Pool:", resortErr);
+        }
+        // =====================================================================
 
         // --- STEP 8: DRAFT ORDER & SCHEDULING ---
         console.log("[SeasonRollover] Generating Draft Order...");
