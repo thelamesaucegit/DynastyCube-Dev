@@ -92,8 +92,8 @@ export function TeamEssenceDisplay({ teamId, isUserTeamMember }: Props) {
         <div className="bg-background/60 rounded-lg p-4 text-sm text-muted-foreground border border-purple-500/10 flex gap-3 shadow-inner">
           <Info className="size-5 shrink-0 text-purple-500 mt-0.5" />
           <div className="space-y-2">
-            <p><strong>Essence</strong> is a currency used to alter The Cube and discover secrets.</p>
-            <p>Once a day, users can claim <strong>1 Base</strong>. If the Team Bank has any Essence stored, you will claim an <strong>Additional Bonus Essence</strong> for yourself!</p>
+            <p><strong>Essence</strong> is a currency used to alter <strong>THE CUBE</strong> and discover secrets.</p>
+            <p>Once a day, users can claim <strong>1 Essence</strong>. If the Team Bank has any Essence stored, you will claim an <strong>Additional Bonus Essence</strong> for yourself!</p>
           </div>
         </div>
       </CardContent>
