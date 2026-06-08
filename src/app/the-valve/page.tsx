@@ -69,7 +69,7 @@ export default function TheValvePage() {
 
         const res = await toggleValveVote(nominationId);
         if (!res.success) {
-            toast.error("Failed to register pressure.");
+            toast.error("Failed to register nomination.");
             await loadNominations(); // Revert on failure
         }
     };
@@ -85,8 +85,8 @@ export default function TheValvePage() {
                         The Valve
                     </h1>
                     <p className="text-lg text-slate-400 max-w-2xl mx-auto border-l-2 border-red-800 pl-4 text-left">
-                        A mechanism of spite. Turn the wheel against the cards that oppress the realm. 
-                        At the conclusion of the Championship, the team holding the worst record will be granted the power to release the pressure, forever purging the highest-voted card from the Cube.
+                        
+                        At the conclusion of the Championship, the team holding the worst record will be granted the power to release the pressure, Retiring the highest-voted card from the Cube immediately.
                     </p>
                 </div>
 
@@ -94,7 +94,7 @@ export default function TheValvePage() {
                 <Card className="bg-slate-900 border-red-900/30 mb-12 shadow-xl">
                     <CardContent className="p-6 relative">
                         <h2 className="text-xl font-bold text-slate-200 mb-4 flex items-center gap-2">
-                            <Flame className="size-5 text-orange-500" />
+                            
                             Add Pressure
                         </h2>
                         <div className="relative">
@@ -129,7 +129,7 @@ export default function TheValvePage() {
                 <div className="space-y-4">
                     <h3 className="text-sm font-bold tracking-widest uppercase text-slate-500 mb-4 flex items-center gap-2">
                         <AlertOctagon className="size-4" />
-                        Current Pressure Levels
+                        
                     </h3>
 
                     {loading ? (
