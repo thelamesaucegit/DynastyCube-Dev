@@ -55,7 +55,7 @@ export function TeamEssenceDisplay({ teamId, isUserTeamMember }: Props) {
       <CardHeader className="pb-3 border-b border-purple-500/10">
         <CardTitle className="flex items-center gap-2 text-purple-700 dark:text-purple-400">
           <Sparkles className="size-5" />
-          Essence Matrix
+          Essence
         </CardTitle>
       </CardHeader>
       
