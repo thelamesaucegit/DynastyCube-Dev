@@ -23,14 +23,20 @@ export function ResortCardComponent({ card, teamId, onVoteSuccess }: ResortCardP
       return;
     }
     
-    // THE FIX: Assign to a strict, immutable constant.
-    // This tells TypeScript that this exact string cannot mutate during the async "await" tick.
+    // Check if card has a valid ID
+    if (!card.id) {
+        toast.error("Invalid card ID.");
+        return;
+    }
+
+    // THE FIX: Assign BOTH parameters to strict, immutable constants.
     const activeTeamId: string = teamId;
+    const activeCardId: string = card.id;
 
     setIsSubmitting(true);
     
-    // Pass the strictly typed 'activeTeamId' instead of the prop 'teamId'
-    const result = await castResortVote(activeTeamId, card.id);
+    // Pass the strictly typed constants!
+    const result = await castResortVote(activeTeamId, activeCardId);
     
     if (result.success) {
       toast.success(`Your team's vote for ${card.card_name} has been recorded!`);
@@ -64,7 +70,7 @@ export function ResortCardComponent({ card, teamId, onVoteSuccess }: ResortCardP
                 <p className="text-xs text-green-200">You can change your vote by selecting another card.</p>
             </div>
         ) : (
-            <Button onClick={handleVote} disabled={isSubmitting || !teamId}>
+            <Button onClick={handleVote} disabled={isSubmitting || !teamId || !card.id}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Vote for this card
             </Button>
