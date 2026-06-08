@@ -25,6 +25,7 @@ export interface ResortCard {
   created_at?: string;
   cubecobra_elo?: number;
   rating_updated_at?: string;
+}
 
 export interface ResortCardWithVote extends ResortCard {
   team_has_voted_for: boolean;
