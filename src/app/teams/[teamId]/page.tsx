@@ -10,9 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 import { TrophyCase } from "@/app/components/team/TrophyCase";
 
-import { TeamCubucksDisplay } from "@/app/components/TeamCubucksDisplay";
 import { TeamEssenceDisplay } from "@/app/components/team/TeamEssenceDisplay"; // <-- ADD THIS
-import { MatchRecording } from "@/app/components/MatchRecording";
 
 import { getTeamByShortName } from "@/app/actions/teamActions";
 import { getTeamDraftPicks, getTeamDecks, toggleKeeperStatus } from "@/app/actions/draftActions";
