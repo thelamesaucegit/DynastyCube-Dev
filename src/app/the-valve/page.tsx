@@ -85,8 +85,8 @@ export default function TheValvePage() {
                         The Valve
                     </h1>
                     <p className="text-lg text-slate-400 max-w-2xl mx-auto border-l-2 border-red-800 pl-4 text-left">
-                        A mechanism of spite. Turn the wheel against the cards that oppress the realm. 
-                        At the conclusion of the Championship, the team holding the worst record will be granted the power to release the pressure, forever purging the highest-voted card from the Cube.
+                        
+                        At the conclusion of the Championship, the team holding the worst record will be granted the power to release the pressure, Retiring the highest-voted card from the Cube immediately.
                     </p>
                 </div>
 
