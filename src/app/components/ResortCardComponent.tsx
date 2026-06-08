@@ -1,5 +1,4 @@
-//src/app/components/ResortCardComponent.tsx
-
+// src/app/components/ResortCardComponent.tsx
 "use client";
 
 import React, { useState } from "react";
@@ -24,8 +23,15 @@ export function ResortCardComponent({ card, teamId, onVoteSuccess }: ResortCardP
       return;
     }
     
+    // THE FIX: Assign to a strict, immutable constant.
+    // This tells TypeScript that this exact string cannot mutate during the async "await" tick.
+    const activeTeamId: string = teamId;
+
     setIsSubmitting(true);
-    const result = await castResortVote(teamId, card.id);
+    
+    // Pass the strictly typed 'activeTeamId' instead of the prop 'teamId'
+    const result = await castResortVote(activeTeamId, card.id);
+    
     if (result.success) {
       toast.success(`Your team's vote for ${card.card_name} has been recorded!`);
       onVoteSuccess();
@@ -46,12 +52,10 @@ export function ResortCardComponent({ card, teamId, onVoteSuccess }: ResortCardP
           </div>
         )}
       </div>
-
       <div className="p-3 bg-card">
         <h3 className="font-semibold text-sm truncate">{card.card_name}</h3>
         <p className="text-xs text-muted-foreground">Votes: {card.vote_count}</p>
       </div>
-
       <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center p-4 opacity-0 group-hover:opacity-100 transition-opacity">
         {card.team_has_voted_for ? (
             <div className="text-center text-primary-foreground">
