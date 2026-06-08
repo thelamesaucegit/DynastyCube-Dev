@@ -111,6 +111,11 @@ export async function getObfuscatedCyphers(): Promise<{ success: boolean; cypher
 }
 
 export async function submitCypherGuess(cypherId: string, guess: string): Promise<{ success: boolean; message?: string; earned?: number; error?: string }> {
+        // The longest word in the English dictionary is 45 letters. 
+    if (guess.length > 50) {
+        return { success: false, error: "Guess is too long." };
+    }
+
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Not authenticated" };
