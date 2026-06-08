@@ -11,6 +11,7 @@ import { executeAutoDraft } from "@/app/actions/autoDraftActions";
 import { generatePlaceholderDeck, submitDeckForWeek } from "@/app/actions/deckGenerationActions";
 import { createDeckVotePoll } from "@/app/actions/deckVoteActions";
 import { getTeamsWithDetails, type TeamWithDetails } from "@/app/actions/teamActions"; 
+import { evaluateDraftHats } from "@/app/actions/hatActions"; // <-- THE FIX 1: Import Hat Evaluator
 
 /**
  * Standard Fisher-Yates shuffle algorithm
@@ -43,7 +44,7 @@ export interface DraftSession {
   updated_at: string;
   autodraft_next_pick_at: string;
   consecutive_skipped_picks?: number;
-    locked_at?: string;
+  locked_at?: string;
 }
 
 export interface DraftSessionWithStatus extends DraftSession {
@@ -94,7 +95,6 @@ async function verifyAdmin(supabase: Awaited<ReturnType<typeof createServerClien
     .select("is_admin")
     .eq("id", user.id)
     .single();
-
   if (userError || !userData?.is_admin) {
     return { authorized: false, userId: user.id, error: "Unauthorized: Admin access required" };
   }
@@ -116,49 +116,40 @@ export async function createDraftSession(config: {
     if (!admin.authorized) {
       return { success: false, error: admin.error };
     }
-
     const { data: activeSeason } = await supabase
       .from("seasons")
       .select("id")
       .eq("is_active", true)
       .single();
-
     if (!activeSeason) {
       return { success: false, error: "No active season found. Please activate a season first." };
     }
-
     const { data: draftOrder } = await supabase
       .from("draft_order")
       .select("id")
       .eq("season_id", activeSeason.id)
       .limit(1);
-
     if (!draftOrder || draftOrder.length === 0) {
       return { success: false, error: "No draft order found for the active season. Please generate a draft order first." };
     }
-
     const { data: existingSession } = await supabase
       .from("draft_sessions")
       .select("id, status")
       .eq("season_id", activeSeason.id)
       .in("status", ["scheduled", "active", "paused"])
       .limit(1);
-
     if (existingSession && existingSession.length > 0) {
       return {
         success: false,
         error: `A draft session already exists for this season (status: ${existingSession[0].status}). Please complete or delete it first.`,
       };
     }
-
     if (config.totalRounds < 1 || config.totalRounds > 999) {
       return { success: false, error: "Total rounds must be between 1 and 999" };
     }
-
     if (config.hoursPerPick <= 0 || config.hoursPerPick > 168) {
       return { success: false, error: "Hours per pick must be greater than 0 and at most 168 (1 week)" };
     }
-
     const { data, error } = await supabase
       .from("draft_sessions")
       .insert({
@@ -172,7 +163,6 @@ export async function createDraftSession(config: {
       })
       .select()
       .single();
-
     if (error) {
       console.error("Error creating draft session:", error);
       return {
@@ -180,7 +170,6 @@ export async function createDraftSession(config: {
         error: `DB error: ${error.message} (code: ${error.code}, hint: ${error.hint ?? "none"})`,
       };
     }
-
     return { success: true, sessionId: data.id };
   } catch (error) {
     console.error("Unexpected error creating draft session:", error);
@@ -199,11 +188,9 @@ export async function getActiveDraftSession(): Promise<{
       .select("id")
       .eq("is_active", true)
       .single();
-
     if (!activeSeason) {
       return { session: null };
     }
-
     const { data: session, error } = await supabase
       .from("draft_sessions")
       .select("*")
@@ -212,16 +199,13 @@ export async function getActiveDraftSession(): Promise<{
       .order("created_at", { ascending: false })
       .limit(1)
       .single();
-
     if (error && error.code !== "PGRST116") {
       console.error("Error fetching draft session:", error);
       return { session: null, error: error.message };
     }
-
     if (!session) {
       return { session: null };
     }
-
     const { status: draftStatus } = await getDraftStatus(session.id, supabase);
     return {
       session: {
@@ -247,12 +231,10 @@ export async function getDraftSessions(): Promise<{
       .from("draft_sessions")
       .select("*")
       .order("created_at", { ascending: false });
-
     if (error) {
       console.error("Error fetching draft sessions:", error);
       return { sessions: [], error: error.message };
     }
-
     return { sessions: data || [] };
   } catch (error) {
     console.error("Unexpected error fetching draft sessions:", error);
@@ -273,33 +255,26 @@ export async function updateDraftSession(
   try {
     const supabase = await createServerClient();
     const admin = await verifyAdmin(supabase);
-
     if (!admin.authorized) {
       return { success: false, error: admin.error };
     }
-
     const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
-
     if (updates.totalRounds !== undefined) updateData.total_rounds = updates.totalRounds;
     if (updates.hoursPerPick !== undefined) updateData.hours_per_pick = updates.hoursPerPick;
     if (updates.startTime !== undefined) updateData.start_time = updates.startTime;
     if (updates.endTime !== undefined) updateData.end_time = updates.endTime;
-
     if (updates.resetDeadline && updates.hoursPerPick !== undefined) {
       const newDeadline = new Date(Date.now() + updates.hoursPerPick * 60 * 60 * 1000);
       updateData.current_pick_deadline = newDeadline.toISOString();
     }
-
     const { error } = await supabase
       .from("draft_sessions")
       .update(updateData)
       .eq("id", sessionId);
-
     if (error) {
       console.error("Error updating draft session:", error);
       return { success: false, error: error.message };
     }
-
     return { success: true };
   } catch (error) {
     console.error("Unexpected error updating draft session:", error);
@@ -313,35 +288,28 @@ export async function deleteDraftSession(
   try {
     const supabase = await createServerClient();
     const admin = await verifyAdmin(supabase);
-
     if (!admin.authorized) {
       return { success: false, error: admin.error };
     }
-
     const { data: session } = await supabase
       .from("draft_sessions")
       .select("status")
       .eq("id", sessionId)
       .single();
-
     if (!session) {
       return { success: false, error: "Draft session not found" };
     }
-
     if (session.status !== "scheduled") {
       return { success: false, error: "Can only delete scheduled draft sessions. Pause or complete the active session first." };
     }
-
     const { error } = await supabase
       .from("draft_sessions")
       .delete()
       .eq("id", sessionId);
-
     if (error) {
       console.error("Error deleting draft session:", error);
       return { success: false, error: error.message };
     }
-
     return { success: true };
   } catch (error) {
     console.error("Unexpected error deleting draft session:", error);
@@ -352,40 +320,29 @@ export async function deleteDraftSession(
 // ============================================================================
 // DRAFT LIFECYCLE
 // ============================================================================
-
-/**
- * Resets the consecutive skip counter for a draft session.
- * This should be called after a successful, non-skipped pick is made.
- */
 export async function activateDraft(
   sessionId: string,
   adminClient?: AnySupabaseClient
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = adminClient ?? await createServerClient();
-
     const { data: session, error: sessionError } = await supabase
       .from("draft_sessions")
       .select("*")
       .eq("id", sessionId)
       .single();
-
     if (sessionError || !session) {
       return { success: false, error: "Draft session not found" };
     }
-
     if (session.status !== "scheduled" && session.status !== "paused") {
       return { success: false, error: `Cannot activate a draft with status: ${session.status}` };
     }
-
     const { status: draftStatus } = await getDraftStatus(sessionId, supabase);
     if (!draftStatus) {
       return { success: false, error: "Could not determine draft status. Ensure draft order is set." };
     }
-
     const now = new Date();
     const deadline = new Date(now.getTime() + session.hours_per_pick * 60 * 60 * 1000);
-
     const { error: updateError } = await supabase
       .from("draft_sessions")
       .update({
@@ -395,23 +352,19 @@ export async function activateDraft(
         updated_at: now.toISOString(),
       })
       .eq("id", sessionId);
-
     if (updateError) {
       console.error("Error activating draft:", updateError);
       return { success: false, error: updateError.message };
     }
-
     await supabase.rpc("notify_all_users_draft", {
       p_notification_type: "draft_started",
       p_message: `The draft has started! ${draftStatus.seasonName} draft is now live.`,
     });
-
     await supabase.rpc("notify_draft_team_roles", {
       p_team_id: draftStatus.onTheClock.teamId,
       p_notification_type: "draft_on_clock",
       p_message: `${draftStatus.onTheClock.teamEmoji} ${draftStatus.onTheClock.teamName} is ON THE CLOCK! You have ${session.hours_per_pick} hours to make your pick.`,
     });
-
     if (draftStatus.onDeck.teamId !== draftStatus.onTheClock.teamId) {
       await supabase.rpc("notify_draft_team_roles", {
         p_team_id: draftStatus.onDeck.teamId,
@@ -419,7 +372,6 @@ export async function activateDraft(
         p_message: `${draftStatus.onDeck.teamEmoji} ${draftStatus.onDeck.teamName} is ON DECK! Get ready, you're picking next.`,
       });
     }
-
     return { success: true };
   } catch (error) {
     console.error("Unexpected error activating draft:", error);
@@ -436,12 +388,11 @@ export async function activateDraft(
 export async function advanceDraft(adminClient?: AnySupabaseClient): Promise<{
   success: boolean;
   completed?: boolean;
-   autoDrafted?: boolean;
+  autoDrafted?: boolean;
   error?: string;
 }> {
   try {
     const supabase = adminClient ?? await createServerClient();
-
     const { data: session } = await supabase
       .from("draft_sessions")
       .select("*")
@@ -449,27 +400,22 @@ export async function advanceDraft(adminClient?: AnySupabaseClient): Promise<{
       .order("created_at", { ascending: false })
       .limit(1)
       .single();
-
     if (!session) {
       return { success: true }; // No active session, do nothing.
     }
-
     const { status: draftStatus } = await getDraftStatus(session.id, supabase);
     if (!draftStatus) {
       return { success: false, error: "Could not determine draft status" };
     }
-
     const allTeamsReachedRounds = draftStatus.draftOrder.every(
       (team) => team.picksMade >= session.total_rounds
     );
-
     const pastEndTime = session.end_time && new Date() >= new Date(session.end_time);
-
+    
     // Check if all teams have spent all their cubucks
     const { data: teamBalances } = await supabase
       .from("teams")
       .select("id, cubucks_balance");
-
     const allTeamsOutOfCubucks =
       teamBalances != null &&
       teamBalances.length > 0 &&
@@ -484,7 +430,6 @@ export async function advanceDraft(adminClient?: AnySupabaseClient): Promise<{
     // Draft continues — set new deadline and notify next team
     const now = new Date();
     const deadline = new Date(now.getTime() + session.hours_per_pick * 60 * 60 * 1000);
-
     await supabase
       .from("draft_sessions")
       .update({
@@ -509,7 +454,6 @@ export async function advanceDraft(adminClient?: AnySupabaseClient): Promise<{
         p_message: `${draftStatus.onDeck.teamEmoji} ${draftStatus.onDeck.teamName} is ON DECK! Get ready, you're picking next.`,
       });
     }
-
     return { success: true, completed: false };
   } catch (error) {
     console.error("Unexpected error advancing draft:", error);
@@ -526,7 +470,6 @@ export async function pauseDraft(
     if (!admin.authorized) {
       return { success: false, error: admin.error };
     }
-
     const { error } = await supabase
       .from("draft_sessions")
       .update({
@@ -536,17 +479,14 @@ export async function pauseDraft(
       })
       .eq("id", sessionId)
       .eq("status", "active");
-
     if (error) {
       console.error("Error pausing draft:", error);
       return { success: false, error: error.message };
     }
-
     await supabase.rpc("notify_all_users_draft", {
-      p_notification_type: "draft_started",
+      p_notification_type: "draft_paused",
       p_message: "The draft has been paused by an admin. Picks are on hold.",
     });
-
     return { success: true };
   } catch (error) {
     console.error("Unexpected error pausing draft:", error);
@@ -583,6 +523,19 @@ export async function completeDraft(
       if (!admin.authorized) return { success: false, error: admin.error };
     }
 
+    const { data: sessionData } = await supabase.from('draft_sessions').select(`season_id, seasons ( season_name, cubucks_allocation )`).eq('id', sessionId).single();
+
+    // =========================================================================================
+    // THE FIX: EVALUATE DRAFT HATS & DISTRIBUTE REWARDS/CURSES FOR THE NEWLY COMPLETED DRAFT!
+    // =========================================================================================
+    if (sessionData?.season_id) {
+        const seasonDetails = Array.isArray(sessionData.seasons) ? sessionData.seasons[0] : sessionData.seasons;
+        const currentCap = seasonDetails?.cubucks_allocation || 40;
+        console.log(`[Draft Complete] Evaluating hats for season ${sessionData.season_id} with Cap: ${currentCap}`);
+        await evaluateDraftHats(sessionData.season_id, currentCap);
+    }
+    // =========================================================================================
+
     const { error } = await supabase
       .from("draft_sessions")
       .update({
@@ -615,7 +568,6 @@ export async function completeDraft(
                 algorithm_details: pick.algorithm_details, cmc: pick.cmc,
                 pick_number: pick.pick_number, pick_source: pick.pick_source, drafted_at: pick.drafted_at || new Date().toISOString()
             }));
-
             const { error: archiveError } = await supabase.from('historical_draft_picks').insert(historicalPayload);
             if (archiveError) await logSystemEvent("CompleteDraft", "error", `Failed to bulk insert historical picks`, { error: archiveError.message });
         }
@@ -625,8 +577,6 @@ export async function completeDraft(
 
     console.log(`Draft ${sessionId} completed. Moving undrafted cards to The Wire.`);
     await supabase.from('card_pools').update({ pool_name: 'wire', on_wire_since: new Date().toISOString() }).eq('pool_name', 'draft').eq('was_drafted', false);
-
-    const { data: sessionData } = await supabase.from('draft_sessions').select(`season_id, seasons ( season_name )`).eq('id', sessionId).single();
 
     // =========================================================================================
     // STEP 1: AUTOMATED SCHEDULE GENERATION (Must happen BEFORE decks/polls so weeks exist!)
@@ -640,7 +590,6 @@ export async function completeDraft(
               supabase.from('schedule_weeks').select('*').eq('season_id', sessionData.season_id),
               supabase.from('seasons').select('*').eq('id', sessionData.season_id).single()
             ]);
-
             const weeks = weeksResponse.data || [];
             const season = seasonResponse.data;
 
@@ -650,18 +599,16 @@ export async function completeDraft(
               const isTestSeason = seasonName.toUpperCase().includes("TEST");
               
               await logSystemEvent("ScheduleGenTrace", "info", `[2] Season loaded. isTestSeason: ${isTestSeason}. Weeks found: ${weeks.length}`);
-
               if (isTestSeason) {
                  const { teams } = await getTeamsWithDetails(false, supabase);
                  const activeTeams = (teams?.filter(t => t.is_hidden !== true) || []) as TeamWithDetails[];
                  await logSystemEvent("ScheduleGenTrace", "info", `[3] Rapid Test Gen: Found ${activeTeams.length} active teams.`);
-
                  if (activeTeams.length < 2) {
                      await logSystemEvent("TestScheduleGen", "error", `Not enough teams for test schedule.`);
                  } else {
                      const allMatchups = await generateSeasonMatchups(activeTeams, 5, true); 
                      await logSystemEvent("ScheduleGenTrace", "info", `[4] Generated ${allMatchups.length} matchups.`);
-
+                     
                      function getTargetDateCT(baseDate: Date, addDays: number, targetHourCT: number): Date {
                          const d = new Date(baseDate);
                          d.setUTCDate(d.getUTCDate() + addDays);
@@ -681,12 +628,11 @@ export async function completeDraft(
                      } else {
                          const { data: sessionInfo } = await supabase.from('draft_sessions').select('start_time').eq('id', sessionId).single();
                          const draftStart = sessionInfo?.start_time ? new Date(sessionInfo.start_time) : new Date();
-                       week1Start = getTargetDateCT(draftStart, 13, 12); 
+                         week1Start = getTargetDateCT(draftStart, 13, 12); 
                      }
 
                      const matchupsPerWeek = Math.floor(activeTeams.length / 2);
                      const weekDurationMs = isTestSeason ? (matchupsPerWeek * 3 * 30 * 60000) : (7 * 86400000); 
-
                      let currentMatchCursor = new Date(week1Start.getTime());
                      let totalMatchups = 0, totalGames = 0;
 
@@ -709,7 +655,7 @@ export async function completeDraft(
                          const weekMatchups = allMatchups.filter(m => m.week === week);
                          const matchupRecords = [];
 
-                          for (const matchup of weekMatchups) {
+                         for (const matchup of weekMatchups) {
                              const result = await supabase.from('weekly_matchups').insert({
                                  season_id: sessionData.season_id, week_number: week, team1_id: matchup.teamAId, team2_id: matchup.teamBId, is_playoff: false
                              }).select('id').single();
@@ -795,7 +741,7 @@ export async function completeDraft(
                              }
                          }
                      }
-                     await logSystemEvent("ScheduleGenTrace", "info", `[6] Schedule Complete! ${totalMatchups} matchups, ${totalGames} games.`);
+                     await logSystemEvent("TestScheduleGen", "info", `[6] Schedule Complete! ${totalMatchups} matchups, ${totalGames} games.`);
                  }
               } else {
                  const regWeeks = weeks.filter((w: { is_playoff_week: boolean; is_championship_week: boolean }) => !w.is_playoff_week && !w.is_championship_week).length;
@@ -816,7 +762,7 @@ export async function completeDraft(
         await logSystemEvent("ScheduleGenTrace", "info", `[7] Moving to Step 2: Decks and Polls.`);
         const { data: firstWeek } = await supabase.from('schedule_weeks').select('id, end_date').eq('season_id', sessionData.season_id).order('start_date', { ascending: true }).limit(1).single();
         const { data: teams } = await supabase.from('draft_order').select('team_id').eq('season_id', sessionData.season_id);
-
+        
         if (teams) {
           console.log(`Starting post-draft actions for ${teams.length} teams...`);
           const teamIds = teams.map(t => t.team_id);
@@ -853,8 +799,8 @@ export async function completeDraft(
 
     await supabase.rpc("notify_all_users_draft", { p_notification_type: "draft_completed", p_message: "The draft has concluded. The league is now in the Preseason phase!" });
     await logSystemEvent("CompleteDraft", "info", `Draft ${sessionId} fully completed and transitioned successfully.`);
-
     return { success: true };
+
   } catch (error) {
     const errString = String(error);
     await logSystemEvent("CompleteDraft", "error", "Unexpected fatal error completing draft", { error: errString });
