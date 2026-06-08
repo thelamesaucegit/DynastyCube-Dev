@@ -1,11 +1,10 @@
-//src/app/actions/resortActions.ts
-
+// src/app/actions/resortActions.ts
 "use server";
 
 import { createServerClient } from "@/lib/supabase";
 
 export interface ResortCard {
-   id?: string;
+  id?: string;
   card_id: string;
   card_name: string;
   card_set?: string;
@@ -16,8 +15,8 @@ export interface ResortCard {
   image_url?: string | null;
   oldest_image_url?: string | null;
   oracle_id?: string | null;
-  oracle_text?: string | null; // <-- ADDED
-  hidden: boolean;
+  oracle_text?: string | null; 
+  hidden?: boolean; // <-- THE FIX 1: Made optional with '?' so partial selects don't fail!
   mana_cost?: string;
   cmc?: number;
   pool_name?: string;
@@ -25,12 +24,13 @@ export interface ResortCard {
   created_at?: string;
   cubecobra_elo?: number;
   rating_updated_at?: string;
-    vote_count: number; 
+  vote_count: number; 
 }
 
 export interface ResortCardWithVote extends ResortCard {
   team_has_voted_for: boolean;
 }
+
 // This function will find the correct poll for a team and add a card as an option.
 export async function nominateResortCard(
   resortCardId: string,
@@ -38,7 +38,6 @@ export async function nominateResortCard(
   cardName: string
 ): Promise<{ success: boolean; error?: string; message?: string }> {
   const supabase = await createServerClient();
-
   try {
     // 1. Find the active "Resort Pool Vote" poll for the given team.
     const { data: poll, error: pollError } = await supabase
@@ -81,7 +80,6 @@ export async function nominateResortCard(
       });
 
     if (insertError) throw insertError;
-
     return { success: true, message: `Successfully nominated ${cardName} for your team!` };
 
   } catch (err) {
@@ -90,12 +88,14 @@ export async function nominateResortCard(
     return { success: false, error: message };
   }
 }
+
 export async function getResortCards(teamId?: string): Promise<{ cards: ResortCardWithVote[]; error?: string }> {
   const supabase = await createServerClient();
   try {
+    // THE FIX 2: Selecting '*' allows us to load all the metrics for the search filters securely
     const { data: cards, error: cardsError } = await supabase
       .from("resort_pool")
-      .select("id, card_id, card_name, image_url, vote_count")
+      .select("*") 
       .eq('hidden', false)
       .order("card_name", { ascending: true });
 
@@ -118,8 +118,8 @@ export async function getResortCards(teamId?: string): Promise<{ cards: ResortCa
         ...card,
         team_has_voted_for: card.id === teamVoteId,
     }));
-
     return { cards: cardsWithVoteStatus };
+
   } catch (err) {
     const message = err instanceof Error ? err.message : "An unexpected error occurred.";
     console.error("Error in getResortCards:", message);
