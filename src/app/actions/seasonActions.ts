@@ -144,6 +144,29 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
         console.log("[Rollover] Resetting team 'is_escaped' and 'locked_in' statuses...");
         const { error: resetTeamsError } = await supabase.from('teams').update({ is_escaped: false, locked_in: false }).not('id', 'is', null);
         if (resetTeamsError) throw new Error(`Failed to reset team status: ${resetTeamsError.message}`);
+        // =====================================================================
+        // --- STEP 5.5: SYNC ALL ELO SCORES ---
+        // =====================================================================
+        console.log("[SeasonRollover] Syncing all ELO scores from CubeCobra...");
+        try {
+            // Dynamically import to avoid circular dependency issues at the top of the file
+            const { updateAllCubecobraElo } = await import('@/app/actions/cardRatingActions');
+            const eloSyncResult = await updateAllCubecobraElo();
+            
+            if (eloSyncResult.success) {
+                console.log(`[SeasonRollover] ELO Sync complete: ${eloSyncResult.message}`);
+                await logSystemEvent("SeasonRollover", "info", `CubeCobra ELO synced successfully. ${eloSyncResult.message}`);
+            } else {
+                console.warn(`[SeasonRollover] ELO Sync Warning: ${eloSyncResult.message}`);
+                await logSystemEvent("SeasonRollover", "warn", `CubeCobra ELO sync returned warnings: ${eloSyncResult.message}`);
+            }
+        } catch (eloErr) {
+            console.error("[SeasonRollover] FATAL ERROR during ELO Sync:", eloErr);
+            // We log but DO NOT THROW. If CubeCobra's S3 bucket goes offline during Rollover, 
+            // we want the season to successfully roll over using the existing/old ELOs.
+            await logSystemEvent("SeasonRollover", "error", "Fatal error during CubeCobra ELO sync.", { error: String(eloErr) });
+        }
+        // =====================================================================
 
         // --- STEP 6: CALCULATE AND SET DYNAMIC CAP ---
         console.log("[SeasonRollover] Calculating dynamic salary cap...");
