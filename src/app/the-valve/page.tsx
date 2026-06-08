@@ -69,7 +69,7 @@ export default function TheValvePage() {
 
         const res = await toggleValveVote(nominationId);
         if (!res.success) {
-            toast.error("Failed to register pressure.");
+            toast.error("Failed to register nomination.");
             await loadNominations(); // Revert on failure
         }
     };
@@ -94,7 +94,7 @@ export default function TheValvePage() {
                 <Card className="bg-slate-900 border-red-900/30 mb-12 shadow-xl">
                     <CardContent className="p-6 relative">
                         <h2 className="text-xl font-bold text-slate-200 mb-4 flex items-center gap-2">
-                            <Flame className="size-5 text-orange-500" />
+                            
                             Add Pressure
                         </h2>
                         <div className="relative">
@@ -129,7 +129,7 @@ export default function TheValvePage() {
                 <div className="space-y-4">
                     <h3 className="text-sm font-bold tracking-widest uppercase text-slate-500 mb-4 flex items-center gap-2">
                         <AlertOctagon className="size-4" />
-                        Current Pressure Levels
+                        
                     </h3>
 
                     {loading ? (
