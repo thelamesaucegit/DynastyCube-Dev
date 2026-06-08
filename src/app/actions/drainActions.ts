@@ -5,6 +5,11 @@ import { createServerClient } from "@/lib/supabase";
 import { logSystemEvent } from "@/lib/systemLogger";
 
 export async function offerToTheDrain(offer: string): Promise<{ success: boolean; message: string; type: "card" | "self" | "rejected" | "unauthenticated" }> {
+       // Maximum MTG card name length is usually under 50 chars. 150 is plenty safe.
+    if (offer.length > 150) {
+        return { success: true, message: "YOUR HUBRIS EXCEEDS YOUR GRASP. THE CUBE REJECTS THIS GIFT.", type: "rejected" };
+    }
+
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
     
