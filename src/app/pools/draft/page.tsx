@@ -272,7 +272,7 @@ export default function PoolsPage() {
                      </div>
       )}
 
-      <PoolFilterBar
+          <PoolFilterBar
         searchTerm={searchTerm} setSearchTerm={setSearchTerm}
         filterColors={filterColors} setFilterColors={setFilterColors}
         matchAllColors={matchAllColors} setMatchAllColors={setMatchAllColors}
@@ -286,13 +286,17 @@ export default function PoolsPage() {
         uniqueTypes={uniqueTypes}
         
         showStatusFilter={true} // Only true for Draft Pool!
-        filterStatus={filterStatus} setFilterStatus={setFilterStatus}
+        filterStatus={filterStatus} 
+        
+        // THE FIX: Wrap setFilterStatus in a plain string handler cast
+        setFilterStatus={(val) => setFilterStatus(val as "all" | "available" | "drafted")}
         
         filteredCount={filteredAndSortedCards.length}
         totalCount={cards.length}
         currentPage={currentPage}
         cardsPerPage={CARDS_PER_PAGE}
       />
+
 
       {/* Cards Grid */}
       {filteredAndSortedCards.length === 0 ? (
