@@ -45,7 +45,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
   const [draftedCards, setDraftedCards] = useState<DraftPick[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(""); // <-- Note: This is searchQuery!
   const [colorFilters, setColorFilters] = useState<string[]>([]);
   const [matchAllColors, setMatchAllColors] = useState(false);
   const [excludeUnselected, setExcludeUnselected] = useState(false);
@@ -195,6 +195,11 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
     }
   };
 
+  const draftedCardCounts = new Map<string, number>();
+  draftedCards.forEach(pick => {
+    draftedCardCounts.set(pick.card_id, (draftedCardCounts.get(pick.card_id) || 0) + 1);
+  });
+
   const filteredCards = availableCards.filter((card) => {
     if (searchQuery) {
         const lowerSearch = searchQuery.toLowerCase();
@@ -331,9 +336,10 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
         </div>
       )}
 
+      {/* --- THE FIX: Passed 'searchQuery' and 'setSearchQuery' correctly! --- */}
       <PoolFilterBar
-        searchTerm={searchTerm} setSearchTerm={setSearchTerm}
-        filterColors={filterColors} setFilterColors={setFilterColors}
+        searchTerm={searchQuery} setSearchTerm={setSearchQuery}
+        filterColors={colorFilters} setFilterColors={setColorFilters}
         matchAllColors={matchAllColors} setMatchAllColors={setMatchAllColors}
         excludeUnselected={excludeUnselected} setExcludeUnselected={setExcludeUnselected}
         filterType={filterType} setFilterType={setFilterType}
