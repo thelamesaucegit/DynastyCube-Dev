@@ -38,13 +38,13 @@ const MARKETPLACE_ITEMS = [
   },
   {
     id: "reveal_truth",
-    title: "Reveal The Truth",
+    title: "Reveal",
     description: "Reveal words from THE BOOK or any other redacted message on the site.",
     icon: <BookOpen className="size-6 text-amber-400" />,
   },
   {
     id: "retrieve_lost",
-    title: "Retrieve The Lost",
+    title: "Retrieve",
     description: "Retrieve something lost.",
     icon: <Search className="size-6 text-cyan-400" />,
   },
@@ -56,13 +56,13 @@ const MARKETPLACE_ITEMS = [
   },
   {
     id: "necromancy",
-    title: "Necromancy",
+    title: "Reinvigorate",
     description: "Call a card back from Retirement.",
     icon: <Ghost className="size-6 text-slate-400" />,
   },
   {
-    id: "baptism",
-    title: "Baptism",
+    id: "rename",
+    title: "Rename",
     description: "Nickname a creature in your Team Pool permanently.",
     icon: <Tag className="size-6 text-pink-400" />,
   },
@@ -111,7 +111,7 @@ export default function MarketplacePage() {
             The Marketplace
           </h1>
           <p className="text-lg text-muted-foreground mt-2 max-w-2xl">
-            A strange, shifting bazaar where the rules of the realm are bought and sold. 
+            A strange bazaar where trinkets and great powers are bought and sold side by side. 
             The vendor appears to be away at the moment.
           </p>
         </div>
@@ -137,7 +137,7 @@ export default function MarketplacePage() {
         <div>
           <h3 className="font-bold text-amber-700 dark:text-amber-400">The stalls are currently closed.</h3>
           <p className="text-sm text-amber-600/80 dark:text-amber-400/80 mt-1">
-            The powers of the league are in flux. The items below have been spotted through the storefront windows, but their prices remain obscured. Gather your Essence while you wait.
+            The League is in flux. The items below have been spotted through the storefront windows, but their prices remain obscured. Gather your Essence while you wait.
           </p>
         </div>
       </div>
