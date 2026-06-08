@@ -121,8 +121,8 @@ export async function submitCypherGuess(cypherId: string, guess: string): Promis
     const { data: cypher } = await supabase.from('cyphers').select('content').eq('id', cypherId).single();
     if (!cypher) return { success: false, error: "Cypher not found." };
 
-    // --- FIX: Explicitly typed 'm' as RegExpMatchArray ---
-    const allWords = Array.from(cypher.content.matchAll(/([a-zA-Z']+)/g)).map((m: RegExpMatchArray) => m[0].toLowerCase());
+    // --- THE FIX: Cast the entire Array.from output BEFORE calling .map() ---
+    const allWords = (Array.from(cypher.content.matchAll(/([a-zA-Z']+)/g)) as RegExpMatchArray[]).map(m => m[0].toLowerCase());
     
     if (!allWords.includes(cleanGuess)) {
         return { success: false, error: "Incorrect. That word is not hidden in this Cypher." };
@@ -173,9 +173,9 @@ export async function purchaseCypherWord(cypherId: string, wordIndex: number): P
     const { data: cypher } = await supabase.from('cyphers').select('content').eq('id', cypherId).single();
     if (!cypher) return { success: false, error: "Cypher not found." };
 
-    // --- FIX: Explicitly typed 'm' as RegExpMatchArray ---
+    // --- THE FIX: Cast the entire Array.from output BEFORE calling .map() ---
     const regex = /([a-zA-Z']+)/g;
-    const allWords = Array.from(cypher.content.matchAll(regex)).map((m: RegExpMatchArray) => m[0]);
+    const allWords = (Array.from(cypher.content.matchAll(regex)) as RegExpMatchArray[]).map(m => m[0]);
     
     if (wordIndex < 0 || wordIndex >= allWords.length) return { success: false, error: "Invalid word target." };
     
