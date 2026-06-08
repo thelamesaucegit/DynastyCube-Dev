@@ -62,9 +62,27 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
     const rejectResponses = [
         "THE CUBE REJECTS THIS GIFT.",
         "WORTHLESS DROSS. THE CUBE REJECTS THIS GIFT.",
-        "DO NOT INSULT THE ABYSS. THE CUBE REJECTS THIS GIFT."
+        "DO NOT INSULT THE ABYSS. THE CUBE REJECTS THIS GIFT.",
+        "A PATHETIC OFFERING. THE CUBE REJECTS THIS GIFT.",
+        "THE MAW SPITS IT BACK. THE CUBE REJECTS THIS GIFT.",
+        "YOU OFFER NOTHING OF VALUE. THE CUBE REJECTS THIS GIFT.",
+        "THE DRAIN REMAINS EMPTY. THE CUBE REJECTS THIS GIFT.",
+        "INSUFFICIENT TRIBUTE. THE CUBE REJECTS THIS GIFT.",
+        "THE VOID FINDS NO NOURISHMENT HERE. THE CUBE REJECTS THIS GIFT.",
+        "AN OFFENSE TO THE ETERNITIES. THE CUBE REJECTS THIS GIFT.",
+        "ASH AND DUST. THE CUBE REJECTS THIS GIFT.",
+        "THE SHADOWS TURN AWAY IN DISGUST. THE CUBE REJECTS THIS GIFT."
     ];
+
+    let finalMessage = "";
+
+    // 1% chance for the ultra-rare absurdity
+    if (Math.random() < 0.01) {
+        finalMessage = "THE CUBE PUTS ON READING GLASSES, SQUINTS, SIGHS DEEPLY, AND SLIDES IT BACK ACROSS THE TABLE. THE CUBE REJECTS THIS GIFT.";
+    } else {
+        finalMessage = rejectResponses[Math.floor(Math.random() * rejectResponses.length)];
+    }
     
     await logSystemEvent("TheDrain", "warn", `User ${user.id} offered invalid tribute: "${offer}"`);
-    return { success: true, message: rejectResponses[Math.floor(Math.random() * rejectResponses.length)], type: "rejected" };
+    return { success: true, message: finalMessage, type: "rejected" };
 }
