@@ -69,7 +69,67 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
         console.log("[SeasonRollover] Running Cost Economy & Retirements...");
         const { error: costErr } = await supabase.rpc('rollover_season_costs', { p_new_season_id: newSeason.id, p_previous_season_id: oldSeason.id });
         if (costErr) throw new Error(`Cost Rollover RPC failed: ${costErr.message}`);
+ // =====================================================================
+        // --- EXECUTE THE VALVE ---
+        // =====================================================================
+        console.log("[SeasonRollover] Checking for Valve Vote...");
+        try {
+            // 1. Find the active Valve vote
+            const { data: valveVote } = await supabase
+                .from('team_votes')
+                .select('id')
+                .eq('title', 'THE VALVE')
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
 
+            let releaseValve = false;
+
+            if (valveVote) {
+                // 2. Fetch the options and raw casts to manually tally safely
+                const { data: options } = await supabase.from('team_vote_options').select('id, option_text').eq('vote_id', valveVote.id);
+                // Note: Update 'team_vote_casts' if your cast table is named slightly differently
+                const { data: casts } = await supabase.from('team_vote_casts').select('option_id').eq('vote_id', valveVote.id);
+                
+                if (options && casts) {
+                    let releaseVotes = 0;
+                    let shutVotes = 0;
+                    
+                    const releaseOptId = options.find(o => o.option_text === "RELEASE THE VALVE")?.id;
+                    const shutOptId = options.find(o => o.option_text === "LEAVE THE VALVE SHUT")?.id;
+
+                    casts.forEach(c => {
+                        if (c.option_id === releaseOptId) releaseVotes++;
+                        if (c.option_id === shutOptId) shutVotes++;
+                    });
+
+                    // It only opens if RELEASE gets strictly more votes (a tie leaves it shut)
+                    if (releaseVotes > shutVotes) releaseValve = true;
+                }
+                
+                // Close the vote in the database so it disappears from their dashboard
+                await supabase.from('team_votes').update({ status: 'completed' }).eq('id', valveVote.id);
+            }
+
+            // 3. Call the RPC to execute the purge (and wipe the slate clean)
+            const { data: purgedCard, error: valveErr } = await supabase.rpc('execute_the_valve', {
+                p_release: releaseValve
+            });
+
+            if (valveErr) throw new Error(valveErr.message);
+
+            if (releaseValve && purgedCard) {
+                console.log(`[SeasonRollover] 🚨 THE VALVE WAS RELEASED! Purged: ${purgedCard}`);
+                await logSystemEvent("TheValve", "info", `The Valve was released! ${purgedCard} was retired from the Cube.`);
+            } else {
+                console.log(`[SeasonRollover] 🔒 The Valve remained shut (or no card was nominated). Slates cleared.`);
+            }
+        } catch (valveCatchErr) {
+            console.error("[SeasonRollover] Error executing The Valve:", valveCatchErr);
+            await logSystemEvent("TheValve", "warn", `Error executing The Valve logic`, { error: String(valveCatchErr) });
+            // We don't throw here. If the Valve fails, the main season rollover should still proceed!
+        }
+        // =====================================================================
         // --- STEP 3: CULL POOLS TO MAKE ROOM ---
         console.log("[SeasonRollover] Culling lowest ELO cards to ensure 600 cap...");
         const { error: cullErr } = await supabase.rpc('cull_pools_for_chamber');
