@@ -15,6 +15,7 @@ export interface RetiredCard {
   image_url: string | null;
   oldest_image_url: string | null;
   oracle_id: string | null;
+  oracle_text?: string | null;
   mana_cost: string | null;
   cmc: number;
   cubucks_cost: number;
