@@ -7,29 +7,15 @@ import { getPoolCardsWithStatus, getPoolStatistics, getCardsForPool } from "@/ap
 import type { PoolCard } from "@/app/actions/poolActions";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
-import { Input } from "@/app/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/app/components/ui/select";
+import { PoolFilterBar } from "@/app/components/pools/PoolFilterBar";
+
 import { Search, Layers, CheckCircle2, CircleDashed, Loader2, ArrowUp, ArrowDown } from "lucide-react";
 import { useSettings } from "@/contexts/SettingsContext";
 import { getCardImageUrl } from "@/app/utils/cardUtils";
 
 const CARDS_PER_PAGE = 20;
 
-const COLOR_OPTIONS = [
-  { value: "all", label: "All", emoji: "🌈" },
-  { value: "W", label: "White", emoji: "⚪" },
-  { value: "U", label: "Blue", emoji: "🔵" },
-  { value: "B", label: "Black", emoji: "⚫" },
-  { value: "R", label: "Red", emoji: "🔴" },
-  { value: "G", label: "Green", emoji: "🟢" },
-  { value: "colorless", label: "Colorless", emoji: "◇" },
-];
+
 
 export default function PoolsPage() {
   const { useOldestArt } = useSettings();
@@ -174,10 +160,10 @@ export default function PoolsPage() {
     if (filterCubucks !== "all") {
         filtered = filtered.filter((card) => {
             const cost = card.cubucks_cost ?? 1;
-            if (filterCubucks === "0-50") return cost <= 50;
-            if (filterCubucks === "51-100") return cost >= 51 && cost <= 100;
-            if (filterCubucks === "101-200") return cost >= 101 && cost <= 200;
-            if (filterCubucks === "201+") return cost >= 201;
+            if (filterCubucks === "0-1") return cost <= 1;
+            if (filterCubucks === "2-3") return cost >= 1 && cost <= 3;
+            if (filterCubucks === "4-6") return cost >= 4 && cost <= 6;
+            if (filterCubucks === "7+") return cost >= 7;
             return true;
         });
     }
@@ -226,15 +212,7 @@ export default function PoolsPage() {
     return Array.from(types).sort();
   }, [cards]);
 
-  const toggleColor = (value: string) => {
-    if (value === "all") {
-      setFilterColors([]);
-      return;
-    }
-    setFilterColors((prev) =>
-      prev.includes(value) ? prev.filter((c) => c !== value) : [...prev, value]
-    );
-  };
+ 
 
   // Pagination
   const totalPages = Math.ceil(filteredAndSortedCards.length / CARDS_PER_PAGE);
@@ -291,149 +269,30 @@ export default function PoolsPage() {
       {stats && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
               <Card><CardContent className="pt-6 text-center"><Layers className="h-5 w-5 text-primary mx-auto mb-2" /><div className="text-3xl font-bold mb-1">{stats.totalCards}</div><div className="text-sm text-muted-foreground">Total Cards</div></CardContent></Card>
-              <Card><CardContent className="pt-6 text-center"><CircleDashed className="h-5 w-5 text-emerald-500 mx-auto mb-2" /><div className="text-3xl font-bold mb-1">{stats.availableCards}</div><div className="text-sm text-muted-foreground">Available</div></CardContent></Card>
-              <Card><CardContent className="pt-6 text-center"><CheckCircle2 className="h-5 w-5 text-orange-500 mx-auto mb-2" /><div className="text-3xl font-bold mb-1">{stats.draftedCards}</div><div className="text-sm text-muted-foreground">Drafted</div></CardContent></Card>
-          </div>
+                     </div>
       )}
 
-      {/* Filters */}
-      <Card className="mb-8">
-          <CardContent className="pt-6 space-y-6">
-              
-              {/* Row 1: Search & Colors */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                      <label className="block text-sm font-medium text-muted-foreground mb-2">Search</label>
-                      <div className="relative">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Card name..." className="pl-10" />
-                      </div>
-                  </div>
-                  <div>
-                      <label className="block text-sm font-medium text-muted-foreground mb-2">Color <span className="text-xs font-normal opacity-60">(select multiple)</span></label>
-                      <div className="flex flex-wrap gap-2">
-                          {COLOR_OPTIONS.map((color) => {
-                              const isActive = color.value === "all" ? filterColors.length === 0 : filterColors.includes(color.value);
-                              return (
-                                  <button key={color.value} onClick={() => toggleColor(color.value)} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation ${isActive ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
-                                      {color.emoji} {color.label}
-                                  </button>
-                              );
-                          })}
-                      </div>
-                      {/* NEW: Strict Color Toggles */}
-                      {filterColors.length > 0 && (
-                          <div className="mt-3 flex flex-col sm:flex-row gap-4 sm:gap-6">
-                              <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-                                  <input 
-                                    type="checkbox" 
-                                    checked={matchAllColors} 
-                                    onChange={(e) => setMatchAllColors(e.target.checked)} 
-                                    className="rounded border-border text-primary focus:ring-primary" 
-                                  />
-                                  Must include ALL selected
-                              </label>
-                              <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-                                  <input 
-                                    type="checkbox" 
-                                    checked={excludeUnselected} 
-                                    onChange={(e) => setExcludeUnselected(e.target.checked)} 
-                                    className="rounded border-border text-primary focus:ring-primary" 
-                                  />
-                                  Exclude unselected colors
-                              </label>
-                          </div>
-                      )}
-                  </div>
-              </div>
-
-              <div className="h-px bg-border/50 w-full" />
-
-              {/* Row 2: Select Filters */}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                  <div>
-                      <label className="block text-sm font-medium text-muted-foreground mb-2">Status</label>
-                      <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as "all" | "available" | "drafted")}>
-                          <SelectTrigger><SelectValue placeholder="All Cards" /></SelectTrigger>
-                          <SelectContent><SelectItem value="all">All Cards</SelectItem><SelectItem value="available">Available</SelectItem><SelectItem value="drafted">Drafted</SelectItem></SelectContent>
-                      </Select>
-                  </div>
-                  <div>
-                      <label className="block text-sm font-medium text-muted-foreground mb-2">Type</label>
-                      <Select value={filterType} onValueChange={setFilterType}>
-                          <SelectTrigger><SelectValue placeholder="All Types" /></SelectTrigger>
-                          <SelectContent><SelectItem value="all">All Types</SelectItem>{uniqueTypes.map((type) => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent>
-                      </Select>
-                  </div>
-                  {/* NEW: Rarity Dropdown */}
-                  <div>
-                      <label className="block text-sm font-medium text-muted-foreground mb-2">Rarity</label>
-                      <Select value={filterRarity} onValueChange={setFilterRarity}>
-                          <SelectTrigger><SelectValue placeholder="All Rarities" /></SelectTrigger>
-                          <SelectContent>
-                              <SelectItem value="all">All Rarities</SelectItem>
-                              <SelectItem value="common">Common</SelectItem>
-                              <SelectItem value="uncommon">Uncommon</SelectItem>
-                              <SelectItem value="rare">Rare</SelectItem>
-                              <SelectItem value="mythic">Mythic</SelectItem>
-                          </SelectContent>
-                      </Select>
-                  </div>
-                  <div>
-                      <label className="block text-sm font-medium text-muted-foreground mb-2">Mana Cost</label>
-                      <Select value={filterCmc} onValueChange={setFilterCmc}>
-                          <SelectTrigger><SelectValue placeholder="All CMC" /></SelectTrigger>
-                          <SelectContent><SelectItem value="all">All CMC</SelectItem><SelectItem value="0-1">0–1 Mana</SelectItem><SelectItem value="2-3">2–3 Mana</SelectItem><SelectItem value="4-5">4–5 Mana</SelectItem><SelectItem value="6+">6+ Mana</SelectItem></SelectContent>
-                      </Select>
-                  </div>
-                  <div>
-                      <label className="block text-sm font-medium text-muted-foreground mb-2">Cubucks</label>
-                      <Select value={filterCubucks} onValueChange={setFilterCubucks}>
-                          <SelectTrigger><SelectValue placeholder="All Costs" /></SelectTrigger>
-                          <SelectContent><SelectItem value="all">All Costs</SelectItem><SelectItem value="0-50">0–50</SelectItem><SelectItem value="51-100">51–100</SelectItem><SelectItem value="101-200">101–200</SelectItem><SelectItem value="201+">201+</SelectItem></SelectContent>
-                      </Select>
-                  </div>
-              </div>
-
-              {/* Row 3: Sorting */}
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                  <div className="col-span-1 md:col-span-2 lg:col-span-1">
-                    <label className="block text-sm font-medium text-muted-foreground mb-2">Sort By</label>
-                    <Select value={sortBy} onValueChange={setSortBy}>
-                        <SelectTrigger><SelectValue placeholder="Sort by..." /></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="card_name">Card Name</SelectItem>
-                            <SelectItem value="cmc">Mana Cost (CMC)</SelectItem>
-                            <SelectItem value="cubucks_cost">Cubucks Cost</SelectItem>
-                            <SelectItem value="elo">ELO</SelectItem>
-                        </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="col-span-1 md:col-span-2 lg:col-span-1">
-                      <label className="block text-sm font-medium text-muted-foreground mb-2">Order</label>
-                      <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as "asc" | "desc")}>
-                          <SelectTrigger>
-                              <div className="flex items-center gap-2">
-                                  {sortOrder === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
-                                  <SelectValue placeholder="Order" />
-                              </div>
-                          </SelectTrigger>
-                          <SelectContent>
-                              <SelectItem value="asc">Ascending</SelectItem>
-                              <SelectItem value="desc">Descending</SelectItem>
-                          </SelectContent>
-                      </Select>
-                  </div>
-              </div>
-
-              <div className="text-sm text-muted-foreground pt-2 border-t border-border/50">
-                  {filteredAndSortedCards.length === 0
-                      ? `0 of ${cards.length} cards`
-                      : `Showing ${Math.min((currentPage - 1) * CARDS_PER_PAGE + 1, filteredAndSortedCards.length)}–${Math.min(currentPage * CARDS_PER_PAGE, filteredAndSortedCards.length)} of ${filteredAndSortedCards.length} cards`
-                  }
-              </div>
-          </CardContent>
-      </Card>
+      <PoolFilterBar
+        searchTerm={searchTerm} setSearchTerm={setSearchTerm}
+        filterColors={filterColors} setFilterColors={setFilterColors}
+        matchAllColors={matchAllColors} setMatchAllColors={setMatchAllColors}
+        excludeUnselected={excludeUnselected} setExcludeUnselected={setExcludeUnselected}
+        filterType={filterType} setFilterType={setFilterType}
+        filterRarity={filterRarity} setFilterRarity={setFilterRarity}
+        filterCmc={filterCmc} setFilterCmc={setFilterCmc}
+        filterCubucks={filterCubucks} setFilterCubucks={setFilterCubucks}
+        sortBy={sortBy} setSortBy={setSortBy}
+        sortOrder={sortOrder} setSortOrder={setSortOrder}
+        uniqueTypes={uniqueTypes}
+        
+        showStatusFilter={true} // Only true for Draft Pool!
+        filterStatus={filterStatus} setFilterStatus={setFilterStatus}
+        
+        filteredCount={filteredAndSortedCards.length}
+        totalCount={cards.length}
+        currentPage={currentPage}
+        cardsPerPage={CARDS_PER_PAGE}
+      />
 
       {/* Cards Grid */}
       {filteredAndSortedCards.length === 0 ? (

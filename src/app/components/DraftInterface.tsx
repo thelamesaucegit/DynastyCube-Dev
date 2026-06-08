@@ -1,7 +1,7 @@
 // src/app/components/DraftInterface.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
 import { getAvailableCardsForDraft, type CardData } from "@/app/actions/cardActions";
 import { getTeamDraftPicks, addDraftPick } from "@/app/actions/draftActions";
@@ -12,6 +12,18 @@ import { advanceDraft, getActiveDraftSession } from "@/app/actions/draftSessionA
 import type { DraftPick } from "@/app/actions/draftActions";
 import { useSettings } from "@/contexts/SettingsContext";
 import { getCardImageUrl } from "@/app/utils/cardUtils";
+import { PoolFilterBar } from "@/app/components/pools/PoolFilterBar";
+import { Badge } from "@/app/components/ui/badge";
+
+const CARDS_PER_PAGE = 20;
+
+const COLOR_LABELS: Record<string, { label: string; emoji: string; className: string }> = {
+  W: { label: "White", emoji: "⚪", className: "bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200" },
+  U: { label: "Blue", emoji: "🔵", className: "bg-blue-100 text-blue-900 dark:bg-blue-900/30 dark:text-blue-200" },
+  B: { label: "Black", emoji: "⚫", className: "bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-gray-200" },
+  R: { label: "Red", emoji: "🔴", className: "bg-red-100 text-red-900 dark:bg-red-900/30 dark:text-red-200" },
+  G: { label: "Green", emoji: "🟢", className: "bg-green-100 text-green-900 dark:bg-green-900/30 dark:text-green-200" },
+};
 
 interface DraftInterfaceProps {
   teamId: string;
@@ -32,25 +44,26 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
   const [availableCards, setAvailableCards] = useState<CardData[]>([]);
   const [draftedCards, setDraftedCards] = useState<DraftPick[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   const [searchQuery, setSearchQuery] = useState("");
   const [colorFilters, setColorFilters] = useState<string[]>([]);
-  const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [cmcFilter, setCmcFilter] = useState<string>("all");
-  const [cubucksFilter, setCubucksFilter] = useState<string>("all");
+  const [matchAllColors, setMatchAllColors] = useState(false);
+  const [excludeUnselected, setExcludeUnselected] = useState(false);
+  const [filterType, setFilterType] = useState<string>("all");
+  const [filterRarity, setFilterRarity] = useState<string>("all");
+  const [filterCmc, setFilterCmc] = useState<string>("all");
+  const [filterCubucks, setFilterCubucks] = useState<string>("all");
   
   const [drafting, setDrafting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [cubucksBalance, setCubucksBalance] = useState<number>(0);
   const [_draftOrderEntries, setDraftOrderEntries] = useState<DraftOrderEntry[]>([]);
-  
+
   const [sortBy, setSortBy] = useState<string>("card_name");
-  const [sortOrder, setSortOrder] = useState<string>("asc");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  
   const [currentPage, setCurrentPage] = useState(1);
-  const CARDS_PER_PAGE = 20;
 
   useEffect(() => {
     loadDraftData();
@@ -59,23 +72,18 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
 
   useEffect(() => {
     setCurrentPage(1);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, colorFilters.join(","), typeFilter, cmcFilter, cubucksFilter, sortBy, sortOrder]);
+  }, [searchQuery, colorFilters, matchAllColors, excludeUnselected, filterType, filterRarity, filterCmc, filterCubucks, sortBy, sortOrder]);
 
   const loadDraftData = async () => {
     setLoading(true);
     setError(null);
-
     try {
       const { session } = await getActiveDraftSession();
       const sessionId = session?.id || null;
       setActiveSessionId(sessionId);
 
-      // If free agency is active, we get cards from the 'free' pool. Otherwise, the 'draft' pool.
       const poolToFetch = isFreeAgencyEnabled ? 'free' : 'draft';
 
-      // FIX: Only run team-specific database queries if teamId is a valid string (not empty).
-      // Passing an empty string "" to Supabase UUID columns causes the "operator does not exist: uuid = text" error.
       const picksPromise = teamId 
         ? getTeamDraftPicks(teamId, sessionId || undefined) 
         : Promise.resolve({ picks: [] });
@@ -95,7 +103,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       setDraftedCards(picks);
       if (team) setCubucksBalance(team.cubucks_balance);
       setDraftOrderEntries(order);
-
     } catch (err) {
       console.error("Error loading draft data:", err);
       const message = err instanceof Error ? err.message : String(err);
@@ -110,7 +117,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
   };
 
   const handleDraftCard = async (card: CardData) => {
-    // FIX: Only require an activeSessionId if we are in the Draft Pool (Free agency doesn't need one)
     if (drafting) return;
     
     if (!isFreeAgencyEnabled && !activeSessionId) {
@@ -137,7 +143,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
 
     try {
       const cubucksResult = await spendCubucksOnDraft(teamId, card.card_id, card.card_name, cardCost, card.id);
-
       if (!cubucksResult.success) {
         setError(cubucksResult.error || "Failed to spend Çubucks");
         return;
@@ -153,7 +158,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
         card_type: card.card_type,
         rarity: card.rarity,
         colors: card.colors,
-         color_identity: card.color_identity || [],
+        color_identity: card.color_identity || [],
         image_url: card.image_url ?? undefined,
         oldest_image_url: card.oldest_image_url ?? undefined,
         mana_cost: card.mana_cost ?? undefined,
@@ -164,16 +169,13 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       };
     
       const result = await addDraftPick(pick);
-
       if (result.success) {
         setSuccess(`Acquired ${card.card_name} for ${cardCost} Cubucks!`);
         await conditionallyCleanupDraftQueues(card.card_id);
         
-        // FIX: Only attempt to advance the draft if this is actually a draft pick
         if (!isFreeAgencyEnabled) {
            await advanceDraft();
         }
-
         await loadDraftData();
         onDraftComplete?.();
         setTimeout(() => setSuccess(null), 3000);
@@ -193,60 +195,73 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
     }
   };
 
-  const draftedCardCounts = new Map<string, number>();
-  draftedCards.forEach(pick => {
-    draftedCardCounts.set(pick.card_id, (draftedCardCounts.get(pick.card_id) || 0) + 1);
-  });
-
   const filteredCards = availableCards.filter((card) => {
-    if (searchQuery && !card.card_name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (searchQuery) {
+        const lowerSearch = searchQuery.toLowerCase();
+        if (!card.card_name.toLowerCase().includes(lowerSearch) && !(card.oracle_text && card.oracle_text.toLowerCase().includes(lowerSearch))) {
+            return false;
+        }
+    }
+
     if (colorFilters.length > 0) {
       const wantColorless = colorFilters.includes("colorless");
       const wantedColors = colorFilters.filter(c => c !== "colorless");
-      const cardIsColorless = !card.colors || card.colors.length === 0;
-      const cardMatchesColor = wantedColors.some(c => card.colors?.includes(c));
-      if (!(wantColorless && cardIsColorless) && !cardMatchesColor) return false;
+      const cardColors = card.colors || [];
+      const isColorless = cardColors.length === 0;
+
+      if (wantColorless && wantedColors.length === 0) {
+          if (!isColorless) return false;
+      } else if (isColorless) {
+          if (!(wantColorless && !matchAllColors)) return false;
+      } else {
+          const hasAll = wantedColors.every(c => cardColors.includes(c));
+          const hasAny = wantedColors.some(c => cardColors.includes(c));
+          const hasOnly = cardColors.every(c => wantedColors.includes(c));
+
+          if (matchAllColors && excludeUnselected && !(hasAll && hasOnly)) return false;
+          if (matchAllColors && !excludeUnselected && !hasAll) return false;
+          if (!matchAllColors && excludeUnselected && !hasOnly) return false;
+          if (!matchAllColors && !excludeUnselected && !hasAny && !(wantColorless && isColorless)) return false;
+      }
     }
-    if (typeFilter !== "all") {
-      if (!card.card_type?.toLowerCase().includes(typeFilter.toLowerCase())) return false;
+
+    if (filterType !== "all") {
+      if (!card.card_type?.toLowerCase().includes(filterType.toLowerCase())) return false;
     }
-    if (cmcFilter !== "all") {
+
+    if (filterRarity !== "all") {
+        if (!card.rarity || card.rarity.toLowerCase() !== filterRarity.toLowerCase()) return false;
+    }
+
+    if (filterCmc !== "all") {
       const cmc = card.cmc ?? 0;
-      if (cmcFilter === "0-1" && cmc > 1) return false;
-      if (cmcFilter === "2-3" && (cmc < 2 || cmc > 3)) return false;
-      if (cmcFilter === "4-5" && (cmc < 4 || cmc > 5)) return false;
-      if (cmcFilter === "6+" && cmc < 6) return false;
+      if (filterCmc === "0-1" && cmc > 1) return false;
+      if (filterCmc === "2-3" && (cmc < 2 || cmc > 3)) return false;
+      if (filterCmc === "4-5" && (cmc < 4 || cmc > 5)) return false;
+      if (filterCmc === "6+" && cmc < 6) return false;
     }
-    if (cubucksFilter !== "all") {
+
+    if (filterCubucks !== "all") {
       const cost = card.cubucks_cost ?? 1;
-      if (cubucksFilter === "0-1" && cost > 1) return false;
-      if (cubucksFilter === "2-3" && (cost < 2 || cost > 3)) return false;
-      if (cubucksFilter === "4-5" && (cost < 4 || cost > 5)) return false;
-      if (cubucksFilter === "6-9" && (cost < 6 || cost > 9)) return false;
-      if (cubucksFilter === "10+" && cost < 10) return false;
+      if (filterCubucks === "0-1" && cost > 1) return false;
+      if (filterCubucks === "2-3" && (cost < 2 || cost > 3)) return false;
+      if (filterCubucks === "4-5" && (cost < 4 || cost > 5)) return false;
+      if (filterCubucks === "6-9" && (cost < 6 || cost > 9)) return false;
+      if (filterCubucks === "10+" && cost < 10) return false;
     }
+
     return true;
   });
 
   const sortedAndFilteredCards = filteredCards.sort((a, b) => {
     let valA, valB;
     switch (sortBy) {
-      case 'cmc':
-        valA = a.cmc ?? 0;
-        valB = b.cmc ?? 0;
-        break;
-      case 'cubucks_cost':
-        valA = a.cubucks_cost ?? 1;
-        valB = b.cubucks_cost ?? 1;
-        break;
-      case 'elo':
-        valA = a.cubecobra_elo ?? 0;
-        valB = b.cubecobra_elo ?? 0;
-        break;
-      default:
-        valA = a.card_name.toLowerCase();
-        valB = b.card_name.toLowerCase();
+      case 'cmc': valA = a.cmc ?? 0; valB = b.cmc ?? 0; break;
+      case 'cubucks_cost': valA = a.cubucks_cost ?? 1; valB = b.cubucks_cost ?? 1; break;
+      case 'elo': valA = a.cubecobra_elo ?? 0; valB = b.cubecobra_elo ?? 0; break;
+      default: valA = a.card_name.toLowerCase(); valB = b.card_name.toLowerCase();
     }
+
     if (typeof valA === 'string' && typeof valB === 'string') {
       return sortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
     } else {
@@ -255,6 +270,17 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       return sortOrder === 'asc' ? numA - numB : numB - numA;
     }
   });
+
+  const uniqueTypes = useMemo(() => {
+    const types = new Set<string>();
+    availableCards.forEach((card) => {
+        if (card.card_type) {
+            const mainType = card.card_type.split(/[\s—–\/]+/)[0];
+            types.add(mainType);
+        }
+    });
+    return Array.from(types).sort();
+  }, [availableCards]);
 
   const totalPages = Math.ceil(sortedAndFilteredCards.length / CARDS_PER_PAGE);
   const paginatedCards = sortedAndFilteredCards.slice(
@@ -273,44 +299,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
     pages.push(totalPages);
     return pages;
   };
-
-  const colors = [
-    { value: "all", label: "All Colors", emoji: "🌈" },
-    { value: "W", label: "White", emoji: "⚪" },
-    { value: "U", label: "Blue", emoji: "🔵" },
-    { value: "B", label: "Black", emoji: "⚫" },
-    { value: "R", label: "Red", emoji: "🔴" },
-    { value: "G", label: "Green", emoji: "🟢" },
-    { value: "colorless", label: "Colorless", emoji: "◇" },
-  ];
-
-  const types = [
-    { value: "all", label: "All Types" },
-    { value: "creature", label: "Creature" },
-    { value: "instant", label: "Instant" },
-    { value: "sorcery", label: "Sorcery" },
-    { value: "enchantment", label: "Enchantment" },
-    { value: "artifact", label: "Artifact" },
-    { value: "planeswalker", label: "Planeswalker" },
-    { value: "land", label: "Land" },
-  ];
-
-  const cmcRanges = [
-    { value: "all", label: "All CMC" },
-    { value: "0-1", label: "0-1 Mana" },
-    { value: "2-3", label: "2-3 Mana" },
-    { value: "4-5", label: "4-5 Mana" },
-    { value: "6+", label: "6+ Mana" },
-  ];
-
-  const cubucksRanges = [
-    { value: "all", label: "All Costs" },
-    { value: "0-1", label: "0-1 Çubucks" },
-    { value: "2-3", label: "2-3 Çubucks" },
-    { value: "4-5", label: "4-5 Çubucks" },
-    { value: "6-9", label: "6-9 Çubucks" },
-    { value: "10+", label: "10+ Çubucks" },
-  ];
 
   if (loading) {
     return (
@@ -343,159 +331,38 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
         </div>
       )}
 
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            🔍 Search Card Pool
-          </label>
-          <input
-            type="text"
-            placeholder="Search by card name..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Color <span className="text-xs text-gray-500 dark:text-gray-400 font-normal">(select multiple)</span>
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {colors.map((color) => {
-                const isActive = color.value === "all"
-                  ? colorFilters.length === 0
-                  : colorFilters.includes(color.value);
-                
-                return (
-                <button
-                  key={color.value}
-                  onClick={() => {
-                    if (color.value === "all") {
-                      setColorFilters([]);
-                    } else {
-                      setColorFilters(prev =>
-                        prev.includes(color.value)
-                          ? prev.filter(c => c !== color.value)
-                          : [...prev, color.value]
-                      );
-                    }
-                  }}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all touch-manipulation ${
-                    isActive
-                      ? "bg-blue-600 text-white shadow-md"
-                      : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-                  }`}
-                >
-                  {color.emoji} {color.label}
-                </button>
-              );
-              })}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Type
-              </label>
-              <select
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                {types.map((type) => (
-                  <option key={type.value} value={type.value}>{type.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Mana Cost (CMC)
-              </label>
-              <select
-                value={cmcFilter}
-                onChange={(e) => setCmcFilter(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                {cmcRanges.map((range) => (
-                  <option key={range.value} value={range.value}>{range.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Çubucks Cost
-              </label>
-              <select
-                value={cubucksFilter}
-                onChange={(e) => setCubucksFilter(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                {cubucksRanges.map((range) => (
-                  <option key={range.value} value={range.value}>{range.label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Sort By
-              </label>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="card_name">Card Name</option>
-                <option value="cmc">Mana Cost (CMC)</option>
-                <option value="cubucks_cost">Çubucks Cost</option>
-                <option value="elo">ELO</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Order
-              </label>
-              <select
-                value={sortOrder}
-                onChange={(e) => setSortOrder(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="asc">Ascending</option>
-                <option value="desc">Descending</option>
-              </select>
-            </div>
-            
-            {isUserTeamMember && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Your Balance
-                </label>
-                <div className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex items-center gap-2 font-semibold">
-                  <span className="text-lg font-bold">Ç</span>
-                  <span>{cubucksBalance.toLocaleString()}</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="text-sm text-gray-600 dark:text-gray-400">
-          {sortedAndFilteredCards.length === 0
-            ? `0 of ${availableCards.length} cards`
-            : `Showing ${(currentPage - 1) * CARDS_PER_PAGE + 1}–${Math.min(currentPage * CARDS_PER_PAGE, sortedAndFilteredCards.length)} of ${sortedAndFilteredCards.length} cards`
-          }
-        </div>
-      </div>
+      <PoolFilterBar
+        searchTerm={searchTerm} setSearchTerm={setSearchTerm}
+        filterColors={filterColors} setFilterColors={setFilterColors}
+        matchAllColors={matchAllColors} setMatchAllColors={setMatchAllColors}
+        excludeUnselected={excludeUnselected} setExcludeUnselected={setExcludeUnselected}
+        filterType={filterType} setFilterType={setFilterType}
+        filterRarity={filterRarity} setFilterRarity={setFilterRarity}
+        filterCmc={filterCmc} setFilterCmc={setFilterCmc}
+        filterCubucks={filterCubucks} setFilterCubucks={setFilterCubucks}
+        sortBy={sortBy} setSortBy={setSortBy}
+        sortOrder={sortOrder} setSortOrder={setSortOrder}
+        uniqueTypes={uniqueTypes}
+        
+        filteredCount={sortedAndFilteredCards.length}
+        totalCount={availableCards.length}
+        currentPage={currentPage}
+        cardsPerPage={CARDS_PER_PAGE}
+      />
 
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-        <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
-          Card Pool
-        </h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+            Card Pool
+          </h3>
+          
+          {isUserTeamMember && (
+              <div className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex items-center gap-2 font-semibold shadow-sm">
+                  <span className="text-muted-foreground text-sm uppercase tracking-widest font-bold">Your Balance:</span>
+                  <span className="text-lg font-bold text-yellow-600 dark:text-yellow-400">Ç {cubucksBalance.toLocaleString()}</span>
+              </div>
+          )}
+        </div>
         
         {sortedAndFilteredCards.length === 0 ? (
           <div className="text-center py-12 text-gray-500 dark:text-gray-500">
@@ -506,41 +373,11 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
           <>
           {totalPages > 1 && (
             <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
-              <button
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="flex items-center gap-2 px-5 py-3 rounded-lg font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed min-w-[100px] justify-center touch-manipulation"
-              >
-                ← Prev
-              </button>
-              
+              <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="flex items-center gap-2 px-5 py-3 rounded-lg font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed min-w-[100px] justify-center touch-manipulation">← Prev</button>
               <div className="flex items-center gap-1 flex-wrap justify-center">
-                {getPageNumbers().map((page, idx) => 
-                  page === "ellipsis" ? (
-                    <span key={`el-${idx}`} className="px-2 text-gray-400 select-none">…</span>
-                  ) : (
-                    <button
-                      key={page}
-                      onClick={() => setCurrentPage(page)}
-                      className={`min-w-[2.75rem] h-11 px-2 rounded-lg font-medium transition-colors touch-manipulation ${
-                        currentPage === page
-                          ? "bg-blue-600 text-white"
-                          : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-                      }`}
-                    >
-                      {page}
-                    </button>
-                  )
-                )}
+                {getPageNumbers().map((page, idx) => page === "ellipsis" ? (<span key={`el-${idx}`} className="px-2 text-gray-400 select-none">…</span>) : (<button key={page} onClick={() => setCurrentPage(page as number)} className={`min-w-[2.75rem] h-11 px-2 rounded-lg font-medium transition-colors touch-manipulation ${currentPage === page ? "bg-blue-600 text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"}`}>{page}</button>))}
               </div>
-
-              <button
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="flex items-center gap-2 px-5 py-3 rounded-lg font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed min-w-[100px] justify-center touch-manipulation"
-              >
-                Next →
-              </button>
+              <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="flex items-center gap-2 px-5 py-3 rounded-lg font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed min-w-[100px] justify-center touch-manipulation">Next →</button>
             </div>
           )}
 
@@ -550,79 +387,22 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
               const isDrafting = drafting === card.id;
               const notEnoughCubucks = cubucksBalance < (card.cubucks_cost || 1);
               const imageUrl = getCardImageUrl(card, useOldestArt);
-
               return (
-                <div 
-                  key={card.id}
-                  className={`group relative bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden border-2 transition-all ${
-                    isThisInstanceDrafted 
-                      ? "border-green-500 opacity-60" 
-                      : "border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:shadow-lg"
-                  }`}
-                >
-                  {imageUrl && (
-                    <div className="relative h-64">
-                      <Image 
-                        src={imageUrl} 
-                        alt={card.card_name}
-                        fill
-                        className="object-cover"
-                      />
-                    </div>
-                  )}
+                <div key={card.id} className={`group relative bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden border-2 transition-all ${isThisInstanceDrafted ? "border-green-500 opacity-60" : "border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:shadow-lg"}`}>
+                  {imageUrl && (<div className="relative h-64"><Image src={imageUrl} alt={card.card_name} fill className="object-cover" /></div>)}
                   
                   <div className="p-2">
-                    <h4 className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
-                      {card.card_name}
-                    </h4>
-                    <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
-                      {card.card_set}
-                    </p>
-                    {card.cubecobra_elo != null && (
-                      <p className="text-xs text-purple-600 dark:text-purple-400 font-medium mt-0.5">
-                        ELO: {card.cubecobra_elo.toLocaleString()}
-                      </p>
-                    )}
+                    <h4 className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{card.card_name}</h4>
+                    <p className="text-xs text-gray-600 dark:text-gray-400 truncate">{card.card_set}</p>
+                    {card.cubecobra_elo != null && (<p className="text-xs text-purple-600 dark:text-purple-400 font-medium mt-0.5">ELO: {card.cubecobra_elo.toLocaleString()}</p>)}
                   </div>
-
-                  <div className="absolute top-2 left-2 bg-yellow-500 text-gray-900 text-xs font-bold px-2 py-1 rounded shadow-lg flex items-center gap-1">
-                    <span className="font-bold">Ç</span>
-                    <span>{card.cubucks_cost || 1}</span>
-                  </div>
-
+                  <div className="absolute top-2 left-2 bg-yellow-500 text-gray-900 text-xs font-bold px-2 py-1 rounded shadow-lg flex items-center gap-1"><span className="font-bold">Ç</span><span>{card.cubucks_cost || 1}</span></div>
                   {!isThisInstanceDrafted && isUserTeamMember && (
-                    <button
-                      onClick={() => handleDraftCard(card)}
-                      disabled={!isFreeAgencyEnabled || isDrafting || notEnoughCubucks}
-                      title={
-                        !isFreeAgencyEnabled 
-                          ? "Free agency is only available during the 'season' phase."
-                          : notEnoughCubucks
-                          ? "Not enough Çubucks to acquire."
-                          : `Acquire ${card.card_name}`
-                      }
-                      className={`absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed`}
-                    >
-                      <span className={`px-4 py-2 rounded-lg font-semibold shadow-lg text-white ${
-                        notEnoughCubucks ? "bg-red-600" : "bg-blue-600 hover:bg-blue-700"
-                      } ${!isFreeAgencyEnabled ? "!bg-gray-600" : ""}`}>
-                        {isDrafting 
-                          ? "Acquiring..." 
-                          : notEnoughCubucks
-                          ? "Not Enough Çubucks"
-                          : !isFreeAgencyEnabled
-                          ? "FA Closed"
-                          : `Acquire FA for ${card.cubucks_cost || 1} Ç`
-                        }
-                      </span>
+                    <button onClick={() => handleDraftCard(card)} disabled={!isFreeAgencyEnabled || isDrafting || notEnoughCubucks} title={!isFreeAgencyEnabled ? "Free agency is only available during the 'season' phase." : notEnoughCubucks ? "Not enough Çubucks to acquire." : `Acquire ${card.card_name}`} className={`absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed`}>
+                      <span className={`px-4 py-2 rounded-lg font-semibold shadow-lg text-white ${notEnoughCubucks ? "bg-red-600" : "bg-blue-600 hover:bg-blue-700"} ${!isFreeAgencyEnabled ? "!bg-gray-600" : ""}`}>{isDrafting ? "Acquiring..." : notEnoughCubucks ? "Not Enough Çubucks" : !isFreeAgencyEnabled ? "FA Closed" : `Acquire FA for ${card.cubucks_cost || 1} Ç`}</span>
                     </button>
                   )}
-
-                  {isThisInstanceDrafted && (
-                    <div className="absolute top-2 right-2 bg-green-600 text-white text-xs font-bold px-2 py-1 rounded shadow-lg">
-                      ✓ DRAFTED
-                    </div>
-                  )}
+                  {isThisInstanceDrafted && (<div className="absolute top-2 right-2 bg-green-600 text-white text-xs font-bold px-2 py-1 rounded shadow-lg">✓ DRAFTED</div>)}
                 </div>
               );
             })}
@@ -630,25 +410,9 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
 
           {totalPages > 1 && (
             <div className="flex items-center justify-between gap-2 mt-6 flex-wrap">
-              <button
-                onClick={() => { setCurrentPage(p => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                disabled={currentPage === 1}
-                className="flex items-center gap-2 px-5 py-3 rounded-lg font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed min-w-[100px] justify-center touch-manipulation"
-              >
-                ← Prev
-              </button>
-              
-              <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">
-                Page {currentPage} of {totalPages}
-              </span>
-
-              <button
-                onClick={() => { setCurrentPage(p => Math.min(totalPages, p + 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                disabled={currentPage === totalPages}
-                className="flex items-center gap-2 px-5 py-3 rounded-lg font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed min-w-[100px] justify-center touch-manipulation"
-              >
-                Next →
-              </button>
+              <button onClick={() => { setCurrentPage(p => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }} disabled={currentPage === 1} className="flex items-center gap-2 px-5 py-3 rounded-lg font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed min-w-[100px] justify-center touch-manipulation">← Prev</button>
+              <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">Page {currentPage} of {totalPages}</span>
+              <button onClick={() => { setCurrentPage(p => Math.min(totalPages, p + 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }} disabled={currentPage === totalPages} className="flex items-center gap-2 px-5 py-3 rounded-lg font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed min-w-[100px] justify-center touch-manipulation">Next →</button>
             </div>
           )}
           </>

@@ -15,6 +15,11 @@ export interface ValveNomination {
  * Searches the card_pools table for autocomplete (case-insensitive).
  */
 export async function searchValveCards(query: string): Promise<{ success: boolean; cards: string[]; error?: string }> {
+     // The longest word in the English dictionary is 45 letters. 
+    if (guess.length > 50) {
+        return { success: false, error: "Guess is too long." };
+    }
+
     if (!query || query.trim().length < 2) return { success: true, cards: [] };
     
     const supabase = await createServerClient();
@@ -75,6 +80,8 @@ export async function getValveNominations(): Promise<{ success: boolean; nominat
  * Nominates a card. Automatically casts a vote for the nominator.
  */
 export async function nominateCardForValve(cardName: string): Promise<{ success: boolean; message?: string; error?: string }> {
+      if (cardName.length > 100) return { success: false, error: "Card name too long." }; // For nominate
+
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
     

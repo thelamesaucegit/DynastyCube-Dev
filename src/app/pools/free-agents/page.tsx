@@ -1,13 +1,12 @@
-//src/app/pools/free-agents/page.tsx
-
+// src/app/pools/free-agents/page.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
 import { DraftInterface } from "@/app/components/DraftInterface";
 import { useAuth } from "@/contexts/AuthContext";
-import { getUserTeam } from "@/app/actions/teamActions"; // We will use this action
+import { getUserTeam } from "@/app/actions/teamActions";
 import { Loader2, AlertCircle } from "lucide-react";
-import type { Team } from "@/app/actions/teamActions"; // Import the Team type
+import type { Team } from "@/app/actions/teamActions";
 
 export default function FreeAgentsPage() {
   const { user } = useAuth();
@@ -16,14 +15,11 @@ export default function FreeAgentsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // This effect runs once when the component mounts to find the user's team.
     const fetchUserTeam = async () => {
       if (!user?.email) {
         setLoading(false);
-        // User is not logged in, they can view but not interact.
         return;
       }
-
       try {
         const { team, error: teamError } = await getUserTeam(user.email);
         if (teamError) {
@@ -36,9 +32,8 @@ export default function FreeAgentsPage() {
         setLoading(false);
       }
     };
-
     fetchUserTeam();
-  }, [user]); // Re-run if the user object changes (e.g., on login)
+  }, [user]);
 
   if (loading) {
     return (
@@ -64,21 +59,12 @@ export default function FreeAgentsPage() {
         </div>
       )}
 
-      {/* 
-        If the user is not on a team, the DraftInterface will still render in a 
-        read-only state, which is good UX. They can see the free agents but can't claim them.
-      */}
-      <DraftInterface
-        teamId={userTeam?.id || ""} // Pass the team ID, or an empty string if no team
-        teamName={userTeam?.name}
-        isUserTeamMember={!!userTeam}
-        onDraftComplete={
-            () => { 
-                // We might want to add a success message or refresh the page after a claim.
-                // For now, the component handles its own refresh internally.
-            }
-        }
-        isFreeAgencyEnabled={true} // This is the Free Agents page, so this is always true.
+      <DraftInterface 
+        teamId={userTeam?.id || ""} 
+        teamName={userTeam?.name} 
+        isUserTeamMember={!!userTeam} 
+        onDraftComplete={() => {}} 
+        isFreeAgencyEnabled={true} 
       />
     </div>
   );
