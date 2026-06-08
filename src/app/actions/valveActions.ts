@@ -15,9 +15,9 @@ export interface ValveNomination {
  * Searches the card_pools table for autocomplete (case-insensitive).
  */
 export async function searchValveCards(query: string): Promise<{ success: boolean; cards: string[]; error?: string }> {
-     // The longest word in the English dictionary is 45 letters. 
-    if (guess.length > 50) {
-        return { success: false, error: "Guess is too long." };
+    // THE FIX: Changed 'guess' to 'query' to match the function parameter!
+    if (query.length > 100) {
+        return { success: true, cards: [] };
     }
 
     if (!query || query.trim().length < 2) return { success: true, cards: [] };
@@ -33,7 +33,7 @@ export async function searchValveCards(query: string): Promise<{ success: boolea
         
     if (error) return { success: false, error: error.message, cards: [] };
     
-    // THE FIX: Filter out nulls/undefined and ensure it's strictly a string[] before throwing into the Set
+    // Filter out nulls/undefined and ensure it's strictly a string[] before throwing into the Set
     const validNames = (data || [])
         .map(c => c.card_name)
         .filter((name): name is string => typeof name === 'string' && name.length > 0);
@@ -80,7 +80,10 @@ export async function getValveNominations(): Promise<{ success: boolean; nominat
  * Nominates a card. Automatically casts a vote for the nominator.
  */
 export async function nominateCardForValve(cardName: string): Promise<{ success: boolean; message?: string; error?: string }> {
-      if (cardName.length > 100) return { success: false, error: "Card name too long." }; // For nominate
+    // Adding the length limit check here as well to prevent DB abuse
+    if (cardName.length > 100) {
+        return { success: false, error: "Card name is too long." };
+    }
 
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
