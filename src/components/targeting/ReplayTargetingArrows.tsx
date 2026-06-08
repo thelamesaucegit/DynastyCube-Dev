@@ -118,7 +118,6 @@ function getTargetPosition(target: unknown): Point | null {
     const id = extractIdSafely(target);
     if (!id) return null;
 
-    // Check player avatars first, then fall back to cards
     return getPlayerCenter(id) || getCardCenter(id);
 }
 
@@ -149,7 +148,8 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
     }).filter((c): c is ClientCard => c !== null) : [];
     
     const combat = snapshot.gameState.combat || snapshot.combat;
-    const cAttackers: unknown[] = combat?.attackers ?? [];
+    // CRITICAL FIX: Explicitly type as readonly to satisfy state immutability
+    const cAttackers: readonly unknown[] = combat?.attackers ?? [];
     
     return { stackCards: sCards, combatAttackers: cAttackers };
   }, [snapshot]);
@@ -187,7 +187,6 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
       }
 
       // 2. Combat Targeting (Attackers)
-      // FIX: Removed the strict filter so we can inspect every attacker
       for (const attacker of combatAttackers) {
         if (!attacker || typeof attacker !== 'object') continue;
         
@@ -197,12 +196,9 @@ export function ReplayTargetingArrows({ snapshot }: ReplayTargetingArrowsProps) 
         const sourcePos = getCardCenter(sourceId);
         if (!sourcePos) continue;
         
-        // FIX: Extract the target ID directly from the attacker object if attackingTarget doesn't exist
         const record = attacker as Record<string, unknown>;
-        
         let targetId = extractIdSafely(record.attackingTarget);
         
-        // If there is no dedicated attackingTarget object, look for a target ID directly on the attacker
         if (!targetId) {
              const possibleTargetIds = [record.targetId, record.defenderId, record.blockingId];
              for (const id of possibleTargetIds) {
