@@ -173,7 +173,6 @@ export async function recordSimGameResult(
 
      // --- AUTOMATION: Schedule Progression ---
      if (finalized) {
-        // Did the ENTIRE week just finish?
         const { data: unfinishedThisWeek } = await supabase
             .from('weekly_matchups')
             .select('id')
@@ -197,7 +196,6 @@ export async function recordSimGameResult(
             } else if (endedWeek?.is_playoff_week) {
                 await advancePlayoffBracket(matchup.season_id, isTestSeason);
             } else {
-                // If it's the regular season, do we need to schedule JIT games?
                 const { data: nextWeek } = await supabase
                     .from('schedule_weeks')
                     .select('id, week_number')
@@ -211,9 +209,6 @@ export async function recordSimGameResult(
                 if (nextWeek) {
                     if (isTestSeason) await scheduleNextWeekJIT(matchup.season_id, nextWeek.week_number);
                 } else {
-                    // --- THE FIX: HARD CHECK FOR UNFINISHED REGULAR SEASON MATCHUPS ---
-                    // Before we EVER generate the playoffs, we MUST ensure there are absolutely ZERO 
-                    // unfinished regular season matchups remaining in the entire database for this season.
                     const { count: unfinishedRegSeasonCount } = await supabase
                         .from('weekly_matchups')
                         .select('id', { count: 'exact', head: true })
@@ -237,8 +232,6 @@ export async function recordSimGameResult(
 
 /**
  * Record a PvP match result for a weekly matchup.
- * Updates pvp win counts, applies Smart ELO once for the overall winner, 
- * and checks if the weekly outcome can be determined.
  */
 export async function recordPvpResult(
     weeklyMatchupId: string,
@@ -249,7 +242,6 @@ export async function recordPvpResult(
 ): Promise<{ success: boolean; matchupFinalized: boolean; error?: string }> {
     const supabase = createServiceClient();
     
-    // 1. Fetch the necessary context for both Finalization and Smart ELO
     const { data: matchup, error: fetchError } = await supabase
         .from('weekly_matchups')
         .select('sim_completed_games, season_id, week_number, team1_id, team2_id')
@@ -260,7 +252,6 @@ export async function recordPvpResult(
         return { success: false, matchupFinalized: false, error: 'Matchup not found' };
     }
 
-    // 2. Update the PvP scores in the database
     const { error: updateError } = await supabase
         .from('weekly_matchups')
         .update({
@@ -284,8 +275,6 @@ export async function recordPvpResult(
         await triggerSmartEloUpdate(matchup.season_id, matchup.week_number, matchup.team2_id, matchup.team1_id);
     }
 
-    // 4. Finalize if all sim games are also done
-    // Note: adjust the '5' if your regular season game count differs
     if (matchup.sim_completed_games >= 5) {
         const finalized = await finalizeWeeklyOutcome(weeklyMatchupId);
         return { success: true, matchupFinalized: finalized };
@@ -327,7 +316,6 @@ async function finalizeWeeklyOutcome(weeklyMatchupId: string): Promise<boolean> 
         } else if (team2Total > team1Total) {
             winner_team_id = matchup.team2_id;
         } else {
-            // Tiebreaker: PvP wins
             if ((matchup.pvp_team1_wins || 0) > (matchup.pvp_team2_wins || 0)) {
                 winner_team_id = matchup.team1_id;
             } else if ((matchup.pvp_team2_wins || 0) > (matchup.pvp_team1_wins || 0)) {
@@ -351,7 +339,6 @@ async function finalizeWeeklyOutcome(weeklyMatchupId: string): Promise<boolean> 
 
         console.log(`[Action/finalizeWeeklyOutcome] ✅ Successfully updated is_outcome_final to TRUE.`);
 
-        // Write head-to-head records
         const team1Outcome = is_draw ? 'draw' : (winner_team_id === matchup.team1_id ? 'win' : 'loss');
         const team2Outcome = is_draw ? 'draw' : (winner_team_id === matchup.team2_id ? 'win' : 'loss');
 
@@ -395,7 +382,6 @@ async function finalizeWeeklyOutcome(weeklyMatchupId: string): Promise<boolean> 
             await logSystemEvent("FinalizeMatchup", "warn", `H2H Upsert failed for matchup ${weeklyMatchupId}`, { error: h2hError.message });
         }
 
-        // Update team_season_stats for both teams
         try {
             await updateTeamSeasonStats(matchup.team1_id, matchup.season_id, {
                 sim_wins: matchup.sim_team1_wins,
@@ -446,7 +432,6 @@ async function updateTeamSeasonStats(
 ): Promise<void> {
     const supabase = createServiceClient();
     
-    // Upsert to ensure the row exists
     const { data: existing } = await supabase
         .from('team_season_stats')
         .select('id, sim_wins, sim_losses, sim_draws, pvp_wins, pvp_losses, pvp_draws, weekly_match_wins, weekly_match_losses, weekly_match_draws')
@@ -488,10 +473,6 @@ async function updateTeamSeasonStats(
     }
 }
 
-/**
- * Get season standings from team_season_stats.
- * includePlayoffs: whether playoff weeks count toward the record.
- */
 export async function getSeasonStandingsFromStats(
     seasonId: string,
     includePlayoffs: boolean = false
@@ -542,10 +523,6 @@ export async function getSeasonStandingsFromStats(
     return { standings };
 }
 
-/**
- * Get all head-to-head records between two specific teams.
- * Returns records from TeamA's perspective (wins = TeamA's wins against TeamB).
- */
 export async function getHeadToHeadHistory(
     teamId: string,
     opponentId: string,
@@ -614,10 +591,6 @@ export async function getHeadToHeadHistory(
     return { records, totals };
 }
 
-/**
- * Get a weekly matchup by its two team IDs and week number.
- * Used by the sim scheduler to find which matchup a completed game belongs to.
- */
 export async function getWeeklyMatchup(params: {
     seasonId: string;
     weekNumber: number;
@@ -642,9 +615,6 @@ export async function getWeeklyMatchup(params: {
     return data ?? null;
 }
 
-/**
- * Helper: Shifts all match dates for the new week to start exactly 20 minutes from right now.
- */
 async function scheduleNextWeekJIT(seasonId: string, weekNumber: number) {
     const supabase = createServiceClient();
     const { data: pendingMatches } = await supabase.from('schedule').select('*').eq('season_id', seasonId).eq('week_number', weekNumber).eq('status', 'scheduled').order('id');
@@ -661,10 +631,6 @@ async function scheduleNextWeekJIT(seasonId: string, weekNumber: number) {
     }
 }
 
-/**
- * Calculates a dynamic CT date (handles DST automatically via UTC interpretation)
- * Sets hour in Central Time and returns the absolute UTC Date object.
- */
 function getTargetDateCT(baseDate: Date, addDays: number, targetHourCT: number): Date {
     const d = new Date(baseDate);
     d.setUTCDate(d.getUTCDate() + addDays);
@@ -677,9 +643,6 @@ function getTargetDateCT(baseDate: Date, addDays: number, targetHourCT: number):
     return d;
 }
 
-/**
- * Creates the initial Round 1 Playoff bracket from regular season standings.
- */
 async function generateInitialPlayoffBracket(seasonId: string, isTestSeason: boolean) {
     const supabase = createServiceClient();
     await logSystemEvent("Playoffs", "info", `Generating initial playoff bracket for season ${seasonId}`);
@@ -812,6 +775,58 @@ export async function advancePlayoffBracket(seasonId: string, isTestSeason: bool
             const targetDate = new Date(d.getTime() + (daysToThu + 7) * 86400000);
             offSeasonEnd = getTargetDateCT(targetDate, 0, 12); 
         }
+
+              // =========================================================================
+        // --- NEW: THE VALVE VOTE SPAWNER ---
+        // =========================================================================
+        try {
+            console.log(`[PlayoffGen] Identifying worst team to grant The Valve...`);
+            const { data: activeTeams } = await supabase.from('teams').select('id').eq('is_hidden', false);
+            const activeTeamIds = activeTeams?.map(t => t.id) || [];
+            
+            if (activeTeamIds.length > 0) {
+                const { data: standings } = await supabase
+                    .from('team_records_view')
+                    .select('team_id')
+                    .in('team_id', activeTeamIds)
+                    .order('wins', { ascending: true })      // Fewest wins
+                    .order('game_wins', { ascending: true }) // Tiebreaker
+                    .limit(1)
+                    .single();
+
+                if (standings?.team_id) {
+                    // Deadline is 1 hour before the offseason timer expires (1 min for test)
+                    const valveDeadline = new Date(offSeasonEnd.getTime() - (isTestSeason ? 60000 : 3600000));
+                    
+                    // Insert into the REAL polls table
+                    const { data: newPoll, error: pollErr } = await supabase.from('polls').insert({
+                        title: "THE VALVE",
+                        description: "Your team has suffered the most this season. You hold the power to turn THE VALVE and purge the realm's most hated card. What is your choice?",
+                        ends_at: valveDeadline.toISOString(),
+                        is_active: true,
+                        allow_multiple_votes: false,
+                        show_results_before_end: false,
+                        vote_type: 'team',
+                        team_id: standings.team_id
+                    }).select('id').single();
+
+                    if (newPoll && !pollErr) {
+                        // Insert the two options into poll_options
+                        await supabase.from('poll_options').insert([
+                            { poll_id: newPoll.id, option_text: "RELEASE THE VALVE", option_order: 1 },
+                            { poll_id: newPoll.id, option_text: "LEAVE THE VALVE SHUT", option_order: 2 }
+                        ]);
+                        await logSystemEvent("TheValve", "info", `Valve vote spawned for team ${standings.team_id}.`);
+                    } else {
+                        console.error("[PlayoffGen] Failed to spawn Valve vote:", pollErr);
+                    }
+                }
+            }
+        } catch (valveErr) {
+            console.error("[PlayoffGen] Failed to execute Valve spawn logic:", valveErr);
+        }
+        // =========================================================================
+
         
         await supabase.from('countdown_timers').update({ is_active: false }).eq('is_active', true);
         await supabase.from('countdown_timers').insert({

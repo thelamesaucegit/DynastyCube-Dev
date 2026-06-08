@@ -13,7 +13,7 @@ import { MessageDropdown } from "./MessageDropdown";
 import { ReportButton } from "./ReportButton";
 import { Button } from "./ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
-import { createClient } from "@/lib/supabase/client"; // <-- NEW IMPORT FOR TEAMS
+import { createClient } from "@/lib/supabase/client"; 
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger,
@@ -24,7 +24,7 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from "./ui/sheet";
 import {
   Menu, X, User, LogOut, Settings, Sun, Moon, Shield, Group, LayoutGrid,
-  Cable, Sparkles, Palmtree, CheckSquare, ChevronDown, ChevronRight, Store, Key, Trophy, CalendarDays, Vote
+  Cable, Sparkles, Palmtree, CheckSquare, ChevronDown, ChevronRight, Store, Key, Trophy, CalendarDays, Vote, Gauge, Skull
 } from "lucide-react";
 import { getDraftSessions, type DraftSession } from "@/app/actions/draftSessionActions";
 import { getUserTeam } from "@/app/actions/teamActions";
@@ -41,7 +41,7 @@ export default function Navigation() {
   const [draftSessions, setDraftSessions] = useState<DraftSession[]>([]);
   const pathname = usePathname();
   const [userTeam, setUserTeam] = useState<BasicTeam | null>(null);
-  const [allTeams, setAllTeams] = useState<BasicTeam[]>([]); // <-- TRACK ALL TEAMS FOR DROPDOWN
+  const [allTeams, setAllTeams] = useState<BasicTeam[]>([]); 
   
   const [mobileExpanded, setMobileExpanded] = useState<Record<string, boolean>>({});
   const { user, loading, signOut } = useAuth();
@@ -204,10 +204,10 @@ export default function Navigation() {
                   </NavigationMenuItem>
                 )}
                 
-                {/* NEW LEAGUE DROPDOWN (Schedule, Vote, Marketplace, Cypher) */}
+                {/* LEAGUE DROPDOWN (Schedule, Vote, Marketplace, Cypher, Valve, Drain) */}
                 <NavigationMenuItem>
                   <DropdownMenu>
-                    <DropdownMenuTrigger className={`${navigationMenuTriggerStyle()} bg-transparent ${isDropdownActive(['/schedule', '/vote', '/marketplace', '/cypher']) ? "bg-accent/50 text-accent-foreground font-medium" : ""}`}>
+                    <DropdownMenuTrigger className={`${navigationMenuTriggerStyle()} bg-transparent ${isDropdownActive(['/schedule', '/vote', '/marketplace', '/cypher', '/the-valve', '/the-drain']) ? "bg-accent/50 text-accent-foreground font-medium" : ""}`}>
                       League
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
@@ -218,6 +218,9 @@ export default function Navigation() {
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild><Link href="/marketplace" className="flex items-center gap-2"><Store className="size-4" /> Marketplace</Link></DropdownMenuItem>
                       <DropdownMenuItem asChild><Link href="/cypher" className="flex items-center gap-2"><Key className="size-4" /> The Cypher</Link></DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild><Link href="/the-valve" className="flex items-center gap-2"><Gauge className="size-4 text-red-500" /> The Valve</Link></DropdownMenuItem>
+                      <DropdownMenuItem asChild><Link href="/the-drain" className="flex items-center gap-2"><Skull className="size-4 text-zinc-500" /> The Drain</Link></DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </NavigationMenuItem>
@@ -369,6 +372,8 @@ export default function Navigation() {
                     {user && <Link href="/vote" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/vote") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>Vote</Link>}
                     <Link href="/marketplace" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/marketplace") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>Marketplace</Link>
                     <Link href="/cypher" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/cypher") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>The Cypher</Link>
+                    <Link href="/the-valve" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/the-valve") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>The Valve</Link>
+                    <Link href="/the-drain" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/the-drain") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>The Drain</Link>
                   </div>
                 )}
                 

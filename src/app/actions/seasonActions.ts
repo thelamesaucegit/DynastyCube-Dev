@@ -33,6 +33,61 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
         const { error: backupErr } = await supabase.rpc('backup_rollover_state');
         if (backupErr) throw new Error(`Failed to create staging snapshot: ${backupErr.message}`);
 
+        // =====================================================================
+        // --- EXECUTE THE VALVE ---
+        // =====================================================================
+        console.log("[SeasonRollover] Checking for Valve Vote...");
+        try {
+            const { data: valvePoll } = await supabase
+                .from('polls')
+                .select('id')
+                .eq('title', 'THE VALVE')
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            let releaseValve = false;
+
+            if (valvePoll) {
+                const { data: options } = await supabase.from('poll_options').select('id, option_text').eq('poll_id', valvePoll.id);
+                const { data: votes } = await supabase.from('poll_votes').select('option_id, vote_weight').eq('poll_id', valvePoll.id);
+                
+                if (options && votes) {
+                    let releaseVotes = 0;
+                    let shutVotes = 0;
+                    
+                    const releaseOptId = options.find(o => o.option_text === "RELEASE THE VALVE")?.id;
+                    const shutOptId = options.find(o => o.option_text === "LEAVE THE VALVE SHUT")?.id;
+
+                    votes.forEach(v => {
+                        if (v.option_id === releaseOptId) releaseVotes += (v.vote_weight || 1);
+                        if (v.option_id === shutOptId) shutVotes += (v.vote_weight || 1);
+                    });
+
+                    if (releaseVotes > shutVotes) releaseValve = true;
+                }
+                
+                await supabase.from('polls').update({ is_active: false }).eq('id', valvePoll.id);
+            }
+
+            const { data: purgedCard, error: valveErr } = await supabase.rpc('execute_the_valve', {
+                p_release: releaseValve
+            });
+
+            if (valveErr) throw new Error(valveErr.message);
+
+            if (releaseValve && purgedCard) {
+                console.log(`[SeasonRollover] 🚨 THE VALVE WAS RELEASED! Purged: ${purgedCard}`);
+                await logSystemEvent("TheValve", "info", `The Valve was released! ${purgedCard} was retired from the Cube.`);
+            } else {
+                console.log(`[SeasonRollover] 🔒 The Valve remained shut (or no card was nominated). Accumulating pressure.`);
+            }
+        } catch (valveCatchErr) {
+            console.error("[SeasonRollover] Error executing The Valve:", valveCatchErr);
+            await logSystemEvent("TheValve", "warn", `Error executing The Valve logic`, { error: String(valveCatchErr) });
+        }
+        // =====================================================================
+
         // --- STEP 1: IDENTIFY OLD & CREATE NEW SEASON ---
         const { data: oldSeason, error: oldSeasonErr } = await supabase.from('seasons').select('*').eq('is_active', true).single();
         if (oldSeasonErr || !oldSeason) throw new Error(`Could not find active season. DB Error: ${JSON.stringify(oldSeasonErr)}`);
@@ -123,7 +178,6 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
         // --- STEP 8: DRAFT ORDER & SCHEDULING ---
         console.log("[SeasonRollover] Generating Draft Order...");
         
-        // FIX: systemOverride = true bypasses the cookie authentication block!
         const draftOrderResult = await generateDraftOrder(newSeason.id, { 
             orderType: 'previous_season',
             systemOverride: true 
@@ -164,14 +218,14 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
             // 1. Restore Database from Staging
             await supabase.rpc('restore_rollover_state', { p_failed_season_id: newSeasonId });
             
-            // 2. Reactivate the old season (since we restored the DB, but seasons weren't staged)
+            // 2. Reactivate the old season
             await supabase.from('seasons').update({ is_active: true }).eq('is_active', false).order('season_number', { ascending: false }).limit(1);
 
-            // 3. Block the Cron Job from retrying
+            // 3. Block the Cron Job from retrying using EXACT MATCH
             await supabase
                 .from('countdown_timers')
                 .update({ title: 'BLOCKED: Offseason Curation (See Logs)' })
-                .ilike('title', '%Offseason Curation%')
+                .eq('title', 'Offseason Curation & Next Draft') // <-- FIX: Exact match only!
                 .eq('is_active', true);
 
             console.log("[SeasonRollover] ✅ Rollback Complete. Cron Job Blocked.");
@@ -179,7 +233,6 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
             console.error("[SeasonRollover] 💀 FATAL: Rollback Failed!", rollbackErr);
         }
 
-        // Log the primary failure to the system
         await logSystemEvent('SeasonRollover', 'error', `Pipeline Failed: ${msg}`, { timestamp: new Date().toISOString() });
         return { success: false, error: msg };
     }
@@ -482,11 +535,7 @@ export async function getCurrentSeason(): Promise<{
   }
 }
 
-export async function checkAndExecuteSeasonRollover(): Promise<{
-  success: boolean;
-  message: string;
-  error?: string;
-}> {
+export async function checkAndExecuteSeasonRollover(): Promise<{ success: boolean; message: string; error?: string; }> {
   console.log("======================================================");
   console.log("[RolloverCron] ⏰ EXECUTED: checkAndExecuteSeasonRollover()");
   console.log("======================================================");
@@ -500,30 +549,23 @@ export async function checkAndExecuteSeasonRollover(): Promise<{
     const { data: timer, error: timerError } = await supabase
       .from("countdown_timers")
       .select("id, end_time, title")
-      .ilike("title", "%Offseason Curation%") 
+      .eq("title", "Offseason Curation & Next Draft") // <-- FIX: Exact match so it ignores blocked timers!
       .eq("is_active", true)
       .single();
-    if (timerError && timerError.code !== "PGRST116") {
-      console.error("[RolloverCron] DB Error fetching timer:", timerError);
-      throw new Error(`Database error checking timer: ${timerError.message}`);
-    }
-    if (!timer) {
-      console.log("[RolloverCron] No active offseason timer found.");
-      return { success: true, message: "No active postseason timer found. No action taken." };
-    }
+
+    if (timerError && timerError.code !== "PGRST116") throw new Error(`Database error checking timer: ${timerError.message}`);
+    if (!timer) return { success: true, message: "No active postseason timer found. No action taken." };
+
     const now = new Date();
     const endTime = new Date(timer.end_time);
     console.log(`[RolloverCron] Timer Found: '${timer.title}'. Ends at: ${endTime.toISOString()}`);
+    
     if (now >= endTime) {
       console.log(`[RolloverCron] 🚨 Timer has expired! Triggering executeSeasonRollover()...`);
-      
       await logSystemEvent("SeasonRollover", "info", `Cron detected expired timer. Starting rollover pipeline.`);
       
       const rolloverResult = await executeSeasonRollover();
-      
-      if (!rolloverResult.success) {
-        throw new Error(rolloverResult.error || "Rollover function failed without a specific error.");
-      }
+      if (!rolloverResult.success) throw new Error(rolloverResult.error || "Rollover function failed without a specific error.");
       return { success: true, message: "Season rollover executed successfully." };
     } else {
       console.log(`[RolloverCron] ⏳ Timer still ticking. Exiting.`);
@@ -532,9 +574,7 @@ export async function checkAndExecuteSeasonRollover(): Promise<{
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("[RolloverCheck] ❌ Failed to check or execute season rollover:", msg);
-    
     await logSystemEvent("SeasonRollover", "error", `Cron check failed: ${msg}`);
-    
     return { success: false, message: "Failed to process season rollover.", error: msg };
   }
 }
