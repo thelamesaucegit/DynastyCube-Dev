@@ -87,6 +87,12 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
             await logSystemEvent("TheValve", "warn", `Error executing The Valve logic`, { error: String(valveCatchErr) });
         }
         // =====================================================================
+        // --- ESCAPE ROOM: CALCULATE TEMPORARY SCAR COST ---
+        // =====================================================================
+        // We calculate this early. It's either 3, or 5% of the OLD cap (whichever is higher).
+        const escapeCardCost = Math.max(3, Math.ceil((oldSeason?.cubucks_allocation || 40) * 0.05));
+        console.log(`[SeasonRollover] Escape Room cards will be priced at ${escapeCardCost} Çubucks.`);
+        // =====================================================================
 
         // --- STEP 1: IDENTIFY OLD & CREATE NEW SEASON ---
         const { data: oldSeason, error: oldSeasonErr } = await supabase.from('seasons').select('*').eq('is_active', true).single();
