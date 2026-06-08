@@ -5,12 +5,26 @@
 import { createServerClient } from "@/lib/supabase";
 
 export interface ResortCard {
-  id: string;
+   id?: string;
   card_id: string;
   card_name: string;
-  image_url: string | null;
-  vote_count: number;
-}
+  card_set?: string;
+  card_type?: string;
+  rarity?: string;
+  colors?: string[];
+  color_identity?: string[];
+  image_url?: string | null;
+  oldest_image_url?: string | null;
+  oracle_id?: string | null;
+  oracle_text?: string | null; // <-- ADDED
+  hidden?: boolean;
+  mana_cost?: string;
+  cmc?: number;
+  pool_name?: string;
+  cubucks_cost?: number;
+  created_at?: string;
+  cubecobra_elo?: number;
+  rating_updated_at?: string;
 
 export interface ResortCardWithVote extends ResortCard {
   team_has_voted_for: boolean;
