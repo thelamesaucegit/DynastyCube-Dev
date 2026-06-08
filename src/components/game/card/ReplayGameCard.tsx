@@ -97,17 +97,19 @@ export function ReplayGameCard({ id, cardData, card, isTapped = false, useOldest
   const power = card?.power;
   const toughness = card?.toughness;
   
-  // CRITICAL FIX: Safely cast counters to a generic dictionary to bypass strict CounterType indexing rules
+  // Safely cast counters to a generic dictionary to bypass strict CounterType indexing rules
   const safeCounters = (card?.counters as Record<string, number> | undefined) || {};
   
   const plusOneCounters = safeCounters['+1/+1'] || 0;
   const minusOneCounters = safeCounters['-1/-1'] || 0;
   const netCounters = plusOneCounters - minusOneCounters;
 
-  const isToken = card?.isToken || cardData.card_type?.toLowerCase().includes('token') || cardData.name.toLowerCase().includes('token');
-  const isSummoningSick = card?.isSummoningSick || card?.sickness;
-  
-  const keywords: string[] = card?.keywords || [];
+  // Safely cast the card object to extract potentially undocumented boolean flags and arrays without alerting the compiler
+  const safeCard = card as Record<string, unknown> | undefined;
+
+  const isToken = Boolean(safeCard?.isToken) || cardData.card_type?.toLowerCase().includes('token') || cardData.name.toLowerCase().includes('token');
+  const isSummoningSick = Boolean(safeCard?.isSummoningSick || safeCard?.sickness);
+  const keywords: string[] = Array.isArray(safeCard?.keywords) ? (safeCard?.keywords as string[]) : [];
   
   // Fetch Scryfall Token Art
   useEffect(() => {
