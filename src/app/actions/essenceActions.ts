@@ -2,6 +2,7 @@
 "use server";
 
 import { createServerClient } from "@/lib/supabase";
+import { logSystemEvent } from "@/lib/systemLogger";
 
 // ============================================================================
 // TYPES
@@ -28,6 +29,161 @@ export interface EssenceTransaction {
   created_at: string;
 }
 
+export interface EssenceData {
+    teamBank: number;
+    personalBalance: number;
+    canClaim: boolean;
+    timeUntilNextClaim: string | null;
+}
+
+// ============================================================================
+// DAILY CLAIMS (META ECONOMY)
+// ============================================================================
+
+export async function getEssenceData(teamId: string): Promise<{ success: boolean; data?: EssenceData; error?: string }> {
+    try {
+        const supabase = await createServerClient();
+        const { data: { user } } = await supabase.auth.getUser();
+
+        // Get Team Bank
+        const { data: teamData } = await supabase
+            .from('teams')
+            .select('essence_bank')
+            .eq('id', teamId)
+            .single();
+
+        if (!user) {
+            return { 
+                success: true, 
+                data: { teamBank: teamData?.essence_bank || 0, personalBalance: 0, canClaim: false, timeUntilNextClaim: null } 
+            };
+        }
+
+        // Get User Balance and Claim Timer
+        const { data: userData } = await supabase
+            .from('users')
+            .select('essence_balance, last_essence_claim')
+            .eq('id', user.id)
+            .single();
+
+        let canClaim = true;
+        let timeUntilNextClaim = null;
+
+        if (userData?.last_essence_claim) {
+            const lastClaim = new Date(userData.last_essence_claim).getTime();
+            const now = Date.now();
+            const hoursSinceClaim = (now - lastClaim) / (1000 * 60 * 60);
+
+            // 20-hour rolling cooldown gives players a flexible daily window
+            if (hoursSinceClaim < 20) {
+                canClaim = false;
+                const hoursLeft = Math.ceil(20 - hoursSinceClaim);
+                timeUntilNextClaim = `${hoursLeft}h`;
+            }
+        }
+
+        return {
+            success: true,
+            data: {
+                teamBank: teamData?.essence_bank || 0,
+                personalBalance: userData?.essence_balance || 0,
+                canClaim,
+                timeUntilNextClaim
+            }
+        };
+    } catch (error) {
+        return { success: false, error: "Failed to fetch Essence data." };
+    }
+}
+
+export async function claimDailyEssence(teamId: string): Promise<{ success: boolean; message?: string; error?: string }> {
+    try {
+        const supabase = await createServerClient();
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (!user) return { success: false, error: "Not authenticated" };
+
+        // 1. Verify Membership
+        const { data: memberData } = await supabase
+            .from('team_members')
+            .select('id')
+            .eq('team_id', teamId)
+            .eq('user_id', user.id)
+            .single();
+
+        if (!memberData) return { success: false, error: "You must be a member of this team to claim Essence." };
+
+        // 2. Fetch Current States (Including essence_total_earned)
+        const { data: userData } = await supabase
+            .from('users')
+            .select('essence_balance, essence_total_earned, last_essence_claim')
+            .eq('id', user.id)
+            .single();
+            
+        const { data: teamData } = await supabase
+            .from('teams')
+            .select('essence_bank')
+            .eq('id', teamId)
+            .single();
+
+        if (!userData || !teamData) return { success: false, error: "Failed to fetch necessary data." };
+
+        // 3. Verify Cooldown
+        if (userData.last_essence_claim) {
+            const hoursSinceClaim = (Date.now() - new Date(userData.last_essence_claim).getTime()) / (1000 * 60 * 60);
+            if (hoursSinceClaim < 20) return { success: false, error: "You have already claimed your Essence recently." };
+        }
+
+        // 4. Calculate Claims
+        let personalGained = 1;
+        let teamBankCost = 0;
+
+        if (teamData.essence_bank > 0) {
+            personalGained = 2; // Base + 1 from Team Bank
+            teamBankCost = 1;
+        }
+
+        // 5. Execute Transactions
+        const newPersonalBalance = (userData.essence_balance || 0) + personalGained;
+        const newTotalEarned = (userData.essence_total_earned || 0) + personalGained;
+        const newTeamBank = teamData.essence_bank - teamBankCost;
+
+        // Update User
+        await supabase.from('users').update({ 
+            essence_balance: newPersonalBalance, 
+            essence_total_earned: newTotalEarned,
+            last_essence_claim: new Date().toISOString() 
+        }).eq('id', user.id);
+
+        // Update Team Bank
+        if (teamBankCost > 0) {
+            await supabase.from('teams').update({ essence_bank: newTeamBank }).eq('id', teamId);
+        }
+
+        // Insert Transaction Record so it shows up in their history!
+        await supabase.from('essence_transactions').insert({
+            user_id: user.id,
+            transaction_type: "grant",
+            amount: personalGained,
+            balance_after: newPersonalBalance,
+            description: teamBankCost > 0 ? "Daily Essence Claim (+1 Base, +1 Team Bonus)" : "Daily Essence Claim (+1 Base)",
+            created_by: user.id
+        });
+
+        await logSystemEvent("EssenceClaim", "info", `User ${user.id} claimed ${personalGained} Essence. Team Bank changed by -${teamBankCost}.`);
+
+        return { 
+            success: true, 
+            message: teamBankCost > 0 
+                ? "You claimed 1 Base Essence + 1 Bonus Essence from the Team Bank! ✨" 
+                : "You claimed 1 Base Essence! ✨ (The Team Bank is empty)" 
+        };
+
+    } catch (error) {
+        return { success: false, error: "An unexpected error occurred." };
+    }
+}
+
 // ============================================================================
 // BALANCE QUERIES
 // ============================================================================
@@ -41,7 +197,6 @@ export async function getAllUserEssenceBalances(): Promise<{
 }> {
   try {
     const supabase = await createServerClient();
-
     const { data, error } = await supabase
       .from("users")
       .select(
@@ -90,7 +245,6 @@ export async function getUserEssenceBalance(): Promise<{
 }> {
   try {
     const supabase = await createServerClient();
-
     const {
       data: { user },
       error: authError,
@@ -144,11 +298,11 @@ export async function grantEssence(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = await createServerClient();
-
     // Check authentication
     const {
       data: { user },
     } = await supabase.auth.getUser();
+
     if (!user) {
       return { success: false, error: "Not authenticated" };
     }
@@ -193,11 +347,11 @@ export async function grantEssenceToAllUsers(
 ): Promise<{ success: boolean; grantedCount?: number; error?: string }> {
   try {
     const supabase = await createServerClient();
-
     // Check authentication
     const {
       data: { user },
     } = await supabase.auth.getUser();
+
     if (!user) {
       return { success: false, error: "Not authenticated" };
     }
@@ -259,11 +413,11 @@ export async function grantEssenceToTeamMembers(
 ): Promise<{ success: boolean; grantedCount?: number; totalMembers?: number; error?: string }> {
   try {
     const supabase = await createServerClient();
-
     // Check authentication
     const {
       data: { user },
     } = await supabase.auth.getUser();
+
     if (!user) {
       return { success: false, error: "Not authenticated" };
     }
@@ -338,7 +492,6 @@ export async function getAllEssenceTransactions(): Promise<{
 }> {
   try {
     const supabase = await createServerClient();
-
     const { data, error } = await supabase
       .from("essence_transactions")
       .select("*")
@@ -366,7 +519,6 @@ export async function getUserEssenceTransactions(): Promise<{
 }> {
   try {
     const supabase = await createServerClient();
-
     const {
       data: { user },
       error: authError,
