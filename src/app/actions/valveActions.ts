@@ -26,10 +26,15 @@ export async function searchValveCards(query: string): Promise<{ success: boolea
         .ilike('card_name', `%${query}%`)
         .limit(10);
         
-    if (error) return { success: false, error: error.message };
+    if (error) return { success: false, error: error.message, cards: [] };
     
-    // Deduplicate the names
-    const uniqueNames = Array.from(new Set(data?.map(c => c.card_name) || []));
+    // THE FIX: Filter out nulls/undefined and ensure it's strictly a string[] before throwing into the Set
+    const validNames = (data || [])
+        .map(c => c.card_name)
+        .filter((name): name is string => typeof name === 'string' && name.length > 0);
+
+    const uniqueNames = Array.from(new Set(validNames));
+    
     return { success: true, cards: uniqueNames };
 }
 
@@ -48,7 +53,7 @@ export async function getValveNominations(): Promise<{ success: boolean; nominat
             valve_votes ( user_id )
         `);
         
-    if (error) return { success: false, error: error.message };
+    if (error) return { success: false, error: error.message, nominations: [] };
 
     const formatted: ValveNomination[] = (noms || []).map(nom => {
         const votes = nom.valve_votes as { user_id: string }[];
