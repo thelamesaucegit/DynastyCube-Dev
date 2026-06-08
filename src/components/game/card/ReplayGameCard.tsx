@@ -10,16 +10,28 @@ import { styles } from '../board/styles';
 // ========================================================================
 // Token Image Cache & Fetcher
 // ========================================================================
-const tokenImageCache: Record<string, string | null> = {};
-const pendingRequests: Record<string, Promise<string | null>> = {};
+
+// CRITICAL FIX: Explicitly tell TypeScript that these dictionary lookups can return undefined.
+const tokenImageCache: Record<string, string | null | undefined> = {};
+const pendingRequests: Record<string, Promise<string | null> | undefined> = {};
 
 async function fetchTokenImageFromScryfall(rawName: string): Promise<string | null> {
     const cleanName = rawName.replace(/ Token$/i, '');
     
-    if (tokenImageCache[cleanName] !== undefined) return tokenImageCache[cleanName];
-    if (pendingRequests[cleanName]) return pendingRequests[cleanName];
+    // 1. Check cache
+    const cachedImage = tokenImageCache[cleanName];
+    if (cachedImage !== undefined) {
+        return cachedImage;
+    }
+    
+    // 2. Check pending requests (The linter now knows this can be undefined)
+    const pending = pendingRequests[cleanName];
+    if (pending) {
+        return pending;
+    }
 
-    pendingRequests[cleanName] = (async () => {
+    // 3. Fire the request and save the promise to the dictionary
+    const request = (async () => {
         try {
             await new Promise(r => setTimeout(r, 50)); 
             const queryUrl = `https://api.scryfall.com/cards/search?order=released&dir=asc&unique=prints&q=t:token+exact:"${encodeURIComponent(cleanName)}"`;
@@ -38,11 +50,13 @@ async function fetchTokenImageFromScryfall(rawName: string): Promise<string | nu
             tokenImageCache[cleanName] = null;
             return null;
         } finally {
+            // Clean up the pending request once resolved
             delete pendingRequests[cleanName];
         }
     })();
 
-    return pendingRequests[cleanName];
+    pendingRequests[cleanName] = request;
+    return request;
 }
 
 // ========================================================================
@@ -96,7 +110,6 @@ export function ReplayGameCard({ id, cardData, card, isTapped = false, useOldest
   const isToken = card?.isToken || cardData.card_type?.toLowerCase().includes('token') || cardData.name.toLowerCase().includes('token');
   const isSummoningSick = card?.isSummoningSick || card?.sickness;
   
-  // Extract keywords (assuming array of strings)
   const keywords: string[] = card?.keywords || [];
   
   // Fetch Scryfall Token Art
@@ -155,13 +168,13 @@ export function ReplayGameCard({ id, cardData, card, isTapped = false, useOldest
         )}
         
         {/* SPECIFIC KEYWORD COUNTERS FROM STYLES */}
-        {card?.counters?.['Flying'] > 0 && <div style={styles.flyingCounterBadge}>🕊️</div>}
-        {card?.counters?.['First Strike'] > 0 && <div style={styles.firstStrikeCounterBadge}>⚡</div>}
-        {card?.counters?.['Lifelink'] > 0 && <div style={styles.lifelinkCounterBadge}>❤️</div>}
+        {card?.counters?.['Flying'] ? <div style={styles.flyingCounterBadge}>🕊️</div> : null}
+        {card?.counters?.['First Strike'] ? <div style={styles.firstStrikeCounterBadge}>⚡</div> : null}
+        {card?.counters?.['Lifelink'] ? <div style={styles.lifelinkCounterBadge}>❤️</div> : null}
         
         {/* OTHER TRACKED COUNTERS */}
-        {card?.counters?.['Charge'] && card.counters['Charge'] > 0 ? <div style={styles.chargeCounterBadge}>⚡ {card.counters['Charge']}</div> : null}
-        {card?.counters?.['Lore'] && card.counters['Lore'] > 0 ? <div style={styles.sagaLoreBadge}>📖 {card.counters['Lore']}</div> : null}
+        {card?.counters?.['Charge'] ? <div style={styles.chargeCounterBadge}>⚡ {card.counters['Charge']}</div> : null}
+        {card?.counters?.['Lore'] ? <div style={styles.sagaLoreBadge}>📖 {card.counters['Lore']}</div> : null}
       </>
   );
 
