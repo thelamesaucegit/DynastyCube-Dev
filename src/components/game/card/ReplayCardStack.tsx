@@ -12,8 +12,8 @@ export function ReplayCardStack({
   group,
   cardDataMap,
   useOldestArt,
-  overrideWidth,  // <-- NEW: Accept the dynamic width
-  overrideHeight, // <-- NEW: Accept the dynamic height
+  overrideWidth,
+  overrideHeight,
 }: {
   group: GroupedCard;
   cardDataMap: Record<string, ReplayCardData>;
@@ -23,13 +23,9 @@ export function ReplayCardStack({
 }) {
   const responsive = useResponsiveContext();
 
-  if (!responsive) {
-    return null;
-  }
+  if (!responsive) return null;
 
   const cardImageData = cardDataMap[group.card.name];
-  
-  // FIX: Use the calculated overrides, fallback to hook ONLY if missing
   const baseWidth = overrideWidth ?? responsive.battlefieldCardWidth;
   const baseHeight = overrideHeight ?? responsive.battlefieldCardHeight;
 
@@ -40,10 +36,11 @@ export function ReplayCardStack({
         <ReplayGameCard
           id={group.card.id}
           cardData={{ name: group.card.name, card_type: cardImageData.card_type, image_url: cardImageData.image_url, oldest_image_url: cardImageData.oldest_image_url }}
+          card={group.card} // CRITICAL FIX: Pass the live game state card!
           isTapped={group.card.isTapped}
           useOldestArt={useOldestArt}
-          width={`${baseWidth}px`}   
-          height={`${baseHeight}px`} 
+          width={`${baseWidth}px`}
+          height={`${baseHeight}px`}
         />
       </CardPreview>
     );
@@ -65,10 +62,11 @@ export function ReplayCardStack({
               <ReplayGameCard
                 id={card.id}
                 cardData={{ name: card.name, card_type: individualCardImageData.card_type, image_url: individualCardImageData.image_url, oldest_image_url: individualCardImageData.oldest_image_url }}
+                card={card} // CRITICAL FIX: Pass the live game state card!
                 isTapped={card.isTapped}
                 useOldestArt={useOldestArt}
-                width={`${baseWidth}px`}   
-                height={`${baseHeight}px`} 
+                width={`${baseWidth}px`}
+                height={`${baseHeight}px`}
               />
             </CardPreview>
           </div>
