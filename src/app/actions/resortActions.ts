@@ -80,6 +80,7 @@ export async function getResortCards(teamId?: string): Promise<{ cards: ResortCa
     const { data: cards, error: cardsError } = await supabase
       .from("resort_pool")
       .select("id, card_id, card_name, image_url, vote_count")
+      .eq('hidden', false)
       .order("card_name", { ascending: true });
 
     if (cardsError) throw cardsError;

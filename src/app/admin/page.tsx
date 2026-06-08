@@ -9,6 +9,7 @@ import { CardManagement } from "../components/admin/CardManagement";
 import { CubucksManagement } from "../components/admin/CubucksManagement";
 import { SeasonManagement } from "../components/admin/SeasonManagement";
 import { ChamberManagement } from "@/app/components/admin/ChamberManagement";
+import { ResortManagement } from "@/app/components/admin/ResortManagement";
 import { TradeSettings } from "../components/admin/TradeSettings";
 import { CardRatingSync } from "../components/admin/CardRatingSync";
 import { ReportManagement } from "../components/admin/ReportManagement";
@@ -167,6 +168,7 @@ export default function AdminPage() {
           </div>
           <div className="space-y-6">
             <ChamberManagement />
+            <ResortManagement />
             <TradeSettings />
             <Card>
               <CardHeader>
