@@ -776,7 +776,7 @@ export async function advancePlayoffBracket(seasonId: string, isTestSeason: bool
             offSeasonEnd = getTargetDateCT(targetDate, 0, 12); 
         }
 
-        // =========================================================================
+              // =========================================================================
         // --- NEW: THE VALVE VOTE SPAWNER ---
         // =========================================================================
         try {
@@ -798,25 +798,27 @@ export async function advancePlayoffBracket(seasonId: string, isTestSeason: bool
                     // Deadline is 1 hour before the offseason timer expires (1 min for test)
                     const valveDeadline = new Date(offSeasonEnd.getTime() - (isTestSeason ? 60000 : 3600000));
                     
-                    // Insert the generic Team Vote
-                    // NOTE: Please verify these table/column names match your exact voting schema!
-                    const { data: newVote, error: voteErr } = await supabase.from('team_votes').insert({
-                        team_id: standings.team_id,
+                    // Insert into the REAL polls table
+                    const { data: newPoll, error: pollErr } = await supabase.from('polls').insert({
                         title: "THE VALVE",
                         description: "Your team has suffered the most this season. You hold the power to turn THE VALVE and purge the realm's most hated card. What is your choice?",
-                        expires_at: valveDeadline.toISOString(),
-                        status: 'active'
+                        ends_at: valveDeadline.toISOString(),
+                        is_active: true,
+                        allow_multiple_votes: false,
+                        show_results_before_end: false,
+                        vote_type: 'team',
+                        team_id: standings.team_id
                     }).select('id').single();
 
-                    if (newVote && !voteErr) {
-                        // Insert the two options
-                        await supabase.from('team_vote_options').insert([
-                            { vote_id: newVote.id, option_text: "RELEASE THE VALVE" },
-                            { vote_id: newVote.id, option_text: "LEAVE THE VALVE SHUT" }
+                    if (newPoll && !pollErr) {
+                        // Insert the two options into poll_options
+                        await supabase.from('poll_options').insert([
+                            { poll_id: newPoll.id, option_text: "RELEASE THE VALVE", option_order: 1 },
+                            { poll_id: newPoll.id, option_text: "LEAVE THE VALVE SHUT", option_order: 2 }
                         ]);
                         await logSystemEvent("TheValve", "info", `Valve vote spawned for team ${standings.team_id}.`);
                     } else {
-                        console.error("[PlayoffGen] Failed to spawn Valve vote:", voteErr);
+                        console.error("[PlayoffGen] Failed to spawn Valve vote:", pollErr);
                     }
                 }
             }
@@ -824,6 +826,7 @@ export async function advancePlayoffBracket(seasonId: string, isTestSeason: bool
             console.error("[PlayoffGen] Failed to execute Valve spawn logic:", valveErr);
         }
         // =========================================================================
+
         
         await supabase.from('countdown_timers').update({ is_active: false }).eq('is_active', true);
         await supabase.from('countdown_timers').insert({
