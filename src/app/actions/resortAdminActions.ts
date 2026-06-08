@@ -32,22 +32,26 @@ export async function importResortPoolFromScryfall(): Promise<{ success: boolean
 
             const data = await response.json();
             
-            // Map Scryfall data to our schema
-            const cardsToInsert = data.data.map((card: any) => ({
-                card_id: card.id,
-                card_name: card.name,
-                card_set: card.set.toUpperCase(),
-                card_type: card.type_line,
-                rarity: card.rarity,
-                colors: card.colors || [],
-                color_identity: card.color_identity || [],
-                image_url: card.image_uris?.normal || card.image_uris?.large || null,
-                oracle_id: card.oracle_id,
-                mana_cost: card.mana_cost || null,
-                cmc: card.cmc || 0,
-                cubucks_cost: 1, // Base cost for Resort pool
-                hidden: true,    // All newly imported cards start hidden!
-            }));
+            // THE FIX: Removed the 'any' type and used string casting for properties
+            const cardsToInsert = data.data.map((card: Record<string, unknown>) => {
+                const imageUris = card.image_uris as Record<string, string> | undefined;
+                
+                return {
+                    card_id: String(card.id),
+                    card_name: String(card.name),
+                    card_set: String((card.set as string).toUpperCase()),
+                    card_type: String(card.type_line),
+                    rarity: String(card.rarity),
+                    colors: Array.isArray(card.colors) ? card.colors : [],
+                    color_identity: Array.isArray(card.color_identity) ? card.color_identity : [],
+                    image_url: imageUris?.normal || imageUris?.large || null,
+                    oracle_id: String(card.oracle_id),
+                    mana_cost: card.mana_cost ? String(card.mana_cost) : null,
+                    cmc: typeof card.cmc === 'number' ? card.cmc : 0,
+                    cubucks_cost: 1, // Base cost for Resort pool
+                    hidden: true,    // All newly imported cards start hidden!
+                };
+            });
 
             if (cardsToInsert.length > 0) {
                 const { error: upsertError } = await supabase
