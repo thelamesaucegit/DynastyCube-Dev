@@ -33,7 +33,7 @@ export function ResortManagement() {
                     Resort Pool Management
                 </CardTitle>
                 <CardDescription>
-                    Import all qualifying non-basic lands from Scryfall. All imported cards are marked as "hidden" by default until the Season Rollover reveals 50 at random.
+                    Import all qualifying non-basic lands from Scryfall. All imported cards are marked as &quot;hidden&quot; by default until the Season Rollover reveals 50 at random.
                 </CardDescription>
             </CardHeader>
             <CardContent>
