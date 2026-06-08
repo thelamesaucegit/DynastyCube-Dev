@@ -121,8 +121,8 @@ export async function submitCypherGuess(cypherId: string, guess: string): Promis
     const { data: cypher } = await supabase.from('cyphers').select('content').eq('id', cypherId).single();
     if (!cypher) return { success: false, error: "Cypher not found." };
 
-    // Extract all valid words from the raw content
-    const allWords = Array.from(cypher.content.matchAll(/([a-zA-Z']+)/g)).map(m => m[0].toLowerCase());
+    // --- FIX: Explicitly typed 'm' as RegExpMatchArray ---
+    const allWords = Array.from(cypher.content.matchAll(/([a-zA-Z']+)/g)).map((m: RegExpMatchArray) => m[0].toLowerCase());
     
     if (!allWords.includes(cleanGuess)) {
         return { success: false, error: "Incorrect. That word is not hidden in this Cypher." };
@@ -147,7 +147,6 @@ export async function submitCypherGuess(cypherId: string, guess: string): Promis
     // Grant Essence!
     const reward = cleanGuess.length; // 1 Essence per letter
     
-    // Use RPC or manual update (Assuming we use manual update for simplicity)
     const { data: userData } = await supabase.from('users').select('essence_balance, essence_total_earned').eq('id', user.id).single();
     
     if (userData) {
@@ -174,9 +173,9 @@ export async function purchaseCypherWord(cypherId: string, wordIndex: number): P
     const { data: cypher } = await supabase.from('cyphers').select('content').eq('id', cypherId).single();
     if (!cypher) return { success: false, error: "Cypher not found." };
 
-    // Safely reconstruct the token array on the server to find the EXACT word they clicked
+    // --- FIX: Explicitly typed 'm' as RegExpMatchArray ---
     const regex = /([a-zA-Z']+)/g;
-    const allWords = Array.from(cypher.content.matchAll(regex)).map(m => m[0]);
+    const allWords = Array.from(cypher.content.matchAll(regex)).map((m: RegExpMatchArray) => m[0]);
     
     if (wordIndex < 0 || wordIndex >= allWords.length) return { success: false, error: "Invalid word target." };
     
