@@ -10,27 +10,22 @@ import { styles } from '../board/styles';
 // ========================================================================
 // Token Image Cache & Fetcher
 // ========================================================================
-
-// CRITICAL FIX: Explicitly tell TypeScript that these dictionary lookups can return undefined.
 const tokenImageCache: Record<string, string | null | undefined> = {};
 const pendingRequests: Record<string, Promise<string | null> | undefined> = {};
 
 async function fetchTokenImageFromScryfall(rawName: string): Promise<string | null> {
     const cleanName = rawName.replace(/ Token$/i, '');
     
-    // 1. Check cache
     const cachedImage = tokenImageCache[cleanName];
     if (cachedImage !== undefined) {
         return cachedImage;
     }
     
-    // 2. Check pending requests (The linter now knows this can be undefined)
     const pending = pendingRequests[cleanName];
     if (pending) {
         return pending;
     }
 
-    // 3. Fire the request and save the promise to the dictionary
     const request = (async () => {
         try {
             await new Promise(r => setTimeout(r, 50)); 
@@ -50,7 +45,6 @@ async function fetchTokenImageFromScryfall(rawName: string): Promise<string | nu
             tokenImageCache[cleanName] = null;
             return null;
         } finally {
-            // Clean up the pending request once resolved
             delete pendingRequests[cleanName];
         }
     })();
@@ -103,8 +97,11 @@ export function ReplayGameCard({ id, cardData, card, isTapped = false, useOldest
   const power = card?.power;
   const toughness = card?.toughness;
   
-  const plusOneCounters = card?.counters?.['+1/+1'] || 0;
-  const minusOneCounters = card?.counters?.['-1/-1'] || 0;
+  // CRITICAL FIX: Safely cast counters to a generic dictionary to bypass strict CounterType indexing rules
+  const safeCounters = (card?.counters as Record<string, number> | undefined) || {};
+  
+  const plusOneCounters = safeCounters['+1/+1'] || 0;
+  const minusOneCounters = safeCounters['-1/-1'] || 0;
   const netCounters = plusOneCounters - minusOneCounters;
 
   const isToken = card?.isToken || cardData.card_type?.toLowerCase().includes('token') || cardData.name.toLowerCase().includes('token');
@@ -168,13 +165,13 @@ export function ReplayGameCard({ id, cardData, card, isTapped = false, useOldest
         )}
         
         {/* SPECIFIC KEYWORD COUNTERS FROM STYLES */}
-        {card?.counters?.['Flying'] ? <div style={styles.flyingCounterBadge}>🕊️</div> : null}
-        {card?.counters?.['First Strike'] ? <div style={styles.firstStrikeCounterBadge}>⚡</div> : null}
-        {card?.counters?.['Lifelink'] ? <div style={styles.lifelinkCounterBadge}>❤️</div> : null}
+        {safeCounters['Flying'] ? <div style={styles.flyingCounterBadge}>🕊️</div> : null}
+        {safeCounters['First Strike'] ? <div style={styles.firstStrikeCounterBadge}>⚡</div> : null}
+        {safeCounters['Lifelink'] ? <div style={styles.lifelinkCounterBadge}>❤️</div> : null}
         
         {/* OTHER TRACKED COUNTERS */}
-        {card?.counters?.['Charge'] ? <div style={styles.chargeCounterBadge}>⚡ {card.counters['Charge']}</div> : null}
-        {card?.counters?.['Lore'] ? <div style={styles.sagaLoreBadge}>📖 {card.counters['Lore']}</div> : null}
+        {safeCounters['Charge'] ? <div style={styles.chargeCounterBadge}>⚡ {safeCounters['Charge']}</div> : null}
+        {safeCounters['Lore'] ? <div style={styles.sagaLoreBadge}>📖 {safeCounters['Lore']}</div> : null}
       </>
   );
 
