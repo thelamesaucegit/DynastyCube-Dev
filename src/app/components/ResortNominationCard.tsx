@@ -1,9 +1,8 @@
-//src/app/components/ResortNominationCard.tsx
-
+// src/app/components/ResortNominationCard.tsx
 "use client";
 
 import React, { useState } from "react";
-import type { ResortCard } from "@/app/actions/resortActions"; // We'll define/get this next
+import type { ResortCard } from "@/app/actions/resortActions"; 
 import { nominateResortCard } from "@/app/actions/resortActions";
 import { toast } from "sonner";
 import { Button } from "@/app/components/ui/button";
@@ -23,14 +22,27 @@ export function ResortNominationCard({ card, teamId, isPostseason }: ResortNomin
       toast.error("You must be on a team to nominate a card.");
       return;
     }
+
+    if (!card.id) {
+      toast.error("Invalid card ID.");
+      return;
+    }
+
     if (!isPostseason) {
       toast.info("Card nominations are only open during the Post-Season.");
       return;
     }
 
-    setIsNominating(true);
-    const result = await nominateResortCard(card.id, teamId, card.card_name);
+    // THE FIX: Assign to strict, immutable constants so they cannot 
+    // mutate to undefined during the asynchronous "await" execution!
+    const activeTeamId: string = teamId;
+    const activeCardId: string = card.id;
 
+    setIsNominating(true);
+    
+    // Pass the strictly narrowed immutable string constants
+    const result = await nominateResortCard(activeCardId, activeTeamId, card.card_name);
+    
     if (result.success) {
       toast.success(result.message);
     } else {
@@ -50,9 +62,8 @@ export function ResortNominationCard({ card, teamId, isPostseason }: ResortNomin
           </div>
         )}
       </div>
-
       <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center p-4 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button onClick={handleNominate} disabled={isNominating || !teamId || !isPostseason}>
+        <Button onClick={handleNominate} disabled={isNominating || !teamId || !isPostseason || !card.id}>
           {isNominating ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (

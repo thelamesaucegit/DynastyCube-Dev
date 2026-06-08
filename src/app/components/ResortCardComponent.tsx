@@ -1,5 +1,4 @@
-//src/app/components/ResortCardComponent.tsx
-
+// src/app/components/ResortCardComponent.tsx
 "use client";
 
 import React, { useState } from "react";
@@ -24,8 +23,21 @@ export function ResortCardComponent({ card, teamId, onVoteSuccess }: ResortCardP
       return;
     }
     
+    // Check if card has a valid ID
+    if (!card.id) {
+        toast.error("Invalid card ID.");
+        return;
+    }
+
+    // THE FIX: Assign BOTH parameters to strict, immutable constants.
+    const activeTeamId: string = teamId;
+    const activeCardId: string = card.id;
+
     setIsSubmitting(true);
-    const result = await castResortVote(teamId, card.id);
+    
+    // Pass the strictly typed constants!
+    const result = await castResortVote(activeTeamId, activeCardId);
+    
     if (result.success) {
       toast.success(`Your team's vote for ${card.card_name} has been recorded!`);
       onVoteSuccess();
@@ -46,12 +58,10 @@ export function ResortCardComponent({ card, teamId, onVoteSuccess }: ResortCardP
           </div>
         )}
       </div>
-
       <div className="p-3 bg-card">
         <h3 className="font-semibold text-sm truncate">{card.card_name}</h3>
         <p className="text-xs text-muted-foreground">Votes: {card.vote_count}</p>
       </div>
-
       <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center p-4 opacity-0 group-hover:opacity-100 transition-opacity">
         {card.team_has_voted_for ? (
             <div className="text-center text-primary-foreground">
@@ -60,7 +70,7 @@ export function ResortCardComponent({ card, teamId, onVoteSuccess }: ResortCardP
                 <p className="text-xs text-green-200">You can change your vote by selecting another card.</p>
             </div>
         ) : (
-            <Button onClick={handleVote} disabled={isSubmitting || !teamId}>
+            <Button onClick={handleVote} disabled={isSubmitting || !teamId || !card.id}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Vote for this card
             </Button>
