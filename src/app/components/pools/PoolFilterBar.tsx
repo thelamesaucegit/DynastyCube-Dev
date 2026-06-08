@@ -50,7 +50,7 @@ interface PoolFilterBarProps {
   // Optional Status Filter (Used by Draft Pool, ignored by others)
   showStatusFilter?: boolean;
   filterStatus?: string;
-  setFilterStatus?: (val: any) => void;
+  setFilterStatus?: (val: string) => void; // <-- THE FIX: Strict typing 'string' instead of 'any'
   
   // Footer Stats
   filteredCount: number;
