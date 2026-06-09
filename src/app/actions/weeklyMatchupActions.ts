@@ -171,8 +171,9 @@ export async function recordSimGameResult(
         finalized = await finalizeWeeklyOutcome(weeklyMatchupId);
     }
 
-     // --- AUTOMATION: Schedule Progression ---
+         // --- AUTOMATION: Schedule Progression ---
      if (finalized) {
+        // Did the ENTIRE week just finish?
         const { data: unfinishedThisWeek } = await supabase
             .from('weekly_matchups')
             .select('id')
@@ -182,7 +183,7 @@ export async function recordSimGameResult(
             .limit(1);
 
         if (!unfinishedThisWeek || unfinishedThisWeek.length === 0) {
-            await logSystemEvent("Automation", "info", `Week ${matchup.week_number} is completely finished!`);
+            await logSystemEvent("Automation", "info", `Week ${matchup.week_number} matchups finalized. Processing rewards...`);
             
             const { data: endedWeek } = await supabase
                 .from('schedule_weeks')
@@ -191,12 +192,19 @@ export async function recordSimGameResult(
                 .eq('week_number', matchup.week_number) 
                 .single();
 
+            // =========================================================
+            // FIRE ESCAPE ROOM REWARDS FOR THE COMPLETED WEEK
+            // =========================================================
+            const { processEscapeRoomRewards } = await import('@/app/actions/escapeRoomActions');
+            await processEscapeRoomRewards(matchup.season_id, matchup.week_number);
+
             if (endedWeek?.is_championship_week) {
-                await triggerOffseason(matchup.season_id, isTestSeason, supabase);
+                // Let the cron handle postseason transitions to avoid premature UI updates!
+                await logSystemEvent("Automation", "info", `Championship matchups completed. Awaiting Postseason transition cron.`);
             } else if (endedWeek?.is_playoff_week) {
-                await advancePlayoffBracket(matchup.season_id, isTestSeason);
-                       } else {
-                // If it's the regular season, do we need to schedule JIT games?
+                 await logSystemEvent("Automation", "info", `Playoff round completed. Generating next bracket...`);
+                 await advancePlayoffBracket(matchup.season_id, isTestSeason);
+            } else {
                 const { data: nextWeek } = await supabase
                     .from('schedule_weeks')
                     .select('id, week_number')
@@ -208,39 +216,16 @@ export async function recordSimGameResult(
                     .single();
 
                 if (nextWeek) {
-                    // =========================================================
-                    // NEW: FIRE ESCAPE ROOM REWARDS FOR COMPLETED WEEK!
-                    // =========================================================
-                    const { processEscapeRoomRewards } = await import('@/app/actions/escapeRoomActions');
-                    await processEscapeRoomRewards(matchup.season_id, matchup.week_number);
-                    // =========================================================
-
                     if (isTestSeason) await scheduleNextWeekJIT(matchup.season_id, nextWeek.week_number);
                 } else {
-                    const { count: unfinishedRegSeasonCount } = await supabase
-                        .from('weekly_matchups')
-                        .select('id', { count: 'exact', head: true })
-                        .eq('season_id', matchup.season_id)
-                        .eq('is_playoff', false)
-                        .eq('is_outcome_final', false);
-
-                    if (unfinishedRegSeasonCount === 0) {
-                        // =========================================================
-                        // NEW: FIRE ESCAPE ROOM REWARDS FOR THE FINAL WEEK!
-                        // =========================================================
-                        const { processEscapeRoomRewards } = await import('@/app/actions/escapeRoomActions');
-                        await processEscapeRoomRewards(matchup.season_id, matchup.week_number);
-                        // =========================================================
-
-                        await logSystemEvent("Automation", "info", `All regular season games complete! Generating playoffs.`);
-                        await generateInitialPlayoffBracket(matchup.season_id, isTestSeason);
-                    } else {
-                        await logSystemEvent("Automation", "warn", `Week ${matchup.week_number} finished, but ${unfinishedRegSeasonCount} other regular season games remain. Blocking playoff generation.`);
-                    }
+                    // THE FIX: Do NOT generate playoffs here anymore!
+                    // Let the standalone Phase Transition handler catch it when the Week officially ends.
+                    await logSystemEvent("Automation", "info", `All regular season matchups complete! Awaiting Playoff transition cron.`);
                 }
             }
         }
     }
+
 
     return { success: true, matchupFinalized: finalized };
 }
