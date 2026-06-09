@@ -1,5 +1,4 @@
 // src/app/account/page.tsx
-
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -12,7 +11,6 @@ import AccountLinking from "../components/AccountLinking";
 import { TeamSelection } from "../components/TeamSelection";
 import { DisplayNameEditor } from "../components/DisplayNameEditor";
 import { TimezoneSelector } from "../components/TimezoneSelector";
-// --- MODIFIED: Import the new UserSettings component ---
 import { UserSettings } from "../components/UserSettings";
 import { getUserTeam } from "../actions/teamActions";
 import { getUserEssenceBalance, type EssenceBalance } from "../actions/essenceActions";
@@ -20,7 +18,7 @@ import { useUserTimezone } from "../hooks/useUserTimezone";
 import { formatDate } from "../utils/timezoneUtils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
-import { Loader2, LogOut, Link2, ChevronRight, Users, Sparkles, Trash2 } from "lucide-react";
+import { Loader2, LogOut, Link2, ChevronRight, Users, Sparkles, Trash2, Gift, Copy, Check } from "lucide-react";
 import { deleteOwnAccount } from "../actions/userManagementActions";
 
 interface Team {
@@ -36,10 +34,17 @@ export default function AccountPage() {
     const [userTeam, setUserTeam] = useState<Team | null>(null);
     const [loadingTeam, setLoadingTeam] = useState(true);
     const [essenceBalance, setEssenceBalance] = useState<EssenceBalance | null>(null);
+    
+    // Deletion states
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [deleteConfirmText, setDeleteConfirmText] = useState("");
     const [deletingAccount, setDeletingAccount] = useState(false);
     const [deleteError, setDeleteError] = useState<string | null>(null);
+    
+    // Referral states
+    const [referralLink, setReferralLink] = useState("");
+    const [copied, setCopied] = useState(false);
+
     const { timezone } = useUserTimezone();
 
     useEffect(() => {
@@ -47,8 +52,12 @@ export default function AccountPage() {
             loadUserTeam();
             loadEssenceBalance();
         }
+        if (user?.id) {
+            // Safely generate the link client-side to get the correct domain
+            setReferralLink(`${window.location.origin}/auth/login?ref=${user.id}`);
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [user?.email]);
+    }, [user?.email, user?.id]);
 
     const loadUserTeam = async () => {
         if (!user?.email) return;
@@ -87,6 +96,13 @@ export default function AccountPage() {
             setDeleteError(result.error || "Failed to delete account.");
             setDeletingAccount(false);
         }
+    };
+
+    const handleCopyLink = () => {
+        if (!referralLink) return;
+        navigator.clipboard.writeText(referralLink);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
     };
 
     const UserProfile = () => (
@@ -185,13 +201,45 @@ export default function AccountPage() {
                 </CardContent>
             </Card>
 
+            {/* NEW: Referral Program */}
+            <Card className="border-teal-500/30">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Gift className="h-5 w-5 text-teal-500" />
+                        Refer a Friend
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-sm text-muted-foreground mb-4">
+                        Invite friends to Dynasty Cube! When a new user signs up using your unique link below, you will instantly receive <strong>10 ✨ Personal Essence</strong>, and your team will receive <strong>25 ✨ Team Essence</strong>.
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="text"
+                            readOnly
+                            value={referralLink}
+                            className="flex-1 px-3 py-2 bg-muted border border-border rounded-md text-sm font-mono text-muted-foreground focus:outline-none focus:ring-1 focus:ring-teal-500"
+                            onClick={(e) => e.currentTarget.select()}
+                        />
+                        <Button 
+                            onClick={handleCopyLink} 
+                            variant="secondary" 
+                            className={`w-28 shrink-0 transition-colors ${copied ? 'bg-teal-500/20 text-teal-600 hover:bg-teal-500/30' : ''}`}
+                        >
+                            {copied ? <Check className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
+                            {copied ? "Copied!" : "Copy"}
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+
             {/* Display Name Editor */}
             <DisplayNameEditor />
 
             {/* Timezone Settings */}
             <TimezoneSelector />
 
-            {/* --- MODIFIED: Added the new user settings component here --- */}
+            {/* User Settings */}
             <UserSettings />
 
             {/* Team Section */}
