@@ -2,6 +2,7 @@
 "use server";
 
 import { createServerClient } from "@/lib/supabase";
+import { revalidatePath } from "next/cache";
 
 interface Report {
   id: string;
@@ -19,6 +20,24 @@ interface Report {
   resolved_at: string | null;
 }
 
+// Helper to notify all admins
+async function notifyAllAdmins(supabase: any, type: string, message: string, excludeUserId?: string) {
+  const { data: admins } = await supabase.from('users').select('id').eq('is_admin', true);
+  if (!admins) return;
+
+  const notificationsToInsert = admins
+    .filter((admin: { id: string }) => admin.id !== excludeUserId)
+    .map((admin: { id: string }) => ({
+      user_id: admin.id,
+      notification_type: type,
+      message: message,
+    }));
+
+  if (notificationsToInsert.length > 0) {
+    await supabase.from('notifications').insert(notificationsToInsert);
+  }
+}
+
 // Submit a new report
 export async function submitReport(
   reportType: "bad_actor" | "bug" | "issue" | "other",
@@ -28,17 +47,11 @@ export async function submitReport(
   reportedUserId?: string
 ): Promise<{ success: boolean; reportId?: string; error?: string }> {
   const supabase = await createServerClient();
-
   try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
 
-    if (!user) {
-      return { success: false, error: "Not authenticated" };
-    }
-
-    // Insert report
+    // 1. Insert the report
     const { data: report, error } = await supabase
       .from("reports")
       .insert({
@@ -55,51 +68,34 @@ export async function submitReport(
 
     if (error) throw error;
 
-    // Notify admins (this would call the database function)
+    // 2. THE FIX: Create notifications for ALL admins instantly upon submission
+    const adminMessage = `🚨 NEW REPORT: [${reportType.toUpperCase()}] "${title}" (Severity: ${severity.toUpperCase()})`;
+    await notifyAllAdmins(supabase, "report_submitted", adminMessage, user.id);
+
+    // 3. Fallback database function notify RPC
     try {
-      const notifyResult = await supabase.rpc("notify_admins_of_report", {
+      await supabase.rpc("notify_admins_of_report", {
         p_report_id: report.id,
         p_report_type: reportType,
         p_title: title,
       });
-
-      if (notifyResult.error) {
-        console.error("RPC Error:", notifyResult.error);
-      }
     } catch (notifyError) {
-      console.error("Error notifying admins:", notifyError);
-      // Don't fail the report submission if notification fails
+      console.error("Error notifying admins via RPC:", notifyError);
     }
 
-    return {
-      success: true,
-      reportId: report.id,
-    };
+    return { success: true, reportId: report.id };
   } catch (error) {
     console.error("Error submitting report:", error);
-    return {
-      success: false,
-      error: "Failed to submit report",
-    };
+    return { success: false, error: "Failed to submit report" };
   }
 }
 
 // Get reports for current user
-export async function getMyReports(): Promise<{
-  reports: Report[];
-  success: boolean;
-  error?: string;
-}> {
+export async function getMyReports(): Promise<{ reports: Report[]; success: boolean; error?: string }> {
   const supabase = await createServerClient();
-
   try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return { reports: [], success: false, error: "Not authenticated" };
-    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { reports: [], success: false, error: "Not authenticated" };
 
     const { data: reports, error } = await supabase
       .from("reports")
@@ -108,18 +104,10 @@ export async function getMyReports(): Promise<{
       .order("created_at", { ascending: false });
 
     if (error) throw error;
-
-    return {
-      reports: reports || [],
-      success: true,
-    };
+    return { reports: reports || [], success: true };
   } catch (error) {
     console.error("Error getting my reports:", error);
-    return {
-      reports: [],
-      success: false,
-      error: "Failed to load reports",
-    };
+    return { reports: [], success: false, error: "Failed to load reports" };
   }
 }
 
@@ -144,35 +132,36 @@ export async function getAllReports(): Promise<{
   error?: string;
 }> {
   const supabase = await createServerClient();
-
   try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { reports: [], success: false, error: "Not authenticated" };
 
-    if (!user) {
-      return { reports: [], success: false, error: "Not authenticated" };
-    }
+    // Fetch all reports
+    const { data: reports, error } = await supabase.from("reports").select("*");
+    if (error) throw error;
 
-    // Query reports table directly to get ALL reports (not just pending)
-    const { data: reports, error } = await supabase
-      .from("reports")
-      .select("*")
-      .order("created_at", { ascending: false });
+    // THE FIX: Custom sorting (Pending & In Review at top, Resolved in middle, Dismissed at bottom)
+    const sortedReports = (reports || []).sort((a, b) => {
+      const statusOrder: Record<string, number> = {
+        pending: 1,
+        in_review: 2,
+        resolved: 3,
+        dismissed: 4
+      };
+      const orderA = statusOrder[a.status] || 1;
+      const orderB = statusOrder[b.status] || 1;
+      
+      if (orderA !== orderB) return orderA - orderB;
+      // Secondary sort: Newest first
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
 
-    if (error) {
-      console.error("Error fetching reports:", error);
-      throw error;
-    }
-
-    // Get user emails separately to avoid RLS issues with auth.users
     const userIds = new Set<string>();
-    reports?.forEach(report => {
+    sortedReports.forEach(report => {
       if (report.reporter_user_id) userIds.add(report.reporter_user_id);
       if (report.reported_user_id) userIds.add(report.reported_user_id);
     });
 
-    // Fetch emails from public.users table instead of auth.users
     const { data: users } = await supabase
       .from("users")
       .select("id, email")
@@ -180,8 +169,7 @@ export async function getAllReports(): Promise<{
 
     const userEmailMap = new Map(users?.map(u => [u.id, u.email]) || []);
 
-    // Format the response to match expected structure
-    const formattedReports = reports?.map(report => ({
+    const formattedReports = sortedReports.map(report => ({
       id: report.id,
       report_type: report.report_type,
       title: report.title,
@@ -195,19 +183,12 @@ export async function getAllReports(): Promise<{
       reported_user_email: userEmailMap.get(report.reported_user_id) || null,
       admin_notes: report.admin_notes,
       assigned_admin_id: report.assigned_admin_id
-    })) || [];
+    }));
 
-    return {
-      reports: formattedReports,
-      success: true,
-    };
+    return { reports: formattedReports, success: true };
   } catch (error) {
     console.error("Error getting all reports:", error);
-    return {
-      reports: [],
-      success: false,
-      error: "Failed to load reports",
-    };
+    return { reports: [], success: false, error: "Failed to load reports" };
   }
 }
 
@@ -218,40 +199,71 @@ export async function updateReportStatus(
   adminNotes?: string
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createServerClient();
-
   try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return { success: false, error: "Not authenticated" };
-    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
 
     const updateData: {
       status: string;
       assigned_admin_id: string;
       admin_notes?: string;
+      resolved_at?: string | null;
     } = {
       status,
       assigned_admin_id: user.id,
     };
 
-    if (adminNotes) {
-      updateData.admin_notes = adminNotes;
+    if (adminNotes) updateData.admin_notes = adminNotes;
+    if (status === "resolved") {
+      updateData.resolved_at = new Date().toISOString();
+    } else {
+      updateData.resolved_at = null;
     }
 
+    // 1. Update the Report status
     const { error } = await supabase.from("reports").update(updateData).eq("id", reportId);
-
     if (error) throw error;
 
+    // 2. THE FIX: Handle Task Synchronization
+    // Fetch details of the modified report to get title & tag
+    const { data: reportDetails } = await supabase
+      .from("reports")
+      .select("title, report_type")
+      .eq("id", reportId)
+      .single();
+
+    if (reportDetails) {
+      if (status === "pending" || status === "in_review") {
+        // A. Automatically generate a task if none exists yet
+        const { data: existingTask } = await supabase
+          .from("admin_tasks")
+          .select("id")
+          .eq("reference_link", `https://yourdomain.com/admin/reports?id=${reportId}`)
+          .maybeSingle();
+
+        if (!existingTask) {
+          await supabase.from("admin_tasks").insert({
+            title: `[Report] ${reportDetails.title}`,
+            tag: reportDetails.report_type === "bug" ? "Bug" : "Issue",
+            reference_link: `https://yourdomain.com/admin/reports?id=${reportId}`,
+            status: "active",
+            created_by: user.id
+          });
+        }
+      } else if (status === "resolved") {
+        // B. Automatically close out the task if the report is marked resolved
+        await supabase
+          .from("admin_tasks")
+          .update({ status: "completed", completed_at: new Date().toISOString() })
+          .eq("reference_link", `https://yourdomain.com/admin/reports?id=${reportId}`);
+      }
+    }
+
+    revalidatePath('/admin/tasks');
     return { success: true };
   } catch (error) {
     console.error("Error updating report status:", error);
-    return {
-      success: false,
-      error: "Failed to update report",
-    };
+    return { success: false, error: "Failed to update report" };
   }
 }
 
@@ -262,42 +274,26 @@ export async function getReportDetails(reportId: string): Promise<{
   error?: string;
 }> {
   const supabase = await createServerClient();
-
   try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return { report: null, success: false, error: "Not authenticated" };
-    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { report: null, success: false, error: "Not authenticated" };
 
     const { data: report, error } = await supabase
       .from("reports")
-      .select(
-        `
+      .select(`
         *,
         reporter:auth.users!reports_reporter_user_id_fkey(email, raw_user_meta_data),
         reported_user:auth.users!reports_reported_user_id_fkey(email, raw_user_meta_data),
         assigned_admin:auth.users!reports_assigned_admin_id_fkey(email, raw_user_meta_data)
-      `
-      )
+      `)
       .eq("id", reportId)
       .single();
 
     if (error) throw error;
-
-    return {
-      report: report as unknown as Report | null,
-      success: true,
-    };
+    return { report: report as unknown as Report | null, success: true };
   } catch (error) {
     console.error("Error getting report details:", error);
-    return {
-      report: null,
-      success: false,
-      error: "Failed to load report details",
-    };
+    return { report: null, success: false, error: "Failed to load report details" };
   }
 }
 
@@ -316,30 +312,17 @@ export async function getReportStats(): Promise<{
   error?: string;
 }> {
   const supabase = await createServerClient();
-
   try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return {
-        stats: {
-          pending: 0,
-          inReview: 0,
-          resolved: 0,
-          dismissed: 0,
-          total: 0,
-          byType: {},
-          bySeverity: {},
-        },
+        stats: { pending: 0, inReview: 0, resolved: 0, dismissed: 0, total: 0, byType: {}, bySeverity: {} },
         success: false,
         error: "Not authenticated",
       };
     }
 
     const { data: reports, error } = await supabase.from("reports").select("status, report_type, severity");
-
     if (error) throw error;
 
     const stats = {
@@ -352,32 +335,19 @@ export async function getReportStats(): Promise<{
       bySeverity: {} as Record<string, number>,
     };
 
-    // Count by type
     reports?.forEach((r) => {
       stats.byType[r.report_type] = (stats.byType[r.report_type] || 0) + 1;
     });
 
-    // Count by severity
     reports?.forEach((r) => {
       stats.bySeverity[r.severity] = (stats.bySeverity[r.severity] || 0) + 1;
     });
 
-    return {
-      stats,
-      success: true,
-    };
+    return { stats, success: true };
   } catch (error) {
     console.error("Error getting report stats:", error);
     return {
-      stats: {
-        pending: 0,
-        inReview: 0,
-        resolved: 0,
-        dismissed: 0,
-        total: 0,
-        byType: {},
-        bySeverity: {},
-      },
+      stats: { pending: 0, inReview: 0, resolved: 0, dismissed: 0, total: 0, byType: {}, bySeverity: {} },
       success: false,
       error: "Failed to load report statistics",
     };
