@@ -1,5 +1,4 @@
 // src/app/teams/[teamId]/page.tsx
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -7,11 +6,8 @@ import Image from "next/image";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
-
 import { TrophyCase } from "@/app/components/team/TrophyCase";
-
-import { TeamEssenceDisplay } from "@/app/components/team/TeamEssenceDisplay"; // <-- ADD THIS
-
+import { TeamEssenceDisplay } from "@/app/components/team/TeamEssenceDisplay";
 import { getTeamByShortName } from "@/app/actions/teamActions";
 import { getTeamDraftPicks, getTeamDecks, toggleKeeperStatus } from "@/app/actions/draftActions";
 import { refundDraftPick } from "@/app/actions/cubucksActions";
@@ -20,6 +16,7 @@ import { getActiveDraftSession } from "@/app/actions/draftSessionActions";
 import { getAutoDraftPreview, toggleQueuePickVote, type AutoDraftPreviewResult } from "@/app/actions/autoDraftActions";
 import { getCurrentUserRolesForTeam, getTeamMembersWithRoles, type TeamMemberWithRoles } from "@/app/actions/roleActions";
 import { getRoleEmoji, getRoleDisplayName } from "@/app/utils/roleUtils";
+import { getTeamHats } from "@/app/actions/hatActions"; // <-- THE FIX: Import getTeamHats
 import { DraftInterface } from "@/app/components/DraftInterface";
 import { DeckBuilder } from "@/app/components/DeckBuilder";
 import { CardPreview } from "@/app/components/CardPreview";
@@ -31,7 +28,6 @@ import { MatchSchedulingWidget } from "@/app/components/team/MatchSchedulingWidg
 import { TeamVoting } from "@/app/components/team/TeamVoting";
 import { DraftStatusWidget } from "@/app/components/DraftStatusWidget";
 import { DraftQueueManager } from "@/app/components/DraftQueueManager";
-
 import type { DraftPick, Deck } from "@/app/actions/draftActions";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
@@ -44,9 +40,9 @@ import { getCardImageUrl } from "@/app/utils/cardUtils";
 interface TeamMember {
   id: string;
   user_id: string;
-  team_id: string; // Add missing property
+  team_id: string; 
   user_display_name?: string;
-  user_email?: string | null; // Add missing property
+  user_email?: string | null; 
   joined_at: string;
 }
 
@@ -73,6 +69,7 @@ export default function TeamPage() {
   const [decks, setDecks] = useState<Deck[]>([]);
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [membersWithRoles, setMembersWithRoles] = useState<TeamMemberWithRoles[]>([]);
+  const [teamHats, setTeamHats] = useState<any[]>([]); // <-- NEW STATE FOR HATS
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>("picks");
   const [undrafting, setUndrafting] = useState<string | null>(null);
@@ -80,7 +77,7 @@ export default function TeamPage() {
   const [cubucksRefreshKey, setCubucksRefreshKey] = useState(0);
   const [seasonPhase, setSeasonPhase] = useState<string | null>(null);
   const [togglingKeeper, setTogglingKeeper] = useState<string | null>(null);
-    const isFreeAgencyActive = seasonPhase === "season";
+  const isFreeAgencyActive = seasonPhase === "season";
   const [draftPreview, setDraftPreview] = useState<AutoDraftPreviewResult | null>(null);
   const [activeDraftSessionId, setActiveDraftSessionId] = useState<string | null>(null);
   const [isVoting, setIsVoting] = useState(false);
@@ -96,21 +93,17 @@ export default function TeamPage() {
     }
     setLoading(true);
     console.log("[TeamPage] Starting data load for team:", teamShortName);
-
     try {
-      // STEP 1: Get the essential team and season data first.
       const { team: foundTeam, error: teamError } = await getTeamByShortName(teamShortName);
       if (teamError || !foundTeam) {
         throw new Error(teamError || "Team not found.");
       }
-
+      
       const seasonResult = await getCurrentSeason();
       const currentPhase = seasonResult.season?.phase || null;
       setSeasonPhase(currentPhase);
-
       const teamUUID = foundTeam.id;
 
-      // STEP 2: Conditionally check for an active draft ONLY if the phase is correct.
       let sessionId: string | null = null;
       if (currentPhase === 'draft') {
         const { session: activeSession } = await getActiveDraftSession();
@@ -120,29 +113,30 @@ export default function TeamPage() {
         setActiveDraftSessionId(null);
       }
 
-      // STEP 3: Fetch all remaining data in parallel using the IDs we now have.
+      // Fetch all remaining data in parallel
       const dataPromises: [
           Promise<{ picks: DraftPick[], error?: string }>,
           Promise<{ decks: Deck[], error?: string }>,
           Promise<{ roles: string[], error?: string }>,
           Promise<{ members: TeamMemberWithRoles[], error?: string }>,
-          Promise<AutoDraftPreviewResult | null>
+          Promise<AutoDraftPreviewResult | null>,
+          Promise<any[]> // <-- ADD HATS PROMISE
       ] = [
         getTeamDraftPicks(teamUUID, sessionId || undefined),
         getTeamDecks(teamUUID),
         getCurrentUserRolesForTeam(teamUUID),
         getTeamMembersWithRoles(teamUUID),
         sessionId ? getAutoDraftPreview(teamUUID, sessionId) : Promise.resolve(null),
+        getTeamHats(teamUUID) // <-- FETCH HATS
       ];
 
-      const [picksResult, decksResult, rolesResult, membersResult, previewResult] = await Promise.all(dataPromises);
+      const [picksResult, decksResult, rolesResult, membersResult, previewResult, hatsResult] = await Promise.all(dataPromises);
 
-      // STEP 4: Set all state once data is fetched.
-       foundTeam.members = membersResult.members.map(m => ({ 
+      foundTeam.members = membersResult.members.map(m => ({ 
         id: m.member_id, 
         user_id: m.user_id,
-        team_id: m.team_id, // Pass through the team_id
-        user_email: m.user_email, // Pass through the user_email
+        team_id: m.team_id, 
+        user_email: m.user_email, 
         user_display_name: m.user_display_name || undefined,
         joined_at: m.joined_at,
       }));
@@ -153,8 +147,10 @@ export default function TeamPage() {
       setUserRoles(rolesResult.roles);
       setMembersWithRoles(membersResult.members);
       setDraftPreview(previewResult);
+      setTeamHats(hatsResult); // <-- SET HATS STATE
 
       const isMember = foundTeam.members?.some((m) => m.user_id === user?.id) || rolesResult.roles.length > 0;
+
       let defaultTab: TabType = "picks";
       if (currentPhase === "preseason" || currentPhase === "draft") {
         defaultTab = isMember ? "draft" : "picks";
@@ -164,7 +160,6 @@ export default function TeamPage() {
         defaultTab = isMember ? "votes" : "picks";
       }
       setActiveTab(defaultTab);
-
     } catch (error) {
       console.error("[TeamPage] Critical error loading team data:", error);
       setTeam(null);
@@ -178,7 +173,6 @@ export default function TeamPage() {
   }, [loadTeamData]);
 
   const handleDraftComplete = async () => {
-      // This logic remains correct.
       if (!activeDraftSessionId || !team) return;
       const { picks } = await getTeamDraftPicks(team.id, activeDraftSessionId);
       setDraftPicks(picks);
@@ -188,7 +182,6 @@ export default function TeamPage() {
   };
   
   const handleToggleVote = async () => {
-      // This logic remains correct.
       if (!draftPreview?.nextPick?.id || !activeDraftSessionId || !team) return;
       setIsVoting(true);
       try {
@@ -211,7 +204,6 @@ export default function TeamPage() {
   };
 
   const handleUndraftCard = async (pick: DraftPick) => {
-    // This logic remains correct.
     if (pick.is_keeper) return;
     if (activeDraftSessionId) {
       alert("Cards cannot be cut from your pool during an active draft session.");
@@ -244,7 +236,6 @@ export default function TeamPage() {
   const currentKeepersCount = draftPicks.filter(p => p.is_keeper).length;
 
   const handleToggleKeeper = async (pick: DraftPick) => {
-    // This logic remains correct.
     if (!pick.id) return; 
     if (!pick.is_keeper && currentKeepersCount >= 8) {
       alert("You can only designate up to 8 Keepers.");
@@ -307,7 +298,39 @@ export default function TeamPage() {
       <Card className="mb-6">
         <CardContent className="pt-6">
           <div className="flex items-center gap-6">
-            <span className="text-7xl">{team.emoji}</span>
+            
+                       {/* --- UPDATED: HATS RENDERED DIRECTLY FROM THE DATABASE --- */}
+            <div className="flex items-end">
+              <span className="text-7xl leading-none">{team.emoji}</span>
+              {teamHats && teamHats.length > 0 && (
+                <div className="flex flex-col gap-1 ml-2 pb-1">
+                  {teamHats.map((th) => {
+                    const hat = Array.isArray(th.hats) ? th.hats[0] : th.hats;
+                    if (!hat || !hat.emoji) return null; // Safely reads database emoji
+
+                    const isCursedHat = hat.hatId === 2;
+
+                    return (
+                      <div 
+                        key={`hat-${hat.hatId}`} 
+                        className={`text-2xl ${isCursedHat ? 'animate-pulse' : 'animate-bounce'}`} 
+                        title={`${hat.hatName || 'Hat'} ${isCursedHat ? `(Level ${hat.hatLevel || 1})` : `(x${th.quantity})`}`}
+                      >
+                        {hat.emoji}
+                        {/* Display Level or Quantity multipliers accordingly */}
+                        {isCursedHat ? (
+                          <span className="text-xs text-red-500 font-bold ml-1">Lv.{hat.hatLevel || 1}</span>
+                        ) : (
+                          th.quantity > 1 && <span className="text-xs text-muted-foreground ml-1">x{th.quantity}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -332,7 +355,6 @@ export default function TeamPage() {
           </div>
         </CardContent>
       </Card>
-
       <DraftStatusWidget variant="team" teamId={team.id} />
       
        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -347,7 +369,6 @@ export default function TeamPage() {
             isUserTeamMember={isUserTeamMember} 
         />
       </div>
-
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabType)}>
         <TabsList className="flex-wrap h-auto gap-1 mb-6">
           {tabs.map((tab) => (
@@ -362,7 +383,6 @@ export default function TeamPage() {
             </TabsTrigger>
           ))}
         </TabsList>
-
         <Card>
           <CardContent className="pt-6">
             <TabsContent value="draft">
@@ -396,7 +416,6 @@ export default function TeamPage() {
                               const currentVotes = draftPreview.votes?.length || 0;
                               const threshold = draftPreview.voteThreshold || 1;
                               const isVoted = user?.id ? draftPreview.votes?.includes(user.id) : false;
-
                               return (
                                 <Button 
                                   onClick={handleToggleVote} 
@@ -428,7 +447,6 @@ export default function TeamPage() {
                     </div>
                     <DraftQueueManager teamId={team.id} isUserTeamMember={isUserTeamMember} />
                   </div>
-
                   <div>
                     <div className="mb-4">
                       <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">Draft Progress & Pick Order</h2>
@@ -436,7 +454,6 @@ export default function TeamPage() {
                     </div>
                     <DraftStatusWidget variant="team" teamId={team.id} />
                   </div>
-
                   <div>
                     <div className="mb-4">
                       <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">Free Agent Pool</h2>
@@ -453,7 +470,6 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
-
             <TabsContent value="picks">
               {activeTab === "picks" && (
                 <div>
@@ -468,7 +484,6 @@ export default function TeamPage() {
                       </Badge>
                     )}
                   </div>
-
                   {undraftMessage && (
                     <div
                       className={`mb-4 p-4 rounded-lg border flex items-center gap-2 ${
@@ -481,7 +496,6 @@ export default function TeamPage() {
                       {undraftMessage.text}
                     </div>
                   )}
-
                   {draftPicks.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground">
                       <Layers className="size-10 mx-auto mb-3 opacity-50" />
@@ -530,13 +544,11 @@ export default function TeamPage() {
                                   </Badge>
                                 )}
                               </div>
-
                               {/* OVERLAY CONTROLS */}
                               {isUserTeamMember && (
                                 <>
                                   {/* Darken image on hover to make buttons pop */}
                                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
-
                                   {/* Cut Button - Only if NOT a keeper */}
                                   {!isKeeper && (
                                     <button
@@ -548,7 +560,6 @@ export default function TeamPage() {
                                       {isUndrafting ? "..." : "Cut"}
                                     </button>
                                   )}
-
                                   {/* Keeper Toggle Button - Only during Playoffs */}
                                   {seasonPhase === "playoffs" && (
                                     <button
@@ -570,7 +581,6 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
-
             <TabsContent value="decks">
               {activeTab === "decks" && (
                 <div>
@@ -589,7 +599,6 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
-
             <TabsContent value="trades">
               {activeTab === "trades" && (
                 <div>
@@ -616,7 +625,6 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
-
             <TabsContent value="matches">
               {activeTab === "matches" && (
                 <div className="space-y-6">
@@ -636,7 +644,6 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
-
             <TabsContent value="votes">
               {activeTab === "votes" && isUserTeamMember && (
                 <div>
@@ -651,7 +658,6 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
-
             <TabsContent value="stats">
               {activeTab === "stats" && (
                 <div>
@@ -666,7 +672,6 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
-
             <TabsContent value="roles">
               {activeTab === "roles" && isUserTeamMember && (
                 <div>
@@ -681,7 +686,6 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
-
             <TabsContent value="members">
               {activeTab === "members" && (
                 <div>
