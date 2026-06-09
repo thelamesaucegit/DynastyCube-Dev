@@ -21,6 +21,8 @@ export interface RetiredCard {
   cubucks_cost: number;
   retired_at: string;
   retired_reason: string | null;
+  hidden: boolean;
+  is_legendary: boolean;
 }
 
 export async function getRetiredCards(): Promise<{ success: boolean; cards: RetiredCard[]; error?: string }> {
@@ -29,6 +31,7 @@ export async function getRetiredCards(): Promise<{ success: boolean; cards: Reti
     const { data, error } = await supabase
       .from("retired_cards")
       .select("*")
+      .eq("hidden", false) // <-- THE FIX: Exclude hidden legendary cards!
       .order("retired_at", { ascending: false });
 
     if (error) {
