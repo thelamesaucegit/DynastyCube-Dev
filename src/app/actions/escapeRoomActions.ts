@@ -1,11 +1,19 @@
 // src/app/actions/escapeRoomActions.ts
 "use server";
 
-import { createServerClient } from "@/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
 import { logSystemEvent } from "@/lib/systemLogger";
 
+// THE FIX: Use service client to bypass RLS for background tasks
+function createServiceClient() {
+    return createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_KEY!
+    );
+}
+
 export async function processEscapeRoomRewards(seasonId: string, weekNumber: number) {
-    const supabase = await createServerClient();
+    const supabase = createServiceClient();
     
     // 1. Find all teams that are currently eliminated (is_escaped = true)
     const { data: escapedTeams } = await supabase

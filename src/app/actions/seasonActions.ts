@@ -197,7 +197,6 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
         // =====================================================================
         console.log("[SeasonRollover] Syncing all ELO scores from CubeCobra...");
         try {
-            // Dynamically import to avoid circular dependency issues at the top of the file
             const { updateAllCubecobraElo } = await import('@/app/actions/cardRatingActions');
             const eloSyncResult = await updateAllCubecobraElo();
             
@@ -210,8 +209,6 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
             }
         } catch (eloErr) {
             console.error("[SeasonRollover] FATAL ERROR during ELO Sync:", eloErr);
-            // We log but DO NOT THROW. If CubeCobra's S3 bucket goes offline during Rollover, 
-            // we want the season to successfully roll over using the existing/old ELOs.
             await logSystemEvent("SeasonRollover", "error", "Fatal error during CubeCobra ELO sync.", { error: String(eloErr) });
         }
         // =====================================================================
@@ -251,21 +248,16 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
         // =====================================================================
         console.log("[SeasonRollover] Rotating the Resort Pool...");
         try {
-            // 1. Hide everything currently visible
             await supabase.from('resort_pool').update({ hidden: true }).eq('hidden', false);
-
-            // 2. Randomly select 50 cards to reveal
             const { data: allResortIds } = await supabase.from('resort_pool').select('id');
             
             if (allResortIds && allResortIds.length > 0) {
                 const shuffled = allResortIds.sort(() => 0.5 - Math.random());
                 const selected = shuffled.slice(0, 50).map(card => card.id);
-
                 const { error: revealErr } = await supabase
                     .from('resort_pool')
                     .update({ hidden: false })
                     .in('id', selected);
-
                 if (revealErr) throw new Error(revealErr.message);
                 console.log(`[SeasonRollover] Successfully revealed 50 random Resort Pool lands!`);
             }
@@ -297,10 +289,8 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
             start_time: startTime,
             started_by: null,
         });
-
         if (draftErr) throw new Error(`Failed to insert draft session: ${JSON.stringify(draftErr)}`);
         
-        // Final success cleanup
         await supabase.from('countdown_timers').delete().eq('is_active', true);
         
         console.log("[SeasonRollover] ✅ Rollover complete! New draft scheduled.");
@@ -310,25 +300,19 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
         const msg = error instanceof Error ? error.message : String(error);
         console.error(`[SeasonRollover] ❌ PIPELINE FAILED: ${msg}`);
         
-        // --- EMERGENCY ROLLBACK & BLOCKER ---
         try {
             console.log("[SeasonRollover] 🚨 Triggering Staging Rollback...");
-            
             await supabase.rpc('restore_rollover_state', { p_failed_season_id: newSeasonId });
-            
             await supabase.from('seasons').update({ is_active: true }).eq('is_active', false).order('season_number', { ascending: false }).limit(1);
-
             await supabase
                 .from('countdown_timers')
                 .update({ title: 'BLOCKED: Offseason Curation (See Logs)' })
                 .eq('title', 'Offseason Curation & Next Draft') 
                 .eq('is_active', true);
-
             console.log("[SeasonRollover] ✅ Rollback Complete. Cron Job Blocked.");
         } catch (rollbackErr) {
             console.error("[SeasonRollover] 💀 FATAL: Rollback Failed!", rollbackErr);
         }
-
         await logSystemEvent('SeasonRollover', 'error', `Pipeline Failed: ${msg}`, { timestamp: new Date().toISOString() });
         return { success: false, error: msg };
     }
@@ -343,21 +327,17 @@ async function verifyAdmin(supabase: Awaited<ReturnType<typeof createServerClien
     data: { user },
     error: authError,
   } = await supabase.auth.getUser();
-
   if (authError || !user) {
     return { authorized: false, error: "Not authenticated" };
   }
-
   const { data: userData, error: userError } = await supabase
     .from("users")
     .select("is_admin")
     .eq("id", user.id)
     .single();
-
   if (userError || !userData?.is_admin) {
     return { authorized: false, userId: user.id, error: "Unauthorized: Admin access required" };
   }
-
   return { authorized: true, userId: user.id };
 }
 
@@ -372,22 +352,18 @@ export async function getWeekIdByNumber(
             .select('id')
             .eq('season_number', seasonNumber)
             .single();
-
         if (seasonError || !season) {
             return { weekId: null, error: `Season ${seasonNumber} not found.` };
         }
-
         const { data: week, error: weekError } = await supabase
             .from('schedule_weeks')
             .select('id')
             .eq('season_id', season.id)
             .eq('week_number', weekNumber)
             .single();
-
         if (weekError || !week) {
             return { weekId: null, error: `Week ${weekNumber} not found in season ${seasonNumber}.` };
         }
-
         return { weekId: week.id, error: undefined };
     } catch (e) {
         const message = e instanceof Error ? e.message : 'An unexpected error occurred';
@@ -395,30 +371,23 @@ export async function getWeekIdByNumber(
     }
 }
 
-/**
- * Deletes an entire season and all its associated data.
- */
 export async function deleteFullSeason(
   seasonId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = await createServerClient(); 
     const admin = await verifyAdmin(supabase); 
-
     if (!admin.authorized) {
       return { success: false, error: admin.error };
     }
-
     const { error } = await supabase
       .from("seasons")
       .delete()
       .eq("id", seasonId);
-
     if (error) {
       console.error("Error deleting season:", error);
       return { success: false, error: error.message };
     }
-
     return { success: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : "An unknown error occurred.";
@@ -427,9 +396,6 @@ export async function deleteFullSeason(
   }
 }
 
-/**
- * Rollover card costs to a new season
- */
 export async function rolloverSeasonCosts(
   newSeasonId: string,
   previousSeasonId?: string
@@ -443,21 +409,17 @@ export async function rolloverSeasonCosts(
     const {
       data: { user },
     } = await supabase.auth.getUser();
-
     if (!user) {
       return { success: false, error: "Not authenticated" };
     }
-
     const { data, error } = await supabase.rpc("rollover_card_costs_for_new_season", {
       p_new_season_id: newSeasonId,
       p_previous_season_id: previousSeasonId || null,
     });
-
     if (error) {
       console.error("Error rolling over costs:", error);
       return { success: false, error: error.message };
     }
-
     return { success: true, changes: data || [] };
   } catch (error) {
     console.error("Unexpected error rolling over costs:", error);
@@ -465,9 +427,6 @@ export async function rolloverSeasonCosts(
   }
 }
 
-/**
- * Initialize card costs for current season
- */
 export async function initializeSeasonCosts(): Promise<{
   success: boolean;
   error?: string;
@@ -477,18 +436,14 @@ export async function initializeSeasonCosts(): Promise<{
     const {
       data: { user },
     } = await supabase.auth.getUser();
-
     if (!user) {
       return { success: false, error: "Not authenticated" };
     }
-
     const { error } = await supabase.rpc("initialize_season_card_costs");
-
     if (error) {
       console.error("Error initializing costs:", error);
       return { success: false, error: error.message };
     }
-
     return { success: true };
   } catch (error) {
     console.error("Unexpected error initializing costs:", error);
@@ -496,9 +451,6 @@ export async function initializeSeasonCosts(): Promise<{
   }
 }
 
-/**
- * Get card pricing history across seasons
- */
 export async function getCardPricingHistory(
   cardPoolId?: string
 ): Promise<{
@@ -518,19 +470,15 @@ export async function getCardPricingHistory(
 }> {
   try {
     const supabase = await createServerClient();
-
     let query = supabase.from("card_pricing_history").select("*");
     if (cardPoolId) {
       query = query.eq("card_pool_id", cardPoolId);
     }
-
     const { data, error } = await query.order("card_name").order("season_number");
-
     if (error) {
       console.error("Error fetching pricing history:", error);
       return { history: [], error: error.message };
     }
-
     return { history: data || [] };
   } catch (error) {
     console.error("Unexpected error fetching pricing history:", error);
@@ -538,9 +486,6 @@ export async function getCardPricingHistory(
   }
 }
 
-/**
- * Get cost changes summary for last season
- */
 export async function getSeasonCostSummary(
   seasonId: string
 ): Promise<{
@@ -556,17 +501,14 @@ export async function getSeasonCostSummary(
 }> {
   try {
     const supabase = await createServerClient();
-
     const { data, error } = await supabase
       .from("card_season_costs")
       .select("cost, was_drafted, times_drafted")
       .eq("season_id", seasonId);
-
     if (error) {
       console.error("Error fetching season summary:", error);
       return { summary: null, error: error.message };
     }
-
     if (!data || data.length === 0) {
       return {
         summary: {
@@ -579,7 +521,6 @@ export async function getSeasonCostSummary(
         },
       };
     }
-
     const summary = {
       total_cards: data.length,
       drafted_cards: data.filter((c) => c.was_drafted).length,
@@ -590,7 +531,6 @@ export async function getSeasonCostSummary(
       max_cost: Math.max(...data.map((c) => c.cost)),
       min_cost: Math.min(...data.map((c) => c.cost)),
     };
-
     return { summary };
   } catch (error) {
     console.error("Unexpected error fetching season summary:", error);
@@ -598,9 +538,6 @@ export async function getSeasonCostSummary(
   }
 }
 
-/**
- * Get cards by cost range for current season
- */
 export async function getCardsByCostRange(
   minCost: number,
   maxCost: number
@@ -617,7 +554,6 @@ export async function getCardsByCostRange(
 }> {
   try {
     const supabase = await createServerClient();
-
     const { data, error } = await supabase
       .from("card_pools")
       .select("id, card_name, card_set, rarity, cubucks_cost, image_url")
@@ -625,12 +561,10 @@ export async function getCardsByCostRange(
       .lte("cubucks_cost", maxCost)
       .order("cubucks_cost", { ascending: false })
       .order("card_name");
-
     if (error) {
       console.error("Error fetching cards by cost:", error);
       return { cards: [], error: error.message };
     }
-
     return { cards: data || [] };
   } catch (error) {
     console.error("Unexpected error fetching cards by cost:", error);
@@ -638,27 +572,21 @@ export async function getCardsByCostRange(
   }
 }
 
-/**
- * Get the current active season
- */
 export async function getCurrentSeason(): Promise<{
   season: { id: string; name: string; season_number: number } | null;
   error?: string;
 }> {
   try {
     const supabase = await createServerClient();
-
     const { data, error } = await supabase
       .from("seasons")
       .select("id, name, season_number")
       .eq("is_active", true)
       .single();
-
     if (error && error.code !== "PGRST116") {
       console.error("Error fetching current season:", error);
       return { season: null, error: error.message };
     }
-
     return { season: data || null };
   } catch (error) {
     console.error("Unexpected error fetching current season:", error);
@@ -666,11 +594,89 @@ export async function getCurrentSeason(): Promise<{
   }
 }
 
+// =============================================================================
+// NEW: CHRONOLOGICAL PHASE TRANSITION (SEASON -> PLAYOFFS)
+// =============================================================================
+/**
+ * Safely advances the season phase from 'season' to 'playoffs' once 
+ * the final regular season week has completed and its deadline has expired!
+ */
+export async function checkAndExecuteSeasonToPlayoffTransition(): Promise<{ success: boolean; transitioned: boolean; error?: string }> {
+  try {
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_KEY!
+    );
+
+    // 1. Get the current active season
+    const { data: season, error: seasonError } = await supabase
+      .from("seasons")
+      .select("id, season_name, phase")
+      .eq("is_active", true)
+      .single();
+
+    if (seasonError || !season) return { success: false, transitioned: false, error: "No active season found." };
+    if (season.phase !== "season") return { success: true, transitioned: false }; // Only process if currently in standard 'season' phase
+
+    // 2. Fetch the final regular season week (Week 6)
+    const { data: finalWeek, error: weekError } = await supabase
+      .from("schedule_weeks")
+      .select("id, end_date, match_completion_deadline")
+      .eq("season_id", season.id)
+      .eq("week_number", 6)
+      .single();
+
+    if (weekError || !finalWeek) return { success: false, transitioned: false, error: "Final regular season week metadata unavailable." };
+
+    const now = new Date();
+    const deadline = new Date(finalWeek.match_completion_deadline || finalWeek.end_date);
+
+    // 3. Wait until the schedule week has chronologically concluded!
+    if (now >= deadline) {
+      console.log(`[CronPhase] Final regular season week has ended. Transitioning ${season.season_name} to Playoffs!`);
+      await logSystemEvent("SeasonRollover", "info", `Chronological regular season deadline reached. Initiating playoff phase.`);
+
+      // A. Verify all regular season matches are finalized (as a failsafe)
+      const { count: unfinishedCount } = await supabase
+          .from("weekly_matchups")
+          .select("id", { count: 'exact', head: true })
+          .eq("season_id", season.id)
+          .eq("is_playoff", false)
+          .eq("is_outcome_final", false);
+
+      if (unfinishedCount && unfinishedCount > 0) {
+          console.warn(`[CronPhase] Warning: Phase transition reached, but ${unfinishedCount} matchups are still unfinished.`);
+          // We let it slide or log depending on strictness. Letting it transition or warning is best.
+      }
+
+      // B. Transition the Phase in the Database
+      const isTestSeason = season.season_name.toUpperCase().includes("TEST");
+      const { generateInitialPlayoffBracket } = await import("@/app/actions/weeklyMatchupActions");
+      
+      // Generate the initial playoff bracket
+      await generateInitialPlayoffBracket(season.id, isTestSeason);
+      console.log(`[CronPhase] Playoff bracket successfully generated.`);
+
+      return { success: true, transitioned: true };
+    }
+
+    return { success: true, transitioned: false };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("[CronPhase] Error running Playoff Transition check:", msg);
+    await logSystemEvent("SeasonRollover", "error", `Playoff phase transition failed: ${msg}`);
+    return { success: false, transitioned: false, error: msg };
+  }
+}
+
+// =============================================================================
+// THE MASTER CRON SCHEDULER
+// =============================================================================
 export async function checkAndExecuteSeasonRollover(): Promise<{ success: boolean; message: string; error?: string; }> {
   console.log("======================================================");
   console.log("[RolloverCron] ⏰ EXECUTED: checkAndExecuteSeasonRollover()");
   console.log("======================================================");
-
   try {
     const { createClient } = await import("@supabase/supabase-js");
     const supabase = createClient(
@@ -678,10 +684,17 @@ export async function checkAndExecuteSeasonRollover(): Promise<{ success: boolea
         process.env.SUPABASE_SERVICE_KEY!
     );
     
+    // --- STEP 1: RUN THE PLAYOFF PHASE TRANSITION HANDLER ---
+    const transitionCheck = await checkAndExecuteSeasonToPlayoffTransition();
+    if (transitionCheck.success && transitionCheck.transitioned) {
+        return { success: true, message: "Season successfully advanced to the Playoff phase." };
+    }
+
+    // --- STEP 2: RUN THE STANDARD OFFSEASON ROLLOVER TIMER ---
     const { data: timer, error: timerError } = await supabase
       .from("countdown_timers")
       .select("id, end_time, title")
-      .eq("title", "Offseason Curation & Next Draft") // <-- FIX: Exact match so it ignores blocked timers!
+      .eq("title", "Offseason Curation & Next Draft") 
       .eq("is_active", true)
       .single();
 
@@ -699,12 +712,10 @@ export async function checkAndExecuteSeasonRollover(): Promise<{ success: boolea
       const rolloverResult = await executeSeasonRollover();
       if (!rolloverResult.success) throw new Error(rolloverResult.error || "Rollover function failed without a specific error.");
       return { success: true, message: "Season rollover executed successfully." };
-
     } else {
       console.log(`[RolloverCron] ⏳ Timer still ticking. Exiting.`);
       return { success: true, message: `Timer '${timer.title}' has not expired yet.` };
     }
-
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("[RolloverCheck] ❌ Failed to check or execute season rollover:", msg);
