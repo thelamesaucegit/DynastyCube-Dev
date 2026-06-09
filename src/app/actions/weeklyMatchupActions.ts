@@ -643,7 +643,7 @@ function getTargetDateCT(baseDate: Date, addDays: number, targetHourCT: number):
     return d;
 }
 
-async function generateInitialPlayoffBracket(seasonId: string, isTestSeason: boolean) {
+export async function generateInitialPlayoffBracket(seasonId: string, isTestSeason: boolean) {
     const supabase = createServiceClient();
     await logSystemEvent("Playoffs", "info", `Generating initial playoff bracket for season ${seasonId}`);
     
