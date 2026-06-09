@@ -2,8 +2,8 @@
 "use server";
 
 import { createServerClient } from "@/lib/supabase";
+import { createClient as createSupabaseJsClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
-import type { SupabaseClient } from "@supabase/supabase-js"; // <-- THE FIX: Import strict client type
 
 interface Report {
   id: string;
@@ -21,9 +21,18 @@ interface Report {
   resolved_at: string | null;
 }
 
-// THE FIX: Typed the 'supabase' client parameter as SupabaseClient instead of any!
-async function notifyAllAdmins(supabase: SupabaseClient, type: string, message: string, excludeUserId?: string) {
-  const { data: admins } = await supabase.from('users').select('id').eq('is_admin', true);
+// THE FIX 1: Use a Service Client for automations to bypass RLS blockers!
+function getServiceClient() {
+  return createSupabaseJsClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_KEY!
+  );
+}
+
+// Helper to notify all admins
+async function notifyAllAdmins(type: string, message: string, excludeUserId?: string) {
+  const supabaseAdmin = getServiceClient();
+  const { data: admins } = await supabaseAdmin.from('users').select('id').eq('is_admin', true);
   if (!admins) return;
 
   const notificationsToInsert = admins
@@ -35,7 +44,8 @@ async function notifyAllAdmins(supabase: SupabaseClient, type: string, message: 
     }));
 
   if (notificationsToInsert.length > 0) {
-    await supabase.from('notifications').insert(notificationsToInsert);
+    const { error } = await supabaseAdmin.from('notifications').insert(notificationsToInsert);
+    if (error) console.error("Failed to insert admin notifications:", error);
   }
 }
 
@@ -71,18 +81,7 @@ export async function submitReport(
 
     // 2. Create notifications for ALL admins instantly upon submission
     const adminMessage = `🚨 NEW REPORT: [${reportType.toUpperCase()}] "${title}" (Severity: ${severity.toUpperCase()})`;
-    await notifyAllAdmins(supabase, "report_submitted", adminMessage, user.id);
-
-    // 3. Fallback database function notify RPC
-    try {
-      await supabase.rpc("notify_admins_of_report", {
-        p_report_id: report.id,
-        p_report_type: reportType,
-        p_title: title,
-      });
-    } catch (notifyError) {
-      console.error("Error notifying admins via RPC:", notifyError);
-    }
+    await notifyAllAdmins("report_submitted", adminMessage, user.id);
 
     return { success: true, reportId: report.id };
   } catch (error) {
@@ -137,7 +136,6 @@ export async function getAllReports(): Promise<{
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { reports: [], success: false, error: "Not authenticated" };
 
-    // Fetch all reports
     const { data: reports, error } = await supabase.from("reports").select("*");
     if (error) throw error;
 
@@ -199,6 +197,8 @@ export async function updateReportStatus(
   adminNotes?: string
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createServerClient();
+  const supabaseAdmin = getServiceClient(); // Use admin client to guarantee task syncing
+
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Not authenticated" };
@@ -224,7 +224,7 @@ export async function updateReportStatus(
     const { error } = await supabase.from("reports").update(updateData).eq("id", reportId);
     if (error) throw error;
 
-    // 2. Handle Task Synchronization
+    // 2. THE FIX 2: Handle Task Synchronization with environment-agnostic URLs
     const { data: reportDetails } = await supabase
       .from("reports")
       .select("title, report_type")
@@ -232,29 +232,32 @@ export async function updateReportStatus(
       .single();
 
     if (reportDetails) {
+      const referenceUrl = `/admin?id=${reportId}`; // Relative URL perfectly matches the Task Splitter
+
       if (status === "pending" || status === "in_review") {
-        // A. Automatically generate a task if none exists yet
-        const { data: existingTask } = await supabase
+        // Automatically generate a task if none exists yet
+        const { data: existingTask } = await supabaseAdmin
           .from("admin_tasks")
           .select("id")
-          .eq("reference_link", `https://yourdomain.com/admin/reports?id=${reportId}`)
+          .eq("reference_link", referenceUrl)
           .maybeSingle();
 
         if (!existingTask) {
-          await supabase.from("admin_tasks").insert({
+          const { error: taskErr } = await supabaseAdmin.from("admin_tasks").insert({
             title: `[Report] ${reportDetails.title}`,
             tag: reportDetails.report_type === "bug" ? "Bug" : "Issue",
-            reference_link: `https://yourdomain.com/admin/reports?id=${reportId}`,
+            reference_link: referenceUrl,
             status: "active",
             created_by: user.id
           });
+          if (taskErr) console.error("Failed to sync task generation:", taskErr);
         }
       } else if (status === "resolved") {
-        // B. Automatically close out the task if the report is marked resolved
-        await supabase
+        // Automatically close out the task if the report is marked resolved
+        await supabaseAdmin
           .from("admin_tasks")
           .update({ status: "completed", completed_at: new Date().toISOString() })
-          .eq("reference_link", `https://yourdomain.com/admin/reports?id=${reportId}`);
+          .eq("reference_link", referenceUrl);
       }
     }
 
