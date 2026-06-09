@@ -219,6 +219,8 @@ export default function RetiredPoolPage() {
       <div className="mb-8">
           <h1 className="text-4xl font-bold tracking-tight mb-2">The Retirement Pool</h1>
           <p className="text-muted-foreground text-lg">Where cards go once they are ready to Rest. These cards are excluded from active play.</p>
+               <p className="text-muted-foreground text-sm">Cards that remain unclaimed in excess of two consecutive Seasons will be Retired.</p>
+
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
