@@ -299,37 +299,37 @@ export default function TeamPage() {
         <CardContent className="pt-6">
           <div className="flex items-center gap-6">
             
-            {/* --- THE FIX: ADD HATS NEXT TO THE MAIN EMOJI --- */}
+                       {/* --- UPDATED: HATS RENDERED DIRECTLY FROM THE DATABASE --- */}
             <div className="flex items-end">
               <span className="text-7xl leading-none">{team.emoji}</span>
               {teamHats && teamHats.length > 0 && (
                 <div className="flex flex-col gap-1 ml-2 pb-1">
                   {teamHats.map((th) => {
                     const hat = Array.isArray(th.hats) ? th.hats[0] : th.hats;
-                    if (!hat) return null;
+                    if (!hat || !hat.emoji) return null; // Safely reads database emoji
 
-                    // Display 'A Really Cool Hat' (ID 1)
-                    if (hat.hatId === 1) {
-                        return (
-                           <div key="hat-1" className="text-2xl animate-bounce" title={`A Really Cool Hat (x${th.quantity})`}>
-                               🧢{th.quantity > 1 && <span className="text-xs text-muted-foreground ml-1">x{th.quantity}</span>}
-                           </div>
-                        );
-                    }
-                    
-                    // Display 'Cursed Witch-Skin Hat' (ID 2)
-                    if (hat.hatId === 2) {
-                        return (
-                           <div key="hat-2" className="text-2xl animate-pulse" title={`Cursed Witch-Skin Hat (Level ${hat.hatLevel || 1})`}>
-                               🧙‍♀️<span className="text-xs text-red-500 font-bold ml-1">Lv.{hat.hatLevel || 1}</span>
-                           </div>
-                        );
-                    }
-                    return null;
+                    const isCursedHat = hat.hatId === 2;
+
+                    return (
+                      <div 
+                        key={`hat-${hat.hatId}`} 
+                        className={`text-2xl ${isCursedHat ? 'animate-pulse' : 'animate-bounce'}`} 
+                        title={`${hat.hatName || 'Hat'} ${isCursedHat ? `(Level ${hat.hatLevel || 1})` : `(x${th.quantity})`}`}
+                      >
+                        {hat.emoji}
+                        {/* Display Level or Quantity multipliers accordingly */}
+                        {isCursedHat ? (
+                          <span className="text-xs text-red-500 font-bold ml-1">Lv.{hat.hatLevel || 1}</span>
+                        ) : (
+                          th.quantity > 1 && <span className="text-xs text-muted-foreground ml-1">x{th.quantity}</span>
+                        )}
+                      </div>
+                    );
                   })}
                 </div>
               )}
             </div>
+
 
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-4">
