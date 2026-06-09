@@ -16,7 +16,7 @@ import { getActiveDraftSession } from "@/app/actions/draftSessionActions";
 import { getAutoDraftPreview, toggleQueuePickVote, type AutoDraftPreviewResult } from "@/app/actions/autoDraftActions";
 import { getCurrentUserRolesForTeam, getTeamMembersWithRoles, type TeamMemberWithRoles } from "@/app/actions/roleActions";
 import { getRoleEmoji, getRoleDisplayName } from "@/app/utils/roleUtils";
-import { getTeamHats } from "@/app/actions/hatActions"; // <-- THE FIX: Import getTeamHats
+import { getTeamHats } from "@/app/actions/hatActions"; 
 import { DraftInterface } from "@/app/components/DraftInterface";
 import { DeckBuilder } from "@/app/components/DeckBuilder";
 import { CardPreview } from "@/app/components/CardPreview";
@@ -55,6 +55,22 @@ interface Team {
   members?: TeamMember[];
 }
 
+// THE FIX 1: Strictly define the hat return structure instead of using 'any'
+interface TeamHatData {
+  quantity: number;
+  hats: {
+    hatId: number;
+    hatName: string | null;
+    hatLevel: number | null;
+    emoji: string | null;
+  } | {
+    hatId: number;
+    hatName: string | null;
+    hatLevel: number | null;
+    emoji: string | null;
+  }[] | null;
+}
+
 type TabType = "picks" | "decks" | "members" | "draft" | "stats" | "roles" | "trades" | "matches" | "votes" | "trophies";
 
 export default function TeamPage() {
@@ -69,7 +85,7 @@ export default function TeamPage() {
   const [decks, setDecks] = useState<Deck[]>([]);
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [membersWithRoles, setMembersWithRoles] = useState<TeamMemberWithRoles[]>([]);
-  const [teamHats, setTeamHats] = useState<any[]>([]); // <-- NEW STATE FOR HATS
+  const [teamHats, setTeamHats] = useState<TeamHatData[]>([]); // <-- STRICTLY TYPED
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>("picks");
   const [undrafting, setUndrafting] = useState<string | null>(null);
@@ -113,21 +129,21 @@ export default function TeamPage() {
         setActiveDraftSessionId(null);
       }
 
-      // Fetch all remaining data in parallel
+      // THE FIX 2: Strict Promise typing on parallel declarations
       const dataPromises: [
           Promise<{ picks: DraftPick[], error?: string }>,
           Promise<{ decks: Deck[], error?: string }>,
           Promise<{ roles: string[], error?: string }>,
           Promise<{ members: TeamMemberWithRoles[], error?: string }>,
           Promise<AutoDraftPreviewResult | null>,
-          Promise<any[]> // <-- ADD HATS PROMISE
+          Promise<TeamHatData[]> // <-- STRICT PROMISE TYPING
       ] = [
         getTeamDraftPicks(teamUUID, sessionId || undefined),
         getTeamDecks(teamUUID),
         getCurrentUserRolesForTeam(teamUUID),
         getTeamMembersWithRoles(teamUUID),
         sessionId ? getAutoDraftPreview(teamUUID, sessionId) : Promise.resolve(null),
-        getTeamHats(teamUUID) // <-- FETCH HATS
+        getTeamHats(teamUUID) as Promise<TeamHatData[]> // <-- CAST FOR SAFETY
       ];
 
       const [picksResult, decksResult, rolesResult, membersResult, previewResult, hatsResult] = await Promise.all(dataPromises);
@@ -147,7 +163,7 @@ export default function TeamPage() {
       setUserRoles(rolesResult.roles);
       setMembersWithRoles(membersResult.members);
       setDraftPreview(previewResult);
-      setTeamHats(hatsResult); // <-- SET HATS STATE
+      setTeamHats(hatsResult);
 
       const isMember = foundTeam.members?.some((m) => m.user_id === user?.id) || rolesResult.roles.length > 0;
 
@@ -299,14 +315,13 @@ export default function TeamPage() {
         <CardContent className="pt-6">
           <div className="flex items-center gap-6">
             
-                       {/* --- UPDATED: HATS RENDERED DIRECTLY FROM THE DATABASE --- */}
             <div className="flex items-end">
               <span className="text-7xl leading-none">{team.emoji}</span>
               {teamHats && teamHats.length > 0 && (
                 <div className="flex flex-col gap-1 ml-2 pb-1">
                   {teamHats.map((th) => {
                     const hat = Array.isArray(th.hats) ? th.hats[0] : th.hats;
-                    if (!hat || !hat.emoji) return null; // Safely reads database emoji
+                    if (!hat || !hat.emoji) return null;
 
                     const isCursedHat = hat.hatId === 2;
 
@@ -317,7 +332,6 @@ export default function TeamPage() {
                         title={`${hat.hatName || 'Hat'} ${isCursedHat ? `(Level ${hat.hatLevel || 1})` : `(x${th.quantity})`}`}
                       >
                         {hat.emoji}
-                        {/* Display Level or Quantity multipliers accordingly */}
                         {isCursedHat ? (
                           <span className="text-xs text-red-500 font-bold ml-1">Lv.{hat.hatLevel || 1}</span>
                         ) : (
@@ -329,7 +343,6 @@ export default function TeamPage() {
                 </div>
               )}
             </div>
-
 
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-4">
@@ -357,8 +370,7 @@ export default function TeamPage() {
       </Card>
       <DraftStatusWidget variant="team" teamId={team.id} />
       
-       {/* --- INDEPENDENT GRID FOR CUBUCKS & ESSENCE DISPLAYS --- */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 items-start">
+       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 items-start">
         <div className="w-full">
           <TeamCubucksDisplay 
               teamId={team.id} 
