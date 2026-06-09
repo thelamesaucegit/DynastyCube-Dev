@@ -357,17 +357,22 @@ export default function TeamPage() {
       </Card>
       <DraftStatusWidget variant="team" teamId={team.id} />
       
-       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <TeamCubucksDisplay 
-            teamId={team.id} 
-            showTransactions={true} 
-            refreshKey={cubucksRefreshKey} 
-            isUserTeamMember={isUserTeamMember} 
-        />
-        <TeamEssenceDisplay 
-            teamId={team.id} 
-            isUserTeamMember={isUserTeamMember} 
-        />
+       {/* --- INDEPENDENT GRID FOR CUBUCKS & ESSENCE DISPLAYS --- */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 items-start">
+        <div className="w-full">
+          <TeamCubucksDisplay 
+              teamId={team.id} 
+              showTransactions={true} 
+              refreshKey={cubucksRefreshKey} 
+              isUserTeamMember={isUserTeamMember} 
+          />
+        </div>
+        <div className="w-full">
+          <TeamEssenceDisplay 
+              teamId={team.id} 
+              isUserTeamMember={isUserTeamMember} 
+          />
+        </div>
       </div>
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabType)}>
         <TabsList className="flex-wrap h-auto gap-1 mb-6">
