@@ -75,7 +75,7 @@ export default function AdminTaskBoard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
-  // THE FIX 1: Custom sorting utility that automatically forces completed items to the bottom of the list
+  // Custom sorting utility that automatically forces completed items to the bottom of the list
   const getSortedTasks = (taskList: AdminTask[]) => {
     return [...taskList].sort((a, b) => {
       // Completed items always drop to the absolute bottom of any active filter view
@@ -111,10 +111,11 @@ export default function AdminTaskBoard() {
     if (data) setAdmins(data);
   };
 
-  // THE FIX 2: Optimistic state handler for main checkboxes.
+  // Optimistic state handler for main checkboxes.
   // Updates UI immediately, sorts dynamically, and makes the server call silent in the background.
   const handleToggleMainTaskStatus = async (task: AdminTask) => {
-    const nextStatus = task.status === 'completed' ? 'active' : 'completed';
+    // THE FIX: Enforce the strict union type cast here so TypeScript can compile safely! [1]
+    const nextStatus = (task.status === 'completed' ? 'active' : 'completed') as 'active' | 'completed' | 'archived';
 
     // 1. Instantly update the local task list (reordering completed tasks to bottom)
     setTasks(prevTasks => {
@@ -137,7 +138,7 @@ export default function AdminTaskBoard() {
     }
   };
 
-  // THE FIX 3: Optimistic state handler for subtasks.
+  // Optimistic state handler for subtasks.
   // Instantly toggle the checked state locally, preventing full page re-renders.
   const handleToggleSubtaskItem = async (taskId: string, subtaskId: string, currentCompletedState: boolean) => {
     const nextCompletedState = !currentCompletedState;
