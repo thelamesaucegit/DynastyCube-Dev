@@ -1,9 +1,9 @@
-//src/app/auth/login/page.tsx
-
+// src/app/auth/login/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
@@ -13,6 +13,17 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const { signInWithDiscord, signInWithGoogle } = useAuth();
+  
+  // THE FIX 1: Capture the referral code from the URL and save it as a cookie!
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const ref = searchParams?.get("ref");
+    if (ref) {
+      // Save it securely in the browser. 
+      // It will automatically be sent to the server in the auth/callback request!
+      document.cookie = `dynasty_referral_id=${encodeURIComponent(ref)}; path=/; max-age=86400; SameSite=Lax`;
+    }
+  }, [searchParams]);
 
   const handleDiscordLogin = async () => {
     setLoading(true);
@@ -55,7 +66,6 @@ export default function Login() {
           <CardHeader className="text-center">
             <CardTitle>Choose your sign in method</CardTitle>
           </CardHeader>
-
           <CardContent>
             {/* Error Message */}
             {message && (
