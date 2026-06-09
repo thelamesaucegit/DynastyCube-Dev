@@ -7,7 +7,6 @@ import { logSystemEvent } from "@/lib/systemLogger";
 // ============================================================================
 // TYPES
 // ============================================================================
-
 export interface EssenceBalance {
   user_id: string;
   display_name: string | null;
@@ -39,7 +38,6 @@ export interface EssenceData {
 // ============================================================================
 // DAILY CLAIMS (META ECONOMY)
 // ============================================================================
-
 export async function getEssenceData(teamId: string): Promise<{ success: boolean; data?: EssenceData; error?: string }> {
     try {
         const supabase = await createServerClient();
@@ -91,6 +89,7 @@ export async function getEssenceData(teamId: string): Promise<{ success: boolean
                 timeUntilNextClaim
             }
         };
+
     } catch (error) {
         return { success: false, error: "Failed to fetch Essence data." };
     }
@@ -137,16 +136,27 @@ export async function claimDailyEssence(teamId: string): Promise<{ success: bool
         // 4. Calculate Claims
         let personalGained = 1;
         let teamBankCost = 0;
+        let claimMessage = "You claimed 1 Base Essence! ✨ (The Team Bank is empty)";
+        let transactionDescription = "Daily Essence Claim (+1 Base)";
 
         if (teamData.essence_bank > 0) {
+            // Standard Bonus Claim
             personalGained = 2; // Base + 1 from Team Bank
-            teamBankCost = 1;
+            teamBankCost = 1;   // Deduct 1 from Team Bank
+            claimMessage = "You claimed 1 Base Essence + 1 Bonus Essence from the Team Bank! ✨";
+            transactionDescription = "Daily Essence Claim (+1 Base, +1 Team Bonus)";
+        } else if (teamData.essence_bank < 0) {
+            // Debt Recovery!
+            personalGained = 1; // User still gets their baseline essence
+            teamBankCost = -1;  // Subtracting a negative number INCREASES the team bank toward 0!
+            claimMessage = "You claimed 1 Base Essence! ✨ (1 Essence was also used to pay down the Team Bank debt)";
+            transactionDescription = "Daily Essence Claim (+1 Base, -1 Debt Recovered)";
         }
 
         // 5. Execute Transactions
         const newPersonalBalance = (userData.essence_balance || 0) + personalGained;
         const newTotalEarned = (userData.essence_total_earned || 0) + personalGained;
-        const newTeamBank = teamData.essence_bank - teamBankCost;
+        const newTeamBank = teamData.essence_bank - teamBankCost; // If bank is -5, subtracting -1 makes it -4.
 
         // Update User
         await supabase.from('users').update({ 
@@ -155,8 +165,8 @@ export async function claimDailyEssence(teamId: string): Promise<{ success: bool
             last_essence_claim: new Date().toISOString() 
         }).eq('id', user.id);
 
-        // Update Team Bank
-        if (teamBankCost > 0) {
+        // Update Team Bank (If it changed)
+        if (teamBankCost !== 0) {
             await supabase.from('teams').update({ essence_bank: newTeamBank }).eq('id', teamId);
         }
 
@@ -166,18 +176,13 @@ export async function claimDailyEssence(teamId: string): Promise<{ success: bool
             transaction_type: "grant",
             amount: personalGained,
             balance_after: newPersonalBalance,
-            description: teamBankCost > 0 ? "Daily Essence Claim (+1 Base, +1 Team Bonus)" : "Daily Essence Claim (+1 Base)",
+            description: transactionDescription,
             created_by: user.id
         });
 
         await logSystemEvent("EssenceClaim", "info", `User ${user.id} claimed ${personalGained} Essence. Team Bank changed by -${teamBankCost}.`);
 
-        return { 
-            success: true, 
-            message: teamBankCost > 0 
-                ? "You claimed 1 Base Essence + 1 Bonus Essence from the Team Bank! ✨" 
-                : "You claimed 1 Base Essence! ✨ (The Team Bank is empty)" 
-        };
+        return { success: true, message: claimMessage };
 
     } catch (error) {
         return { success: false, error: "An unexpected error occurred." };
@@ -187,7 +192,6 @@ export async function claimDailyEssence(teamId: string): Promise<{ success: bool
 // ============================================================================
 // BALANCE QUERIES
 // ============================================================================
-
 /**
  * Get all users with their Essence balances (Admin use)
  */
@@ -203,12 +207,10 @@ export async function getAllUserEssenceBalances(): Promise<{
         "id, display_name, discord_username, avatar_url, essence_balance, essence_total_earned, essence_total_spent"
       )
       .order("display_name");
-
     if (error) {
       console.error("Error fetching user essence balances:", error);
       return { users: [], error: error.message };
     }
-
     const users: EssenceBalance[] = (data || []).map(
       (u: {
         id: string;
@@ -228,7 +230,6 @@ export async function getAllUserEssenceBalances(): Promise<{
         essence_total_spent: u.essence_total_spent ?? 0,
       })
     );
-
     return { users };
   } catch (error) {
     console.error("Unexpected error fetching essence balances:", error);
@@ -249,11 +250,9 @@ export async function getUserEssenceBalance(): Promise<{
       data: { user },
       error: authError,
     } = await supabase.auth.getUser();
-
     if (authError || !user) {
       return { balance: null, error: "Not authenticated" };
     }
-
     const { data, error } = await supabase
       .from("users")
       .select(
@@ -261,12 +260,10 @@ export async function getUserEssenceBalance(): Promise<{
       )
       .eq("id", user.id)
       .single();
-
     if (error) {
       console.error("Error fetching user essence balance:", error);
       return { balance: null, error: error.message };
     }
-
     return {
       balance: {
         user_id: data.id,
@@ -287,7 +284,6 @@ export async function getUserEssenceBalance(): Promise<{
 // ============================================================================
 // GRANTING ESSENCE
 // ============================================================================
-
 /**
  * Grant Essence to a single user (Admin only)
  */
@@ -302,22 +298,18 @@ export async function grantEssence(
     const {
       data: { user },
     } = await supabase.auth.getUser();
-
     if (!user) {
       return { success: false, error: "Not authenticated" };
     }
-
     // Check admin
     const { data: userData, error: userError } = await supabase
       .from("users")
       .select("is_admin")
       .eq("id", user.id)
       .single();
-
     if (userError || !userData?.is_admin) {
       return { success: false, error: "Unauthorized: Admin access required" };
     }
-
     // Call the stored procedure
     const { error } = await supabase.rpc("grant_essence_to_user", {
       p_user_id: userId,
@@ -325,12 +317,10 @@ export async function grantEssence(
       p_description: description || "Admin grant",
       p_created_by: user.id,
     });
-
     if (error) {
       console.error("Error granting Essence:", error);
       return { success: false, error: error.message };
     }
-
     return { success: true };
   } catch (error) {
     console.error("Unexpected error granting Essence:", error);
@@ -351,31 +341,25 @@ export async function grantEssenceToAllUsers(
     const {
       data: { user },
     } = await supabase.auth.getUser();
-
     if (!user) {
       return { success: false, error: "Not authenticated" };
     }
-
     // Check admin
     const { data: userData, error: userError } = await supabase
       .from("users")
       .select("is_admin")
       .eq("id", user.id)
       .single();
-
     if (userError || !userData?.is_admin) {
       return { success: false, error: "Unauthorized: Admin access required" };
     }
-
     // Get all users
     const { data: users, error: usersError } = await supabase
       .from("users")
       .select("id, display_name");
-
     if (usersError) {
       return { success: false, error: usersError.message };
     }
-
     // Grant to each user
     let grantedCount = 0;
     for (const u of users || []) {
@@ -385,7 +369,6 @@ export async function grantEssenceToAllUsers(
         p_description: description || "Bulk grant",
         p_created_by: user.id,
       });
-
       if (error) {
         console.error(
           `Error granting Essence to ${u.display_name || u.id}:`,
@@ -395,7 +378,6 @@ export async function grantEssenceToAllUsers(
         grantedCount++;
       }
     }
-
     return { success: true, grantedCount };
   } catch (error) {
     console.error("Unexpected error granting Essence to all users:", error);
@@ -417,41 +399,33 @@ export async function grantEssenceToTeamMembers(
     const {
       data: { user },
     } = await supabase.auth.getUser();
-
     if (!user) {
       return { success: false, error: "Not authenticated" };
     }
-
     // Check admin
     const { data: userData, error: userError } = await supabase
       .from("users")
       .select("is_admin")
       .eq("id", user.id)
       .single();
-
     if (userError || !userData?.is_admin) {
       return { success: false, error: "Unauthorized: Admin access required" };
     }
-
     if (amount <= 0) {
       return { success: false, error: "Amount must be positive" };
     }
-
     // Get all members of the specified team
     const { data: members, error: membersError } = await supabase
       .from("team_members")
       .select("user_id")
       .eq("team_id", teamId)
       .not("user_id", "is", null);
-
     if (membersError) {
       return { success: false, error: membersError.message };
     }
-
     if (!members || members.length === 0) {
       return { success: false, error: "No members found in this team" };
     }
-
     // Grant to each team member
     let grantedCount = 0;
     for (const member of members) {
@@ -461,7 +435,6 @@ export async function grantEssenceToTeamMembers(
         p_description: description || "Team grant",
         p_created_by: user.id,
       });
-
       if (error) {
         console.error(
           `Error granting Essence to team member ${member.user_id}:`,
@@ -471,7 +444,6 @@ export async function grantEssenceToTeamMembers(
         grantedCount++;
       }
     }
-
     return { success: true, grantedCount, totalMembers: members.length };
   } catch (error) {
     console.error("Unexpected error granting Essence to team members:", error);
@@ -482,7 +454,6 @@ export async function grantEssenceToTeamMembers(
 // ============================================================================
 // TRANSACTIONS
 // ============================================================================
-
 /**
  * Get all Essence transactions (Admin use)
  */
@@ -497,12 +468,10 @@ export async function getAllEssenceTransactions(): Promise<{
       .select("*")
       .order("created_at", { ascending: false })
       .limit(100);
-
     if (error) {
       console.error("Error fetching all essence transactions:", error);
       return { transactions: [], error: error.message };
     }
-
     return { transactions: data || [] };
   } catch (error) {
     console.error("Unexpected error fetching essence transactions:", error);
@@ -523,23 +492,19 @@ export async function getUserEssenceTransactions(): Promise<{
       data: { user },
       error: authError,
     } = await supabase.auth.getUser();
-
     if (authError || !user) {
       return { transactions: [], error: "Not authenticated" };
     }
-
     const { data, error } = await supabase
       .from("essence_transactions")
       .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(50);
-
     if (error) {
       console.error("Error fetching user essence transactions:", error);
       return { transactions: [], error: error.message };
     }
-
     return { transactions: data || [] };
   } catch (error) {
     console.error("Unexpected error fetching user transactions:", error);

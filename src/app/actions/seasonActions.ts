@@ -253,13 +253,13 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
             
             if (allResortIds && allResortIds.length > 0) {
                 const shuffled = allResortIds.sort(() => 0.5 - Math.random());
-                const selected = shuffled.slice(0, 50).map(card => card.id);
+                const selected = shuffled.slice(0, 20).map(card => card.id);
                 const { error: revealErr } = await supabase
                     .from('resort_pool')
                     .update({ hidden: false })
                     .in('id', selected);
                 if (revealErr) throw new Error(revealErr.message);
-                console.log(`[SeasonRollover] Successfully revealed 50 random Resort Pool lands!`);
+                console.log(`[SeasonRollover] Successfully revealed 20 random Resort Pool lands!`);
             }
         } catch (resortErr) {
             console.error("[SeasonRollover] Failed to rotate Resort Pool:", resortErr);
