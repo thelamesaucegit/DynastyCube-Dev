@@ -31,6 +31,7 @@ export const TeamCubucksDisplay: React.FC<TeamCubucksDisplayProps> = ({
   const [transactions, setTransactions] = useState<CubucksTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
+  const [showInfo, setShowInfo] = useState(false); // <-- THE FIX: Collapsed info state by default!
 
   useEffect(() => {
     loadData();
@@ -44,10 +45,8 @@ export const TeamCubucksDisplay: React.FC<TeamCubucksDisplayProps> = ({
         getTeamBalance(teamId),
         getActiveSeason(),
       ]);
-
       setTeam(teamRes.team);
       setActiveSeason(seasonRes.season);
-
       if (showTransactions) {
         const txRes = await getTeamTransactions(teamId);
         setTransactions(txRes.transactions);
@@ -111,7 +110,7 @@ export const TeamCubucksDisplay: React.FC<TeamCubucksDisplayProps> = ({
 
   // Full view
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Balance Card */}
       <div className="bg-gradient-to-br from-yellow-50 via-amber-50 to-orange-50 dark:from-yellow-900/20 dark:via-amber-900/20 dark:to-orange-900/20 border-2 border-yellow-400 dark:border-yellow-600 rounded-xl p-6 shadow-lg">
         <div className="flex items-center justify-between mb-4">
@@ -130,7 +129,6 @@ export const TeamCubucksDisplay: React.FC<TeamCubucksDisplayProps> = ({
             </div>
           </div>
         </div>
-
         {/* Stats */}
         <div className="grid grid-cols-2 gap-4 pt-4 border-t border-yellow-300 dark:border-yellow-700">
           <div>
@@ -150,94 +148,104 @@ export const TeamCubucksDisplay: React.FC<TeamCubucksDisplayProps> = ({
         </div>
       </div>
 
-      {/* Transactions Section */}
-      {showTransactions && (
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-              Transaction History
-            </h4>
-            <button
-              onClick={() => setShowHistory(!showHistory)}
-              className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
-            >
-              {showHistory ? "Hide" : "Show"} History
-            </button>
-          </div>
+      {/* Toggle Buttons Container */}
+      <div className="flex gap-2">
+        {showTransactions && (
+          <button
+            onClick={() => {
+              setShowHistory(!showHistory);
+              if (showInfo) setShowInfo(false); // Close info if opening history
+            }}
+            className="flex-1 py-2 px-3 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-center font-medium bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors text-blue-600 dark:text-blue-400 shadow-sm"
+          >
+            {showHistory ? "Hide" : "Show"} History ({transactions.length})
+          </button>
+        )}
+        <button
+          onClick={() => {
+            setShowInfo(!showInfo);
+            if (showHistory) setShowHistory(false); // Close history if opening info
+          }}
+          className="flex-1 py-2 px-3 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-center font-medium bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors text-blue-600 dark:text-blue-400 shadow-sm"
+        >
+          {showInfo ? "Hide" : "Show"} About Çubucks 💡
+        </button>
+      </div>
 
-          {showHistory && (
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-              {transactions.length === 0 ? (
-                <div className="text-center text-gray-600 dark:text-gray-400 py-8">
-                  No transactions yet
-                </div>
-              ) : (
-                <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {transactions.map((tx) => (
-                    <div
-                      key={tx.id}
-                      className="p-4 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start gap-3">
-                          <span className="text-2xl">{getTransactionIcon(tx.transaction_type)}</span>
-                          <div>
-                            <div className="font-medium text-gray-900 dark:text-gray-100">
-                              {tx.description || tx.card_name || "Transaction"}
-                            </div>
-                            <div className="text-sm text-gray-600 dark:text-gray-400">
-                              {formatDate(tx.created_at)}
-                            </div>
-                            {tx.card_name && (
-                              <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                                Card: {tx.card_name}
-                              </div>
-                            )}
-                          </div>
+      {/* Collapsible Transactions History */}
+      {showTransactions && showHistory && (
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden max-h-64 overflow-y-auto shadow-md">
+          {transactions.length === 0 ? (
+            <div className="text-center text-gray-600 dark:text-gray-400 py-8">
+              No transactions yet
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-200 dark:divide-gray-700">
+              {transactions.map((tx) => (
+                <div
+                  key={tx.id}
+                  className="p-4 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3">
+                      <span className="text-2xl">{getTransactionIcon(tx.transaction_type)}</span>
+                      <div>
+                        <div className="font-medium text-gray-900 dark:text-gray-100">
+                          {tx.description || tx.card_name || "Transaction"}
                         </div>
-                        <div className="text-right">
-                          <div
-                            className={`text-lg font-bold ${
-                              tx.amount > 0
-                                ? "text-green-600 dark:text-green-400"
-                                : "text-red-600 dark:text-red-400"
-                            }`}
-                          >
-                            {tx.amount > 0 ? "+" : ""}
-                            {tx.amount}
-                          </div>
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
-                            Balance: {tx.balance_after}
-                          </div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                          {formatDate(tx.created_at)}
                         </div>
+                        {tx.card_name && (
+                          <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                            Card: {tx.card_name}
+                          </div>
+                        )}
                       </div>
                     </div>
-                  ))}
+                    <div className="text-right">
+                      <div
+                        className={`text-lg font-bold ${
+                          tx.amount > 0
+                            ? "text-green-600 dark:text-green-400"
+                            : "text-red-600 dark:text-red-400"
+                        }`}
+                      >
+                        {tx.amount > 0 ? "+" : ""}
+                        {tx.amount}
+                      </div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">
+                        Balance: {tx.balance_after}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
           )}
         </div>
       )}
 
-      {/* Info Box */}
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-300 dark:border-blue-700 rounded-lg p-4">
-        <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
-          💡 About Çubucks
-        </h4>
-        <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1 ml-4 list-disc">
-          <li>Çubucks are a finite resource that each Team allocates to the cards in their Pool.</li>
-                    <li>As you add and remove cards from your Team Pool, your Çubucks Balance will adjust to reflect the allocated funds.</li>
-          <li>Each card has a different value based on power level and how frequently it has been drafted.</li>
-          <li>The Season Cap ({(activeSeason?.cubucks_allocation || 0).toLocaleString()} this season) is set at the beginning of each season and remains fixed.</li>
-          <li>
-            {isUserTeamMember
-              ? "Your Çubucks Balance reflects remaining funds for the Draft, Free Agency, Waivers, and Trades."
-              : "The Çubucks Balance reflects remaining funds for the Draft, Free Agency, Waivers, and Trades."}
-          </li>
-          <li>Budget wisely - cards will be cut automatically from your Team Pool if you exceed The Cap before a match!</li>
-        </ul>
-      </div>
+      {/* Collapsible Info Box */}
+      {showInfo && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-300 dark:border-blue-700 rounded-lg p-4 shadow-sm animate-in fade-in duration-200">
+          <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2 flex items-center gap-1.5">
+            <span>💡</span> About Çubucks
+          </h4>
+          <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1.5 ml-4 list-disc">
+            <li>Çubucks are a finite resource that each Team allocates to the cards in their Pool.</li>
+            <li>As you add and remove cards from your Team Pool, your Çubucks Balance will adjust to reflect the allocated funds.</li>
+            <li>Each card has a different value based on power level and how frequently it has been drafted.</li>
+            <li>The Season Cap ({(activeSeason?.cubucks_allocation || 0).toLocaleString()} this season) is set at the beginning of each season and remains fixed.</li>
+            <li>
+              {isUserTeamMember
+                ? "Your Çubucks Balance reflects remaining funds for the Draft, Free Agency, Waivers, and Trades."
+                : "The Çubucks Balance reflects remaining funds for the Draft, Free Agency, Waivers, and Trades."}
+            </li>
+            <li>Budget wisely - cards will be cut automatically from your Team Pool if you exceed The Cap before a match!</li>
+          </ul>
+        </div>
+      )}
     </div>
   );
 };
