@@ -162,6 +162,7 @@ export default function Navigation() {
                     <DropdownMenuContent>
                       <DropdownMenuItem asChild><Link href="/pools/draft" className="flex items-center gap-2"><LayoutGrid className="size-4" /> Draft Pool</Link></DropdownMenuItem>
                       <DropdownMenuItem asChild><Link href="/pools/resort" className="flex items-center gap-2"><Palmtree className="size-4" /> The Resort Pool</Link></DropdownMenuItem>
+                      <DropdownMenuItem asChild><Link href="/pools/retired" className="flex items-center gap-2"><Skull className="size-4" /> The Retirement Pool</Link></DropdownMenuItem>
                       <DropdownMenuItem asChild><Link href="/pools/wire" className="flex items-center gap-2"><Cable className="size-4" /> THE WIRE</Link></DropdownMenuItem>
                       <DropdownMenuItem asChild><Link href="/pools/chamber" className="flex items-center gap-2"><Group className="size-4" /> The Chamber</Link></DropdownMenuItem>
                       <DropdownMenuItem asChild><Link href="/pools/free-agents" className="flex items-center gap-2"><Sparkles className="size-4" /> Free Agents</Link></DropdownMenuItem>
@@ -169,7 +170,7 @@ export default function Navigation() {
                   </DropdownMenu>
                 </NavigationMenuItem>
 
-                {/* NEW TEAMS DROPDOWN */}
+                {/*  TEAMS DROPDOWN */}
                 <NavigationMenuItem>
                   <DropdownMenu>
                     <DropdownMenuTrigger className={`${navigationMenuTriggerStyle()} bg-transparent ${isDropdownActive(['/teams']) && !isActive(`/teams/${userTeam?.short_name}`) ? "bg-accent/50 text-accent-foreground font-medium" : ""}`}>
@@ -328,7 +329,7 @@ export default function Navigation() {
                   </div>
                 )}
                 
-                {/* POOLS */}
+                                {/* POOLS */}
                 <button onClick={() => toggleMobileSection('pools')} className="flex items-center justify-between w-full pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase hover:text-foreground transition-colors outline-none">
                   <span>Pools</span>
                   {mobileExpanded['pools'] ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
@@ -337,11 +338,13 @@ export default function Navigation() {
                   <div className="flex flex-col gap-1 mb-2">
                     <Link href="/pools/draft" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/draft") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>Draft Pool</Link>
                     <Link href="/pools/resort" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/resort") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>The Resort Pool</Link>
+                    <Link href="/pools/retired" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/retired") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>The Retirement Pool</Link>
                     <Link href="/pools/wire" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/wire") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>The Wire</Link>
                     <Link href="/pools/chamber" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/chamber") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>The Chamber</Link>
                     <Link href="/pools/free-agents" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/free-agents") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>Free Agents</Link>
                   </div>
                 )}
+
 
                 {/* TEAMS */}
                 <button onClick={() => toggleMobileSection('teams')} className="flex items-center justify-between w-full pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase hover:text-foreground transition-colors outline-none">
