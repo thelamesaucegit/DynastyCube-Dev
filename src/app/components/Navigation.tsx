@@ -111,14 +111,12 @@ export default function Navigation() {
             <Image src="/images/logo/logo.jpg" alt="Dynasty Cube Logo" width={32} height={32} className="size-8 rounded-md" />
             <span className="font-bold text-xl text-foreground hidden sm:inline-block">Dynasty Cube</span>
           </Link>
-
           {/* FLOATING MOBILE EMOJI */}
           {userTeam && (
              <Link href={`/teams/${userTeam.short_name}`} className="md:hidden text-2xl hover:scale-110 transition-transform">
                 {userTeam.emoji}
              </Link>
           )}
-
           {/* Desktop Nav */}
           <nav className="hidden md:flex items-center gap-1">
             <NavigationMenu>
@@ -130,7 +128,6 @@ export default function Navigation() {
                     </NavigationMenuLink>
                   </Link>
                 </NavigationMenuItem>
-
                 {/* Drafts Dropdown */}
                 <NavigationMenuItem>
                   <DropdownMenu>
@@ -162,6 +159,7 @@ export default function Navigation() {
                     <DropdownMenuContent>
                       <DropdownMenuItem asChild><Link href="/pools/draft" className="flex items-center gap-2"><LayoutGrid className="size-4" /> Draft Pool</Link></DropdownMenuItem>
                       <DropdownMenuItem asChild><Link href="/pools/resort" className="flex items-center gap-2"><Palmtree className="size-4" /> The Resort Pool</Link></DropdownMenuItem>
+                      {/* NEW: Retired Pool Link */}
                       <DropdownMenuItem asChild><Link href="/pools/retired" className="flex items-center gap-2"><Skull className="size-4" /> The Retirement Pool</Link></DropdownMenuItem>
                       <DropdownMenuItem asChild><Link href="/pools/wire" className="flex items-center gap-2"><Cable className="size-4" /> THE WIRE</Link></DropdownMenuItem>
                       <DropdownMenuItem asChild><Link href="/pools/chamber" className="flex items-center gap-2"><Group className="size-4" /> The Chamber</Link></DropdownMenuItem>
@@ -169,8 +167,7 @@ export default function Navigation() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </NavigationMenuItem>
-
-                {/*  TEAMS DROPDOWN */}
+                {/* NEW TEAMS DROPDOWN */}
                 <NavigationMenuItem>
                   <DropdownMenu>
                     <DropdownMenuTrigger className={`${navigationMenuTriggerStyle()} bg-transparent ${isDropdownActive(['/teams']) && !isActive(`/teams/${userTeam?.short_name}`) ? "bg-accent/50 text-accent-foreground font-medium" : ""}`}>
@@ -193,7 +190,6 @@ export default function Navigation() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </NavigationMenuItem>
-
                 {/* USER'S TEAM EMOJI LINK */}
                 {userTeam && (
                   <NavigationMenuItem>
@@ -225,7 +221,6 @@ export default function Navigation() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </NavigationMenuItem>
-
                 {/* Info Dropdown */}
                 <NavigationMenuItem>
                   <DropdownMenu>
@@ -240,7 +235,6 @@ export default function Navigation() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </NavigationMenuItem>
-
                 {/* Admin Dropdown */}
                 {user && isAdmin && (
                   <NavigationMenuItem>
@@ -260,7 +254,6 @@ export default function Navigation() {
             </NavigationMenu>
           </nav>
         </div>
-
         {/* Right section */}
         <div className="flex items-center gap-2 sm:gap-3">
           {user && (
@@ -273,7 +266,6 @@ export default function Navigation() {
           <Button variant="ghost" size="icon" onClick={toggleTheme} className="size-9">
             {mounted ? (theme === "light" ? <Moon className="size-4" /> : <Sun className="size-4" />) : <span className="size-4" />}
           </Button>
-
           {loading ? (
             <div className="size-8 rounded-full bg-muted animate-pulse" />
           ) : user ? (
@@ -299,7 +291,6 @@ export default function Navigation() {
           ) : (
             <Button asChild variant="default" size="sm"><Link href="/auth/login">Sign In</Link></Button>
           )}
-
           {/* Mobile menu */}
           <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
             <SheetTrigger asChild className="md:hidden">
@@ -329,7 +320,7 @@ export default function Navigation() {
                   </div>
                 )}
                 
-                                {/* POOLS */}
+                {/* POOLS */}
                 <button onClick={() => toggleMobileSection('pools')} className="flex items-center justify-between w-full pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase hover:text-foreground transition-colors outline-none">
                   <span>Pools</span>
                   {mobileExpanded['pools'] ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
@@ -338,14 +329,13 @@ export default function Navigation() {
                   <div className="flex flex-col gap-1 mb-2">
                     <Link href="/pools/draft" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/draft") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>Draft Pool</Link>
                     <Link href="/pools/resort" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/resort") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>The Resort Pool</Link>
+                    {/* Mobile Retired Pool Link */}
                     <Link href="/pools/retired" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/retired") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>The Retirement Pool</Link>
                     <Link href="/pools/wire" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/wire") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>The Wire</Link>
                     <Link href="/pools/chamber" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/chamber") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>The Chamber</Link>
                     <Link href="/pools/free-agents" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/pools/free-agents") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>Free Agents</Link>
                   </div>
                 )}
-
-
                 {/* TEAMS */}
                 <button onClick={() => toggleMobileSection('teams')} className="flex items-center justify-between w-full pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase hover:text-foreground transition-colors outline-none">
                   <span>Teams</span>
@@ -363,7 +353,6 @@ export default function Navigation() {
                     ))}
                   </div>
                 )}
-
                 {/* LEAGUE */}
                 <button onClick={() => toggleMobileSection('league')} className="flex items-center justify-between w-full pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase hover:text-foreground transition-colors outline-none">
                   <span>League</span>
@@ -393,7 +382,6 @@ export default function Navigation() {
                     <Link href="/glossary" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/glossary") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>Glossary</Link>
                   </div>
                 )}
-
                 {/* ADMIN */}
                 {user && isAdmin && (
                   <>
@@ -409,7 +397,6 @@ export default function Navigation() {
                     )}
                   </>
                 )}
-
                 {/* Bottom Buttons */}
                 {user && (
                   <div className="flex items-center gap-3 px-4 py-2 border-t mt-4 pt-6">
@@ -425,4 +412,6 @@ export default function Navigation() {
       </div>
     </header>
   );
+}
+);
 }

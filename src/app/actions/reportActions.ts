@@ -3,6 +3,7 @@
 
 import { createServerClient } from "@/lib/supabase";
 import { revalidatePath } from "next/cache";
+import type { SupabaseClient } from "@supabase/supabase-js"; // <-- THE FIX: Import strict client type
 
 interface Report {
   id: string;
@@ -20,8 +21,8 @@ interface Report {
   resolved_at: string | null;
 }
 
-// Helper to notify all admins
-async function notifyAllAdmins(supabase: any, type: string, message: string, excludeUserId?: string) {
+// THE FIX: Typed the 'supabase' client parameter as SupabaseClient instead of any!
+async function notifyAllAdmins(supabase: SupabaseClient, type: string, message: string, excludeUserId?: string) {
   const { data: admins } = await supabase.from('users').select('id').eq('is_admin', true);
   if (!admins) return;
 
@@ -68,7 +69,7 @@ export async function submitReport(
 
     if (error) throw error;
 
-    // 2. THE FIX: Create notifications for ALL admins instantly upon submission
+    // 2. Create notifications for ALL admins instantly upon submission
     const adminMessage = `🚨 NEW REPORT: [${reportType.toUpperCase()}] "${title}" (Severity: ${severity.toUpperCase()})`;
     await notifyAllAdmins(supabase, "report_submitted", adminMessage, user.id);
 
@@ -140,7 +141,7 @@ export async function getAllReports(): Promise<{
     const { data: reports, error } = await supabase.from("reports").select("*");
     if (error) throw error;
 
-    // THE FIX: Custom sorting (Pending & In Review at top, Resolved in middle, Dismissed at bottom)
+    // Custom sorting (Pending & In Review at top, Resolved in middle, Dismissed at bottom)
     const sortedReports = (reports || []).sort((a, b) => {
       const statusOrder: Record<string, number> = {
         pending: 1,
@@ -152,7 +153,6 @@ export async function getAllReports(): Promise<{
       const orderB = statusOrder[b.status] || 1;
       
       if (orderA !== orderB) return orderA - orderB;
-      // Secondary sort: Newest first
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
 
@@ -224,8 +224,7 @@ export async function updateReportStatus(
     const { error } = await supabase.from("reports").update(updateData).eq("id", reportId);
     if (error) throw error;
 
-    // 2. THE FIX: Handle Task Synchronization
-    // Fetch details of the modified report to get title & tag
+    // 2. Handle Task Synchronization
     const { data: reportDetails } = await supabase
       .from("reports")
       .select("title, report_type")
