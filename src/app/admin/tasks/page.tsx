@@ -1,9 +1,7 @@
-
 // src/app/admin/tasks/page.tsx
-
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { AdminRoute } from "@/app/components/admin/AdminRoute";
 import { useAuth } from "@/contexts/AuthContext";
 import { createClient } from "@supabase/supabase-js";
@@ -20,11 +18,9 @@ import {
   editAdminTask,
   type AdminTask,
 } from "@/app/actions/adminTaskActions";
-
 import {
-  CheckSquare, Plus, GripVertical, Link as LinkIcon, Calendar, 
-  UserPlus, Hand, Copy, Trash2, Clock, CheckCircle2, Circle,
-  Tag, X, ChevronDown, ChevronUp, AlertCircle, Edit
+  CheckSquare, Plus, GripVertical, Link as LinkIcon, 
+  UserPlus, Hand, Copy, Trash2, Clock, CheckCircle2, Circle, X, Edit
 } from "lucide-react";
 
 // Initialize standard Supabase client for fetching admin list
@@ -74,12 +70,24 @@ export default function AdminTaskBoard() {
   }>({ id: "", title: "", reference_link: "", tag: "Feature", deadline: "", newSubtasks: [] });
 
   useEffect(() => {
-    loadTasks();
+    loadTasks(true); // Initial load uses the full skeleton loader
     loadAdmins();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
-  const loadTasks = async () => {
-    setLoading(true);
+  // THE FIX 1: Custom sorting utility that automatically forces completed items to the bottom of the list
+  const getSortedTasks = (taskList: AdminTask[]) => {
+    return [...taskList].sort((a, b) => {
+      // Completed items always drop to the absolute bottom of any active filter view
+      if (a.status === "completed" && b.status !== "completed") return 1;
+      if (a.status !== "completed" && b.status === "completed") return -1;
+      // Active items maintain their custom drag-and-drop order indexes
+      return a.order_index - b.order_index;
+    });
+  };
+
+  const loadTasks = async (showPulseLoader = false) => {
+    if (showPulseLoader) setLoading(true);
     const includeArchived = filter === "completed";
     const res = await getAdminTasks(includeArchived);
     if (res.success && res.tasks) {
@@ -93,7 +101,7 @@ export default function AdminTaskBoard() {
       } else {
         filtered = res.tasks.filter(t => t.status !== "completed" && t.status !== "archived");
       }
-      setTasks(filtered);
+      setTasks(getSortedTasks(filtered));
     }
     setLoading(false);
   };
@@ -103,7 +111,55 @@ export default function AdminTaskBoard() {
     if (data) setAdmins(data);
   };
 
-  // --- Handlers ---
+  // THE FIX 2: Optimistic state handler for main checkboxes.
+  // Updates UI immediately, sorts dynamically, and makes the server call silent in the background.
+  const handleToggleMainTaskStatus = async (task: AdminTask) => {
+    const nextStatus = task.status === 'completed' ? 'active' : 'completed';
+
+    // 1. Instantly update the local task list (reordering completed tasks to bottom)
+    setTasks(prevTasks => {
+        let updated = prevTasks.map(t => 
+            t.id === task.id ? { ...t, status: nextStatus, completed_at: nextStatus === 'completed' ? new Date().toISOString() : null } : t
+        );
+        // If we are looking at standard active tabs, re-sort so the completed item slides down smoothly
+        if (filter !== "completed") {
+            updated = getSortedTasks(updated);
+        }
+        return updated;
+    });
+
+    // 2. Safely process the Database update silently in the background
+    const res = await updateTaskStatus(task.id, nextStatus, task.title);
+    
+    // 3. Silent re-sync just to align metadata without pulsing or resetting the scroll position!
+    if (res.success) {
+        loadTasks(false); 
+    }
+  };
+
+  // THE FIX 3: Optimistic state handler for subtasks.
+  // Instantly toggle the checked state locally, preventing full page re-renders.
+  const handleToggleSubtaskItem = async (taskId: string, subtaskId: string, currentCompletedState: boolean) => {
+    const nextCompletedState = !currentCompletedState;
+
+    // 1. Instantly update the subtask checked state locally
+    setTasks(prevTasks => 
+        prevTasks.map(t => {
+            if (t.id !== taskId) return t;
+            const updatedSubtasks = t.subtasks?.map(sub => 
+                sub.id === subtaskId ? { ...sub, is_completed: nextCompletedState } : sub
+            );
+            return { ...t, subtasks: updatedSubtasks };
+        })
+    );
+
+    // 2. Update DB silently
+    const res = await toggleSubtask(subtaskId, nextCompletedState);
+    if (res.success) {
+        loadTasks(false); // Silent background align
+    }
+  };
+
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTaskTitle.trim()) return;
@@ -119,13 +175,12 @@ export default function AdminTaskBoard() {
     
     setIsCreateModalOpen(false);
     resetForm();
-    loadTasks();
+    loadTasks(true);
   };
 
   const handleEditTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editTaskData.title.trim()) return;
-
     const validNewSubtasks = editTaskData.newSubtasks.filter(st => st.trim() !== "");
     await editAdminTask(editTaskData.id, {
       title: editTaskData.title,
@@ -134,9 +189,8 @@ export default function AdminTaskBoard() {
       deadline: editTaskData.deadline || undefined,
       newSubtaskTitles: validNewSubtasks
     });
-
     setIsEditModalOpen(false);
-    loadTasks();
+    loadTasks(true);
   };
 
   const openEditModal = (task: AdminTask) => {
@@ -145,8 +199,8 @@ export default function AdminTaskBoard() {
       title: task.title,
       reference_link: task.reference_link || "",
       tag: task.tag || "Feature",
-      deadline: task.deadline ? task.deadline.split('T')[0] : "", // Formats for <input type="date">
-      newSubtasks: [] // Ready for any new ones
+      deadline: task.deadline ? task.deadline.split('T')[0] : "",
+      newSubtasks: [] 
     });
     setIsEditModalOpen(true);
   };
@@ -159,7 +213,6 @@ export default function AdminTaskBoard() {
     setNewSubtasks([""]);
   };
 
-  // --- Drag and Drop Logic ---
   const handleDragStart = (e: React.DragEvent, id: string) => {
     setDraggedTaskId(id);
     e.dataTransfer.effectAllowed = "move";
@@ -173,11 +226,13 @@ export default function AdminTaskBoard() {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     if (draggedTaskId === id) return;
-
     const draggedIndex = tasks.findIndex(t => t.id === draggedTaskId);
     const targetIndex = tasks.findIndex(t => t.id === id);
     
     if (draggedIndex === -1 || targetIndex === -1) return;
+    
+    // Prevent dragging completed items above active ones to maintain sorting consistency
+    if (tasks[draggedIndex].status === "completed" || tasks[targetIndex].status === "completed") return;
 
     const newTasks = [...tasks];
     const draggedTask = newTasks[draggedIndex];
@@ -187,13 +242,12 @@ export default function AdminTaskBoard() {
     setTasks(newTasks);
   };
 
-  const handleDragEnd = async (e: React.DragEvent) => {
+  const handleDragEnd = async () => {
     if (draggedTaskId) {
       const el = document.getElementById(`task-${draggedTaskId}`);
       if (el) el.style.opacity = "1";
     }
     setDraggedTaskId(null);
-
     const updates = tasks.map((t, index) => ({ id: t.id, order_index: index }));
     await reorderTasks(updates);
   };
@@ -258,29 +312,28 @@ export default function AdminTaskBoard() {
               <div
                 key={task.id}
                 id={`task-${task.id}`}
-                draggable={filter === "active"}
+                draggable={filter === "active" && task.status !== "completed"}
                 onDragStart={(e) => handleDragStart(e, task.id)}
                 onDragOver={(e) => handleDragOver(e, task.id)}
                 onDragEnd={handleDragEnd}
                 className={`group bg-card border border-border rounded-lg p-4 shadow-sm transition-all ${
-                  task.status === 'completed' ? 'opacity-70' : 'hover:border-primary/30'
+                  task.status === 'completed' ? 'opacity-60 bg-muted/30 border-border/60' : 'hover:border-primary/30'
                 }`}
               >
                 <div className="flex items-start gap-3">
                   {/* Drag Handle */}
-                  {filter === "active" && (
+                  {filter === "active" && task.status !== "completed" ? (
                     <div className="mt-1 cursor-grab active:cursor-grabbing text-muted-foreground opacity-30 group-hover:opacity-100 transition-opacity">
                       <GripVertical className="size-5" />
                     </div>
+                  ) : (
+                    // Reserve empty space for alignment so layout doesn't shift
+                    filter === "active" && <div className="size-5 flex-shrink-0" />
                   )}
 
                   {/* Main Checkbox */}
                   <button 
-                    onClick={async () => {
-                      const newStatus = task.status === 'completed' ? 'active' : 'completed';
-                      await updateTaskStatus(task.id, newStatus, task.title);
-                      loadTasks();
-                    }}
+                    onClick={() => handleToggleMainTaskStatus(task)}
                     className="mt-1 flex-shrink-0 text-muted-foreground hover:text-emerald-500 transition-colors"
                   >
                     {task.status === 'completed' ? (
@@ -312,23 +365,19 @@ export default function AdminTaskBoard() {
                         </span>
                       )}
                     </div>
-
                     {task.reference_link && (
                       <a href={task.reference_link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-blue-500 hover:underline mb-3">
                         <LinkIcon className="size-3" /> Reference Link
                       </a>
                     )}
-
+                    
                     {/* Subtasks */}
                     {task.subtasks && task.subtasks.length > 0 && (
                       <div className="mt-3 space-y-2 pl-2 border-l-2 border-border/50">
                         {task.subtasks.map(sub => (
                           <div key={sub.id} className="flex items-center gap-2 text-sm">
                             <button 
-                              onClick={async () => {
-                                await toggleSubtask(sub.id, !sub.is_completed);
-                                loadTasks();
-                              }}
+                              onClick={() => handleToggleSubtaskItem(task.id, sub.id, sub.is_completed)}
                               className="text-muted-foreground hover:text-primary transition-colors"
                             >
                               {sub.is_completed ? <CheckSquare className="size-4 text-primary" /> : <div className="size-4 border-2 border-muted-foreground rounded-sm" />}
@@ -342,7 +391,6 @@ export default function AdminTaskBoard() {
 
                   {/* Right Actions & Claim Info */}
                   <div className="flex flex-col items-end gap-2 ml-4">
-                    {/* Claimed By Hover Badge */}
                     {task.claimed_by_user ? (
                       <div className="relative group/tooltip flex items-center gap-2 bg-secondary px-2 py-1 rounded-md text-xs font-medium border border-border cursor-default">
                         <img 
@@ -352,14 +400,13 @@ export default function AdminTaskBoard() {
                         />
                         <span className="truncate max-w-[80px]">{task.claimed_by_user.display_name.split(' ')[0]}</span>
                         
-                        {/* Custom Tooltip */}
                         <div className="absolute bottom-full right-0 mb-2 w-max px-3 py-1.5 bg-foreground text-background text-xs rounded shadow-lg opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none z-10">
                           Claimed by {task.claimed_by_user.display_name}
                         </div>
                       </div>
                     ) : (
                       <button 
-                        onClick={async () => { await claimTask(task.id); loadTasks(); }}
+                        onClick={async () => { await claimTask(task.id); loadTasks(false); }}
                         className="text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 px-3 py-1.5 rounded-md transition-colors"
                       >
                         Claim Task
@@ -375,10 +422,9 @@ export default function AdminTaskBoard() {
                       >
                         <Edit className="size-4" />
                       </button>
-
                       <button 
                         title="Duplicate Task"
-                        onClick={async () => { await duplicateTask(task.id); loadTasks(); }}
+                        onClick={async () => { await duplicateTask(task.id); loadTasks(false); }}
                         className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary rounded transition"
                       >
                         <Copy className="size-4" />
@@ -403,7 +449,6 @@ export default function AdminTaskBoard() {
                       ) : null}
                     </div>
                   </div>
-
                 </div>
               </div>
             ))
@@ -440,12 +485,10 @@ export default function AdminTaskBoard() {
                   <input type="date" value={newTaskDeadline} onChange={e => setNewTaskDeadline(e.target.value)} className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
                 </div>
               </div>
-
               <div>
                 <label className="block text-sm font-medium mb-1">Reference URL (Optional)</label>
                 <input type="url" value={newTaskLink} onChange={e => setNewTaskLink(e.target.value)} className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" placeholder="https://..." />
               </div>
-
               <div>
                 <label className="block text-sm font-medium mb-2">Subtasks (Checklist)</label>
                 <div className="space-y-2">
@@ -468,7 +511,6 @@ export default function AdminTaskBoard() {
                   </button>
                 </div>
               </div>
-
               <div className="pt-4 border-t mt-6 flex justify-end gap-2">
                 <button type="button" onClick={() => setIsCreateModalOpen(false)} className="px-4 py-2 rounded-md hover:bg-secondary text-sm font-medium">Cancel</button>
                 <button type="submit" className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90">Create Task</button>
@@ -507,12 +549,10 @@ export default function AdminTaskBoard() {
                   <input type="date" value={editTaskData.deadline} onChange={e => setEditTaskData({...editTaskData, deadline: e.target.value})} className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
                 </div>
               </div>
-
               <div>
                 <label className="block text-sm font-medium mb-1">Reference URL (Optional)</label>
                 <input type="url" value={editTaskData.reference_link} onChange={e => setEditTaskData({...editTaskData, reference_link: e.target.value})} className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
               </div>
-
               <div>
                 <label className="block text-sm font-medium mb-2">Add New Subtasks</label>
                 <div className="space-y-2">
@@ -536,7 +576,6 @@ export default function AdminTaskBoard() {
                   </button>
                 </div>
               </div>
-
               <div className="pt-4 border-t mt-6 flex justify-end gap-2">
                 <button type="button" onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 rounded-md hover:bg-secondary text-sm font-medium">Cancel</button>
                 <button type="submit" className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90">Save Changes</button>
@@ -564,7 +603,7 @@ export default function AdminTaskBoard() {
                   onClick={async () => {
                     await assignTask(assignModalData.taskId, admin.id, admin.display_name, assignModalData.taskTitle);
                     setAssignModalData({ isOpen: false, taskId: "", taskTitle: "" });
-                    loadTasks();
+                    loadTasks(false);
                   }}
                   className="w-full text-left px-4 py-3 rounded-md border border-transparent hover:border-primary/50 hover:bg-primary/5 transition flex items-center justify-between group"
                 >
@@ -576,7 +615,6 @@ export default function AdminTaskBoard() {
           </div>
         </div>
       )}
-
     </AdminRoute>
   );
 }
