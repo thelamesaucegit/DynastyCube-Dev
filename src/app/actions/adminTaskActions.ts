@@ -297,16 +297,42 @@ export async function updateTaskStatus(taskId: string, status: 'active' | 'compl
   try {
     const { user, display_name } = await requireAdmin();
     const supabaseAdmin = createServiceRoleClient();
-
     const updatePayload: { status: string; completed_at?: string | null } = { status };
+    
     if (status === 'completed') {
       updatePayload.completed_at = new Date().toISOString();
     } else {
       updatePayload.completed_at = null; // Reset if moving back to active
     }
-
+    
+    // 1. Update the Task
     const { error } = await supabaseAdmin.from('admin_tasks').update(updatePayload).eq('id', taskId);
     if (error) throw error;
+
+    // 2. THE FIX: Check if this task represents a synced user report
+    const { data: taskDetails } = await supabaseAdmin
+      .from('admin_tasks')
+      .select('reference_link')
+      .eq('id', taskId)
+      .single();
+
+    if (taskDetails?.reference_link?.includes('id=')) {
+      const urlParts = taskDetails.reference_link.split('id=');
+      const reportId = urlParts[1];
+
+      if (reportId) {
+        // Automatically sync the report status to match the task status
+        const nextReportStatus = status === 'completed' ? 'resolved' : 'in_review';
+        await supabaseAdmin
+          .from('reports')
+          .update({ 
+            status: nextReportStatus, 
+            assigned_admin_id: user.id,
+            resolved_at: nextReportStatus === 'resolved' ? new Date().toISOString() : null
+          })
+          .eq('id', reportId);
+      }
+    }
 
     // Notify if marked completed
     if (status === 'completed') {
@@ -317,7 +343,7 @@ export async function updateTaskStatus(taskId: string, status: 'active' | 'compl
         user.id
       );
     }
-
+    
     revalidatePath('/admin/tasks');
     return { success: true };
   } catch (error: unknown) {
