@@ -561,7 +561,7 @@ export async function getTeamsWithDetails(
 
 export async function toggleChangelingIdentity(teamId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const supabase = await createServerClient();
+  const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
