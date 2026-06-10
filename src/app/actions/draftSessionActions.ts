@@ -864,7 +864,7 @@ export async function checkDraftTimer(
   try {
     const { data: session, error: sessionError } = await supabase
       .from("draft_sessions")
-      .select("id, status, start_time, hours_per_pick, consecutive_skipped_picks, locked_at")
+      .select("id, status, start_time, hours_per_pick, consecutive_skipped_picks, locked_at, enforce_day_night_drafting, night_start_hour, night_end_hour")
       .in("status", ["active", "scheduled"])
       .single();
 
@@ -928,7 +928,45 @@ export async function checkDraftTimer(
     if (now >= deadline) {
       console.log(`Deadline passed for session ${session.id}. Executing auto-pick logic.`);
       const teamId = draftStatus.onTheClock.teamId;
-      
+
+
+      // =======================================================================
+      //  DYNAMIC DAY/NIGHT DRAFT FREEZE LOGIC
+      // =======================================================================
+      if (session.enforce_day_night_drafting) {
+          // Get the current hour in your localized timezone (e.g. Central Time)
+          // 0 = Midnight, 23 = 11 PM
+          const currentHourStr = new Date().toLocaleString("en-US", { timeZone: "America/Chicago", hour: "numeric", hour12: false });
+          const currentHour = parseInt(currentHourStr, 10);
+
+          const startHour = session.night_start_hour; // e.g. 22
+          const endHour = session.night_end_hour;     // e.g. 8
+
+          let isNightTime = false;
+
+          // Logic handles standard overnight hours (e.g., 22 to 8)
+          if (startHour > endHour) {
+              if (currentHour >= startHour || currentHour < endHour) {
+                  isNightTime = true;
+              }
+          } 
+          // Logic handles same-day daytime freeze hours (e.g., 12 to 17) if you want a mid-day freeze
+          else if (startHour <= endHour) {
+              if (currentHour >= startHour && currentHour < endHour) {
+                  isNightTime = true;
+              }
+          }
+
+          if (isNightTime) {
+              console.log(`[DraftTimer] 🌙 The sun has set. Auto-draft is frozen until ${endHour}:00 for team ${teamId}.`);
+              return { action: "none", message: "Draft clock is frozen for the night." };
+          }
+      }
+      // =======================================================================
+
+      // Lock the session
+
+        
       const { data: lockResult, error: lockError } = await supabase
           .from("draft_sessions")
           .update({ locked_at: new Date().toISOString() })
