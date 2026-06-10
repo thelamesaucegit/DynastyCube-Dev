@@ -6,7 +6,6 @@ import { createServerClient } from "@/lib/supabase";
 // =================================================================================================
 // TYPES
 // =================================================================================================
-
 export type VoteType = "individual" | "team" | "league" | "republic" | "blessing_event";
 
 export interface Poll {
@@ -90,11 +89,11 @@ export interface TypedPollResults {
 
 export interface PollWithOptions extends Poll {
   options: PollOption[];
-  userVotes?: string[]; // option IDs user has voted for
+  userVotes?: string[]; 
   hasVoted?: boolean;
-  userVoteWeight?: number; // For republic polls
-  userTeamId?: string; // For team/republic/blessing polls
-  team_id?: string | null; // For team-scoped polls
+  userVoteWeight?: number; 
+  userTeamId?: string; 
+  team_id?: string | null; 
 }
 
 // =================================================================================================
@@ -107,8 +106,6 @@ export interface PollWithOptions extends Poll {
 export async function getActivePolls(userId?: string) {
   try {
     const supabase = await createServerClient();
-
-    // Fetch polls AND their options in one query using Supabase relations
     const { data, error } = await supabase
       .from("polls")
       .select("*, poll_options(*)")
@@ -117,24 +114,14 @@ export async function getActivePolls(userId?: string) {
       .order("created_at", { ascending: false });
 
     if (error) throw error;
-
     const polls = data || [];
 
-    // Map the Supabase relation 'poll_options' to the 'options' property expected by the frontend
     const pollsWithOptions = polls.map((poll) => {
-      // Safely cast the joined options to our PollOption type and sort them
       const rawOptions = (poll.poll_options as PollOption[]) || [];
-      const sortedOptions = rawOptions.sort(
-        (a: PollOption, b: PollOption) => a.option_order - b.option_order
-      );
-      
-      return {
-        ...poll,
-        options: sortedOptions,
-      };
+      const sortedOptions = rawOptions.sort((a, b) => a.option_order - b.option_order);
+      return { ...poll, options: sortedOptions };
     });
 
-    // If userId provided, get user's votes for each poll
     if (userId) {
       const pollsWithVotes = await Promise.all(
         pollsWithOptions.map(async (poll) => {
@@ -157,7 +144,6 @@ export async function getActivePolls(userId?: string) {
               .eq("user_id", userId);
             userVotesData = data || [];
           }
-
           return {
             ...poll,
             userVotes: userVotesData.map((v) => v.option_id),
@@ -165,10 +151,8 @@ export async function getActivePolls(userId?: string) {
           };
         })
       );
-
       return { polls: pollsWithVotes, success: true };
     }
-
     return { polls: pollsWithOptions, success: true };
   } catch (error) {
     console.error("Error fetching active polls:", error);
@@ -176,72 +160,39 @@ export async function getActivePolls(userId?: string) {
   }
 }
 
-
-/**
- * Get a single poll with its options
- */
 export async function getPollWithOptions(pollId: string, userId?: string) {
   try {
     const supabase = await createServerClient();
-
-    // Get poll
-    const { data: poll, error: pollError } = await supabase
-      .from("polls")
-      .select("*")
-      .eq("id", pollId)
-      .single();
-
+    const { data: poll, error: pollError } = await supabase.from("polls").select("*").eq("id", pollId).single();
     if (pollError) throw pollError;
     if (!poll) return { poll: null, success: false, error: "Poll not found" };
 
-    // Get options
-    const { data: options, error: optionsError } = await supabase
-      .from("poll_options")
-      .select("*")
-      .eq("poll_id", pollId)
-      .order("option_order", { ascending: true });
-
+    const { data: options, error: optionsError } = await supabase.from("poll_options").select("*").eq("poll_id", pollId).order("option_order", { ascending: true });
     if (optionsError) throw optionsError;
 
-    // Get user's votes if userId provided
     let userVotes: string[] = [];
     let userVoteWeight: number | undefined;
     let userTeamId: string | undefined;
 
     if (userId) {
       if (poll.vote_type === 'blessing_event') {
-        const { data: votes } = await supabase
-          .from("blessing_allocations")
-          .select("option_id")
-          .eq("poll_id", pollId)
-          .eq("user_id", userId)
-          .eq("voted_yes", true);
+        const { data: votes } = await supabase.from("blessing_allocations").select("option_id").eq("poll_id", pollId).eq("user_id", userId).eq("voted_yes", true);
         userVotes = votes?.map((v) => v.option_id) || [];
       } else {
-        const { data: votes } = await supabase
-          .from("poll_votes")
-          .select("option_id")
-          .eq("poll_id", pollId)
-          .eq("user_id", userId);
+        const { data: votes } = await supabase.from("poll_votes").select("option_id").eq("poll_id", pollId).eq("user_id", userId);
         userVotes = votes?.map((v) => v.option_id) || [];
       }
 
-      // For team/republic/blessing polls, get user's team and vote weight
       if (poll.vote_type === "team" || poll.vote_type === "republic" || poll.vote_type === "blessing_event") {
         const { data: teamData } = await supabase.rpc("get_user_team_for_voting", { p_user_id: userId });
         userTeamId = teamData || undefined;
-
         if (poll.vote_type === "republic" && userTeamId) {
-          const { data: weightData } = await supabase.rpc("get_user_vote_weight", {
-            p_user_id: userId,
-            p_team_id: userTeamId,
-          });
+          const { data: weightData } = await supabase.rpc("get_user_vote_weight", { p_user_id: userId, p_team_id: userTeamId });
           userVoteWeight = weightData || 1;
         }
       }
     }
 
-    // Determine status
     const now = new Date();
     const startsAt = new Date(poll.starts_at);
     const endsAt = new Date(poll.ends_at);
@@ -249,16 +200,7 @@ export async function getPollWithOptions(pollId: string, userId?: string) {
     if (endsAt < now) status = "ended";
     else if (startsAt > now) status = "upcoming";
 
-    const pollWithOptions: PollWithOptions = {
-      ...poll,
-      options: options || [],
-      userVotes,
-      hasVoted: userVotes.length > 0,
-      status,
-      userVoteWeight,
-      userTeamId,
-    };
-
+    const pollWithOptions: PollWithOptions = { ...poll, options: options || [], userVotes, hasVoted: userVotes.length > 0, status, userVoteWeight, userTeamId };
     return { poll: pollWithOptions, success: true };
   } catch (error) {
     console.error("Error fetching poll:", error);
@@ -266,9 +208,6 @@ export async function getPollWithOptions(pollId: string, userId?: string) {
   }
 }
 
-/**
- * Get poll results
- */
 export async function getPollResults(pollId: string) {
   try {
     const supabase = await createServerClient();
@@ -281,117 +220,51 @@ export async function getPollResults(pollId: string) {
   }
 }
 
-/**
- * Cast a vote on a poll
- */
-export async function castVote(
-  pollId: string,
-  optionIds: string[],
-  userId: string
-) {
+export async function castVote(pollId: string, optionIds: string[], userId: string) {
   try {
     const supabase = await createServerClient();
-
-    // Get poll to check settings and vote type
-    const { data: poll, error: pollError } = await supabase
-      .from("polls")
-      .select("allow_multiple_votes, ends_at, vote_type")
-      .eq("id", pollId)
-      .single();
-
+    const { data: poll, error: pollError } = await supabase.from("polls").select("allow_multiple_votes, ends_at, vote_type").eq("id", pollId).single();
     if (pollError) throw pollError;
     if (!poll) return { success: false, error: "Poll not found" };
 
-    // Check if poll has ended
-    if (new Date(poll.ends_at) < new Date()) {
-      return { success: false, error: "This poll has ended" };
-    }
+    if (new Date(poll.ends_at) < new Date()) return { success: false, error: "This poll has ended" };
+    if (!poll.allow_multiple_votes && optionIds.length > 1) return { success: false, error: "This poll only allows one selection" };
 
-    // Validate option count
-    if (!poll.allow_multiple_votes && optionIds.length > 1) {
-      return { success: false, error: "This poll only allows one selection" };
-    }
-
-    // Get user's team
     let teamId: string | null = null;
     let voteWeight = 1;
 
     if (poll.vote_type === "team" || poll.vote_type === "republic" || poll.vote_type === "blessing_event") {
       const { data: userTeamId } = await supabase.rpc("get_user_team_for_voting", { p_user_id: userId });
-      if (!userTeamId) {
-        return { success: false, error: "You must be on a team to vote in this poll" };
-      }
+      if (!userTeamId) return { success: false, error: "You must be on a team to vote in this poll" };
       teamId = userTeamId;
-
       if (poll.vote_type === "republic") {
-        const { data: weight } = await supabase.rpc("get_user_vote_weight", {
-          p_user_id: userId,
-          p_team_id: teamId,
-        });
+        const { data: weight } = await supabase.rpc("get_user_vote_weight", { p_user_id: userId, p_team_id: teamId });
         voteWeight = weight || 1;
       }
     }
 
-    // -----------------------------------------------------
-    // Handle Blessing Event Allocations
-    // -----------------------------------------------------
     if (poll.vote_type === "blessing_event") {
-      // 1. Delete previous allocations
-      await supabase
-        .from("blessing_allocations")
-        .delete()
-        .eq("poll_id", pollId)
-        .eq("user_id", userId);
-
-      // 2. Insert new allocations
+      await supabase.from("blessing_allocations").delete().eq("poll_id", pollId).eq("user_id", userId);
       if (optionIds.length > 0) {
-        const allocations = optionIds.map((opt) => ({
-          poll_id: pollId,
-          option_id: opt,
-          team_id: teamId,
-          user_id: userId,
-          voted_yes: true
-        }));
+        const allocations = optionIds.map((opt) => ({ poll_id: pollId, option_id: opt, team_id: teamId, user_id: userId, voted_yes: true }));
         const { error: insertError } = await supabase.from("blessing_allocations").insert(allocations);
         if (insertError) throw insertError;
       }
       return { success: true, message: "Allocations saved successfully!" };
     } 
 
-    // -----------------------------------------------------
-    // Handle Standard, Team, and Republic polls
-    // -----------------------------------------------------
-    // Delete existing votes
-    const { error: deleteError } = await supabase
-      .from("poll_votes")
-      .delete()
-      .eq("poll_id", pollId)
-      .eq("user_id", userId);
-
+    const { error: deleteError } = await supabase.from("poll_votes").delete().eq("poll_id", pollId).eq("user_id", userId);
     if (deleteError) throw deleteError;
 
-    // Insert new votes
     if (optionIds.length > 0) {
-      const votes = optionIds.map((optionId) => ({
-        poll_id: pollId,
-        option_id: optionId,
-        user_id: userId,
-        team_id: teamId,
-        vote_weight: voteWeight,
-      }));
-
+      const votes = optionIds.map((optionId) => ({ poll_id: pollId, option_id: optionId, user_id: userId, team_id: teamId, vote_weight: voteWeight }));
       const { error: insertError } = await supabase.from("poll_votes").insert(votes);
       if (insertError) throw insertError;
     }
 
-    // Recalculate results for team/republic polls
     if (poll.vote_type === "team" || poll.vote_type === "republic") {
-      await supabase.rpc("recalculate_poll_results", {
-        p_poll_id: pollId,
-        p_team_id: teamId,
-      });
+      await supabase.rpc("recalculate_poll_results", { p_poll_id: pollId, p_team_id: teamId });
     }
-
     return { success: true, message: "Vote cast successfully!" };
   } catch (error) {
     console.error("Error casting vote:", error);
@@ -399,14 +272,9 @@ export async function castVote(
   }
 }
 
-/**
- * Remove user's vote from a poll
- */
 export async function removeVote(pollId: string, userId: string) {
   try {
     const supabase = await createServerClient();
-    
-    // Check poll type to know which table to clear from
     const { data: poll } = await supabase.from("polls").select("vote_type").eq("id", pollId).single();
     
     if (poll?.vote_type === 'blessing_event') {
@@ -417,14 +285,12 @@ export async function removeVote(pollId: string, userId: string) {
         if (error) throw error;
     }
 
-    // Recalculate results if necessary
     if (poll?.vote_type === "team" || poll?.vote_type === "republic") {
       const { data: userTeamId } = await supabase.rpc("get_user_team_for_voting", { p_user_id: userId });
       if (userTeamId) {
          await supabase.rpc("recalculate_poll_results", { p_poll_id: pollId, p_team_id: userTeamId });
       }
     }
-
     return { success: true, message: "Vote removed successfully" };
   } catch (error) {
     console.error("Error removing vote:", error);
@@ -435,18 +301,10 @@ export async function removeVote(pollId: string, userId: string) {
 // =================================================================================================
 // ADMIN ACTIONS
 // =================================================================================================
-
-/**
- * Get all polls (admin only)
- */
 export async function getAllPolls() {
   try {
     const supabase = await createServerClient();
-    const { data, error } = await supabase
-      .from("polls")
-      .select(` *, poll_options(count) `)
-      .order("created_at", { ascending: false });
-
+    const { data, error } = await supabase.from("polls").select(` *, poll_options(count) `).order("created_at", { ascending: false });
     if (error) throw error;
     return { polls: data || [], success: true };
   } catch (error) {
@@ -455,72 +313,30 @@ export async function getAllPolls() {
   }
 }
 
-/**
- * Create a new poll (admin only)
- */
 export async function createPoll(
-  title: string,
-  description: string | null,
-  endsAt: string,
-  allowMultipleVotes: boolean,
-  showResultsBeforeEnd: boolean,
-  options: string[],
-  createdBy: string,
-  voteType: VoteType = "individual",
-  triggerEvent?: 'championship_match_start' | null
+  title: string, description: string | null, endsAt: string, allowMultipleVotes: boolean,
+  showResultsBeforeEnd: boolean, options: string[], createdBy: string, voteType: VoteType = "individual"
 ) {
   try {
     const supabase = await createServerClient();
+    if (!title || title.trim().length === 0) return { success: false, error: "Title is required" };
+    if (!options || options.length < 2) return { success: false, error: "At least 2 options are required" };
+    if (new Date(endsAt) <= new Date()) return { success: false, error: "End date must be in the future" };
 
-    // Validate
-    if (!title || title.trim().length === 0) {
-      return { success: false, error: "Title is required" };
-    }
-    if (!options || options.length < 2) {
-      return { success: false, error: "At least 2 options are required" };
-    }
-    if (new Date(endsAt) <= new Date()) {
-      return { success: false, error: "End date must be in the future" };
-    }
-
-    const isActive = !triggerEvent;
-
-    // Create poll
-    const { data: poll, error: pollError } = await supabase
-      .from("polls")
-      .insert({
-        title,
-        description,
-        ends_at: endsAt,
-        allow_multiple_votes: allowMultipleVotes,
-        show_results_before_end: showResultsBeforeEnd,
-        vote_type: voteType,
-        created_by: createdBy,
-        is_active: isActive,
-        trigger_event: triggerEvent, 
-      })
-      .select()
-      .single();
+    const { data: poll, error: pollError } = await supabase.from("polls").insert({
+        title, description, ends_at: endsAt, allow_multiple_votes: allowMultipleVotes,
+        show_results_before_end: showResultsBeforeEnd, vote_type: voteType, created_by: createdBy, is_active: true,
+      }).select().single();
 
     if (pollError) throw pollError;
     if (!poll) return { success: false, error: "Failed to create poll" };
 
-    // Create options
-    const pollOptions = options.map((text, index) => ({
-      poll_id: poll.id,
-      option_text: text,
-      option_order: index + 1,
-    }));
-
-    const { error: optionsError } = await supabase
-      .from("poll_options")
-      .insert(pollOptions);
-
+    const pollOptions = options.map((text, index) => ({ poll_id: poll.id, option_text: text, option_order: index + 1 }));
+    const { error: optionsError } = await supabase.from("poll_options").insert(pollOptions);
     if (optionsError) {
       await supabase.from("polls").delete().eq("id", poll.id);
       throw optionsError;
     }
-
     return { success: true, message: "Poll created successfully!", pollId: poll.id };
   } catch (error) {
     console.error("Error creating poll:", error);
@@ -528,19 +344,8 @@ export async function createPoll(
   }
 }
 
-/**
- * Update a poll (admin only)
- */
 export async function updatePoll(
-  pollId: string,
-  updates: {
-    title?: string;
-    description?: string | null;
-    ends_at?: string;
-    is_active?: boolean;
-    allow_multiple_votes?: boolean;
-    show_results_before_end?: boolean;
-  }
+  pollId: string, updates: { title?: string; description?: string | null; ends_at?: string; is_active?: boolean; allow_multiple_votes?: boolean; show_results_before_end?: boolean; }
 ) {
   try {
     const supabase = await createServerClient();
@@ -553,9 +358,6 @@ export async function updatePoll(
   }
 }
 
-/**
- * Delete a poll (admin only)
- */
 export async function deletePoll(pollId: string) {
   try {
     const supabase = await createServerClient();
@@ -568,9 +370,6 @@ export async function deletePoll(pollId: string) {
   }
 }
 
-/**
- * Toggle poll active status (admin only)
- */
 export async function togglePollActive(pollId: string, isActive: boolean) {
   try {
     const supabase = await createServerClient();
@@ -583,27 +382,12 @@ export async function togglePollActive(pollId: string, isActive: boolean) {
   }
 }
 
-/**
- * Add option to existing poll (admin only)
- */
 export async function addPollOption(pollId: string, optionText: string) {
   try {
     const supabase = await createServerClient();
-    const { data: existingOptions } = await supabase
-      .from("poll_options")
-      .select("option_order")
-      .eq("poll_id", pollId)
-      .order("option_order", { ascending: false })
-      .limit(1);
-
+    const { data: existingOptions } = await supabase.from("poll_options").select("option_order").eq("poll_id", pollId).order("option_order", { ascending: false }).limit(1);
     const maxOrder = existingOptions?.[0]?.option_order || 0;
-
-    const { error } = await supabase.from("poll_options").insert({
-      poll_id: pollId,
-      option_text: optionText,
-      option_order: maxOrder + 1,
-    });
-
+    const { error } = await supabase.from("poll_options").insert({ poll_id: pollId, option_text: optionText, option_order: maxOrder + 1 });
     if (error) throw error;
     return { success: true, message: "Option added successfully!" };
   } catch (error) {
@@ -612,9 +396,6 @@ export async function addPollOption(pollId: string, optionText: string) {
   }
 }
 
-/**
- * Delete poll option (admin only)
- */
 export async function deletePollOption(optionId: string) {
   try {
     const supabase = await createServerClient();
@@ -627,19 +408,11 @@ export async function deletePollOption(optionId: string) {
   }
 }
 
-/**
- * Resolve a Team Blessings lottery event (Admin only)
- * This triggers the backend RPC to securely calculate odds and roll for winners.
- */
 export async function resolveBlessingEvent(pollId: string) {
   try {
     const supabase = await createServerClient();
-    const { error } = await supabase.rpc("resolve_blessings_event", {
-      p_poll_id: pollId,
-    });
-    
+    const { error } = await supabase.rpc("resolve_blessings_event", { p_poll_id: pollId });
     if (error) throw error;
-    
     return { success: true, message: "Blessing lottery resolved successfully!" };
   } catch (error) {
     console.error("Error resolving blessing event:", error);
@@ -647,25 +420,13 @@ export async function resolveBlessingEvent(pollId: string) {
   }
 }
 
-
 // =================================================================================================
 // MULTI-TYPE VOTING FUNCTIONS
 // =================================================================================================
-
-/**
- * Get poll results by type (individual, team, republic, or blessing_event)
- */
 export async function getPollResultsByType(pollId: string) {
   try {
     const supabase = await createServerClient();
-
-    // Get poll type first
-    const { data: poll, error: pollError } = await supabase
-      .from("polls")
-      .select("vote_type")
-      .eq("id", pollId)
-      .single();
-
+    const { data: poll, error: pollError } = await supabase.from("polls").select("vote_type").eq("id", pollId).single();
     if (pollError) throw pollError;
     if (!poll) return { results: null, success: false, error: "Poll not found" };
 
@@ -678,36 +439,16 @@ export async function getPollResultsByType(pollId: string) {
     if (poll.vote_type === "team" || poll.vote_type === "republic" || poll.vote_type === "league") {
       const { data, error } = await supabase.rpc("get_poll_results_by_type", { p_poll_id: pollId });
       if (error) throw error;
-      
       const typedResults = data as TypedPollResults;
       if (poll.vote_type === "republic") typedResults.type = "republic" as VoteType;
-      
       return { results: typedResults, success: true };
     }
 
     if (poll.vote_type === "blessing_event") {
-       const { data: blessingResults, error } = await supabase
-          .from("blessing_results")
-          .select(`
-            roll_value,
-            team_odds,
-            poll_options(id, option_text),
-            teams(id, name, emoji)
-          `)
-          .eq("poll_id", pollId);
-
+       const { data: blessingResults, error } = await supabase.from("blessing_results").select(`roll_value, team_odds, poll_options(id, option_text), teams(id, name, emoji)`).eq("poll_id", pollId);
        if (error) throw error;
-       
-       // FIX: Cast the Supabase relation response explicitly through 'unknown' to avoid overlapping type errors
-       return { 
-         results: { 
-           type: "blessing_event" as VoteType, 
-           rawData: blessingResults as unknown as BlessingResultRaw[] 
-         }, 
-         success: true 
-       };
+       return { results: { type: "blessing_event" as VoteType, rawData: blessingResults as unknown as BlessingResultRaw[] }, success: true };
     }
-
     return { results: null, success: false, error: "Unsupported poll type" };
   } catch (error) {
     console.error("Error fetching typed poll results:", error);
@@ -715,16 +456,10 @@ export async function getPollResultsByType(pollId: string) {
   }
 }
 
-/**
- * Get user's vote weight for league polls
- */
 export async function getUserVoteWeight(userId: string, teamId: string) {
   try {
     const supabase = await createServerClient();
-    const { data, error } = await supabase.rpc("get_user_vote_weight", {
-      p_user_id: userId,
-      p_team_id: teamId,
-    });
+    const { data, error } = await supabase.rpc("get_user_vote_weight", { p_user_id: userId, p_team_id: teamId });
     if (error) throw error;
     return { weight: data || 1, success: true };
   } catch (error) {
@@ -733,9 +468,6 @@ export async function getUserVoteWeight(userId: string, teamId: string) {
   }
 }
 
-/**
- * Get user's team for voting purposes
- */
 export async function getUserTeamForVoting(userId: string) {
   try {
     const supabase = await createServerClient();
@@ -748,16 +480,10 @@ export async function getUserTeamForVoting(userId: string) {
   }
 }
 
-/**
- * Recalculate poll results (admin only)
- */
 export async function recalculatePollResults(pollId: string, teamId?: string) {
   try {
     const supabase = await createServerClient();
-    const { error } = await supabase.rpc("recalculate_poll_results", {
-      p_poll_id: pollId,
-      p_team_id: teamId || null,
-    });
+    const { error } = await supabase.rpc("recalculate_poll_results", { p_poll_id: pollId, p_team_id: teamId || null });
     if (error) throw error;
     return { success: true, message: "Results recalculated successfully!" };
   } catch (error) {
@@ -769,38 +495,18 @@ export async function recalculatePollResults(pollId: string, teamId?: string) {
 // =================================================================================================
 // TEAM POLL ACTIONS
 // =================================================================================================
-
-/**
- * Get polls scoped to a specific team
- * Returns active + recently ended polls (last 7 days)
- */
 export async function getTeamPolls(teamId: string, userId?: string) {
   try {
     const supabase = await createServerClient();
-
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-    const { data: polls, error } = await supabase
-      .from("polls")
-      .select("*")
-      .eq("team_id", teamId)
-      .eq("is_active", true)
-      .gte("ends_at", sevenDaysAgo.toISOString())
-      .order("created_at", { ascending: false });
-
+    const { data: polls, error } = await supabase.from("polls").select("*").eq("team_id", teamId).eq("is_active", true).gte("ends_at", sevenDaysAgo.toISOString()).order("created_at", { ascending: false });
     if (error) throw error;
 
     const pollIds = (polls || []).map((p) => p.id);
     let allOptions: PollOption[] = [];
-
     if (pollIds.length > 0) {
-      const { data: options, error: optionsError } = await supabase
-        .from("poll_options")
-        .select("*")
-        .in("poll_id", pollIds)
-        .order("option_order", { ascending: true });
-
+      const { data: options, error: optionsError } = await supabase.from("poll_options").select("*").in("poll_id", pollIds).order("option_order", { ascending: true });
       if (optionsError) throw optionsError;
       allOptions = options || [];
     }
@@ -812,31 +518,14 @@ export async function getTeamPolls(teamId: string, userId?: string) {
       let status: "active" | "ended" | "upcoming" = "active";
       if (endsAt < now) status = "ended";
       else if (startsAt > now) status = "upcoming";
-
-      return {
-        ...poll,
-        options: allOptions.filter((o) => o.poll_id === poll.id),
-        status,
-        team_id: poll.team_id,
-      };
+      return { ...poll, options: allOptions.filter((o) => o.poll_id === poll.id), status, team_id: poll.team_id };
     });
 
     if (userId && pollIds.length > 0) {
-      const { data: userVotes } = await supabase
-        .from("poll_votes")
-        .select("poll_id, option_id")
-        .in("poll_id", pollIds)
-        .eq("user_id", userId);
-
+      const { data: userVotes } = await supabase.from("poll_votes").select("poll_id, option_id").in("poll_id", pollIds).eq("user_id", userId);
       pollsWithOptions = pollsWithOptions.map((poll) => {
-        const votes = (userVotes || [])
-          .filter((v) => v.poll_id === poll.id)
-          .map((v) => v.option_id);
-        return {
-          ...poll,
-          userVotes: votes,
-          hasVoted: votes.length > 0,
-        };
+        const votes = (userVotes || []).filter((v) => v.poll_id === poll.id).map((v) => v.option_id);
+        return { ...poll, userVotes: votes, hasVoted: votes.length > 0 };
       });
     }
 
@@ -848,7 +537,7 @@ export async function getTeamPolls(teamId: string, userId?: string) {
 }
 
 /**
- * Create a new team-scoped poll (captain only)
+ * Create a new team-scoped poll (captain only, unless it's a special system vote)
  */
 export async function createTeamPoll(
   teamId: string,
@@ -862,54 +551,32 @@ export async function createTeamPoll(
 ) {
   try {
     const supabase = await createServerClient();
+    if (!title || title.trim().length === 0) return { success: false, error: "Title is required" };
+    if (!options || options.length < 2) return { success: false, error: "At least 2 options are required" };
+    if (new Date(endsAt) <= new Date()) return { success: false, error: "End date must be in the future" };
 
-    if (!title || title.trim().length === 0) {
-      return { success: false, error: "Title is required" };
-    }
-    if (!options || options.length < 2) {
-      return { success: false, error: "At least 2 options are required" };
-    }
-    if (new Date(endsAt) <= new Date()) {
-      return { success: false, error: "End date must be in the future" };
-    }
-
-    const { data: isCaptain } = await supabase.rpc("user_has_team_role", {
-      p_user_id: userId,
-      p_team_id: teamId,
-      p_role: "captain",
-    });
-
-    if (!isCaptain) {
-      return { success: false, error: "Only team captains can create polls" };
+    const isCutPoll = title.trim().startsWith("Cut ");
+    
+    if (!isCutPoll) {
+      const { data: isCaptain } = await supabase.rpc("user_has_team_role", { p_user_id: userId, p_team_id: teamId, p_role: "captain" });
+      if (!isCaptain) return { success: false, error: "Only team captains can create general polls" };
+    } else {
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { count, error: countError } = await supabase.from("polls").select("id", { count: "exact", head: true }).eq("team_id", teamId).eq("created_by", userId).like("title", "Cut %").gte("created_at", oneDayAgo);
+      if (countError) throw countError;
+      if (count && count >= 1) return { success: false, error: "You can only initiate one cut vote per 24 hours." };
     }
 
-    const { data: poll, error: pollError } = await supabase
-      .from("polls")
-      .insert({
-        title,
-        description,
-        ends_at: endsAt,
-        allow_multiple_votes: allowMultipleVotes,
-        show_results_before_end: showResultsBeforeEnd,
-        vote_type: "team" as VoteType, // Hardcoded to team
-        created_by: userId,
-        is_active: true,
-        team_id: teamId,
-      })
-      .select()
-      .single();
+    // THE FIX: NO trigger_event reference passed at all!
+    const { data: poll, error: pollError } = await supabase.from("polls").insert({
+        title, description, ends_at: endsAt, allow_multiple_votes: allowMultipleVotes, show_results_before_end: showResultsBeforeEnd, vote_type: "team" as VoteType, created_by: userId, is_active: true, team_id: teamId
+      }).select().single();
 
     if (pollError) throw pollError;
     if (!poll) return { success: false, error: "Failed to create poll" };
 
-    const pollOptions = options.map((text, index) => ({
-      poll_id: poll.id,
-      option_text: text,
-      option_order: index + 1,
-    }));
-
+    const pollOptions = options.map((text, index) => ({ poll_id: poll.id, option_text: text, option_order: index + 1 }));
     const { error: optionsError } = await supabase.from("poll_options").insert(pollOptions);
-
     if (optionsError) {
       await supabase.from("polls").delete().eq("id", poll.id);
       throw optionsError;
@@ -922,37 +589,18 @@ export async function createTeamPoll(
   }
 }
 
-/**
- * Delete a team-scoped poll (captain only)
- */
 export async function deleteTeamPoll(pollId: string, teamId: string, userId: string) {
   try {
     const supabase = await createServerClient();
+    const { data: isCaptain } = await supabase.rpc("user_has_team_role", { p_user_id: userId, p_team_id: teamId, p_role: "captain" });
+    if (!isCaptain) return { success: false, error: "Only team captains can delete polls" };
 
-    const { data: isCaptain } = await supabase.rpc("user_has_team_role", {
-      p_user_id: userId,
-      p_team_id: teamId,
-      p_role: "captain",
-    });
-
-    if (!isCaptain) {
-      return { success: false, error: "Only team captains can delete polls" };
-    }
-
-    const { data: poll, error: pollError } = await supabase
-      .from("polls")
-      .select("team_id")
-      .eq("id", pollId)
-      .single();
-
+    const { data: poll, error: pollError } = await supabase.from("polls").select("team_id").eq("id", pollId).single();
     if (pollError) throw pollError;
-    if (!poll || poll.team_id !== teamId) {
-      return { success: false, error: "Poll not found for this team" };
-    }
+    if (!poll || poll.team_id !== teamId) return { success: false, error: "Poll not found for this team" };
 
     const { error } = await supabase.from("polls").delete().eq("id", pollId);
     if (error) throw error;
-
     return { success: true, message: "Poll deleted successfully!" };
   } catch (error) {
     console.error("Error deleting team poll:", error);
@@ -960,42 +608,21 @@ export async function deleteTeamPoll(pollId: string, teamId: string, userId: str
   }
 }
 
-/**
- * Toggle a team poll's active status (captain only)
- */
 export async function toggleTeamPollActive(pollId: string, teamId: string, isActive: boolean) {
   try {
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      return { success: false, error: "Not authenticated" };
-    }
+    if (!user) return { success: false, error: "Not authenticated" };
 
-    const { data: isCaptain } = await supabase.rpc("user_has_team_role", {
-      p_user_id: user.id,
-      p_team_id: teamId,
-      p_role: "captain",
-    });
+    const { data: isCaptain } = await supabase.rpc("user_has_team_role", { p_user_id: user.id, p_team_id: teamId, p_role: "captain" });
+    if (!isCaptain) return { success: false, error: "Only team captains can manage polls" };
 
-    if (!isCaptain) {
-      return { success: false, error: "Only team captains can manage polls" };
-    }
-
-    const { data: poll, error: pollError } = await supabase
-      .from("polls")
-      .select("team_id")
-      .eq("id", pollId)
-      .single();
-
+    const { data: poll, error: pollError } = await supabase.from("polls").select("team_id").eq("id", pollId).single();
     if (pollError) throw pollError;
-    if (!poll || poll.team_id !== teamId) {
-      return { success: false, error: "Poll not found for this team" };
-    }
+    if (!poll || poll.team_id !== teamId) return { success: false, error: "Poll not found for this team" };
 
     const { error } = await supabase.from("polls").update({ is_active: isActive }).eq("id", pollId);
     if (error) throw error;
-
     return { success: true, message: isActive ? "Poll activated!" : "Poll deactivated!" };
   } catch (error) {
     console.error("Error toggling team poll:", error);
@@ -1003,62 +630,31 @@ export async function toggleTeamPollActive(pollId: string, teamId: string, isAct
   }
 }
 
-// Add to the bottom of src/app/actions/voteActions.ts
-
-/**
- * Automatically creates a 12-hour poll for the Changelings/Mimics to swap identity
- */
-export async function createIdentitySwapPoll(
-  teamId: string,
-  userId: string,
-  currentIdentity: string
-) {
+// =================================================================================================
+// SPECIAL SYSTEM VOTES
+// =================================================================================================
+export async function createIdentitySwapPoll(teamId: string, userId: string, currentIdentity: string) {
   try {
     const supabase = await createServerClient();
-
-    // 1. Verify Season is neutral and not drafting
     const { data: season } = await supabase.from('seasons').select('day_night_status, phase').eq('is_active', true).single();
-    if (season?.day_night_status !== 'neutral' || season?.phase === 'draft') {
-       return { success: false, error: "The cosmos are aligned against you. Shapeshifting is currently disabled." };
-    }
+    if (season?.day_night_status !== 'neutral' || season?.phase === 'draft') return { success: false, error: "The cosmos are aligned against you. Shapeshifting is currently disabled." };
 
-    // 2. Set the 12-hour timer
     const endsAt = new Date();
     endsAt.setHours(endsAt.getHours() + 12);
-
     const title = currentIdentity === 'changelings' ? "Initiate The Great Aurora?" : "Let The Great Aurora Recede?";
-    const desc = currentIdentity === 'changelings' 
-      ? "Should we embrace the darkness and transform into the Shadowmoor Mimics? This poll ends in 12 hours."
-      : "Should we return to the light and transform back into the Lorwyn Changelings? This poll ends in 12 hours.";
+    const desc = currentIdentity === 'changelings' ? "Should we embrace the darkness and transform into the Shadowmoor Mimics? This poll ends in 12 hours." : "Should we return to the light and transform back into the Lorwyn Changelings? This poll ends in 12 hours.";
 
-    // 3. Create the automated Team Poll
-    const { data: poll, error: pollError } = await supabase
-      .from("polls")
-      .insert({
-        title,
-        description: desc,
-        ends_at: endsAt.toISOString(),
-        allow_multiple_votes: false,
-        show_results_before_end: false,
-        vote_type: "team", 
-        created_by: userId,
-        is_active: true,
-        team_id: teamId,
-        trigger_event: 'lorwyn_shadowmoor_swap' // The SQL migration ensures this is now legally TEXT
-      })
-      .select()
-      .single();
+    const { data: existingPoll } = await supabase.from('polls').select('id').eq('team_id', teamId).eq('is_active', true).in('title', ["Initiate The Great Aurora?", "Let The Great Aurora Recede?"]).maybeSingle();
+    if (existingPoll) return { success: false, error: "A transformation vote is already in progress!" };
+
+    // THE FIX: Removed trigger_event!
+    const { data: poll, error: pollError } = await supabase.from("polls").insert({
+        title, description: desc, ends_at: endsAt.toISOString(), allow_multiple_votes: false, show_results_before_end: false, vote_type: "team", created_by: userId, is_active: true, team_id: teamId
+    }).select().single();
 
     if (pollError) throw pollError;
-
-    // 4. Create the binary options
-    const pollOptions = [
-      { poll_id: poll.id, option_text: currentIdentity === 'changelings' ? "Transform into Mimics" : "Revert to Changelings", option_order: 1 },
-      { poll_id: poll.id, option_text: "Remain as we are", option_order: 2 },
-    ];
-
+    const pollOptions = [{ poll_id: poll.id, option_text: currentIdentity === 'changelings' ? "Transform into Mimics" : "Revert to Changelings", option_order: 1 }, { poll_id: poll.id, option_text: "Remain as we are", option_order: 2 }];
     await supabase.from("poll_options").insert(pollOptions);
-
     return { success: true, message: "Transformation poll initiated!" };
   } catch (error) {
     console.error("Error creating identity swap poll:", error);
@@ -1066,30 +662,46 @@ export async function createIdentitySwapPoll(
   }
 }
 
-/**
- * This function should be called by your poll-resolution cron job or an admin 
- * when a 'lorwyn_shadowmoor_swap' poll officially ends.
- */
 export async function resolveIdentitySwapPoll(pollId: string, teamId: string) {
   try {
     const supabase = await createServerClient();
-    
-    // Calculate results using your existing RPC
-    const { data: resultsData } = await supabase.rpc("recalculate_poll_results", { p_poll_id: pollId, p_team_id: teamId });
+    await supabase.rpc("recalculate_poll_results", { p_poll_id: pollId, p_team_id: teamId });
     const { data: pollResults } = await supabase.rpc("get_poll_results_by_type", { p_poll_id: pollId });
-    
     const teamResult = (pollResults as TypedPollResults)?.team_results?.find(r => r.team_id === teamId);
     
-    if (teamResult && teamResult.winning_option_text?.includes("Transform") || teamResult?.winning_option_text?.includes("Revert")) {
-       // Import and execute the cosmetic swap we built earlier!
+    if (teamResult && (teamResult.winning_option_text?.includes("Transform") || teamResult.winning_option_text?.includes("Revert"))) {
        const { toggleChangelingIdentity } = await import('@/app/actions/teamActions');
        await toggleChangelingIdentity(teamId);
        return { success: true, message: "The team has successfully transformed!" };
     }
-
     return { success: true, message: "The team chose to remain unchanged." };
   } catch (error) {
     console.error("Error resolving identity swap:", error);
+    return { success: false, error: "Resolution failed." };
+  }
+}
+
+export async function resolveCutVotePoll(pollId: string, teamId: string) {
+  try {
+    const supabase = await createServerClient();
+    await supabase.rpc("recalculate_poll_results", { p_poll_id: pollId, p_team_id: teamId });
+    const { data: pollResults } = await supabase.rpc("get_poll_results_by_type", { p_poll_id: pollId });
+    const teamResult = (pollResults as TypedPollResults)?.team_results?.find(r => r.team_id === teamId);
+    
+    if (teamResult && teamResult.winning_option_text?.startsWith("Cut ")) {
+       const cardName = teamResult.winning_option_text.replace("Cut ", "");
+       const { data: pick } = await supabase.from("team_draft_picks").select("id, card_id").eq("team_id", teamId).eq("card_name", cardName).single();
+       if (pick) {
+          const { refundDraftPick } = await import('@/app/actions/cubucksActions');
+          const result = await refundDraftPick(teamId, pick.id, pick.card_id, cardName);
+          if (result.success) return { success: true, message: `Vote passed! ${cardName} was cut and refunded.` };
+          else return { success: false, error: `Vote passed, but refund failed: ${result.error}` };
+       }
+       return { success: false, error: "Card was already removed or not found on roster." };
+    }
+    return { success: true, message: "The vote failed or tied. The card remains on the roster." };
+  } catch (error) {
+    console.error("Error resolving cut vote:", error);
     return { success: false, error: "Resolution failed." };
   }
 }
