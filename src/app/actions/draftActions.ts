@@ -29,6 +29,7 @@ export interface DraftPick {
   cmc?: number;
   drafted_at?: string;
   pick_number?: number;
+    cubucks_cost?: number;
   cubecobra_elo?: number;
     effective_elo?: number;
     algorithm_details?: Record<string, unknown>; 
