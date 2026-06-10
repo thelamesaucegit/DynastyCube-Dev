@@ -6,35 +6,27 @@ import { use } from "react";
 import { getTeamsWithMembers } from "@/app/actions/teamActions";
 import { getTeamDraftPicks } from "@/app/actions/draftActions";
 import { getSeasons } from "@/app/actions/cubucksActions";
-import { createTrade, areTradesEnabled } from "@/app/actions/tradeActions";
+import { createTrade, areTradesEnabled, type TradeItem } from "@/app/actions/tradeActions";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { DraftPick } from "@/app/actions/draftActions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { Badge } from "@/app/components/ui/badge";
-import { Loader2, ArrowLeft, AlertCircle, Ban, Send } from "lucide-react";
+import { Loader2, ArrowLeft, AlertCircle, Ban, Send, Sparkles } from "lucide-react";
 
 interface Team {
-  id: string;         // UUID primary key
-  short_name: string; // URL slug e.g. 'shards'
+  id: string;
+  short_name: string;
   name: string;
   emoji: string;
+  is_hidden?: boolean;
 }
 
 interface Season {
   id: string;
   name: string;
   is_active: boolean;
-}
-
-interface TradeItem {
-  item_type: "card" | "draft_pick";
-  draft_pick_id?: string;
-  card_id?: string;
-  card_name?: string;
-  draft_pick_round?: number;
-  draft_pick_season_id?: string;
 }
 
 interface TradePageProps {
@@ -50,6 +42,7 @@ export default function CreateTradePage({ params }: TradePageProps) {
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [myDraftPicks, setMyDraftPicks] = useState<DraftPick[]>([]);
   const [seasons, setSeasons] = useState<Season[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +51,11 @@ export default function CreateTradePage({ params }: TradePageProps) {
   // Trade items
   const [myOfferedCards, setMyOfferedCards] = useState<string[]>([]);
   const [myOfferedPicks, setMyOfferedPicks] = useState<{ round: number; seasonId: string }[]>([]);
+  const [myOfferedEssence, setMyOfferedEssence] = useState<number>(0);
+
   const [theirOfferedPicks, setTheirOfferedPicks] = useState<{ round: number; seasonId: string }[]>([]);
+  const [theirOfferedEssence, setTheirOfferedEssence] = useState<number>(0);
+
   const [deadlineDays, setDeadlineDays] = useState<number>(3);
 
   useEffect(() => {
@@ -76,7 +73,9 @@ export default function CreateTradePage({ params }: TradePageProps) {
       const teams = await getTeamsWithMembers();
       const current = teams.find((t) => t.short_name === teamId);
       setCurrentTeam(current || null);
-      setAllTeams(teams.filter((t) => t.id !== current?.id));
+
+      // THE FIX: Do not allow trading with hidden teams or yourself
+      setAllTeams(teams.filter((t) => t.id !== current?.id && t.is_hidden === false));
 
       const { picks } = await getTeamDraftPicks(current?.id ?? teamId);
       setMyDraftPicks(picks);
@@ -99,36 +98,16 @@ export default function CreateTradePage({ params }: TradePageProps) {
     );
   };
 
-  const handleAddMyDraftPick = () => {
-    setMyOfferedPicks((prev) => [...prev, { round: 1, seasonId: seasons[0]?.id || "" }]);
-  };
-
-  const handleRemoveMyDraftPick = (index: number) => {
-    setMyOfferedPicks((prev) => prev.filter((_, i) => i !== index));
-  };
-
+  const handleAddMyDraftPick = () => setMyOfferedPicks((prev) => [...prev, { round: 1, seasonId: seasons[0]?.id || "" }]);
+  const handleRemoveMyDraftPick = (index: number) => setMyOfferedPicks((prev) => prev.filter((_, i) => i !== index));
   const handleUpdateMyDraftPick = (index: number, field: "round" | "seasonId", value: number | string) => {
-    setMyOfferedPicks((prev) =>
-      prev.map((pick, i) =>
-        i === index ? { ...pick, [field]: value } : pick
-      )
-    );
+    setMyOfferedPicks((prev) => prev.map((pick, i) => (i === index ? { ...pick, [field]: value } : pick)));
   };
 
-  const handleAddTheirDraftPick = () => {
-    setTheirOfferedPicks((prev) => [...prev, { round: 1, seasonId: seasons[0]?.id || "" }]);
-  };
-
-  const handleRemoveTheirDraftPick = (index: number) => {
-    setTheirOfferedPicks((prev) => prev.filter((_, i) => i !== index));
-  };
-
+  const handleAddTheirDraftPick = () => setTheirOfferedPicks((prev) => [...prev, { round: 1, seasonId: seasons[0]?.id || "" }]);
+  const handleRemoveTheirDraftPick = (index: number) => setTheirOfferedPicks((prev) => prev.filter((_, i) => i !== index));
   const handleUpdateTheirDraftPick = (index: number, field: "round" | "seasonId", value: number | string) => {
-    setTheirOfferedPicks((prev) =>
-      prev.map((pick, i) =>
-        i === index ? { ...pick, [field]: value } : pick
-      )
-    );
+    setTheirOfferedPicks((prev) => prev.map((pick, i) => (i === index ? { ...pick, [field]: value } : pick)));
   };
 
   const handleSubmitTrade = async () => {
@@ -139,15 +118,20 @@ export default function CreateTradePage({ params }: TradePageProps) {
       return;
     }
 
-    if (myOfferedCards.length === 0 && myOfferedPicks.length === 0 && theirOfferedPicks.length === 0) {
-      setError("Please add at least one item to the trade");
+    if (
+      myOfferedCards.length === 0 &&
+      myOfferedPicks.length === 0 &&
+      myOfferedEssence === 0 &&
+      theirOfferedPicks.length === 0 &&
+      theirOfferedEssence === 0
+    ) {
+      setError("Please add at least one item or Essence amount to the trade");
       return;
     }
 
     setSubmitting(true);
-
     try {
-      const fromTeamItems: TradeItem[] = [
+      const fromTeamItems: Partial<TradeItem>[] = [
         ...myOfferedCards.map((draftPickId) => {
           const pick = myDraftPicks.find((p) => p.id === draftPickId);
           return {
@@ -164,18 +148,36 @@ export default function CreateTradePage({ params }: TradePageProps) {
         })),
       ];
 
-      const toTeamItems: TradeItem[] = theirOfferedPicks.map((pick) => ({
-        item_type: "draft_pick" as const,
-        draft_pick_round: pick.round,
-        draft_pick_season_id: pick.seasonId,
-      }));
+      // Inject essence if > 0
+      if (myOfferedEssence > 0) {
+        fromTeamItems.push({
+          item_type: "essence" as const,
+          essence_amount: myOfferedEssence,
+        });
+      }
+
+      const toTeamItems: Partial<TradeItem>[] = [
+        ...theirOfferedPicks.map((pick) => ({
+          item_type: "draft_pick" as const,
+          draft_pick_round: pick.round,
+          draft_pick_season_id: pick.seasonId,
+        }))
+      ];
+
+      // Inject essence if > 0
+      if (theirOfferedEssence > 0) {
+        toTeamItems.push({
+          item_type: "essence" as const,
+          essence_amount: theirOfferedEssence,
+        });
+      }
 
       const result = await createTrade(
-        teamId,
+        currentTeam!.id,
         selectedTeamId,
         deadlineDays,
-        fromTeamItems as never,
-        toTeamItems as never
+        fromTeamItems,
+        toTeamItems
       );
 
       if (result.success) {
@@ -209,12 +211,8 @@ export default function CreateTradePage({ params }: TradePageProps) {
           <CardContent className="pt-6 text-center">
             <Ban className="h-12 w-12 text-orange-500 mx-auto mb-3" />
             <h2 className="text-2xl font-bold mb-2">Trades Disabled</h2>
-            <p className="text-muted-foreground mb-4">
-              The trade system is currently disabled by an administrator.
-            </p>
-            <Button asChild>
-              <Link href={`/teams/${teamId}`}>Back to Team</Link>
-            </Button>
+            <p className="text-muted-foreground mb-4">The trade system is currently disabled by an administrator.</p>
+            <Button asChild><Link href={`/teams/${teamId}`}>Back to Team</Link></Button>
           </CardContent>
         </Card>
       </div>
@@ -246,20 +244,15 @@ export default function CreateTradePage({ params }: TradePageProps) {
             Back to Trades
           </Link>
         </Button>
-        <h1 className="text-4xl font-bold tracking-tight mb-2">
-          Create Trade Proposal
-        </h1>
-        <p className="text-lg text-muted-foreground">
-          Propose a trade with another team
-        </p>
+        <h1 className="text-4xl font-bold tracking-tight mb-2">Create Trade Proposal</h1>
+        <p className="text-lg text-muted-foreground">Propose a trade with another team</p>
       </div>
 
-      {/* Error Message */}
       {error && (
-        <Card className="mb-6 border-destructive">
+        <Card className="mb-6 border-destructive bg-destructive/10">
           <CardContent className="pt-6 flex items-center gap-3">
             <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
-            <p>{error}</p>
+            <p className="font-semibold text-destructive">{error}</p>
           </CardContent>
         </Card>
       )}
@@ -270,14 +263,14 @@ export default function CreateTradePage({ params }: TradePageProps) {
           <CardTitle>1. Select Team to Trade With</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-h-60 overflow-y-auto pr-2 pb-2">
             {allTeams.map((team) => (
               <button
                 key={team.id}
                 onClick={() => setSelectedTeamId(team.id)}
                 className={`p-4 border-2 rounded-lg text-center transition-all ${
                   selectedTeamId === team.id
-                    ? "border-primary bg-primary/5"
+                    ? "border-primary bg-primary/5 shadow-md scale-105"
                     : "border-border hover:border-primary/50"
                 }`}
               >
@@ -293,23 +286,18 @@ export default function CreateTradePage({ params }: TradePageProps) {
       {selectedTeamId && (
         <>
           {/* What I'm Offering */}
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle>
-                2. What {currentTeam.emoji} {currentTeam.name} Offers
-              </CardTitle>
+          <Card className="mb-6 border-blue-500/30">
+            <CardHeader className="bg-blue-500/5">
+              <CardTitle>2. What {currentTeam.emoji} {currentTeam.name} Offers</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-6 pt-6">
+              
               {/* My Cards */}
               <div>
-                <h3 className="text-lg font-semibold mb-3">
-                  Cards ({myOfferedCards.length} selected)
-                </h3>
+                <h3 className="text-lg font-semibold mb-3">Cards ({myOfferedCards.length} selected)</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto p-2 bg-muted rounded-lg">
                   {myDraftPicks.length === 0 ? (
-                    <p className="text-muted-foreground col-span-full text-center py-4">
-                      No cards available to trade
-                    </p>
+                    <p className="text-muted-foreground col-span-full text-center py-4">No cards available to trade</p>
                   ) : (
                     myDraftPicks.map((pick) => (
                       <button
@@ -317,18 +305,12 @@ export default function CreateTradePage({ params }: TradePageProps) {
                         onClick={() => handleToggleCardOffer(pick.id!)}
                         className={`p-3 border-2 rounded-lg text-left transition-all ${
                           myOfferedCards.includes(pick.id!)
-                            ? "border-emerald-500 bg-emerald-500/5"
-                            : "border-border hover:border-emerald-500/50"
+                            ? "border-blue-500 bg-blue-500/10 shadow-sm"
+                            : "border-border hover:border-blue-500/50 bg-background"
                         }`}
                       >
-                        <div className="font-semibold text-sm">
-                          {pick.card_name}
-                        </div>
-                        {myOfferedCards.includes(pick.id!) && (
-                          <Badge variant="secondary" className="mt-1 text-xs">
-                            Selected
-                          </Badge>
-                        )}
+                        <div className="font-semibold text-sm truncate">{pick.card_name}</div>
+                        {myOfferedCards.includes(pick.id!) && <Badge variant="secondary" className="mt-1 text-[10px] bg-blue-500 text-white">Selected</Badge>}
                       </button>
                     ))
                   )}
@@ -337,158 +319,159 @@ export default function CreateTradePage({ params }: TradePageProps) {
 
               {/* My Future Draft Picks */}
               <div>
-                <h3 className="text-lg font-semibold mb-3">
-                  Future Draft Picks ({myOfferedPicks.length} offered)
-                </h3>
+                <h3 className="text-lg font-semibold mb-3">Future Draft Picks ({myOfferedPicks.length} offered)</h3>
                 <div className="space-y-3">
                   {myOfferedPicks.map((pick, index) => (
-                    <div key={index} className="flex items-center gap-3 p-3 bg-muted rounded-lg">
+                    <div key={index} className="flex items-center gap-3 p-3 bg-muted rounded-lg border border-border">
                       <select
                         value={pick.round}
                         onChange={(e) => handleUpdateMyDraftPick(index, "round", parseInt(e.target.value))}
-                        className="px-3 py-2 border rounded bg-background"
+                        className="px-3 py-2 border rounded-md bg-background focus:ring-2 focus:ring-blue-500 outline-none"
                       >
-                        {[1, 2, 3, 4, 5, 6, 7, 8].map((round) => (
-                          <option key={round} value={round}>
-                            Round {round}
-                          </option>
-                        ))}
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map((round) => <option key={round} value={round}>Round {round}</option>)}
                       </select>
                       <select
                         value={pick.seasonId}
                         onChange={(e) => handleUpdateMyDraftPick(index, "seasonId", e.target.value)}
-                        className="flex-1 px-3 py-2 border rounded bg-background"
+                        className="flex-1 px-3 py-2 border rounded-md bg-background focus:ring-2 focus:ring-blue-500 outline-none"
                       >
-                        {seasons.map((season) => (
-                          <option key={season.id} value={season.id}>
-                            {season.name}
-                          </option>
-                        ))}
+                        {seasons.map((season) => <option key={season.id} value={season.id}>{season.name}</option>)}
                       </select>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleRemoveMyDraftPick(index)}
-                      >
-                        Remove
-                      </Button>
+                      <Button variant="destructive" size="sm" onClick={() => handleRemoveMyDraftPick(index)}>Remove</Button>
                     </div>
                   ))}
                   <button
                     onClick={handleAddMyDraftPick}
-                    className="w-full py-3 border-2 border-dashed border-border rounded-lg text-muted-foreground hover:border-primary hover:text-primary transition-colors font-semibold"
+                    className="w-full py-3 border-2 border-dashed border-border rounded-lg text-muted-foreground hover:border-blue-500 hover:text-blue-500 hover:bg-blue-500/5 transition-all font-semibold"
                   >
                     + Add Future Draft Pick
                   </button>
+                </div>
+              </div>
+
+              {/* My Essence */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                  <Sparkles className="size-5 text-teal-500" /> Team Essence
+                </h3>
+                <div className="flex items-center gap-3 p-4 bg-muted rounded-lg border border-border">
+                  <span className="font-semibold text-muted-foreground">Offer Amount:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="999"
+                    value={myOfferedEssence}
+                    onChange={(e) => setMyOfferedEssence(parseInt(e.target.value) || 0)}
+                    className="w-24 px-3 py-2 border rounded-md bg-background focus:ring-2 focus:ring-teal-500 outline-none font-bold"
+                  />
+                  <span className="text-sm text-teal-600 font-bold tracking-widest">✨ ESSENCE</span>
                 </div>
               </div>
             </CardContent>
           </Card>
 
           {/* What They're Offering */}
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle>
-                3. What You Want from {selectedTeam?.emoji} {selectedTeam?.name}
-              </CardTitle>
+          <Card className="mb-6 border-orange-500/30">
+            <CardHeader className="bg-orange-500/5">
+              <CardTitle>3. What You Want from {selectedTeam?.emoji} {selectedTeam?.name}</CardTitle>
             </CardHeader>
-            <CardContent>
-              <h3 className="text-lg font-semibold mb-3">
-                Future Draft Picks ({theirOfferedPicks.length} requested)
-              </h3>
-              <div className="space-y-3">
-                {theirOfferedPicks.map((pick, index) => (
-                  <div key={index} className="flex items-center gap-3 p-3 bg-muted rounded-lg">
-                    <select
-                      value={pick.round}
-                      onChange={(e) => handleUpdateTheirDraftPick(index, "round", parseInt(e.target.value))}
-                      className="px-3 py-2 border rounded bg-background"
-                    >
-                      {[1, 2, 3, 4, 5, 6, 7, 8].map((round) => (
-                        <option key={round} value={round}>
-                          Round {round}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      value={pick.seasonId}
-                      onChange={(e) => handleUpdateTheirDraftPick(index, "seasonId", e.target.value)}
-                      className="flex-1 px-3 py-2 border rounded bg-background"
-                    >
-                      {seasons.map((season) => (
-                        <option key={season.id} value={season.id}>
-                          {season.name}
-                        </option>
-                      ))}
-                    </select>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => handleRemoveTheirDraftPick(index)}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                ))}
-                <button
-                  onClick={handleAddTheirDraftPick}
-                  className="w-full py-3 border-2 border-dashed border-border rounded-lg text-muted-foreground hover:border-primary hover:text-primary transition-colors font-semibold"
-                >
-                  + Request Future Draft Pick
-                </button>
+            <CardContent className="space-y-6 pt-6">
+              
+              {/* Their Future Draft Picks */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3">Future Draft Picks ({theirOfferedPicks.length} requested)</h3>
+                <div className="space-y-3">
+                  {theirOfferedPicks.map((pick, index) => (
+                    <div key={index} className="flex items-center gap-3 p-3 bg-muted rounded-lg border border-border">
+                      <select
+                        value={pick.round}
+                        onChange={(e) => handleUpdateTheirDraftPick(index, "round", parseInt(e.target.value))}
+                        className="px-3 py-2 border rounded-md bg-background focus:ring-2 focus:ring-orange-500 outline-none"
+                      >
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map((round) => <option key={round} value={round}>Round {round}</option>)}
+                      </select>
+                      <select
+                        value={pick.seasonId}
+                        onChange={(e) => handleUpdateTheirDraftPick(index, "seasonId", e.target.value)}
+                        className="flex-1 px-3 py-2 border rounded-md bg-background focus:ring-2 focus:ring-orange-500 outline-none"
+                      >
+                        {seasons.map((season) => <option key={season.id} value={season.id}>{season.name}</option>)}
+                      </select>
+                      <Button variant="destructive" size="sm" onClick={() => handleRemoveTheirDraftPick(index)}>Remove</Button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={handleAddTheirDraftPick}
+                    className="w-full py-3 border-2 border-dashed border-border rounded-lg text-muted-foreground hover:border-orange-500 hover:text-orange-500 hover:bg-orange-500/5 transition-all font-semibold"
+                  >
+                    + Request Future Draft Pick
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-3 font-semibold">
+                  Note: Currently, you cannot request specific cards from other teams via this UI. Negotiate card inclusion via DMs!
+                </p>
               </div>
-              <p className="text-sm text-muted-foreground mt-3">
-                Note: Currently, you can only request future draft picks. Card trading will be added soon!
-              </p>
+
+              {/* Their Essence */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                  <Sparkles className="size-5 text-teal-500" /> Team Essence
+                </h3>
+                <div className="flex items-center gap-3 p-4 bg-muted rounded-lg border border-border">
+                  <span className="font-semibold text-muted-foreground">Request Amount:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="999"
+                    value={theirOfferedEssence}
+                    onChange={(e) => setTheirOfferedEssence(parseInt(e.target.value) || 0)}
+                    className="w-24 px-3 py-2 border rounded-md bg-background focus:ring-2 focus:ring-teal-500 outline-none font-bold"
+                  />
+                  <span className="text-sm text-teal-600 font-bold tracking-widest">✨ ESSENCE</span>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
           {/* Trade Deadline */}
-          <Card className="mb-6">
-            <CardHeader>
+          <Card className="mb-8 border-primary/20">
+            <CardHeader className="bg-primary/5">
               <CardTitle>4. Set Trade Deadline</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-4">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-6 p-4 bg-muted rounded-lg border border-border">
                 <input
                   type="range"
                   min="1"
                   max="7"
                   value={deadlineDays}
                   onChange={(e) => setDeadlineDays(parseInt(e.target.value))}
-                  className="flex-1"
+                  className="flex-1 accent-primary cursor-pointer h-2 bg-border rounded-lg appearance-none"
                 />
-                <div className="text-2xl font-bold text-primary">
+                <div className="text-3xl font-black text-primary min-w-[80px] text-right">
                   {deadlineDays} {deadlineDays === 1 ? "Day" : "Days"}
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground mt-2">
-                The other team will have {deadlineDays} day{deadlineDays !== 1 ? "s" : ""} to accept or reject this trade
+              <p className="text-sm text-muted-foreground mt-3 font-medium">
+                {selectedTeam?.name} will have exactly {deadlineDays} day{deadlineDays !== 1 ? "s" : ""} to accept or reject this trade proposal before it naturally expires.
               </p>
             </CardContent>
           </Card>
 
           {/* Submit Button */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 sticky bottom-6 bg-background/80 backdrop-blur-sm p-4 rounded-xl border shadow-xl">
             <Button
               onClick={handleSubmitTrade}
               disabled={submitting}
-              className="flex-1 py-6 text-lg gap-2"
-              size="lg"
+              className="flex-1 py-7 text-lg font-bold tracking-wide"
             >
               {submitting ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  Creating Trade...
-                </>
+                <><Loader2 className="h-6 w-6 animate-spin mr-2" /> Negotiating...</>
               ) : (
-                <>
-                  <Send className="h-5 w-5" />
-                  Send Trade Proposal
-                </>
+                <><Send className="h-6 w-6 mr-2" /> Send Official Proposal</>
               )}
             </Button>
-            <Button variant="outline" size="lg" className="py-6" asChild>
+            <Button variant="outline" size="lg" className="py-7 font-bold" asChild>
               <Link href={`/teams/${teamId}/trades`}>Cancel</Link>
             </Button>
           </div>
