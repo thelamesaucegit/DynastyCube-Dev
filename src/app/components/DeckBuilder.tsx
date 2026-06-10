@@ -33,7 +33,7 @@ import { addDeckToActivePoll } from "@/app/actions/deckVoteActions";
 import type { DraftPick, Deck, DeckCard } from "@/app/actions/draftActions";
 import { useSettings } from "@/contexts/SettingsContext";
 import { getCardImageUrl } from "@/app/utils/cardUtils";
-import { CardPreview } from "@/app/components/CardPreview"; // <-- THE FIX: Imported the wrapper!
+import { CardPreview } from "@/app/components/CardPreview";
 
 interface DeckBuilderProps {
   teamId: string;
@@ -481,8 +481,25 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
     }
   };
 
+  // THE FIX: Modified getCardsByCategory to automatically sort items by their CMC!
   const getCardsByCategory = (category: string) => {
-    return deckCards.filter((card) => card.category === category);
+    const filtered = deckCards.filter((card) => card.category === category);
+    
+    // Sort logic
+    return filtered.sort((a, b) => {
+      // 1. Basic Lands always sort to the bottom (assign them a CMC of 99)
+      const isBasicA = a.card_id?.startsWith('basic-');
+      const isBasicB = b.card_id?.startsWith('basic-');
+      
+      const cmcA = isBasicA ? 99 : (draftPicks.find(p => p.card_id === a.card_id)?.cmc ?? 99);
+      const cmcB = isBasicB ? 99 : (draftPicks.find(p => p.card_id === b.card_id)?.cmc ?? 99);
+
+      // 2. Sort primarily by CMC
+      if (cmcA !== cmcB) return cmcA - cmcB;
+
+      // 3. Tie-breaker: Alphabetical sorting
+      return a.card_name.localeCompare(b.card_name);
+    });
   };
 
   const mainboardCards = getCardsByCategory("mainboard");
@@ -793,7 +810,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                   </p>
                 ) : (
                   availablePicks.map((pick) => (
-                    // THE FIX: Wrap Available Drafted Cards in CardPreview!
                     <CardPreview 
                         key={pick.id} 
                         card={{ 
@@ -889,7 +905,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                 </div>
               ) : (
                 getCardsByCategory(activeCategory).map((card) => {
-                  // Rehydrate the full pick data to get the image_url for the preview
                   const fullPickData = draftPicks.find(p => p.card_id === card.card_id) || {
                       card_name: card.card_name,
                       image_url: null,
@@ -900,7 +915,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                     <div key={card.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border">
                       <span className="text-gray-700 dark:text-gray-300 font-mono text-sm">{card.quantity}x</span>
                       <div className="flex-1">
-                        {/* THE FIX: Wrap active deck cards in CardPreview! */}
                         <CardPreview card={fullPickData}>
                           <p className="font-semibold hover:text-blue-500 transition-colors cursor-pointer">{card.card_name}</p>
                         </CardPreview>
@@ -1038,12 +1052,11 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
             </p>
           )}
 
-          {/* Category Tabs - Read Only */}
          <div className="flex gap-2 mb-4 border-b border-gray-200 dark:border-gray-700">
             {[
               { id: "mainboard" as const, label: "Mainboard", count: deckCards.filter(c => c.category === "mainboard").reduce((acc, c) => acc + (c.quantity || 1), 0) },
               { id: "sideboard" as const, label: "Sideboard", count: deckCards.filter(c => c.category === "sideboard").reduce((acc, c) => acc + (c.quantity || 1), 0) },
-              { id: "maybeboard" as const, label: "Maybeboard", count: deck: deckCards.filter(c => c.category === "maybeboard").reduce((acc, c) => acc + (c.quantity || 1), 0) },
+              { id: "maybeboard" as const, label: "Maybeboard", count: deckCards.filter(c => c.category === "maybeboard").reduce((acc, c) => acc + (c.quantity || 1), 0) },
             ].map((category) => (
               <button
                 key={category.id}
@@ -1057,8 +1070,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {deckCards.filter((card) => card.category === activeCategory).map((card) => {
-              // Rehydrate the full pick data to get the image_url for the preview
+            {getCardsByCategory(activeCategory).map((card) => {
               const fullPickData = draftPicks.find(p => p.card_id === card.card_id) || {
                   card_name: card.card_name,
                   image_url: null,
@@ -1067,7 +1079,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
               
               return (
                 <div key={card.id} className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border">
-                  {/* THE FIX: Wrap read-only cards in CardPreview! */}
                   <CardPreview card={fullPickData}>
                     <p className="font-semibold text-sm truncate hover:text-blue-500 transition-colors cursor-pointer">{card.card_name}</p>
                   </CardPreview>
