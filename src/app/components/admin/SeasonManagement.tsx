@@ -15,16 +15,17 @@ import {
   rolloverSeasonCosts,
   initializeSeasonCosts,
   deleteFullSeason,
-    executeSeasonRollover,
+  executeSeasonRollover,
+  setSeasonDayNightStatus, // <-- NEW ACTION IMPORT
   type CardCostChange,
 } from "@/app/actions/seasonActions";
 
-// Notice: Removed SeasonPhaseManager import completely
-import { SeasonPauseControl } from "./SeasonPauseControl"; // Added the new control
+import { SeasonPauseControl } from "./SeasonPauseControl";
 import { WeekCreator } from "./WeekCreator";
 import { MatchScheduler } from "./MatchScheduler";
 import { ScheduleOverview } from "./ScheduleOverview";
 import { MatchExtensionManager } from "./MatchExtensionManager";
+import { MoonStar, Sun, Eclipse } from "lucide-react"; // <-- NEW ICONS
 
 type SeasonSubTab = "management" | "schedule";
 
@@ -33,7 +34,6 @@ interface ScheduleTabContentProps {
     activeSeason: Season | undefined;
 }
 
-// 1. Declare the component exactly ONCE outside the main component.
 function TestSeasonStarter({ onComplete }: { onComplete: () => void }) {
   const [loading, setLoading] = useState(false);
 
@@ -68,15 +68,11 @@ function TestSeasonStarter({ onComplete }: { onComplete: () => void }) {
   );
 }
 
-/**
- * A new component for the manual season rollover button, placed in a "Danger Zone".
- */
 function ManualSeasonRollover({ onComplete }: { onComplete: (result: { success: boolean; error?: string }) => void }) {
   const [loading, setLoading] = useState(false);
 
   const handleManualRollover = async () => {
     if (!confirm("DANGER: This will immediately execute the full season rollover process. This includes calculating curation, creating a new season, generating a draft order, and scheduling the draft. This action is irreversible. Are you absolutely sure?")) return;
-
     setLoading(true);
     try {
       const result = await executeSeasonRollover();
@@ -106,13 +102,14 @@ function ManualSeasonRollover({ onComplete }: { onComplete: (result: { success: 
   );
 }
 
-
-// 2. Main Component
 export const SeasonManagement: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<SeasonSubTab>("management");
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Status flags for the new Day/Night toggles
+  const [updatingAlignment, setUpdatingAlignment] = useState(false);
 
   const [draftStartTime, setDraftStartTime] = useState("12:00"); 
   const [showPlanner, setShowPlanner] = useState(false);
@@ -149,7 +146,6 @@ export const SeasonManagement: React.FC = () => {
 
   const handleDeleteSeason = async (seasonId: string, seasonName: string) => {
     if (!confirm(`ARE YOU ABSOLUTELY SURE?\n\nThis will permanently delete "${seasonName}" and all of its associated data.`)) return;
-
     const result = await deleteFullSeason(seasonId);
     if (result.success) {
         setMessage({ type: "success", text: `Successfully deleted season "${seasonName}".` });
@@ -162,13 +158,12 @@ export const SeasonManagement: React.FC = () => {
   const handleCreateSeason = async () => {
     const seasonNum = parseInt(newSeasonNumber);
     const allocation = parseInt(cubucksAllocation);
-
     if (isNaN(seasonNum) || !newSeasonName || isNaN(allocation) || !scheduleParams.draft_start_date || !draftStartTime) {
       setMessage({ type: "error", text: "Please fill in all Season Planner fields correctly." });
       return;
     }
-
     setCreating(true);
+
     try {
       const fullScheduleParams: SeasonScheduleParams = {
           ...scheduleParams,
@@ -268,6 +263,23 @@ export const SeasonManagement: React.FC = () => {
     }
   };
 
+  const handleCosmicAlignment = async (status: 'day' | 'night' | 'neutral', isOverride: boolean) => {
+      setUpdatingAlignment(true);
+      try {
+          const result = await setSeasonDayNightStatus(status, isOverride);
+          if (result.success) {
+              setMessage({ type: "success", text: `Cosmic Alignment locked to ${status.toUpperCase()}!`});
+              loadSeasons(); // Refresh to get the active season's new status (if it was returned in your getSeasons fetch)
+          } else {
+              setMessage({ type: "error", text: result.error || "Failed to update cosmic alignment." });
+          }
+      } catch (err) {
+          setMessage({ type: "error", text: String(err) });
+      } finally {
+          setUpdatingAlignment(false);
+      }
+  };
+
   if (loading) {
     return (
       <div className="admin-section text-center py-8">
@@ -300,25 +312,67 @@ export const SeasonManagement: React.FC = () => {
       {activeSubTab === "management" && (
         <>
           {activeSeason && (
-            <div className="mb-8">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Season Flow Control</h3>
+            <div className="mb-8 space-y-4">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Season Flow Controls</h3>
               <SeasonPauseControl seasonId={activeSeason.id} seasonName={activeSeason.season_name} />
+              
+              {/* THE FIX: NEW COSMIC ALIGNMENT CONTROL PANEL */}
+              <div className="p-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 border-2 border-indigo-200 dark:border-indigo-800 rounded-xl">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                      <div>
+                          <h4 className="text-lg font-bold text-indigo-900 dark:text-indigo-100 flex items-center gap-2">
+                              <Eclipse className="size-5" /> Cosmic Alignment (Lorwyn/Shadowmoor)
+                          </h4>
+                          <p className="text-sm text-indigo-800 dark:text-indigo-300 mt-1">
+                              Force a cosmic shift. Overriding the alignment locks it permanently until reset, overriding the organic end-of-draft reset.
+                          </p>
+                      </div>
+                      
+                      {/* You can display the current status here if your getSeasons() query returns day_night_status! */}
+                      {/* <Badge variant="outline" className="bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200">Current: {activeSeason.day_night_status}</Badge> */}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <button 
+                          onClick={() => handleCosmicAlignment('day', true)} 
+                          disabled={updatingAlignment}
+                          className="flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-bold transition-all bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 dark:bg-amber-900/40 dark:hover:bg-amber-900/60 dark:text-amber-200 dark:border-amber-700"
+                      >
+                          <Sun className="size-4" /> Force Day (Override)
+                      </button>
+                      
+                      <button 
+                          onClick={() => handleCosmicAlignment('night', true)} 
+                          disabled={updatingAlignment}
+                          className="flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-bold transition-all bg-slate-800 hover:bg-slate-900 text-slate-100 border border-slate-700 dark:bg-slate-950 dark:hover:bg-black dark:text-slate-300 dark:border-slate-800"
+                      >
+                          <MoonStar className="size-4" /> Force Night (Override)
+                      </button>
+
+                      <button 
+                          onClick={() => handleCosmicAlignment('neutral', false)} 
+                          disabled={updatingAlignment}
+                          className="flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-bold transition-all bg-indigo-100 hover:bg-indigo-200 text-indigo-900 border border-indigo-300 dark:bg-indigo-900/40 dark:hover:bg-indigo-900/60 dark:text-indigo-200 dark:border-indigo-700"
+                      >
+                          <Eclipse className="size-4" /> Reset to Neutral
+                      </button>
+                  </div>
+              </div>
+
             </div>
           )}
 
           {message && (
-            <div className={`mb-6 p-4 rounded-lg border ${message.type === "success" ? "bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 text-green-800 dark:text-green-200" : "bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 text-red-800 dark:text-red-200"}`}>
-                <div className="flex justify-between items-start">
-                    <p>{message.text}</p>
-                    <button onClick={() => setMessage(null)} className="text-sm opacity-70 hover:opacity-100">✕</button>
-                </div>
+            <div className={`mb-6 p-4 rounded-lg border flex justify-between items-start ${message.type === "success" ? "bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 text-green-800 dark:text-green-200" : "bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 text-red-800 dark:text-red-200"}`}>
+                <p>{message.text}</p>
+                <button onClick={() => setMessage(null)} className="text-sm opacity-70 hover:opacity-100 font-bold p-1">✕</button>
             </div>
           )}
 
           <div className="mb-6 p-6 bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 border-2 border-purple-300 dark:border-purple-700 rounded-xl">
             <h3 className="text-lg font-bold text-purple-900 dark:text-purple-100 mb-3">💡 Dynamic Pricing System</h3>
             <div className="space-y-2 text-sm text-purple-800 dark:text-purple-200">
-                <div className="flex items-start gap-2"><span className="font-semibold min-w-[120px]">Starting Cost:</span><span> (Nearly) All cards begin at 1 Cubuck</span></div>
+                <div className="flex items-start gap-2"><span className="font-semibold min-w-[120px]">Starting Cost:</span><span>(Nearly) All cards begin at 1 Cubuck</span></div>
                 <div className="flex items-start gap-2"><span className="font-semibold min-w-[120px]">If Drafted:</span><span>Cost increases by +1 Cubuck next Season</span></div>
                 <div className="flex items-start gap-2"><span className="font-semibold min-w-[120px]">If Undrafted:</span><span>Cost decreases by half or -1 Cubuck, whichever is greater</span></div>
                 <div className="flex items-start gap-2"><span className="font-semibold min-w-[120px]">If Cubuck cost = 0:</span><span>Cards reduced to 0 are removed from the Draft Pool and can instead be claimed as &quot;Free Agents&quot;</span></div>
@@ -353,7 +407,6 @@ export const SeasonManagement: React.FC = () => {
                   <button onClick={() => setShowPlanner(true)} className="w-full admin-btn admin-btn-primary py-4 text-base">
                     + Plan New Season
                   </button>
-                  {/* --- CORRECTLY PLACED TEST SEASON BUTTON --- */}
                   <TestSeasonStarter onComplete={loadSeasons} />
               </div>
             ) : (
@@ -377,7 +430,7 @@ export const SeasonManagement: React.FC = () => {
                     <input type="number" value={cubucksAllocation} onChange={(e) => setCubucksAllocation(e.target.value)} placeholder="100" className="w-full px-4 py-2 border rounded-lg" />
                   </div>
                 </div>
-
+                
                 <div className="border-t pt-6">
                   <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-4">Scheduling</h4>
                   <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
@@ -407,7 +460,7 @@ export const SeasonManagement: React.FC = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Include All-Rivals Week</label>
-                      <input type="checkbox" checked={scheduleParams.include_rivals_week} onChange={(e) => setScheduleParams(p => ({ ...p, include_rivals_week: e.target.checked }))} className="w-full px-4 py-2 border rounded-lg" />
+                      <input type="checkbox" checked={scheduleParams.include_rivals_week} onChange={(e) => setScheduleParams(p => ({ ...p, include_rivals_week: e.target.checked }))} className="mt-1 size-5 rounded" />
                     </div>
                   </div>
                   <button onClick={handleCreateSeason} disabled={creating} className="admin-btn admin-btn-primary w-full mt-4">
@@ -442,14 +495,13 @@ export const SeasonManagement: React.FC = () => {
             </div>
           </div>
 
- {/* 3. Add the new manual rollover component here */}
           <ManualSeasonRollover onComplete={(result) => {
               if (result.success) {
                 setMessage({ type: 'success', text: 'Season rollover initiated successfully!' });
               } else {
                 setMessage({ type: 'error', text: `Rollover failed: ${result.error}` });
               }
-              loadSeasons(); // Reload seasons list to show the new season
+              loadSeasons(); 
           }} />
           
         </>
@@ -483,18 +535,17 @@ const ScheduleTabContent: React.FC<ScheduleTabContentProps> = ({ seasonId, activ
       <div className="p-6 border-b border-gray-200 dark:border-gray-700">
         <FullSeasonScheduler seasonId={seasonId} />
       </div>
-
-      <div className="flex border-b border-gray-200 dark:border-gray-700">
-        <button onClick={() => setScheduleTab("overview")} className={`flex-1 px-6 py-3 text-sm font-medium transition-colors ${scheduleTab === "overview" ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-b-2 border-blue-600" : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"}`}>
+      <div className="flex border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
+        <button onClick={() => setScheduleTab("overview")} className={`flex-1 min-w-[150px] px-4 py-3 text-sm font-medium transition-colors ${scheduleTab === "overview" ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-b-2 border-blue-600" : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"}`}>
           📋 Schedule Overview
         </button>
-        <button onClick={() => setScheduleTab("create-week")} className={`flex-1 px-6 py-3 text-sm font-medium transition-colors ${scheduleTab === "create-week" ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-b-2 border-blue-600" : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"}`}>
+        <button onClick={() => setScheduleTab("create-week")} className={`flex-1 min-w-[150px] px-4 py-3 text-sm font-medium transition-colors ${scheduleTab === "create-week" ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-b-2 border-blue-600" : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"}`}>
           ➕ Create Week
         </button>
-        <button onClick={() => setScheduleTab("schedule-matches")} className={`flex-1 px-6 py-3 text-sm font-medium transition-colors ${scheduleTab === "schedule-matches" ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-b-2 border-blue-600" : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"}`}>
+        <button onClick={() => setScheduleTab("schedule-matches")} className={`flex-1 min-w-[150px] px-4 py-3 text-sm font-medium transition-colors ${scheduleTab === "schedule-matches" ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-b-2 border-blue-600" : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"}`}>
           🎮 Schedule Matches
         </button>
-        <button onClick={() => setScheduleTab("extensions")} className={`flex-1 px-6 py-3 text-sm font-medium transition-colors ${scheduleTab === "extensions" ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-b-2 border-blue-600" : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"}`}>
+        <button onClick={() => setScheduleTab("extensions")} className={`flex-1 min-w-[150px] px-4 py-3 text-sm font-medium transition-colors ${scheduleTab === "extensions" ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-b-2 border-blue-600" : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"}`}>
           ⏰ Extensions
         </button>
       </div>
