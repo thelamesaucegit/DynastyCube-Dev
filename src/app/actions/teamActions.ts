@@ -561,7 +561,7 @@ export async function getTeamsWithDetails(
 
 export async function toggleChangelingIdentity(teamId: string): Promise<{ success: boolean; error?: string }> {
   try {
-  const supabase = await createClient();
+    const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
@@ -575,26 +575,29 @@ export async function toggleChangelingIdentity(teamId: string): Promise<{ succes
     const { data: team } = await supabase.from('teams').select('active_identity').eq('id', teamId).single();
     if (!team) return { success: false, error: "Team not found." };
 
-    const newIdentity = team.active_identity === 'changelings' ? 'mimics' : 'changelings';
+    const newIdentityKey = team.active_identity === 'changelings' ? 'mimics' : 'changelings';
 
-    // 3. Apply the cosmetic swap
-    const updates = newIdentity === 'changelings' 
-      ? {
-          active_identity: 'changelings',
-          name: 'Lorwyn Changelings',
-          emoji: '👽',
-          primary_color: '#55d829',
-          secondary_color: '#29d8cf'
-        }
-      : {
-          active_identity: 'mimics',
-          name: 'Shadowmoor Mimics',
-          emoji: '😈',
-          primary_color: '#215c01',
-          secondary_color: '#5c0103'
-        };
+    // 3. Fetch the cosmetic details from the new team_identities table!
+    const { data: identityData, error: identityError } = await supabase
+        .from('team_identities')
+        .select('name, emoji, primary_color, secondary_color')
+        .eq('team_id', teamId)
+        .eq('identity_key', newIdentityKey)
+        .single();
 
-    const { error } = await supabase.from('teams').update(updates).eq('id', teamId);
+    if (identityError || !identityData) {
+        return { success: false, error: "Identity profile not found in the database." };
+    }
+
+    // 4. Apply the cosmetic swap dynamically
+    const { error } = await supabase.from('teams').update({
+        active_identity: newIdentityKey,
+        name: identityData.name,
+        emoji: identityData.emoji,
+        primary_color: identityData.primary_color,
+        secondary_color: identityData.secondary_color
+    }).eq('id', teamId);
+
     if (error) throw error;
 
     return { success: true };
