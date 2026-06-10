@@ -928,7 +928,31 @@ export async function checkDraftTimer(
     if (now >= deadline) {
       console.log(`Deadline passed for session ${session.id}. Executing auto-pick logic.`);
       const teamId = draftStatus.onTheClock.teamId;
-      
+
+
+      // =======================================================================
+      //  DAY/NIGHT DRAFT FREEZE LOGIC
+      // =======================================================================
+      // If the draft enforces day/night rules, check the current hour!
+      if (session.enforce_day_night_drafting) {
+          // Get the current hour in your localized timezone (e.g. Central Time)
+          // 0 = Midnight, 23 = 11 PM
+          const currentHour = new Date().toLocaleString("en-US", { timeZone: "America/Chicago", hour: "numeric", hour12: false });
+          const hourNum = parseInt(currentHour, 10);
+
+          // Define "Night" as 10:00 PM (22) to 8:00 AM (8)
+          const isNightTime = hourNum >= 22 || hourNum < 8;
+
+          if (isNightTime) {
+              console.log(`[DraftTimer] The sun has set on Jamuraa. Auto-draft is frozen until morning for team ${teamId}.`);
+              return { action: "none", message: "Draft clock is frozen for the night." };
+          }
+      }
+      // =======================================================================
+
+      // Lock the session
+
+        
       const { data: lockResult, error: lockError } = await supabase
           .from("draft_sessions")
           .update({ locked_at: new Date().toISOString() })
