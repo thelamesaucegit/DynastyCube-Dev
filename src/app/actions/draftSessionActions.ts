@@ -872,7 +872,7 @@ export async function checkDraftTimer(
   try {
     const { data: session, error: sessionError } = await supabase
       .from("draft_sessions")
-      .select("id, status, start_time, hours_per_pick, consecutive_skipped_picks, locked_at, enforce_day_night_drafting, night_start_hour, night_end_hour")
+      .select("id, status, start_time, hours_per_pick, consecutive_skipped_picks, locked_at, enforce_day_night_drafting, night_start_hour, night_end_hour, season_id")
       .in("status", ["active", "scheduled"])
       .single();
 
@@ -911,6 +911,7 @@ export async function checkDraftTimer(
     }
 
     const { status: draftStatus, error: statusError } = await getDraftStatus(session.id, supabase);
+
     if (statusError || !draftStatus) {
       return { action: "none", message: "Draft appears complete or status unavailable." };
     }
@@ -925,6 +926,7 @@ export async function checkDraftTimer(
     if (picksError) return { action: "error", error: "Failed to fetch last pick time." };
 
     let timerStartTime = new Date(session.start_time);
+
     if (picks && picks.length > 0 && picks[0].drafted_at) {
       timerStartTime = new Date(picks[0].drafted_at);
     }
@@ -937,44 +939,50 @@ export async function checkDraftTimer(
       console.log(`Deadline passed for session ${session.id}. Executing auto-pick logic.`);
       const teamId = draftStatus.onTheClock.teamId;
 
-
       // =======================================================================
       //  DYNAMIC DAY/NIGHT DRAFT FREEZE LOGIC
       // =======================================================================
       if (session.enforce_day_night_drafting) {
-          // Get the current hour in your localized timezone (e.g. Central Time)
-          // 0 = Midnight, 23 = 11 PM
-          const currentHourStr = new Date().toLocaleString("en-US", { timeZone: "America/Chicago", hour: "numeric", hour12: false });
-          const currentHour = parseInt(currentHourStr, 10);
-
-          const startHour = session.night_start_hour; // e.g. 22
-          const endHour = session.night_end_hour;     // e.g. 8
+          // Fetch the day/night status from the seasons table to see if we're in a lore override!
+          const { data: seasonData } = await supabase
+              .from('seasons')
+              .select('day_night_status, day_night_override')
+              .eq('id', session.season_id)
+              .single();
 
           let isNightTime = false;
 
-          // Logic handles standard overnight hours (e.g., 22 to 8)
-          if (startHour > endHour) {
-              if (currentHour >= startHour || currentHour < endHour) {
-                  isNightTime = true;
-              }
-          } 
-          // Logic handles same-day daytime freeze hours (e.g., 12 to 17) if you want a mid-day freeze
-          else if (startHour <= endHour) {
-              if (currentHour >= startHour && currentHour < endHour) {
-                  isNightTime = true;
-              }
+          if (seasonData?.day_night_override) {
+             // If there is an admin lore override, trust it blindly.
+             isNightTime = seasonData.day_night_status === 'night';
+          } else {
+             // Otherwise, calculate standard night hours normally
+             const currentHourStr = new Date().toLocaleString("en-US", { timeZone: "America/Chicago", hour: "numeric", hour12: false });
+             const currentHour = parseInt(currentHourStr, 10);
+   
+             const startHour = session.night_start_hour; // e.g. 22
+             const endHour = session.night_end_hour;     // e.g. 8
+   
+             if (startHour > endHour) {
+                 if (currentHour >= startHour || currentHour < endHour) {
+                     isNightTime = true;
+                 }
+             } 
+             else if (startHour <= endHour) {
+                 if (currentHour >= startHour && currentHour < endHour) {
+                     isNightTime = true;
+                 }
+             }
           }
 
           if (isNightTime) {
-              console.log(`[DraftTimer] 🌙 The sun has set. Auto-draft is frozen until ${endHour}:00 for team ${teamId}.`);
+              console.log(`[DraftTimer] 🌙 The sun has set. Auto-draft is frozen until morning for team ${teamId}.`);
               return { action: "none", message: "Draft clock is frozen for the night." };
           }
       }
       // =======================================================================
 
       // Lock the session
-
-        
       const { data: lockResult, error: lockError } = await supabase
           .from("draft_sessions")
           .update({ locked_at: new Date().toISOString() })
@@ -1001,6 +1009,7 @@ export async function checkDraftTimer(
             console.error(`Auto-draft system error for ${teamId}: ${autoDraftResult.error}`);
             await supabase.from("draft_sessions").update({ status: "paused" }).eq("id", session.id);
             await logSystemEvent("AutoDraft", "error", `System error during auto-draft for team ${teamId}. Draft automatically paused.`, { error: autoDraftResult.error });
+            
             await supabase.rpc("notify_all_users_draft", {
               p_notification_type: "draft_paused",
               p_message: `The draft has been paused due to a system error on team ${draftStatus.onTheClock.teamName}'s pick.`
@@ -1012,8 +1021,7 @@ export async function checkDraftTimer(
             
             if (newSkipCount >= draftStatus.totalTeams) {
               console.log(`[Draft Failsafe] Maximum consecutive skips reached. Evaluating auto-completion...`);
-
-              // 1. Fetch active teams and balances
+              
               const { data: activeTeams, error: teamsErr } = await supabase
                   .from('teams')
                   .select('id, cubucks_balance')
@@ -1023,7 +1031,6 @@ export async function checkDraftTimer(
                   throw new Error("Failsafe could not fetch teams to verify balances.");
               }
 
-              // 2. Fetch total card counts
               const { data: rosterCounts, error: countErr } = await supabase
                   .from('team_draft_picks')
                   .select('team_id');
@@ -1037,7 +1044,6 @@ export async function checkDraftTimer(
                   cardsPerTeam.set(pick.team_id, (cardsPerTeam.get(pick.team_id) || 0) + 1);
               });
 
-              // 3. Evaluate Conditions
               let readyToComplete = true;
               let failingReason = "";
 
@@ -1050,6 +1056,7 @@ export async function checkDraftTimer(
                       failingReason = `Team ${team.id} still has ${balance} Cubucks.`;
                       break;
                   }
+
                   if (totalCards < 25) {
                       readyToComplete = false;
                       failingReason = `Team ${team.id} only has ${totalCards} cards (needs 25).`;
@@ -1057,7 +1064,6 @@ export async function checkDraftTimer(
                   }
               }
 
-              // 4. Auto-Complete or Pause
               if (readyToComplete) {
                   console.log("[Draft Failsafe] ✅ All teams broke with 25+ cards. Auto-completing draft!");
                   
@@ -1082,7 +1088,6 @@ export async function checkDraftTimer(
                   
                   actionResult = { action: "completed", message: `Draft paused due to all teams running out of funds.` };
               }
-
             } else {
               console.log(`Team ${teamId} skipped. Consecutive skips: ${newSkipCount}.`);
               await supabase.from("draft_sessions").update({ consecutive_skipped_picks: newSkipCount }).eq("id", session.id);
@@ -1105,11 +1110,14 @@ export async function checkDraftTimer(
             await resetSkipCounter(session.id, supabase);
             await advanceDraft(supabase);
           }
+
       } finally {
           await supabase.from("draft_sessions").update({ locked_at: null }).eq("id", session.id);
       }
+
       return actionResult;
     }
+
     return { action: "none", message: "Active session found, but no action required at this time." };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error in draft timer check";
