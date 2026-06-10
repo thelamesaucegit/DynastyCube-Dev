@@ -52,13 +52,7 @@ export function TeamEssenceDisplay({ teamId, isUserTeamMember }: Props) {
 
   return (
     <Card className="border-purple-500/30 bg-gradient-to-br from-purple-500/5 to-fuchsia-500/5 shadow-sm">
-      <CardHeader className="py-2.5 sm:py-3 border-b border-purple-500/10">
-        <CardTitle className="flex items-center gap-2 text-xs sm:text-sm uppercase tracking-wider font-extrabold text-purple-700 dark:text-purple-400">
-          <span className="text-base">€</span>
-          Essence
-        </CardTitle>
-      </CardHeader>
-      
+         
       {/* 
         THE FIX: Responsive layouts and paddings. 
         - Mobile: p-3 (half size reduction)
