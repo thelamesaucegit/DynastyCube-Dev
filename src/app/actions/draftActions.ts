@@ -226,6 +226,7 @@ export async function addDraftPick(pick: DraftPick): Promise<{ success: boolean;
       image_url: pick.image_url,
       oldest_image_url: pick.oldest_image_url,
       mana_cost: pick.mana_cost,
+            cubucks_cost: pick.cubucks_cost,
       cmc: pick.cmc,
       pick_number: pick.pick_number,
       drafted_by: authCheck.userId,
