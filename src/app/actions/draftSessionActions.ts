@@ -11,7 +11,7 @@ import { executeAutoDraft } from "@/app/actions/autoDraftActions";
 import { generatePlaceholderDeck, submitDeckForWeek } from "@/app/actions/deckGenerationActions";
 import { createDeckVotePoll } from "@/app/actions/deckVoteActions";
 import { getTeamsWithDetails, type TeamWithDetails } from "@/app/actions/teamActions"; 
-import { evaluateDraftHats } from "@/app/actions/hatActions"; // <-- THE FIX 1: Import Hat Evaluator
+import { evaluateDraftHats } from "@/app/actions/hatActions"; 
 
 /**
  * Standard Fisher-Yates shuffle algorithm
@@ -51,6 +51,20 @@ export interface DraftSessionWithStatus extends DraftSession {
   draftStatus: DraftStatus | null;
 }
 
+// THE FIX: Strict typing for the joined query in completeDraft to eliminate 'any' errors
+interface CompleteDraftSessionData {
+  season_id: string;
+  seasons: {
+    season_name: string;
+    cubucks_allocation: number;
+    day_night_override: boolean;
+  } | {
+    season_name: string;
+    cubucks_allocation: number;
+    day_night_override: boolean;
+  }[];
+}
+
 // ============================================================================
 // HELPERS
 // ============================================================================
@@ -87,17 +101,21 @@ async function verifyAdmin(supabase: Awaited<ReturnType<typeof createServerClien
     data: { user },
     error: authError,
   } = await supabase.auth.getUser();
+
   if (authError || !user) {
     return { authorized: false, error: "Not authenticated" };
   }
+
   const { data: userData, error: userError } = await supabase
     .from("users")
     .select("is_admin")
     .eq("id", user.id)
     .single();
+
   if (userError || !userData?.is_admin) {
     return { authorized: false, userId: user.id, error: "Unauthorized: Admin access required" };
   }
+
   return { authorized: true, userId: user.id };
 }
 
@@ -116,40 +134,49 @@ export async function createDraftSession(config: {
     if (!admin.authorized) {
       return { success: false, error: admin.error };
     }
+
     const { data: activeSeason } = await supabase
       .from("seasons")
       .select("id")
       .eq("is_active", true)
       .single();
+
     if (!activeSeason) {
       return { success: false, error: "No active season found. Please activate a season first." };
     }
+
     const { data: draftOrder } = await supabase
       .from("draft_order")
       .select("id")
       .eq("season_id", activeSeason.id)
       .limit(1);
+
     if (!draftOrder || draftOrder.length === 0) {
       return { success: false, error: "No draft order found for the active season. Please generate a draft order first." };
     }
+
     const { data: existingSession } = await supabase
       .from("draft_sessions")
       .select("id, status")
       .eq("season_id", activeSeason.id)
       .in("status", ["scheduled", "active", "paused"])
       .limit(1);
+
     if (existingSession && existingSession.length > 0) {
       return {
         success: false,
         error: `A draft session already exists for this season (status: ${existingSession[0].status}). Please complete or delete it first.`,
       };
     }
+
     if (config.totalRounds < 1 || config.totalRounds > 999) {
       return { success: false, error: "Total rounds must be between 1 and 999" };
     }
+
     if (config.hoursPerPick <= 0 || config.hoursPerPick > 168) {
       return { success: false, error: "Hours per pick must be greater than 0 and at most 168 (1 week)" };
     }
+
     const { data, error } = await supabase
       .from("draft_sessions")
       .insert({
@@ -163,6 +190,7 @@ export async function createDraftSession(config: {
       })
       .select()
       .single();
+
     if (error) {
       console.error("Error creating draft session:", error);
       return {
@@ -170,6 +198,7 @@ export async function createDraftSession(config: {
         error: `DB error: ${error.message} (code: ${error.code}, hint: ${error.hint ?? "none"})`,
       };
     }
+
     return { success: true, sessionId: data.id };
   } catch (error) {
     console.error("Unexpected error creating draft session:", error);
@@ -188,9 +217,11 @@ export async function getActiveDraftSession(): Promise<{
       .select("id")
       .eq("is_active", true)
       .single();
+
     if (!activeSeason) {
       return { session: null };
     }
+
     const { data: session, error } = await supabase
       .from("draft_sessions")
       .select("*")
@@ -199,14 +230,18 @@ export async function getActiveDraftSession(): Promise<{
       .order("created_at", { ascending: false })
       .limit(1)
       .single();
+
     if (error && error.code !== "PGRST116") {
       console.error("Error fetching draft session:", error);
       return { session: null, error: error.message };
     }
+
     if (!session) {
       return { session: null };
     }
+
     const { status: draftStatus } = await getDraftStatus(session.id, supabase);
+
     return {
       session: {
         ...session,
@@ -231,10 +266,12 @@ export async function getDraftSessions(): Promise<{
       .from("draft_sessions")
       .select("*")
       .order("created_at", { ascending: false });
+
     if (error) {
       console.error("Error fetching draft sessions:", error);
       return { sessions: [], error: error.message };
     }
+
     return { sessions: data || [] };
   } catch (error) {
     console.error("Unexpected error fetching draft sessions:", error);
@@ -258,23 +295,28 @@ export async function updateDraftSession(
     if (!admin.authorized) {
       return { success: false, error: admin.error };
     }
+
     const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (updates.totalRounds !== undefined) updateData.total_rounds = updates.totalRounds;
     if (updates.hoursPerPick !== undefined) updateData.hours_per_pick = updates.hoursPerPick;
     if (updates.startTime !== undefined) updateData.start_time = updates.startTime;
     if (updates.endTime !== undefined) updateData.end_time = updates.endTime;
+
     if (updates.resetDeadline && updates.hoursPerPick !== undefined) {
       const newDeadline = new Date(Date.now() + updates.hoursPerPick * 60 * 60 * 1000);
       updateData.current_pick_deadline = newDeadline.toISOString();
     }
+
     const { error } = await supabase
       .from("draft_sessions")
       .update(updateData)
       .eq("id", sessionId);
+
     if (error) {
       console.error("Error updating draft session:", error);
       return { success: false, error: error.message };
     }
+
     return { success: true };
   } catch (error) {
     console.error("Unexpected error updating draft session:", error);
@@ -291,25 +333,31 @@ export async function deleteDraftSession(
     if (!admin.authorized) {
       return { success: false, error: admin.error };
     }
+
     const { data: session } = await supabase
       .from("draft_sessions")
       .select("status")
       .eq("id", sessionId)
       .single();
+
     if (!session) {
       return { success: false, error: "Draft session not found" };
     }
+
     if (session.status !== "scheduled") {
       return { success: false, error: "Can only delete scheduled draft sessions. Pause or complete the active session first." };
     }
+
     const { error } = await supabase
       .from("draft_sessions")
       .delete()
       .eq("id", sessionId);
+
     if (error) {
       console.error("Error deleting draft session:", error);
       return { success: false, error: error.message };
     }
+
     return { success: true };
   } catch (error) {
     console.error("Unexpected error deleting draft session:", error);
@@ -326,23 +374,30 @@ export async function activateDraft(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = adminClient ?? await createServerClient();
+
     const { data: session, error: sessionError } = await supabase
       .from("draft_sessions")
       .select("*")
       .eq("id", sessionId)
       .single();
+
     if (sessionError || !session) {
       return { success: false, error: "Draft session not found" };
     }
+
     if (session.status !== "scheduled" && session.status !== "paused") {
       return { success: false, error: `Cannot activate a draft with status: ${session.status}` };
     }
+
     const { status: draftStatus } = await getDraftStatus(sessionId, supabase);
+
     if (!draftStatus) {
       return { success: false, error: "Could not determine draft status. Ensure draft order is set." };
     }
+
     const now = new Date();
     const deadline = new Date(now.getTime() + session.hours_per_pick * 60 * 60 * 1000);
+
     const { error: updateError } = await supabase
       .from("draft_sessions")
       .update({
@@ -352,19 +407,23 @@ export async function activateDraft(
         updated_at: now.toISOString(),
       })
       .eq("id", sessionId);
+
     if (updateError) {
       console.error("Error activating draft:", updateError);
       return { success: false, error: updateError.message };
     }
+
     await supabase.rpc("notify_all_users_draft", {
       p_notification_type: "draft_started",
       p_message: `The draft has started! ${draftStatus.seasonName} draft is now live.`,
     });
+
     await supabase.rpc("notify_draft_team_roles", {
       p_team_id: draftStatus.onTheClock.teamId,
       p_notification_type: "draft_on_clock",
       p_message: `${draftStatus.onTheClock.teamEmoji} ${draftStatus.onTheClock.teamName} is ON THE CLOCK! You have ${session.hours_per_pick} hours to make your pick.`,
     });
+
     if (draftStatus.onDeck.teamId !== draftStatus.onTheClock.teamId) {
       await supabase.rpc("notify_draft_team_roles", {
         p_team_id: draftStatus.onDeck.teamId,
@@ -372,6 +431,7 @@ export async function activateDraft(
         p_message: `${draftStatus.onDeck.teamEmoji} ${draftStatus.onDeck.teamName} is ON DECK! Get ready, you're picking next.`,
       });
     }
+
     return { success: true };
   } catch (error) {
     console.error("Unexpected error activating draft:", error);
@@ -393,6 +453,7 @@ export async function advanceDraft(adminClient?: AnySupabaseClient): Promise<{
 }> {
   try {
     const supabase = adminClient ?? await createServerClient();
+
     const { data: session } = await supabase
       .from("draft_sessions")
       .select("*")
@@ -400,22 +461,28 @@ export async function advanceDraft(adminClient?: AnySupabaseClient): Promise<{
       .order("created_at", { ascending: false })
       .limit(1)
       .single();
+
     if (!session) {
       return { success: true }; // No active session, do nothing.
     }
+
     const { status: draftStatus } = await getDraftStatus(session.id, supabase);
+
     if (!draftStatus) {
       return { success: false, error: "Could not determine draft status" };
     }
+
     const allTeamsReachedRounds = draftStatus.draftOrder.every(
       (team) => team.picksMade >= session.total_rounds
     );
+
     const pastEndTime = session.end_time && new Date() >= new Date(session.end_time);
     
     // Check if all teams have spent all their cubucks
     const { data: teamBalances } = await supabase
       .from("teams")
       .select("id, cubucks_balance");
+
     const allTeamsOutOfCubucks =
       teamBalances != null &&
       teamBalances.length > 0 &&
@@ -430,6 +497,7 @@ export async function advanceDraft(adminClient?: AnySupabaseClient): Promise<{
     // Draft continues — set new deadline and notify next team
     const now = new Date();
     const deadline = new Date(now.getTime() + session.hours_per_pick * 60 * 60 * 1000);
+
     await supabase
       .from("draft_sessions")
       .update({
@@ -454,6 +522,7 @@ export async function advanceDraft(adminClient?: AnySupabaseClient): Promise<{
         p_message: `${draftStatus.onDeck.teamEmoji} ${draftStatus.onDeck.teamName} is ON DECK! Get ready, you're picking next.`,
       });
     }
+
     return { success: true, completed: false };
   } catch (error) {
     console.error("Unexpected error advancing draft:", error);
@@ -470,6 +539,7 @@ export async function pauseDraft(
     if (!admin.authorized) {
       return { success: false, error: admin.error };
     }
+
     const { error } = await supabase
       .from("draft_sessions")
       .update({
@@ -479,14 +549,17 @@ export async function pauseDraft(
       })
       .eq("id", sessionId)
       .eq("status", "active");
+
     if (error) {
       console.error("Error pausing draft:", error);
       return { success: false, error: error.message };
     }
+
     await supabase.rpc("notify_all_users_draft", {
       p_notification_type: "draft_paused",
       p_message: "The draft has been paused by an admin. Picks are on hold.",
     });
+
     return { success: true };
   } catch (error) {
     console.error("Unexpected error pausing draft:", error);
@@ -523,17 +596,25 @@ export async function completeDraft(
       if (!admin.authorized) return { success: false, error: admin.error };
     }
 
-    const { data: sessionData } = await supabase.from('draft_sessions').select(`season_id, seasons ( season_name, cubucks_allocation )`).eq('id', sessionId).single();
+    // THE FIX: Provide explicit typing for the joined relation!
+    const { data } = await supabase
+        .from('draft_sessions')
+        .select(`season_id, seasons ( season_name, cubucks_allocation, day_night_override )`)
+        .eq('id', sessionId)
+        .single();
+        
+    const sessionData = data as unknown as CompleteDraftSessionData;
 
     // =========================================================================================
-    // EVALUATE DRAFT HATS & DISTRIBUTE REWARDS/CURSES FOR THE NEWLY COMPLETED DRAFT, THEN RESET DAY/NIGHT!
+    // EVALUATE DRAFT HATS & DISTRIBUTE REWARDS/CURSES FOR THE NEWLY COMPLETED DRAFT!
     // =========================================================================================
     if (sessionData?.season_id) {
         const seasonDetails = Array.isArray(sessionData.seasons) ? sessionData.seasons[0] : sessionData.seasons;
         const currentCap = seasonDetails?.cubucks_allocation || 40;
         console.log(`[Draft Complete] Evaluating hats for season ${sessionData.season_id} with Cap: ${currentCap}`);
         await evaluateDraftHats(sessionData.season_id, currentCap);
-      //  Reset Day/Night to neutral UNLESS the admin has set a lore override!
+
+        // Reset Day/Night to neutral UNLESS the admin has set a lore override!
         if (!seasonDetails?.day_night_override) {
              console.log(`[Draft Complete] Resetting Day/Night status to Neutral.`);
              await supabase.from('seasons').update({ day_night_status: 'neutral' }).eq('id', sessionData.season_id);
@@ -543,7 +624,6 @@ export async function completeDraft(
     }
       
     // =========================================================================================
-
     const { error } = await supabase
       .from("draft_sessions")
       .update({
@@ -576,6 +656,7 @@ export async function completeDraft(
                 algorithm_details: pick.algorithm_details, cmc: pick.cmc,
                 pick_number: pick.pick_number, pick_source: pick.pick_source, drafted_at: pick.drafted_at || new Date().toISOString()
             }));
+
             const { error: archiveError } = await supabase.from('historical_draft_picks').insert(historicalPayload);
             if (archiveError) await logSystemEvent("CompleteDraft", "error", `Failed to bulk insert historical picks`, { error: archiveError.message });
         }
@@ -587,7 +668,7 @@ export async function completeDraft(
     await supabase.from('card_pools').update({ pool_name: 'wire', on_wire_since: new Date().toISOString() }).eq('pool_name', 'draft').eq('was_drafted', false);
 
     // =========================================================================================
-    // STEP 1: AUTOMATED SCHEDULE GENERATION (Must happen BEFORE decks/polls so weeks exist!)
+    // STEP 1: AUTOMATED SCHEDULE GENERATION
     // =========================================================================================
     console.log(`[Draft Complete] Checking schedule generation...`);
     await logSystemEvent("ScheduleGenTrace", "info", `[1] Starting Schedule Gen Phase for session: ${sessionId}`);
@@ -598,6 +679,7 @@ export async function completeDraft(
               supabase.from('schedule_weeks').select('*').eq('season_id', sessionData.season_id),
               supabase.from('seasons').select('*').eq('id', sessionData.season_id).single()
             ]);
+
             const weeks = weeksResponse.data || [];
             const season = seasonResponse.data;
 
@@ -607,10 +689,13 @@ export async function completeDraft(
               const isTestSeason = seasonName.toUpperCase().includes("TEST");
               
               await logSystemEvent("ScheduleGenTrace", "info", `[2] Season loaded. isTestSeason: ${isTestSeason}. Weeks found: ${weeks.length}`);
+
               if (isTestSeason) {
                  const { teams } = await getTeamsWithDetails(false, supabase);
                  const activeTeams = (teams?.filter(t => t.is_hidden !== true) || []) as TeamWithDetails[];
+                 
                  await logSystemEvent("ScheduleGenTrace", "info", `[3] Rapid Test Gen: Found ${activeTeams.length} active teams.`);
+
                  if (activeTeams.length < 2) {
                      await logSystemEvent("TestScheduleGen", "error", `Not enough teams for test schedule.`);
                  } else {
@@ -627,10 +712,10 @@ export async function completeDraft(
                          return d;
                      }
 
-                     const isTestSeason = seasonName.toUpperCase().includes("TEST");
                      const testSeasonNumber = parseInt(seasonName.replace(/[^0-9]/g, '')) || 999;
                      
                      let week1Start: Date;
+                     
                      if (isTestSeason) {
                          week1Start = new Date(Date.now() + 60 * 60000); 
                      } else {
@@ -789,8 +874,11 @@ export async function completeDraft(
              try {
                  const { success, deckId } = await generatePlaceholderDeck(team.team_id, sessionId, supabase);
                  
+                 // THE FIX: Test seasons shouldn't be excluded from the poll generator, 
+                 // we just need to use the real shortened 'end_date' of the test week!
                  if (success && deckId && firstWeek) {
                      await submitDeckForWeek(deckId, team.team_id, firstWeek.id, supabase);
+                     // This function inherently uses firstWeek.end_date, which is exactly correct for test seasons!
                      await createDeckVotePoll(team.team_id, firstWeek.id, firstWeek.end_date, supabase);
                  }
              } catch (deckErr) {
@@ -807,8 +895,8 @@ export async function completeDraft(
 
     await supabase.rpc("notify_all_users_draft", { p_notification_type: "draft_completed", p_message: "The draft has concluded. The league is now in the Preseason phase!" });
     await logSystemEvent("CompleteDraft", "info", `Draft ${sessionId} fully completed and transitioned successfully.`);
-    return { success: true };
 
+    return { success: true };
   } catch (error) {
     const errString = String(error);
     await logSystemEvent("CompleteDraft", "error", "Unexpected fatal error completing draft", { error: errString });
@@ -819,13 +907,6 @@ export async function completeDraft(
 // ============================================================================
 // AUTO-DRAFT TIMER CHECK
 // ============================================================================
-
-/**
- * The main cron job handler.
- * This function is designed to be called every minute by a scheduled task.
- * It performs a very fast check to see if a draft is active before running
- * the more expensive timer logic.
- */
 export async function handleDraftTimerCron(): Promise<{
   status: "skipped" | "processed" | "error";
   details?: string;
@@ -844,12 +925,14 @@ export async function handleDraftTimerCron(): Promise<{
       console.error("Cron check for active session failed:", checkError);
       return { status: "error", error: "Failed to check for active sessions." };
     }
+
     if (!activeSession) {
       return { status: "skipped", details: "No active or scheduled draft session found." };
     }
     
     console.log(`Draft session found (${activeSession.id}). Running full draft timer check.`);
     const result = await checkDraftTimer(supabase);
+
     return { status: "processed", details: result.action, error: result.error };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -858,9 +941,6 @@ export async function handleDraftTimerCron(): Promise<{
   }
 }
 
-/**
- * Checks the state of an active or scheduled draft and takes action if needed.
- */
 export async function checkDraftTimer(
   adminClient?: AnySupabaseClient
 ): Promise<{
@@ -869,6 +949,7 @@ export async function checkDraftTimer(
   error?: string;
 }> {
   const supabase = adminClient ?? createServiceClient();
+
   try {
     const { data: session, error: sessionError } = await supabase
       .from("draft_sessions")
@@ -939,11 +1020,7 @@ export async function checkDraftTimer(
       console.log(`Deadline passed for session ${session.id}. Executing auto-pick logic.`);
       const teamId = draftStatus.onTheClock.teamId;
 
-      // =======================================================================
-      //  DYNAMIC DAY/NIGHT DRAFT FREEZE LOGIC
-      // =======================================================================
       if (session.enforce_day_night_drafting) {
-          // Fetch the day/night status from the seasons table to see if we're in a lore override!
           const { data: seasonData } = await supabase
               .from('seasons')
               .select('day_night_status, day_night_override')
@@ -953,15 +1030,13 @@ export async function checkDraftTimer(
           let isNightTime = false;
 
           if (seasonData?.day_night_override) {
-             // If there is an admin lore override, trust it blindly.
              isNightTime = seasonData.day_night_status === 'night';
           } else {
-             // Otherwise, calculate standard night hours normally
              const currentHourStr = new Date().toLocaleString("en-US", { timeZone: "America/Chicago", hour: "numeric", hour12: false });
              const currentHour = parseInt(currentHourStr, 10);
    
-             const startHour = session.night_start_hour; // e.g. 22
-             const endHour = session.night_end_hour;     // e.g. 8
+             const startHour = session.night_start_hour;
+             const endHour = session.night_end_hour;    
    
              if (startHour > endHour) {
                  if (currentHour >= startHour || currentHour < endHour) {
@@ -980,9 +1055,7 @@ export async function checkDraftTimer(
               return { action: "none", message: "Draft clock is frozen for the night." };
           }
       }
-      // =======================================================================
 
-      // Lock the session
       const { data: lockResult, error: lockError } = await supabase
           .from("draft_sessions")
           .update({ locked_at: new Date().toISOString() })
