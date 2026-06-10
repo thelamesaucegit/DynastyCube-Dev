@@ -56,10 +56,10 @@ export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | nul
     const { data, error } = await supabase
         .from('schedule')
         .select(`
-            id, match_date, status, sim_match_id, total_steps, week_number,
+            id, match_date, status, sim_match_id, total_steps, week_number, weekly_matchup_id,
             team1:teams!team1_id(id, name, emoji),
             team2:teams!team2_id(id, name, emoji),
-            weekly_matchup:weekly_matchups(sim_team1_wins, sim_team2_wins, sim_completed_games, is_playoff, week_number),
+            weekly_matchup:weekly_matchups(id, sim_team1_wins, sim_team2_wins, sim_completed_games, is_playoff, week_number),
             sim_match:sim_matches!sim_match_id(argentum_game_states, game_states),
             season:seasons(season_name, phase)
         `)
@@ -76,6 +76,7 @@ export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | nul
     const chronologicalMatches = [...data].sort((a, b) => new Date(a.match_date).getTime() - new Date(b.match_date).getTime());
     
     let targetMatch = data[0]; 
+
     const liveMatch = chronologicalMatches.find(m => {
         const broadcastStartTime = new Date(m.match_date).getTime() + BROADCAST_DELAY_MS;
         const broadcastDuration = (m.total_steps || 300) * STEP_DURATION_MS;
@@ -97,14 +98,13 @@ export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | nul
     const t1 = (Array.isArray(targetMatch.team1) ? targetMatch.team1[0] : targetMatch.team1) as unknown as DbTeam;
     const t2 = (Array.isArray(targetMatch.team2) ? targetMatch.team2[0] : targetMatch.team2) as unknown as DbTeam;
     
-        // Check if it's a test season using the newly joined table
     const seasonData = (Array.isArray(targetMatch.season) ? targetMatch.season[0] : targetMatch.season) as unknown as DbSeason | undefined;
     const seasonName = seasonData?.season_name || "";
     const currentPhase = seasonData?.phase || "";
     const isTestSeason = seasonName.toUpperCase().includes("TEST");
 
-
     const matchupRaw = (Array.isArray(targetMatch.weekly_matchup) ? targetMatch.weekly_matchup[0] : targetMatch.weekly_matchup) as {
+        id?: string;
         sim_team1_wins?: number;
         sim_team2_wins?: number;
         sim_completed_games?: number;
@@ -148,13 +148,11 @@ export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | nul
     }
 
     let matchupContext = null;
+
     if (matchupRaw) {
-        const gameNumber = (matchupRaw.sim_completed_games || 0) + 1;
         const weekNum = targetMatch.week_number || matchupRaw.week_number || 1;
-
-        // --- NEW: DYNAMIC REQUIRED GAMES CALCULATION ---
         let totalGamesRequired = isTestSeason ? 3 : 5; 
-
+        
         if (matchupRaw.is_playoff) {
             if (currentPhase === 'playoffs' && weekNum > 100) {
                 totalGamesRequired = isTestSeason ? 3 : 9; // Championship
@@ -162,13 +160,46 @@ export async function getLatestStreamMatch(): Promise<{ match: StreamMatch | nul
                 totalGamesRequired = isTestSeason ? 3 : 7; // Playoff Round
             }
         }
-        // -----------------------------------------------
-        
+
+        // =====================================================================
+        // THE FIX: CHRONOLOGICAL GAME NUMBERING (NO SPOILERS)
+        // =====================================================================
+        let calculatedGameNumber = 1;
+        let visibleT1Wins = 0;
+        let visibleT2Wins = 0;
+
+        // If we know the matchup ID, we count exactly how many games have finished their BROADCAST window!
+        if (targetMatch.weekly_matchup_id) {
+            const { data: scheduleHistory } = await supabase
+                .from('schedule')
+                .select('id, match_date, sim_match_id, sim_matches!sim_match_id(winner_team_id)')
+                .eq('weekly_matchup_id', targetMatch.weekly_matchup_id)
+                .not('sim_match_id', 'is', null)
+                .order('match_date', { ascending: true });
+
+            if (scheduleHistory) {
+                // Find where the current targetMatch sits in the chronological lineup
+                const targetIndex = scheduleHistory.findIndex(s => s.id === targetMatch.id);
+                calculatedGameNumber = targetIndex !== -1 ? targetIndex + 1 : 1;
+
+                // Tally wins ONLY for games that occurred BEFORE the current one in the lineup!
+                for (let i = 0; i < targetIndex; i++) {
+                    const pastGame = scheduleHistory[i];
+                    // The join returns an array or object depending on schema.
+                    const simMatchRef = Array.isArray(pastGame.sim_matches) ? pastGame.sim_matches[0] : pastGame.sim_matches;
+                    
+                    if (simMatchRef && simMatchRef.winner_team_id === t1.id) visibleT1Wins++;
+                    if (simMatchRef && simMatchRef.winner_team_id === t2.id) visibleT2Wins++;
+                }
+            }
+        }
+        // =====================================================================
+
         matchupContext = {
-            game_number: gameNumber,
+            game_number: calculatedGameNumber, // Uses strictly historical count!
             total_games: totalGamesRequired,
-            t1_wins: matchupRaw.sim_team1_wins || 0,
-            t2_wins: matchupRaw.sim_team2_wins || 0,
+            t1_wins: visibleT1Wins, // Only counts games whose broadcast has ended!
+            t2_wins: visibleT2Wins,
             is_playoff: matchupRaw.is_playoff || false,
             week_number: weekNum
         };
