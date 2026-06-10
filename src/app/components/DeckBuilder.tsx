@@ -1,5 +1,4 @@
 // src/app/components/DeckBuilder.tsx
-
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -34,6 +33,7 @@ import { addDeckToActivePoll } from "@/app/actions/deckVoteActions";
 import type { DraftPick, Deck, DeckCard } from "@/app/actions/draftActions";
 import { useSettings } from "@/contexts/SettingsContext";
 import { getCardImageUrl } from "@/app/utils/cardUtils";
+import { CardPreview } from "@/app/components/CardPreview";
 
 interface DeckBuilderProps {
   teamId: string;
@@ -49,6 +49,7 @@ function DraggableCard({ pick }: { pick: DraftPick }) {
     id: `pick-${pick.id}`,
     data: { pick },
   });
+
   const style = transform
     ? {
         transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
@@ -104,6 +105,7 @@ function DroppableZone({
   const { setNodeRef, isOver } = useDroppable({
     id,
   });
+
   return (
     <div
       ref={setNodeRef}
@@ -132,19 +134,19 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
   const [selectedDeck, setSelectedDeck] = useState<Deck | null>(null);
   const [deckCards, setDeckCards] = useState<DeckCard[]>([]);
   const [loading, setLoading] = useState(true);
-   // Create / Edit Modals State
+
+  // Create / Edit Modals State
   const [showNewDeckModal, setShowNewDeckModal] = useState(false);
   const [newDeckName, setNewDeckName] = useState("");
   const [newDeckDescription, setNewDeckDescription] = useState("");
   const [newDeckFormat, setNewDeckFormat] = useState("standard");
-const [showEditDeckModal, setShowEditDeckModal] = useState(false);
+  const [showEditDeckModal, setShowEditDeckModal] = useState(false);
   const [editDeckName, setEditDeckName] = useState("");
   const [editDeckDescription, setEditDeckDescription] = useState("");
-
   
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-    const [voteLoading, setVoteLoading] = useState(false);
+  const [voteLoading, setVoteLoading] = useState(false);
   const [activeCategory, setActiveCategory] = useState<"mainboard" | "sideboard" | "maybeboard">("mainboard");
   const [activeDragPick, setActiveDragPick] = useState<DraftPick | null>(null);
 
@@ -176,6 +178,7 @@ const [showEditDeckModal, setShowEditDeckModal] = useState(false);
       setDraftPicks(picks);
       const { decks: teamDecks } = await getTeamDecks(teamId);
       setDecks(teamDecks);
+      
       // Auto-select the first deck (most recent) - especially important for non-members
       if (teamDecks.length > 0 && !selectedDeck) {
         setSelectedDeck(teamDecks[0]);
@@ -225,7 +228,8 @@ const [showEditDeckModal, setShowEditDeckModal] = useState(false);
       setError(result.error || "Failed to create deck");
     }
   };
-const handleEditDeck = async () => {
+
+  const handleEditDeck = async () => {
     if (!editDeckName.trim()) return setError("Deck name is required");
     const result = await updateDeckDetails(selectedDeck!.id!, {
       deck_name: editDeckName, description: editDeckDescription
@@ -242,7 +246,6 @@ const handleEditDeck = async () => {
     }
   };
 
-  // --- NEW: Handle Add To Vote ---
   const handleAddDeckToVote = async () => {
     if (!selectedDeck) return;
     setVoteLoading(true);
@@ -255,6 +258,7 @@ const handleEditDeck = async () => {
     setTimeout(() => { setSuccess(null); setError(null); }, 4000);
     setVoteLoading(false);
   };
+
   const handleDeleteDeck = async (deckId: string) => {
     if (!confirm("Are you sure you want to delete this deck?")) return;
     const result = await deleteDeck(deckId);
@@ -273,7 +277,6 @@ const handleEditDeck = async () => {
       setError("Please select a deck first");
       return;
     }
-    // Check if card is already in deck
     if (deckCards.some((dc) => dc.draft_pick_id === pick.id)) {
       setError("Card is already in this section");
       setTimeout(() => setError(null), 3000);
@@ -309,10 +312,8 @@ const handleEditDeck = async () => {
     }
   };
 
-  // Add a basic land to the deck
   const handleAddBasicLand = async (landName: string) => {
     if (!selectedDeck?.id) return setError("Please select a deck first");
-
     const existingLand = deckCards.find(
       (dc) => dc.card_name.toLowerCase() === landName.toLowerCase() && dc.category === activeCategory
     );
@@ -321,7 +322,6 @@ const handleEditDeck = async () => {
       const newQuantity = (existingLand.quantity || 1) + 1;
       setDeckCards(prev => prev.map(dc => dc.id === existingLand.id ? { ...dc, quantity: newQuantity } : dc));
       
-      // FIX: Added '!' non-null assertion for TypeScript
       const result = await updateDeckCardQuantity(existingLand.id!, newQuantity);
       if (!result.success) {
         setError(result.error || "Failed to update basic land");
@@ -335,7 +335,6 @@ const handleEditDeck = async () => {
         deck_id: selectedDeck.id, draft_pick_id: undefined, card_id: `basic-${landName.toLowerCase()}`,
         card_name: landName, quantity: 1, category: activeCategory,
       });
-
       if (result.success) {
         await loadDeckCards(selectedDeck.id);
       } else {
@@ -350,6 +349,7 @@ const handleEditDeck = async () => {
     const existingLand = deckCards.find(
       (dc) => dc.card_name.toLowerCase() === landName.toLowerCase() && dc.category === activeCategory
     );
+
     if (!existingLand || !existingLand.id || existingLand.id.startsWith('temp-')) return;
 
     if (newQuantity <= 0) {
@@ -358,30 +358,26 @@ const handleEditDeck = async () => {
     } else {
       setDeckCards(prev => prev.map(dc => dc.id === existingLand.id ? { ...dc, quantity: newQuantity } : dc));
       
-      // FIX: Added '!' non-null assertion for TypeScript
       const result = await updateDeckCardQuantity(existingLand.id!, newQuantity);
       if (!result.success) await loadDeckCards(selectedDeck.id!);
     }
   };
 
-  // Export deck to Cockatrice format
   const handleExportToCockatrice = () => {
     if (!selectedDeck) {
       setError("No deck selected");
       return;
     }
-    // Get cards by category
     const mainboard = getCardsByCategory("mainboard");
     const sideboard = getCardsByCategory("sideboard");
-    // Build Cockatrice deck format
+
     let deckText = `// Deck: ${selectedDeck.deck_name}\n`;
     deckText += `// Format: ${selectedDeck.format || 'Unknown'}\n`;
     if (selectedDeck.description) {
       deckText += `// Description: ${selectedDeck.description}\n`;
     }
-    deckText += `// Exported from Dynasty Cube\n`;
-    deckText += `\n`;
-    // Add mainboard
+    deckText += `// Exported from Dynasty Cube\n\n`;
+
     if (mainboard.length > 0) {
       deckText += `// Mainboard (${mainboard.reduce((sum, card) => sum + (card.quantity || 1), 0)} cards)\n`;
       mainboard.forEach((card) => {
@@ -389,14 +385,14 @@ const handleEditDeck = async () => {
       });
       deckText += `\n`;
     }
-    // Add sideboard
+
     if (sideboard.length > 0) {
       deckText += `// Sideboard (${sideboard.reduce((sum, card) => sum + (card.quantity || 1), 0)} cards)\n`;
       sideboard.forEach((card) => {
         deckText += `SB: ${card.quantity || 1} ${card.card_name}\n`;
       });
     }
-    // Create and download file
+
     const blob = new Blob([deckText], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -410,27 +406,26 @@ const handleEditDeck = async () => {
     setTimeout(() => setSuccess(null), 3000);
   };
 
-  // Export deck to Arena format
   const handleExportToArena = () => {
     if (!selectedDeck) {
       setError("No deck selected");
       return;
     }
-    // Get cards by category
     const mainboard = getCardsByCategory("mainboard");
     const sideboard = getCardsByCategory("sideboard");
-    // Build Arena deck format (simpler format)
+
     let deckText = `Deck\n`;
     mainboard.forEach((card) => {
       deckText += `${card.quantity || 1} ${card.card_name}\n`;
     });
+
     if (sideboard.length > 0) {
       deckText += `\nSideboard\n`;
       sideboard.forEach((card) => {
         deckText += `${card.quantity || 1} ${card.card_name}\n`;
       });
     }
-    // Create and download file
+
     const blob = new Blob([deckText], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -444,7 +439,6 @@ const handleEditDeck = async () => {
     setTimeout(() => setSuccess(null), 3000);
   };
 
-  // Drag and drop handlers
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
     const pick = active.data.current?.pick as DraftPick;
@@ -455,18 +449,18 @@ const handleEditDeck = async () => {
     const { active, over } = event;
     setActiveDragPick(null);
     if (!over || !selectedDeck) return;
-    // Check if dropped on a category zone
+
     if (over.id.toString().startsWith('category-')) {
       const category = over.id.toString().replace('category-', '') as "mainboard" | "sideboard" | "maybeboard";
       const pick = active.data.current?.pick as DraftPick;
       if (!pick) return;
-      // Check if card is already in this category
+
       if (deckCards.some((dc) => dc.draft_pick_id === pick.id)) {
         setError(`${pick.card_name} is already in ${category}`);
         setTimeout(() => setError(null), 3000);
         return;
       }
-      // Add card to the deck in the dropped category
+
       const result = await addCardToDeck({
         deck_id: selectedDeck.id!,
         draft_pick_id: pick.id,
@@ -475,6 +469,7 @@ const handleEditDeck = async () => {
         quantity: 1,
         category: category,
       });
+
       if (result.success) {
         setSuccess(`Added ${pick.card_name} to ${category}!`);
         await loadDeckCards(selectedDeck.id!);
@@ -486,17 +481,32 @@ const handleEditDeck = async () => {
     }
   };
 
+  // THE FIX: Modified getCardsByCategory to automatically sort items by their CMC!
   const getCardsByCategory = (category: string) => {
-    return deckCards.filter((card) => card.category === category);
+    const filtered = deckCards.filter((card) => card.category === category);
+    
+    // Sort logic
+    return filtered.sort((a, b) => {
+      // 1. Basic Lands always sort to the bottom (assign them a CMC of 99)
+      const isBasicA = a.card_id?.startsWith('basic-');
+      const isBasicB = b.card_id?.startsWith('basic-');
+      
+      const cmcA = isBasicA ? 99 : (draftPicks.find(p => p.card_id === a.card_id)?.cmc ?? 99);
+      const cmcB = isBasicB ? 99 : (draftPicks.find(p => p.card_id === b.card_id)?.cmc ?? 99);
+
+      // 2. Sort primarily by CMC
+      if (cmcA !== cmcB) return cmcA - cmcB;
+
+      // 3. Tie-breaker: Alphabetical sorting
+      return a.card_name.localeCompare(b.card_name);
+    });
   };
 
   const mainboardCards = getCardsByCategory("mainboard");
   const sideboardCards = getCardsByCategory("sideboard");
   const maybeboardCards = getCardsByCategory("maybeboard");
 
-  // Get available picks (not in current deck yet)
   const availablePicks = draftPicks.filter(
-    // A pick is available if its unique ID is not found in the list of cards already in the deck.
     (pick) => !deckCards.some((dc) => dc.draft_pick_id === pick.id)
   );
 
@@ -530,6 +540,7 @@ const handleEditDeck = async () => {
             ✗ {error}
           </div>
         )}
+
       {/* Deck Selection / Creation */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
         <div className="flex items-center justify-between mb-4">
@@ -591,7 +602,6 @@ const handleEditDeck = async () => {
             ))}
           </div>
         ) : (
-          /* Non-members only see the most recent deck */
           <div className="text-center py-4">
             {decks.length > 0 && (
               <div className="inline-block text-left p-4 rounded-lg border-2 border-blue-500 bg-blue-50 dark:bg-blue-900/30">
@@ -620,7 +630,7 @@ const handleEditDeck = async () => {
         )}
       </div>
 
-      {/* New Deck Modal - Only for team members */}
+      {/* New Deck Modal */}
       {showNewDeckModal && isUserTeamMember && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full shadow-2xl">
@@ -693,7 +703,8 @@ const handleEditDeck = async () => {
           </div>
         </div>
       )}
-{/* NEW: Edit Deck Modal */}
+
+      {/* Edit Deck Modal */}
       {showEditDeckModal && isUserTeamMember && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full shadow-2xl">
@@ -715,13 +726,14 @@ const handleEditDeck = async () => {
           </div>
         </div>
       )}
-
         
-      {/* Deck Builder Interface - Full editing for team members */}
+      {/* Deck Builder Interface */}
       {selectedDeck && isUserTeamMember && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
           {/* Left: Available Cards & Basic Lands */}
           <div className="lg:col-span-1 space-y-4">
+            
             {/* Basic Lands Section */}
             <div className="bg-gradient-to-br from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20 border-2 border-green-300 dark:border-green-700 rounded-lg p-4">
               <div className="flex items-center justify-between mb-4">
@@ -780,6 +792,7 @@ const handleEditDeck = async () => {
                 })}
               </div>
             </div>
+
             {/* Available Drafted Cards */}
             <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
               <div className="flex items-center justify-between mb-4">
@@ -797,14 +810,24 @@ const handleEditDeck = async () => {
                   </p>
                 ) : (
                   availablePicks.map((pick) => (
-                    <div key={pick.id} onClick={() => handleAddCardToDeck(pick)}>
-                      <DraggableCard pick={pick} />
-                    </div>
+                    <CardPreview 
+                        key={pick.id} 
+                        card={{ 
+                            card_name: pick.card_name, 
+                            image_url: pick.image_url, 
+                            oldest_image_url: pick.oldest_image_url 
+                        }}
+                    >
+                        <div onClick={() => handleAddCardToDeck(pick)}>
+                          <DraggableCard pick={pick} />
+                        </div>
+                    </CardPreview>
                   ))
                 )}
               </div>
             </div>
           </div>
+
           {/* Right: Deck Contents */}
           <div className="lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
            <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
@@ -820,7 +843,6 @@ const handleEditDeck = async () => {
               </div>
               
               <div className="flex gap-2 flex-wrap items-center">
-                {/* NEW: Add To Vote Button */}
                 <button
                   onClick={handleAddDeckToVote}
                   disabled={voteLoading}
@@ -828,7 +850,6 @@ const handleEditDeck = async () => {
                 >
                   {voteLoading ? "Adding..." : "➕ Add to Vote"}
                 </button>
-
                 <div className="relative group">
                   <button className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1">
                     📥 Export
@@ -838,8 +859,6 @@ const handleEditDeck = async () => {
                     <button onClick={handleExportToArena} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 rounded-b-lg">MTG Arena (.txt)</button>
                   </div>
                 </div>
-
-                {/* NEW: Edit Button */}
                 <button
                   onClick={() => {
                     setEditDeckName(selectedDeck.deck_name);
@@ -860,7 +879,6 @@ const handleEditDeck = async () => {
               </div>
             </div>
 
-            {/* FIX: Tab Counts (Calculates true quantities) */}
             <div className="flex gap-2 mb-4 border-b border-gray-200 dark:border-gray-700">
               {[
                 { id: "mainboard" as const, label: "Mainboard", count: mainboardCards.reduce((acc, c) => acc + (c.quantity || 1), 0) },
@@ -886,17 +904,28 @@ const handleEditDeck = async () => {
                   <p className="text-sm">Drag cards here or click to add them</p>
                 </div>
               ) : (
-                getCardsByCategory(activeCategory).map((card) => (
-                  <div key={card.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border">
-                    <span className="text-gray-700 dark:text-gray-300 font-mono text-sm">{card.quantity}x</span>
-                    <div className="flex-1">
-                      <p className="font-semibold">{card.card_name}</p>
+                getCardsByCategory(activeCategory).map((card) => {
+                  const fullPickData = draftPicks.find(p => p.card_id === card.card_id) || {
+                      card_name: card.card_name,
+                      image_url: null,
+                      oldest_image_url: null
+                  };
+                  
+                  return (
+                    <div key={card.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border">
+                      <span className="text-gray-700 dark:text-gray-300 font-mono text-sm">{card.quantity}x</span>
+                      <div className="flex-1">
+                        <CardPreview card={fullPickData}>
+                          <p className="font-semibold hover:text-blue-500 transition-colors cursor-pointer">{card.card_name}</p>
+                        </CardPreview>
+                      </div>
+                      <button onClick={() => handleRemoveCardFromDeck(card.id!, card.card_name)} className="text-red-600 hover:text-red-700 text-sm">Remove</button>
                     </div>
-                    <button onClick={() => handleRemoveCardFromDeck(card.id!, card.card_name)} className="text-red-600 hover:text-red-700 text-sm">Remove</button>
-                  </div>
-                ))
+                  );
+                })
               )}
             </DroppableZone>
+
             {/* Deck Stats */}
             <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center mb-4">
@@ -954,6 +983,7 @@ const handleEditDeck = async () => {
                   <div className="text-xs text-gray-600 dark:text-gray-400">Colors</div>
                 </div>
               </div>
+              
               {/* Mini Mana Curve */}
               <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3">
                 <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -996,6 +1026,7 @@ const handleEditDeck = async () => {
           </div>
         </div>
       )}
+
       {/* Read-only Deck View for Non-Members */}
       {selectedDeck && !isUserTeamMember && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
@@ -1014,12 +1045,13 @@ const handleEditDeck = async () => {
               {deckCards.length} cards
             </span>
           </div>
+
           {selectedDeck.description && (
             <p className="text-gray-600 dark:text-gray-400 mb-4">
               {selectedDeck.description}
             </p>
           )}
-          {/* Category Tabs - Read Only */}
+
          <div className="flex gap-2 mb-4 border-b border-gray-200 dark:border-gray-700">
             {[
               { id: "mainboard" as const, label: "Mainboard", count: deckCards.filter(c => c.category === "mainboard").reduce((acc, c) => acc + (c.quantity || 1), 0) },
@@ -1038,12 +1070,22 @@ const handleEditDeck = async () => {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {deckCards.filter((card) => card.category === activeCategory).map((card) => (
+            {getCardsByCategory(activeCategory).map((card) => {
+              const fullPickData = draftPicks.find(p => p.card_id === card.card_id) || {
+                  card_name: card.card_name,
+                  image_url: null,
+                  oldest_image_url: null
+              };
+              
+              return (
                 <div key={card.id} className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border">
-                  <p className="font-semibold text-sm truncate">{card.card_name}</p>
+                  <CardPreview card={fullPickData}>
+                    <p className="font-semibold text-sm truncate hover:text-blue-500 transition-colors cursor-pointer">{card.card_name}</p>
+                  </CardPreview>
                   {(card.quantity || 1) > 1 && <p className="text-xs text-gray-500">x{card.quantity}</p>}
                 </div>
-            ))}
+              );
+            })}
           </div>
           
           <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border">
@@ -1060,6 +1102,7 @@ const handleEditDeck = async () => {
         </div>
       )}
       </div>
+
       {/* Drag Overlay */}
       <DragOverlay>
         {activeDragPick && activeDragPickImageUrl ? (

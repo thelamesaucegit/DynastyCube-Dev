@@ -31,7 +31,6 @@ function getRelativeTime(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
   if (diffInSeconds < 60) return "Just now";
   if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
   if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
@@ -60,11 +59,10 @@ export default function HomePage() {
       const currentSeason = seasonResult.season;
       setSeason(currentSeason);
       
-      const currentPhase = (currentSeason as CurrentSeason & { phase?: string })?.phase || currentSeason?.status;
+      const currentPhase = currentSeason?.phase;
       const isActivePlayPhase = currentPhase && currentPhase !== 'postseason' && currentPhase !== 'draft';
       
       const liveMatchPromise = isActivePlayPhase ? getLatestStreamMatch() : Promise.resolve({ match: null });
-
       const [teamsResult, newsResult, timerResult, streamResult] = await Promise.all([
         getTeamsWithDetails(),
         getAdminNews(3),
@@ -79,7 +77,6 @@ export default function HomePage() {
     } catch (error) {
       console.error("Error loading core home page data:", error);
     } finally {
-      // Unblock the main UI immediately!
       setLoadingCore(false); 
     }
   }, []);
@@ -125,7 +122,24 @@ export default function HomePage() {
     };
   }, []);
 
-  // Only block the UI if the CORE data is loading
+  // Helper to resolve human-readable season phase labels
+  const getPhaseDisplayLabel = (phase?: string) => {
+    switch (phase) {
+      case "draft":
+        return "Draft";
+      case "preseason":
+        return "Pre Season";
+      case "season":
+        return "Regular Season";
+      case "playoffs":
+        return "Post Season";
+      case "postseason":
+        return "Off Season";
+      default:
+        return "Active";
+    }
+  };
+
   if (loadingCore) {
     return (
       <div className="container max-w-7xl mx-auto px-4 py-16 text-center">
@@ -136,7 +150,7 @@ export default function HomePage() {
   }
 
   const liveDraftLink = draftSessionId ? `/draft/${draftSessionId}/live` : "#";
-  const currentPhase = (season as CurrentSeason & { phase?: string })?.phase || season?.status;
+  const currentPhase = season?.phase;
   const isPlayActive = currentPhase && currentPhase !== 'postseason' && currentPhase !== 'draft';
   const visiblePicks = recentPicks.slice(0, activeTeamCount);
 
@@ -159,7 +173,8 @@ export default function HomePage() {
             {season && (
               <div className="mb-3">
                 <Badge variant="secondary" className="text-[10px] bg-black/50 text-white border-white/20 backdrop-blur-md">
-                  {season.name} {(season as CurrentSeason & { is_active?: boolean }).is_active || season.status === "active" ? "Active" : ""}
+                  {/* THE FIX: Render the strict season_name and dynamic phase label cleanly! */}
+                  {season.season_name} • {getPhaseDisplayLabel(season.phase)}
                 </Badge>
               </div>
             )}
@@ -198,8 +213,9 @@ export default function HomePage() {
 
       {isPlayActive && liveMatch && <LiveStreamWidget initialMatch={liveMatch} onStreamEnd={loadCoreData} />}
        {(currentPhase === 'playoffs' || currentPhase === 'postseason') && season && (
-        <PlayoffBracket seasonId={season.id} seasonName={season.name} />
+        <PlayoffBracket seasonId={season.id} seasonName={season.season_name} />
       )}
+
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">Latest News</h2>

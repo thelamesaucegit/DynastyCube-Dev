@@ -218,6 +218,8 @@ export default function ChamberPoolsPage() {
       <div className="mb-8">
           <h1 className="text-4xl font-bold tracking-tight mb-2">The Chamber</h1>
           <p className="text-muted-foreground text-lg">Browse all cards currently in The Chamber</p>
+                  <p className="text-muted-foreground text-sm">These cards will be added to The Draft Pool next Season</p>
+
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">

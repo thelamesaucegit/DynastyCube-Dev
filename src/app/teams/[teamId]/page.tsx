@@ -19,7 +19,6 @@ import { getRoleEmoji, getRoleDisplayName } from "@/app/utils/roleUtils";
 import { getTeamHats } from "@/app/actions/hatActions"; 
 import { DraftInterface } from "@/app/components/DraftInterface";
 import { DeckBuilder } from "@/app/components/DeckBuilder";
-import { CardPreview } from "@/app/components/CardPreview";
 import { TeamStats } from "@/app/components/TeamStats";
 import { TeamRoles } from "@/app/components/TeamRoles";
 import { TeamCubucksDisplay } from "@/app/components/TeamCubucksDisplay";
@@ -32,7 +31,7 @@ import type { DraftPick, Deck } from "@/app/actions/draftActions";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
 import { Button } from "@/app/components/ui/button";
-import { createIdentitySwapPoll } from "@/app/actions/voteActions"; // <-- Add to top imports
+import { createIdentitySwapPoll, createTeamPoll } from "@/app/actions/voteActions"; 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
 import { MoonStar, Sun, Target, Layers, BookOpen, ArrowLeftRight, Swords, BarChart3, Crown, Users, Loader2, AlertCircle, ExternalLink, CalendarDays, CheckCircle2, XCircle, Vote } from "lucide-react";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -56,7 +55,6 @@ interface Team {
   members?: TeamMember[];
 }
 
-// THE FIX 1: Strictly define the hat return structure instead of using 'any'
 interface TeamHatData {
   quantity: number;
   hats: {
@@ -86,7 +84,7 @@ export default function TeamPage() {
   const [decks, setDecks] = useState<Deck[]>([]);
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [membersWithRoles, setMembersWithRoles] = useState<TeamMemberWithRoles[]>([]);
-  const [teamHats, setTeamHats] = useState<TeamHatData[]>([]); // <-- STRICTLY TYPED
+  const [teamHats, setTeamHats] = useState<TeamHatData[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>("picks");
   const [undrafting, setUndrafting] = useState<string | null>(null);
@@ -105,11 +103,9 @@ export default function TeamPage() {
 
   const loadTeamData = useCallback(async () => {
     if (!teamShortName) {
-        console.log("[TeamPage] Waiting for teamShortName from URL...");
         return;
     }
     setLoading(true);
-    console.log("[TeamPage] Starting data load for team:", teamShortName);
     try {
       const { team: foundTeam, error: teamError } = await getTeamByShortName(teamShortName);
       if (teamError || !foundTeam) {
@@ -130,21 +126,20 @@ export default function TeamPage() {
         setActiveDraftSessionId(null);
       }
 
-      // THE FIX 2: Strict Promise typing on parallel declarations
       const dataPromises: [
           Promise<{ picks: DraftPick[], error?: string }>,
           Promise<{ decks: Deck[], error?: string }>,
           Promise<{ roles: string[], error?: string }>,
           Promise<{ members: TeamMemberWithRoles[], error?: string }>,
           Promise<AutoDraftPreviewResult | null>,
-          Promise<TeamHatData[]> // <-- STRICT PROMISE TYPING
+          Promise<TeamHatData[]> 
       ] = [
         getTeamDraftPicks(teamUUID, sessionId || undefined),
         getTeamDecks(teamUUID),
         getCurrentUserRolesForTeam(teamUUID),
         getTeamMembersWithRoles(teamUUID),
         sessionId ? getAutoDraftPreview(teamUUID, sessionId) : Promise.resolve(null),
-        getTeamHats(teamUUID) as Promise<TeamHatData[]> // <-- CAST FOR SAFETY
+        getTeamHats(teamUUID) as Promise<TeamHatData[]>
       ];
 
       const [picksResult, decksResult, rolesResult, membersResult, previewResult, hatsResult] = await Promise.all(dataPromises);
@@ -220,33 +215,78 @@ export default function TeamPage() {
       }
   };
 
+  // THE FIX: Intercept Cut Requests for non-officer team members
   const handleUndraftCard = async (pick: DraftPick) => {
     if (pick.is_keeper) return;
     if (activeDraftSessionId) {
       alert("Cards cannot be cut from your pool during an active draft session.");
       return;
     }
-    if (!pick.id || undrafting || !team) return;
-    const confirmed = window.confirm(`Are you sure you want to undraft "${pick.card_name}"? The Çubucks spent will be refunded to the team.`);
+    if (!pick.id || undrafting || !team || !user) return;
+
+    const hasCutPermission = userRoles.includes("captain") || userRoles.includes("pilot") || userRoles.includes("broker");
+
+    // Scenario A: User HAS permission. Execute cut instantly.
+    if (hasCutPermission) {
+        const confirmed = window.confirm(`Are you sure you want to cut "${pick.card_name}"? The Çubucks spent will be refunded to the team.`);
+        if (!confirmed) return;
+        
+        setUndrafting(pick.id);
+        setUndraftMessage(null);
+        try {
+          const result = await refundDraftPick(team.id, pick.id, pick.card_id, pick.card_name);
+          if (result.success) {
+            setUndraftMessage({ type: "success", text: `Cut ${pick.card_name}! Refunded ${result.refundAmount} Çubucks.` });
+            const { picks } = await getTeamDraftPicks(team.id, activeDraftSessionId || undefined);
+            setDraftPicks(picks);
+            setCubucksRefreshKey((prev) => prev + 1);
+          } else {
+            setUndraftMessage({ type: "error", text: result.error || "Failed to cut card" });
+          }
+        } catch (error) {
+          setUndraftMessage({ type: "error", text: "An unexpected error occurred." });
+        } finally {
+          setUndrafting(null);
+          setTimeout(() => setUndraftMessage(null), 5000);
+        }
+        return;
+    }
+
+    // Scenario B: User DOES NOT have permission. Initiate a Vote!
+    const confirmed = window.confirm(`You do not have direct permission to cut cards. Would you like to initiate a team vote to cut "${pick.card_name}"?`);
     if (!confirmed) return;
-    
+
     setUndrafting(pick.id);
-    setUndraftMessage(null);
     try {
-      const result = await refundDraftPick(team.id, pick.id, pick.card_id, pick.card_name);
-      if (result.success) {
-        setUndraftMessage({ type: "success", text: `Undrafted ${pick.card_name}! Refunded ${result.refundAmount} Çubucks.` });
-        const { picks } = await getTeamDraftPicks(team.id, activeDraftSessionId || undefined);
-        setDraftPicks(picks);
-        setCubucksRefreshKey((prev) => prev + 1);
-      } else {
-        setUndraftMessage({ type: "error", text: result.error || "Failed to undraft card" });
-      }
-    } catch (error) {
-      setUndraftMessage({ type: "error", text: "An unexpected error occurred." });
+        const endsAt = new Date();
+        endsAt.setHours(endsAt.getHours() + 12);
+
+        // Note: For this to securely enforce the "1 per day" limit, your `createTeamPoll` backend 
+        // action will need to check the `polls` table to see if this `created_by` user has submitted 
+        // a poll titled "Cut " in the last 24 hours! Assuming the UI sends the request cleanly here:
+        const result = await createTeamPoll(
+            team.id,
+            `Cut ${pick.card_name}?`,
+            `Do we want to cut ${pick.card_name} and refund its Çubucks cost?`,
+            endsAt.toISOString(),
+            false, // no multiple votes
+            false, // do not show results early
+            [`Cut ${pick.card_name}`, "Keep it"],
+            user.id
+        );
+
+        if (result.success) {
+            setUndraftMessage({ type: "success", text: `A 12-hour team vote to cut ${pick.card_name} has been initiated! Check the Votes tab.` });
+            // In a complete implementation, you'd have a cron job or manual trigger resolve this poll 
+            // and actually execute the refund if "Cut" wins!
+        } else {
+            setUndraftMessage({ type: "error", text: result.error || "Failed to initiate vote. (You may have hit your daily limit)." });
+        }
+    } catch (e) {
+        setUndraftMessage({ type: "error", text: "An unexpected error occurred." });
     } finally {
-      setUndrafting(null);
-      setTimeout(() => setUndraftMessage(null), 5000);
+        setUndrafting(null);
+        setTimeout(() => setUndraftMessage(null), 5000);
     }
   };
 
@@ -323,9 +363,7 @@ export default function TeamPage() {
                   {teamHats.map((th) => {
                     const hat = Array.isArray(th.hats) ? th.hats[0] : th.hats;
                     if (!hat || !hat.emoji) return null;
-
                     const isCursedHat = hat.hatId === 2;
-
                     return (
                       <div 
                         key={`hat-${hat.hatId}`} 
@@ -369,8 +407,8 @@ export default function TeamPage() {
           </div>
         </CardContent>
       </Card>
+      
       <DraftStatusWidget variant="team" teamId={team.id} />
-        {/*  Lorwyn/Shadowmoor Transformation Button ONLY for the Changelings/Mimics */}
 
       {isUserTeamMember && (team.short_name === 'changelings' || team.short_name === 'mimics') && seasonPhase !== 'draft' && (
         <Card className="mb-6 border-purple-500/50 bg-gradient-to-r from-purple-500/10 to-indigo-500/10">
@@ -381,7 +419,7 @@ export default function TeamPage() {
                 The Great Aurora
               </h3>
               <p className="text-sm text-muted-foreground">
-                As long as the cosmos remain neutral, any team member may initiate a 12-hour vote to transform the team&apos;s identity.
+                As long as the cosmos remain neutral, any team member may initiate a 12-hour vote to transform the team's identity.
               </p>
             </div>
             <Button 
@@ -391,7 +429,6 @@ export default function TeamPage() {
                 const result = await createIdentitySwapPoll(team.id, user.id, activeIdentity);
                 alert(result.message || result.error);
                 if (result.success) {
-                  // Reload the page to show the newly created poll in the Votes tab!
                   window.location.reload(); 
                 }
               }}
@@ -402,6 +439,7 @@ export default function TeamPage() {
           </CardContent>
         </Card>
       )}
+
        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 items-start">
         <div className="w-full">
           <TeamCubucksDisplay 
@@ -418,6 +456,7 @@ export default function TeamPage() {
           />
         </div>
       </div>
+
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabType)}>
         <TabsList className="flex-wrap h-auto gap-1 mb-6">
           {tabs.map((tab) => (
@@ -564,65 +603,70 @@ export default function TeamPage() {
                         const imageUrl = getCardImageUrl(pick, useOldestArt);
                         
                         return (
-                          <CardPreview key={pick.id} card={pick}>
-                            <div className={`group relative bg-muted rounded-lg overflow-hidden border transition-all hover:shadow-md ${isKeeper && isUserTeamMember ? 'ring-2 ring-green-500 shadow-[0_0_15px_rgba(34,197,94,0.3)] border-green-500' : 'hover:border-primary/50'}`}>
-                              
-                              {imageUrl && (
-                                <div className="relative h-64">
-                                  <Image src={imageUrl} alt={pick.card_name} fill className="object-cover" />
+                          /* THE FIX: Removed CardPreview, implemented object-contain on image */
+                          <div key={pick.id} className={`group relative bg-muted rounded-lg overflow-hidden border transition-all hover:shadow-md ${isKeeper && isUserTeamMember ? 'ring-2 ring-green-500 shadow-[0_0_15px_rgba(34,197,94,0.3)] border-green-500' : 'hover:border-primary/50'}`}>
+                            
+                            {imageUrl && (
+                              <div className="relative h-80 bg-zinc-950/40 border-b border-border/10">
+                                <Image src={imageUrl} alt={pick.card_name} fill className="object-contain" />
+                              </div>
+                            )}
+                            
+                            <div className="p-2">
+                              <div className="flex justify-between items-start">
+                                <div className="min-w-0 flex-1">
+                                  <h4 className="font-semibold text-sm truncate">{pick.card_name}</h4>
+                                  <p className="text-xs text-muted-foreground truncate">{pick.card_set}</p>
                                 </div>
-                              )}
+                              </div>
                               
-                              <div className="p-2">
-                                <div className="flex justify-between items-start">
-                                  <div className="min-w-0 flex-1">
-                                    <h4 className="font-semibold text-sm truncate">{pick.card_name}</h4>
-                                    <p className="text-xs text-muted-foreground truncate">{pick.card_set}</p>
-                                  </div>
-                                </div>
-                                
+                              <div className="flex items-center justify-between mt-1">
                                 {pick.cubecobra_elo != null && (
-                                  <p className="text-xs text-purple-600 dark:text-purple-400 font-medium mt-0.5">
+                                  <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">
                                     ELO: {pick.cubecobra_elo.toLocaleString()}
                                   </p>
                                 )}
-                                
-                                {isKeeper && isUserTeamMember && (
-                                  <Badge className="mt-1.5 bg-green-600 hover:bg-green-600 text-[10px] uppercase font-bold tracking-wider">
-                                    KEEPER
-                                  </Badge>
-                                )}
+                                {/* THE FIX: Added Çubucks cost! */}
+                                <p className="text-xs font-bold text-yellow-600 dark:text-yellow-500">
+                                  Ç {pick.cubucks_cost || 1}
+                                </p>
                               </div>
-                              {/* OVERLAY CONTROLS */}
-                              {isUserTeamMember && (
-                                <>
-                                  {/* Darken image on hover to make buttons pop */}
-                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
-                                  {/* Cut Button - Only if NOT a keeper */}
-                                  {!isKeeper && (
-                                    <button
-                                      onClick={(e) => { e.preventDefault(); handleUndraftCard(pick); }}
-                                      disabled={isUndrafting || !!undrafting || !!togglingKeeper}
-                                      className="absolute top-2 right-2 bg-destructive hover:bg-destructive/90 text-white text-xs font-bold px-2.5 py-1.5 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 z-10"
-                                      title="Cut and Refund"
-                                    >
-                                      {isUndrafting ? "..." : "Cut"}
-                                    </button>
-                                  )}
-                                  {/* Keeper Toggle Button - Only during Playoffs */}
-                                  {seasonPhase === "playoffs" && (
-                                    <button
-                                      onClick={(e) => { e.preventDefault(); handleToggleKeeper(pick); }}
-                                      disabled={isToggling || !!undrafting}
-                                      className={`absolute bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-xs font-bold shadow-lg opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 z-10 whitespace-nowrap ${isKeeper ? 'bg-gray-700 hover:bg-gray-800 text-white' : 'bg-green-600 hover:bg-green-500 text-white'}`}
-                                    >
-                                      {isToggling ? "Saving..." : isKeeper ? "Remove Keeper" : "Designate Keeper"}
-                                    </button>
-                                  )}
-                                </>
+                              
+                              {isKeeper && isUserTeamMember && (
+                                <Badge className="mt-1.5 bg-green-600 hover:bg-green-600 text-[10px] uppercase font-bold tracking-wider">
+                                  KEEPER
+                                </Badge>
                               )}
                             </div>
-                          </CardPreview>
+                            
+                            {/* OVERLAY CONTROLS */}
+                            {isUserTeamMember && (
+                              <>
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
+                                {/* Cut Button - Only if NOT a keeper */}
+                                {!isKeeper && (
+                                  <button
+                                    onClick={(e) => { e.preventDefault(); handleUndraftCard(pick); }}
+                                    disabled={isUndrafting || !!undrafting || !!togglingKeeper}
+                                    className="absolute top-2 right-2 bg-destructive hover:bg-destructive/90 text-white text-xs font-bold px-2.5 py-1.5 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 z-10 pointer-events-auto"
+                                    title="Cut and Refund"
+                                  >
+                                    {isUndrafting ? "..." : "Cut"}
+                                  </button>
+                                )}
+                                {/* Keeper Toggle Button - Only during Playoffs */}
+                                {seasonPhase === "playoffs" && (
+                                  <button
+                                    onClick={(e) => { e.preventDefault(); handleToggleKeeper(pick); }}
+                                    disabled={isToggling || !!undrafting}
+                                    className={`absolute bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-xs font-bold shadow-lg opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 z-10 whitespace-nowrap pointer-events-auto ${isKeeper ? 'bg-gray-700 hover:bg-gray-800 text-white' : 'bg-green-600 hover:bg-green-500 text-white'}`}
+                                  >
+                                    {isToggling ? "Saving..." : isKeeper ? "Remove Keeper" : "Designate Keeper"}
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </div>
                         );
                       })}
                     </div>
