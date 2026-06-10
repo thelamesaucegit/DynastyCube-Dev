@@ -313,30 +313,71 @@ export async function getAllPolls() {
   }
 }
 
+/**
+ * Create a new poll (admin only)
+ */
 export async function createPoll(
-  title: string, description: string | null, endsAt: string, allowMultipleVotes: boolean,
-  showResultsBeforeEnd: boolean, options: string[], createdBy: string, voteType: VoteType = "individual"
+  title: string,
+  description: string | null,
+  endsAt: string,
+  allowMultipleVotes: boolean,
+  showResultsBeforeEnd: boolean,
+  options: string[],
+  createdBy: string,
+  voteType: VoteType = "individual",
+  triggerEvent: string | null = null // <-- RESTORED: Explicitly typed as string | null
 ) {
   try {
     const supabase = await createServerClient();
-    if (!title || title.trim().length === 0) return { success: false, error: "Title is required" };
-    if (!options || options.length < 2) return { success: false, error: "At least 2 options are required" };
-    if (new Date(endsAt) <= new Date()) return { success: false, error: "End date must be in the future" };
+    // Validate
+    if (!title || title.trim().length === 0) {
+      return { success: false, error: "Title is required" };
+    }
+    if (!options || options.length < 2) {
+      return { success: false, error: "At least 2 options are required" };
+    }
+    if (new Date(endsAt) <= new Date()) {
+      return { success: false, error: "End date must be in the future" };
+    }
 
-    const { data: poll, error: pollError } = await supabase.from("polls").insert({
-        title, description, ends_at: endsAt, allow_multiple_votes: allowMultipleVotes,
-        show_results_before_end: showResultsBeforeEnd, vote_type: voteType, created_by: createdBy, is_active: true,
-      }).select().single();
+    const isActive = !triggerEvent;
+
+    // Create poll
+    const { data: poll, error: pollError } = await supabase
+      .from("polls")
+      .insert({
+        title,
+        description,
+        ends_at: endsAt,
+        allow_multiple_votes: allowMultipleVotes,
+        show_results_before_end: showResultsBeforeEnd,
+        vote_type: voteType,
+        created_by: createdBy,
+        is_active: isActive,
+        trigger_event: triggerEvent, // Uses string or null
+      })
+      .select()
+      .single();
 
     if (pollError) throw pollError;
     if (!poll) return { success: false, error: "Failed to create poll" };
 
-    const pollOptions = options.map((text, index) => ({ poll_id: poll.id, option_text: text, option_order: index + 1 }));
-    const { error: optionsError } = await supabase.from("poll_options").insert(pollOptions);
+    // Create options
+    const pollOptions = options.map((text, index) => ({
+      poll_id: poll.id,
+      option_text: text,
+      option_order: index + 1,
+    }));
+
+    const { error: optionsError } = await supabase
+      .from("poll_options")
+      .insert(pollOptions);
+
     if (optionsError) {
       await supabase.from("polls").delete().eq("id", poll.id);
       throw optionsError;
     }
+
     return { success: true, message: "Poll created successfully!", pollId: poll.id };
   } catch (error) {
     console.error("Error creating poll:", error);
