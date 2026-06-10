@@ -19,8 +19,7 @@ import { getRoleEmoji, getRoleDisplayName } from "@/app/utils/roleUtils";
 import { getTeamHats } from "@/app/actions/hatActions";
 import { DraftInterface } from "@/app/components/DraftInterface";
 import { DeckBuilder } from "@/app/components/DeckBuilder";
-import { TeamStats } from "@/app/components/TeamStats";
-import { TeamRoles } from "@/app/components/TeamRoles";
+import { TeamRoles } from "@/app/components/TeamRoles"; // <-- Imported for inline embedding
 import { TeamCubucksDisplay } from "@/app/components/TeamCubucksDisplay";
 import { MatchRecording } from "@/app/components/MatchRecording";
 import { MatchSchedulingWidget } from "@/app/components/team/MatchSchedulingWidget";
@@ -70,7 +69,8 @@ interface TeamHatData {
   }[] | null;
 }
 
-type TabType = "picks" | "decks" | "members" | "draft" | "stats" | "roles" | "trades" | "matches" | "votes" | "trophies";
+// THE FIX: Decluttered the tabs to keep only the primary categories
+type TabType = "picks" | "decks" | "members" | "draft" | "trades" | "matches" | "votes" | "trophies";
 
 export default function TeamPage() {
   const params = useParams();
@@ -86,7 +86,7 @@ export default function TeamPage() {
   const [membersWithRoles, setMembersWithRoles] = useState<TeamMemberWithRoles[]>([]);
   const [teamHats, setTeamHats] = useState<TeamHatData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("picks");
+  const [activeTab, setActiveTab] = useState<TabType>("picks");
   const [undrafting, setUndrafting] = useState<string | null>(null);
   const [undraftMessage, setUndraftMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [cubucksRefreshKey, setCubucksRefreshKey] = useState(0);
@@ -298,6 +298,7 @@ export default function TeamPage() {
     }
   };
 
+  // THE FIX: Decluttered the tabs to keep only the consolidated categories
   const tabs: { id: TabType; label: string; icon: React.ReactNode; count?: number, disabled?: boolean }[] = [
     ...(isUserTeamMember ? [{ id: "draft" as TabType, label: "Draft & Free Agency", icon: <Target className="size-4" />, count: undefined, disabled: false }] : []),
     { id: "picks" as TabType, label: "Team Pool", icon: <Layers className="size-4" />, count: draftPicks.length },
@@ -306,8 +307,6 @@ export default function TeamPage() {
     { id: "matches" as TabType, label: "Matches", icon: <Swords className="size-4" />, count: undefined },
     { id: "trophies" as TabType, label: "Trophy Case", icon: <Crown className="size-4 text-yellow-500" />, count: undefined },
     ...(isUserTeamMember ? [{ id: "votes" as TabType, label: "Votes", icon: <Vote className="size-4" />, count: undefined }] : []),
-    { id: "stats" as TabType, label: "Statistics", icon: <BarChart3 className="size-4" />, count: undefined },
-    ...(isUserTeamMember ? [{ id: "roles" as TabType, label: "Team Roles", icon: <Crown className="size-4" />, count: undefined }] : []),
     { id: "members" as TabType, label: "Members", icon: <Users className="size-4" />, count: team?.members?.length || 0 },
   ];
 
@@ -393,7 +392,6 @@ export default function TeamPage() {
           pointer-events: none;
         }
       `}</style>
-
       <Card className="mb-6">
         <CardContent className="pt-6">
           <div className="flex items-center gap-6">
@@ -444,11 +442,7 @@ export default function TeamPage() {
       </Card>
       
       <DraftStatusWidget variant="team" teamId={team.id} />
-
-      {/* 
-         THE GREAT AURORA CARD
-         Features animated shifting linear gradients, sparkling starlight layers, and a glowing neon backdrop
-      */}
+      
       {isUserTeamMember && (team.short_name === 'changelings' || team.short_name === 'mimics') && seasonPhase !== 'draft' && (
         <Card className="mb-6 aurora-card-bg border border-green-500/40 relative">
           <div className="aurora-stream" />
@@ -717,71 +711,63 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
-            <TabsContent value="stats">
-              {activeTab === "stats" && (
-                <div>
-                  <div className="mb-6">
-                    <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
-                      <BarChart3 className="size-5" /> Team Statistics
-                    </h2>
-                    <p className="text-sm text-muted-foreground">Comprehensive statistics for {team.name}&apos;s draft picks and decks</p>
-                  </div>
-                  <TeamStats teamId={team.id} />
-                </div>
-              )}
-            </TabsContent>
-            <TabsContent value="roles">
-              {activeTab === "roles" && isUserTeamMember && (
-                <div>
-                  <div className="mb-6">
-                    <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
-                      <Crown className="size-5" /> Team Roles & Permissions
-                    </h2>
-                    <p className="text-sm text-muted-foreground">Manage team member roles and responsibilities</p>
-                  </div>
-                  <TeamRoles teamId={team.id} teamName={team.name} isUserTeamMember={isUserTeamMember} />
-                </div>
-              )}
-            </TabsContent>
             <TabsContent value="members">
               {activeTab === "members" && (
-                <div>
-                  <h2 className="text-xl font-semibold flex items-center gap-2 mb-4">
-                    <Users className="size-5" /> Team Members
-                  </h2>
-                  {!team.members || team.members.length === 0 ? (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <Users className="size-10 mx-auto mb-3 opacity-50" />
-                      <p className="text-lg mb-1">No members yet</p>
-                      <p className="text-sm">This team is waiting for players to join</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {team.members.map((member) => {
-                        const memberRoleData = membersWithRoles.find((m) => m.user_id === member.user_id);
-                        const memberRoles = memberRoleData?.roles || [];
-                        return (
-                          <div key={member.id} className="flex items-center justify-between bg-muted rounded-lg p-4 border">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <p className="font-semibold">{member.user_display_name || "Unknown User"}</p>
-                                {memberRoles.length > 0 && (
-                                  <div className="flex gap-1 flex-wrap">
-                                    {memberRoles.map((role) => (
-                                      <Badge key={role} variant="secondary" title={getRoleDisplayName(role)}>
-                                        {getRoleEmoji(role)} {getRoleDisplayName(role)}
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                )}
+                <div className="space-y-8">
+                  <div>
+                    <h2 className="text-xl font-semibold flex items-center gap-2 mb-4">
+                      <Users className="size-5" /> Team Members
+                    </h2>
+                    {!team.members || team.members.length === 0 ? (
+                      <div className="text-center py-12 text-muted-foreground">
+                        <Users className="size-10 mx-auto mb-3 opacity-50" />
+                        <p className="text-lg mb-1">No members yet</p>
+                        <p className="text-sm">This team is waiting for players to join</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {team.members.map((member) => {
+                          const memberRoleData = membersWithRoles.find((m) => m.user_id === member.user_id);
+                          const memberRoles = memberRoleData?.roles || [];
+                          return (
+                            <div key={member.id} className="flex items-center justify-between bg-muted rounded-lg p-4 border">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="font-semibold">{member.user_display_name || "Unknown User"}</p>
+                                  {memberRoles.length > 0 && (
+                                    <div className="flex gap-1 flex-wrap">
+                                      {memberRoles.map((role) => (
+                                        <Badge key={role} variant="secondary" title={getRoleDisplayName(role)}>
+                                          {getRoleEmoji(role)} {getRoleDisplayName(role)}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
+                                  <CalendarDays className="size-3" /> Joined {new Date(member.joined_at).toLocaleDateString()}
+                                </p>
                               </div>
-                              <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
-                                <CalendarDays className="size-3" /> Joined {new Date(member.joined_at).toLocaleDateString()}
-                              </p>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 
+                     THE FIX: Embedded the TeamRoles component directly inside the Members directory, 
+                     divided cleanly with a full horizontal rule border. Only visible to team members!
+                  */}
+                  {isUserTeamMember && (
+                    <div className="border-t border-gray-200 dark:border-gray-700 pt-8">
+                      <div className="mb-6">
+                        <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
+                          <Crown className="size-5" /> Team Roles & Permissions
+                        </h2>
+                        <p className="text-sm text-muted-foreground">Manage role assignments and responsibilities for all active team members.</p>
+                      </div>
+                      <TeamRoles teamId={team.id} teamName={team.name} isUserTeamMember={isUserTeamMember} />
                     </div>
                   )}
                 </div>
