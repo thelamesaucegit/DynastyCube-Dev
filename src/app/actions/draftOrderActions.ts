@@ -591,7 +591,20 @@ export async function getDraftStatus(
       return { status: null, seasonId: activeSeason.id };
     }
 
+    // Map base draft order teams
+    const draftOrderTeams = validOrderData.map((entry) => {
+      const team = Array.isArray(entry.team) ? entry.team[0] : entry.team;
+      return {
+        teamId: entry.team_id,
+        teamName: team!.name || "Unknown",
+        teamEmoji: team!.emoji || "?",
+        pickPosition: entry.pick_position,
+      };
+    });
+
+    let totalPicks = 0;
     const pickCounts = new Map<string, number>();
+
     if (sessionId) {
       const { data: pickData, error: rpcError } = await supabase
         .rpc('get_pick_counts_for_session', { p_session_id: sessionId });
@@ -600,39 +613,68 @@ export async function getDraftStatus(
         console.error("Error counting drafted cards:", rpcError);
         return { status: null, seasonId: activeSeason.id, error: rpcError.message };
       }
+
       (pickData || []).forEach((row: PickCount) => {
         pickCounts.set(row.team_id, Number(row.pick_count));
+        totalPicks += Number(row.pick_count);
       });
     }
 
-    const draftOrder = validOrderData.map((entry) => {
-      const team = Array.isArray(entry.team) ? entry.team[0] : entry.team;
-      return {
-        teamId: entry.team_id,
-        teamName: team!.name || "Unknown",
-        teamEmoji: team!.emoji || "?",
-        pickPosition: entry.pick_position,
-        picksMade: pickCounts.get(entry.team_id) || 0,
-      };
-    });
+    // Attach picksMade to the draft order for the UI
+    const draftOrder = draftOrderTeams.map(t => ({
+        ...t,
+        picksMade: pickCounts.get(t.teamId) || 0
+    }));
 
     const totalTeams = draftOrder.length;
     if (totalTeams === 0) return { status: null, seasonId: activeSeason.id };
 
-    const totalPicks = draftOrder.reduce((sum, t) => sum + t.picksMade, 0);
-    const minPicks = Math.min(...draftOrder.map((t) => t.picksMade));
-    const currentRound = minPicks + 1;
-    const teamsNeedingPick = draftOrder.filter((t) => t.picksMade === minPicks);
+    // =========================================================================
+    // THE FIX: FETCH TRADED PICKS LEDGER
+    // =========================================================================
+    const { data: tradedPicks } = await supabase
+        .from('future_draft_picks')
+        .select('original_team_id, new_owner_team_id, round_number');
+        
+    // Create a fast lookup map: 'originalTeamId_roundNumber' -> 'newOwnerTeamId'
+    const tradeMap = new Map<string, string>(); 
+    (tradedPicks || []).forEach(tp => {
+        tradeMap.set(`${tp.original_team_id}_${tp.round_number}`, tp.new_owner_team_id);
+    });
 
-    if (teamsNeedingPick.length === 0) {
-      if (draftOrder.every(t => t.picksMade >= minPicks + 1)) {
-        return { status: null, seasonId: activeSeason.id, error: "Draft appears to be complete, but not marked." };
-      }
-      return { status: null, seasonId: activeSeason.id, error: "Could not determine team on the clock." };
+    // Helper to resolve pick ownership dynamically
+    const resolvePickOwner = (globalPickNum: number) => {
+        const roundNum = Math.ceil(globalPickNum / totalTeams);
+        // Map global pick (e.g., 15) to slot index (0 to N-1)
+        const slotIndex = (globalPickNum - 1) % totalTeams; 
+        const originalOwner = draftOrderTeams[slotIndex];
+        
+        const tradeKey = `${originalOwner.teamId}_${roundNum}`;
+        if (tradeMap.has(tradeKey)) {
+            const newOwnerId = tradeMap.get(tradeKey)!;
+            // Lookup the new owner's details to populate the UI correctly
+            const newOwner = draftOrderTeams.find(t => t.teamId === newOwnerId);
+            return newOwner || originalOwner;
+        }
+        return originalOwner;
+    };
+    // =========================================================================
+
+    // Calculate current position globally
+    const globalPickNumber = totalPicks + 1;
+    const currentRound = Math.ceil(globalPickNumber / totalTeams);
+
+    // Ensure draft hasn't exceeded total rounds (assuming 40)
+    const { data: sessionData } = await supabase.from('draft_sessions').select('total_rounds').eq('id', sessionId).maybeSingle();
+    const maxRounds = sessionData?.total_rounds || 40;
+    
+    if (currentRound > maxRounds) {
+         return { status: null, seasonId: activeSeason.id, error: "Draft appears to be complete." };
     }
 
-    const onTheClock = teamsNeedingPick[0];
-    const onDeck = teamsNeedingPick.length > 1 ? teamsNeedingPick[1] : draftOrder[0];
+    // Determine On The Clock & On Deck by resolving the ledger!
+    const onTheClock = resolvePickOwner(globalPickNumber);
+    const onDeck = resolvePickOwner(globalPickNumber + 1);
 
     return {
       status: { onTheClock, onDeck, currentRound, totalPicks, totalTeams, seasonName: activeSeason.season_name, draftOrder },
