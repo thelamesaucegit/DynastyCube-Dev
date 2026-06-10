@@ -419,7 +419,7 @@ export default function TeamPage() {
                 The Great Aurora
               </h3>
               <p className="text-sm text-muted-foreground">
-                As long as the cosmos remain neutral, any team member may initiate a 12-hour vote to transform the team's identity.
+                As long as the cosmos remain neutral, any team member may initiate a 12-hour vote to transform the team&apos;s identity.
               </p>
             </div>
             <Button 
