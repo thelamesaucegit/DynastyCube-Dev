@@ -40,7 +40,10 @@ export default function CreateTradePage({ params }: TradePageProps) {
   const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
+  
   const [myDraftPicks, setMyDraftPicks] = useState<DraftPick[]>([]);
+  const [theirDraftPicks, setTheirDraftPicks] = useState<DraftPick[]>([]); // <-- NEW: To store their roster
+
   const [seasons, setSeasons] = useState<Season[]>([]);
   
   const [loading, setLoading] = useState(true);
@@ -48,11 +51,13 @@ export default function CreateTradePage({ params }: TradePageProps) {
   const [error, setError] = useState<string | null>(null);
   const [tradesEnabled, setTradesEnabled] = useState(true);
 
-  // Trade items
+  // My Trade items
   const [myOfferedCards, setMyOfferedCards] = useState<string[]>([]);
   const [myOfferedPicks, setMyOfferedPicks] = useState<{ round: number; seasonId: string }[]>([]);
   const [myOfferedEssence, setMyOfferedEssence] = useState<number>(0);
 
+  // Their Trade items
+  const [theirOfferedCards, setTheirOfferedCards] = useState<string[]>([]); // <-- NEW: To store requested cards
   const [theirOfferedPicks, setTheirOfferedPicks] = useState<{ round: number; seasonId: string }[]>([]);
   const [theirOfferedEssence, setTheirOfferedEssence] = useState<number>(0);
 
@@ -62,6 +67,19 @@ export default function CreateTradePage({ params }: TradePageProps) {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId]);
+
+  // THE FIX: Automatically fetch the target team's roster when selected!
+  useEffect(() => {
+    if (selectedTeamId) {
+      getTeamDraftPicks(selectedTeamId).then(({ picks }) => {
+        setTheirDraftPicks(picks);
+        setTheirOfferedCards([]); // Reset requested cards if they change teams
+      });
+    } else {
+      setTheirDraftPicks([]);
+      setTheirOfferedCards([]);
+    }
+  }, [selectedTeamId]);
 
   const loadData = async () => {
     setLoading(true);
@@ -74,7 +92,6 @@ export default function CreateTradePage({ params }: TradePageProps) {
       const current = teams.find((t) => t.short_name === teamId);
       setCurrentTeam(current || null);
 
-      // THE FIX: Do not allow trading with hidden teams or yourself
       setAllTeams(teams.filter((t) => t.id !== current?.id && t.is_hidden === false));
 
       const { picks } = await getTeamDraftPicks(current?.id ?? teamId);
@@ -90,8 +107,16 @@ export default function CreateTradePage({ params }: TradePageProps) {
     }
   };
 
-  const handleToggleCardOffer = (draftPickId: string) => {
+  const handleToggleMyCardOffer = (draftPickId: string) => {
     setMyOfferedCards((prev) =>
+      prev.includes(draftPickId)
+        ? prev.filter((id) => id !== draftPickId)
+        : [...prev, draftPickId]
+    );
+  };
+
+  const handleToggleTheirCardOffer = (draftPickId: string) => {
+    setTheirOfferedCards((prev) =>
       prev.includes(draftPickId)
         ? prev.filter((id) => id !== draftPickId)
         : [...prev, draftPickId]
@@ -122,6 +147,7 @@ export default function CreateTradePage({ params }: TradePageProps) {
       myOfferedCards.length === 0 &&
       myOfferedPicks.length === 0 &&
       myOfferedEssence === 0 &&
+      theirOfferedCards.length === 0 &&
       theirOfferedPicks.length === 0 &&
       theirOfferedEssence === 0
     ) {
@@ -148,7 +174,6 @@ export default function CreateTradePage({ params }: TradePageProps) {
         })),
       ];
 
-      // Inject essence if > 0
       if (myOfferedEssence > 0) {
         fromTeamItems.push({
           item_type: "essence" as const,
@@ -157,6 +182,15 @@ export default function CreateTradePage({ params }: TradePageProps) {
       }
 
       const toTeamItems: Partial<TradeItem>[] = [
+        ...theirOfferedCards.map((draftPickId) => {
+          const pick = theirDraftPicks.find((p) => p.id === draftPickId);
+          return {
+            item_type: "card" as const,
+            draft_pick_id: draftPickId,
+            card_id: pick?.card_id || "",
+            card_name: pick?.card_name || "",
+          };
+        }),
         ...theirOfferedPicks.map((pick) => ({
           item_type: "draft_pick" as const,
           draft_pick_round: pick.round,
@@ -164,7 +198,6 @@ export default function CreateTradePage({ params }: TradePageProps) {
         }))
       ];
 
-      // Inject essence if > 0
       if (theirOfferedEssence > 0) {
         toTeamItems.push({
           item_type: "essence" as const,
@@ -295,14 +328,14 @@ export default function CreateTradePage({ params }: TradePageProps) {
               {/* My Cards */}
               <div>
                 <h3 className="text-lg font-semibold mb-3">Cards ({myOfferedCards.length} selected)</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto p-2 bg-muted rounded-lg">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto p-2 bg-muted rounded-lg border border-border">
                   {myDraftPicks.length === 0 ? (
                     <p className="text-muted-foreground col-span-full text-center py-4">No cards available to trade</p>
                   ) : (
                     myDraftPicks.map((pick) => (
                       <button
                         key={pick.id}
-                        onClick={() => handleToggleCardOffer(pick.id!)}
+                        onClick={() => handleToggleMyCardOffer(pick.id!)}
                         className={`p-3 border-2 rounded-lg text-left transition-all ${
                           myOfferedCards.includes(pick.id!)
                             ? "border-blue-500 bg-blue-500/10 shadow-sm"
@@ -377,6 +410,31 @@ export default function CreateTradePage({ params }: TradePageProps) {
             </CardHeader>
             <CardContent className="space-y-6 pt-6">
               
+              {/* Their Cards */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3">Cards ({theirOfferedCards.length} requested)</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto p-2 bg-muted rounded-lg border border-border">
+                  {theirDraftPicks.length === 0 ? (
+                    <p className="text-muted-foreground col-span-full text-center py-4">No cards available to request</p>
+                  ) : (
+                    theirDraftPicks.map((pick) => (
+                      <button
+                        key={pick.id}
+                        onClick={() => handleToggleTheirCardOffer(pick.id!)}
+                        className={`p-3 border-2 rounded-lg text-left transition-all ${
+                          theirOfferedCards.includes(pick.id!)
+                            ? "border-orange-500 bg-orange-500/10 shadow-sm"
+                            : "border-border hover:border-orange-500/50 bg-background"
+                        }`}
+                      >
+                        <div className="font-semibold text-sm truncate">{pick.card_name}</div>
+                        {theirOfferedCards.includes(pick.id!) && <Badge variant="secondary" className="mt-1 text-[10px] bg-orange-500 text-white">Requested</Badge>}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+
               {/* Their Future Draft Picks */}
               <div>
                 <h3 className="text-lg font-semibold mb-3">Future Draft Picks ({theirOfferedPicks.length} requested)</h3>
@@ -407,9 +465,6 @@ export default function CreateTradePage({ params }: TradePageProps) {
                     + Request Future Draft Pick
                   </button>
                 </div>
-                <p className="text-xs text-muted-foreground mt-3 font-semibold">
-                  Note: Currently, you cannot request specific cards from other teams via this UI. Negotiate card inclusion via DMs!
-                </p>
               </div>
 
               {/* Their Essence */}
