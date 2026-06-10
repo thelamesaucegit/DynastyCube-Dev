@@ -1040,12 +1040,11 @@ export async function createIdentitySwapPoll(
         ends_at: endsAt.toISOString(),
         allow_multiple_votes: false,
         show_results_before_end: false,
-        vote_type: "team" as VoteType, 
+        vote_type: "team", 
         created_by: userId,
         is_active: true,
         team_id: teamId,
-        // Using a custom trigger event so the backend knows what to do when it concludes
-        trigger_event: 'lorwyn_shadowmoor_swap' 
+        trigger_event: 'lorwyn_shadowmoor_swap' // The SQL migration ensures this is now legally TEXT
       })
       .select()
       .single();
