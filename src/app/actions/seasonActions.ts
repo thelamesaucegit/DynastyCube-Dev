@@ -152,6 +152,23 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
         const { error: promoteErr } = await supabase.rpc('promote_staging_pools');
         if (promoteErr) throw new Error(`Promote Staging Pools RPC failed: ${promoteErr.message}`);
 
+
+       // =====================================================================
+        // --- NEW META EVENT: THE RAT PLAGUE ---
+        // =====================================================================
+        console.log("[SeasonRollover] 🐀 Executing The Rat Plague (Cloning rats)...");
+        try {
+            const { error: ratErr } = await supabase.rpc('execute_rat_plague');
+            if (ratErr) {
+                console.warn("[SeasonRollover] ⚠️ Rat Plague encountered an error:", ratErr.message);
+                await logSystemEvent("SeasonRollover", "warn", `Rat plague execution failed: ${ratErr.message}`);
+            } else {
+                await logSystemEvent("SeasonRollover", "info", `The Rat Plague executed successfully. The swarm grows.`);
+            }
+        } catch (ratCatchErr) {
+            console.error("[SeasonRollover] Failed to execute Rat Plague:", ratCatchErr);
+        }
+
         // =====================================================================
         // --- STEP 4: CULL POOLS TO MAKE ROOM FOR THE CHAMBER ---
         // Now that Draft holds exactly the survivors, we trim the fat if needed.
