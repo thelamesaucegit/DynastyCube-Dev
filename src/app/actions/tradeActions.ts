@@ -28,7 +28,7 @@ export interface TradeItem {
   id?: string;
   trade_id: string;
   offering_team_id: string;
-  item_type: "card" | "draft_pick" | "essence"; // <-- ADDED ESSENCE
+  item_type: "card" | "draft_pick" | "essence";
   // For cards
   draft_pick_id?: string;
   card_id?: string;
@@ -37,7 +37,7 @@ export interface TradeItem {
   draft_pick_round?: number;
   draft_pick_season_id?: string;
   // For essence
-  essence_amount?: number; // <-- ADDED
+  essence_amount?: number;
 }
 
 export interface TradeMessage {
@@ -174,7 +174,7 @@ export async function getTeamTrades(teamId: string): Promise<{ trades: Trade[]; 
       .order("created_at", { ascending: false });
 
     if (error) return { trades: [], error: error.message };
-    return { trades: data as Trade[] || [] };
+    return { trades: (data as unknown as Trade[]) || [] };
   } catch (error) {
     return { trades: [], error: String(error) };
   }
@@ -196,9 +196,10 @@ export async function getTradeDetails(tradeId: string): Promise<{ trade: Trade |
       .select(`*, draft_pick:team_draft_picks(id, card_name, card_id, image_url)`)
       .eq("trade_id", tradeId);
 
-    if (itemsError) return { trade: null as any, items: [], error: itemsError.message };
+    // THE FIX: Use safe unknown casting instead of generic 'any'
+    if (itemsError) return { trade: null, items: [], error: itemsError.message };
 
-    return { trade: trade as any, items: items as TradeItem[] || [] };
+    return { trade: (trade as unknown as Trade), items: (items as unknown as TradeItem[]) || [] };
   } catch (error) {
     return { trade: null, items: [], error: String(error) };
   }
@@ -312,7 +313,7 @@ export async function getUserNotifications(): Promise<{ notifications: Notificat
     if (error) return { notifications: [], unreadCount: 0, error: error.message };
 
     const unreadCount = data?.filter((n) => !n.is_read).length || 0;
-    return { notifications: data || [], unreadCount };
+    return { notifications: data as Notification[] || [], unreadCount };
   } catch (error) {
     return { notifications: [], unreadCount: 0, error: String(error) };
   }
