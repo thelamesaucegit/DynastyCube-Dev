@@ -49,8 +49,11 @@ export interface RecentDraftPick {
 
 export interface CurrentSeason {
   id: string;
-  name: string;
+  season_name: string;
+  phase: "draft" | "preseason" | "season" | "playoffs" | "postseason"; // <-- Added to match DB!
+  season_number: number;
   start_date: string;
+    is_active: boolean;
   end_date?: string;
   status: string;
 }
