@@ -719,3 +719,45 @@ export async function checkAndExecuteSeasonRollover(): Promise<{ success: boolea
     return { success: false, message: "Failed to process season rollover.", error: msg };
   }
 }
+
+
+/**
+ * Admin action to force the Day/Night status of the active season
+ */
+export async function setSeasonDayNightStatus(
+  status: 'day' | 'night' | 'neutral',
+  overrideLock: boolean
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createServerClient();
+    const admin = await verifyAdmin(supabase);
+    if (!admin.authorized) return { success: false, error: admin.error };
+
+    const { data: activeSeason } = await supabase
+      .from("seasons")
+      .select("id")
+      .eq("is_active", true)
+      .single();
+
+    if (!activeSeason) return { success: false, error: "No active season found." };
+
+    const { error } = await supabase
+      .from("seasons")
+      .update({ 
+          day_night_status: status,
+          day_night_override: overrideLock 
+      })
+      .eq("id", activeSeason.id);
+
+    if (error) throw error;
+    
+    // Optional: Log the lore event!
+    const { logSystemEvent } = await import("@/lib/systemLogger");
+    await logSystemEvent("AdminAction", "info", `Admin forced Day/Night status to ${status} (Override: ${overrideLock})`);
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error setting Day/Night status:", error);
+    return { success: false, error: String(error) };
+  }
+}
