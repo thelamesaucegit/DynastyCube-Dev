@@ -69,7 +69,6 @@ export default function TeamsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Teams</h1>
-          <p className="text-muted-foreground mt-1">Meet the teams of the Dynasty Cube League</p>
         </div>
         <div className="flex items-center gap-2 text-muted-foreground">
           <Users className="size-5" />
