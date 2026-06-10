@@ -484,7 +484,7 @@ export default function TeamPage() {
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabType)}>
+    <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabType)}>
         <TabsList className="flex-wrap h-auto gap-1 mb-6">
           {tabs.map((tab) => (
             <TabsTrigger key={tab.id} value={tab.id} className="gap-1.5">
@@ -500,6 +500,8 @@ export default function TeamPage() {
         </TabsList>
         <Card>
           <CardContent className="pt-6">
+            
+            {/* DRAFT TAB */}
             <TabsContent value="draft">
               {activeTab === "draft" && isUserTeamMember && (
                 <div className="space-y-8">
@@ -527,7 +529,7 @@ export default function TeamPage() {
                               const isVoted = user?.id ? draftPreview.votes?.includes(user.id) : false;
                               return (
                                 <Button onClick={handleToggleVote} disabled={isVoting || !activeDraftSessionId} className={isVoted ? "bg-green-600 hover:bg-green-700 text-white" : ""} >
-                                  {isVoting && <Loader2 className="size-4 animate-spin mr-2" />}
+                                  {isVoting && <Loader2 className="size-4 mr-2 animate-spin" />}
                                   {!isVoting && <Vote className="size-4 mr-2" />}
                                   {isVoted ? "Retract Vote" : "Confirm pick for immediate submission"}
                                   <span className="ml-2 font-normal opacity-90">
@@ -569,6 +571,8 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
+
+            {/* TEAM POOL (PICKS) TAB */}
             <TabsContent value="picks">
               {activeTab === "picks" && (
                 <div>
@@ -646,6 +650,8 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
+
+            {/* DECKS (DECK BUILDER) TAB */}
             <TabsContent value="decks">
               {activeTab === "decks" && (
                 <div>
@@ -661,6 +667,8 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
+
+            {/* TRADES TAB */}
             <TabsContent value="trades">
               {activeTab === "trades" && (
                 <div>
@@ -681,6 +689,8 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
+
+            {/* MATCHES TAB */}
             <TabsContent value="matches">
               {activeTab === "matches" && (
                 <div className="space-y-6">
@@ -698,6 +708,8 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
+
+            {/* VOTES TAB */}
             <TabsContent value="votes">
               {activeTab === "votes" && isUserTeamMember && (
                 <div>
@@ -711,6 +723,8 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
+
+            {/* MEMBERS & ROLES TAB */}
             <TabsContent value="members">
               {activeTab === "members" && (
                 <div className="space-y-8">
@@ -755,10 +769,6 @@ export default function TeamPage() {
                     )}
                   </div>
 
-                  {/* 
-                     THE FIX: Embedded the TeamRoles component directly inside the Members directory, 
-                     divided cleanly with a full horizontal rule border. Only visible to team members!
-                  */}
                   {isUserTeamMember && (
                     <div className="border-t border-gray-200 dark:border-gray-700 pt-8">
                       <div className="mb-6">
@@ -773,21 +783,26 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
-            {activeTab === "trophies" && (
-              <div>
-                <div className="mb-6">
-                  <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
-                    <Crown className="size-5 text-yellow-500" /> Trophy Case
-                  </h2>
-                  <p className="text-sm text-muted-foreground">Historical championships won by {team.name}</p>
+
+              
+             {/* TROPHIES TAB */}
+            <TabsContent value="trophies">
+              {activeTab === "trophies" && (
+                <div>
+                  <div className="mb-6">
+                    <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
+                      <Crown className="size-5 text-yellow-500" /> Trophy Case
+                    </h2>
+                    <p className="text-sm text-muted-foreground">Historical championships won by {team.name}</p>
+                  </div>
+                  <TrophyCase teamId={team.id} />
                 </div>
-                <TrophyCase teamId={team.id} />
-              </div>
-            )}
-          </TabsContent>
-        </CardContent>
-      </Card>
-    </Tabs>
-  </div>
-);
+              )}
+            </TabsContent>
+
+          </CardContent>
+        </Card>
+      </Tabs>
+    </div>
+  );
 }
