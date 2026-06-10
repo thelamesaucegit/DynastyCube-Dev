@@ -526,14 +526,22 @@ export async function completeDraft(
     const { data: sessionData } = await supabase.from('draft_sessions').select(`season_id, seasons ( season_name, cubucks_allocation )`).eq('id', sessionId).single();
 
     // =========================================================================================
-    // THE FIX: EVALUATE DRAFT HATS & DISTRIBUTE REWARDS/CURSES FOR THE NEWLY COMPLETED DRAFT!
+    // EVALUATE DRAFT HATS & DISTRIBUTE REWARDS/CURSES FOR THE NEWLY COMPLETED DRAFT, THEN RESET DAY/NIGHT!
     // =========================================================================================
     if (sessionData?.season_id) {
         const seasonDetails = Array.isArray(sessionData.seasons) ? sessionData.seasons[0] : sessionData.seasons;
         const currentCap = seasonDetails?.cubucks_allocation || 40;
         console.log(`[Draft Complete] Evaluating hats for season ${sessionData.season_id} with Cap: ${currentCap}`);
         await evaluateDraftHats(sessionData.season_id, currentCap);
+      //  Reset Day/Night to neutral UNLESS the admin has set a lore override!
+        if (!seasonDetails?.day_night_override) {
+             console.log(`[Draft Complete] Resetting Day/Night status to Neutral.`);
+             await supabase.from('seasons').update({ day_night_status: 'neutral' }).eq('id', sessionData.season_id);
+        } else {
+             console.log(`[Draft Complete] Lore override detected. Skipping Neutral reset.`);
+        }
     }
+      
     // =========================================================================================
 
     const { error } = await supabase
