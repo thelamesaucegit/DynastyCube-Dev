@@ -271,7 +271,7 @@ export default function HomePage() {
       
       <section className="max-w-5xl mx-auto w-full space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold">Recent Draft Picks</h2>
+          <h2 className="text-2xl font-bold">Latest Card Acquisitions</h2>
           <Button variant="ghost" asChild>
             <Link href={liveDraftLink}>View All</Link>
           </Button>
