@@ -134,17 +134,33 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
         if (protectErr) console.error("[SeasonRollover] Failed to protect escape cards:", protectErr);
 
         // =====================================================================
-        // --- STEP 2: ROLLOVER COSTS & RETIREMENTS ---
+               // =====================================================================
+        // --- STEP 2: ROLLOVER COSTS & NATURAL RETIREMENT ---
         console.log("[SeasonRollover] Running Cost Economy & Retirements...");
         const { error: costErr } = await supabase.rpc('rollover_season_costs', { p_new_season_id: newSeason.id, p_previous_season_id: oldSeason.id });
         if (costErr) throw new Error(`Cost Rollover RPC failed: ${costErr.message}`);
 
-        // --- STEP 3: CULL POOLS TO MAKE ROOM ---
+        // THE FIX 1: Run natural Free Agency purge (Drops 0-cost cards immediately)
+        console.log("[SeasonRollover] Processing Natural Free Agency (0-cost cards)...");
+        const { error: natFreeErr } = await supabase.rpc('process_natural_free_agency');
+        if (natFreeErr) throw new Error(`Natural Free Agency RPC failed: ${natFreeErr.message}`);
+
+        // =====================================================================
+        // --- STEP 3: PROMOTE EXISTING STAGING POOLS ---
+        // We do this BEFORE culling so all survivors consolidate into 'draft'
+        console.log("[SeasonRollover] Promoting Wire back to Draft...");
+        const { error: promoteErr } = await supabase.rpc('promote_staging_pools');
+        if (promoteErr) throw new Error(`Promote Staging Pools RPC failed: ${promoteErr.message}`);
+
+        // =====================================================================
+        // --- STEP 4: CULL POOLS TO MAKE ROOM FOR THE CHAMBER ---
+        // Now that Draft holds exactly the survivors, we trim the fat if needed.
         console.log("[SeasonRollover] Culling lowest ELO cards to ensure 600 cap...");
         const { error: cullErr } = await supabase.rpc('cull_pools_for_chamber');
         if (cullErr) throw new Error(`Cull Pools RPC failed: ${cullErr.message}`);
 
-        // --- STEP 4: FLUSH THE CHAMBER TABLE ---
+        // =====================================================================
+        // --- STEP 5: FLUSH THE CHAMBER TABLE ---
         console.log("[SeasonRollover] Flushing The Chamber to Card Pools...");
         const { error: flushErr } = await supabase.rpc('flush_chamber_to_pools');
         if (flushErr) throw new Error(`Flush Chamber RPC failed: ${flushErr.message}`);
@@ -153,7 +169,6 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
         // --- ESCAPE ROOM: DOWNGRADE TO TEMPORARY & SPIKE COSTS ---
         // =====================================================================
         console.log(`[SeasonRollover] Downgrading Escape cards to Temporary...`);
-        
         const { data: survivingEscapes } = await supabase
             .from('team_draft_picks')
             .select('id, card_pool_id')
@@ -174,36 +189,11 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
             console.log(`[SeasonRollover] Successfully transitioned ${survivingEscapes.length} Escape cards.`);
         }
 
-        // =====================================================================
-        // --- STEP 5: PROMOTE EXISTING STAGING POOLS ---
-        console.log("[SeasonRollover] Promoting Wire and Chamber pools to Draft...");
-        const { error: promoteErr } = await supabase.rpc('promote_staging_pools');
-        if (promoteErr) throw new Error(`Promote Staging Pools RPC failed: ${promoteErr.message}`);
-
         // --- RESET TEAM STATUSES ---
         console.log("[Rollover] Resetting team 'is_escaped' and 'locked_in' statuses...");
         const { error: resetTeamsError } = await supabase.from('teams').update({ is_escaped: false, locked_in: false }).not('id', 'is', null);
         if (resetTeamsError) throw new Error(`Failed to reset team status: ${resetTeamsError.message}`);
 
-        // =====================================================================
-        // --- STEP 5.5: SYNC ALL ELO SCORES ---
-        // =====================================================================
-        console.log("[SeasonRollover] Syncing all ELO scores from CubeCobra...");
-        try {
-            const { updateAllCubecobraElo } = await import('@/app/actions/cardRatingActions');
-            const eloSyncResult = await updateAllCubecobraElo();
-            
-            if (eloSyncResult.success) {
-                console.log(`[SeasonRollover] ELO Sync complete: ${eloSyncResult.message}`);
-                await logSystemEvent("SeasonRollover", "info", `CubeCobra ELO synced successfully. ${eloSyncResult.message}`);
-            } else {
-                console.warn(`[SeasonRollover] ELO Sync Warning: ${eloSyncResult.message}`);
-                await logSystemEvent("SeasonRollover", "warn", `CubeCobra ELO sync returned warnings: ${eloSyncResult.message}`);
-            }
-        } catch (eloErr) {
-            console.error("[SeasonRollover] FATAL ERROR during ELO Sync:", eloErr);
-            await logSystemEvent("SeasonRollover", "error", "Fatal error during CubeCobra ELO sync.", { error: String(eloErr) });
-        }
 
         // =====================================================================
         // --- STEP 6: CALCULATE AND SET DYNAMIC CAP ---
