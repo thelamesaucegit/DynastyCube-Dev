@@ -121,13 +121,7 @@ export default function Navigation() {
           <nav className="hidden md:flex items-center gap-1">
             <NavigationMenu>
               <NavigationMenuList>
-                <NavigationMenuItem>
-                  <Link href="/" legacyBehavior passHref>
-                    <NavigationMenuLink className={`${navigationMenuTriggerStyle()} bg-transparent ${isActive("/") ? "bg-accent/50 text-accent-foreground font-medium" : ""}`}>
-                      Home
-                    </NavigationMenuLink>
-                  </Link>
-                </NavigationMenuItem>
+              
                 {/* Drafts Dropdown */}
                 <NavigationMenuItem>
                   <DropdownMenu>
