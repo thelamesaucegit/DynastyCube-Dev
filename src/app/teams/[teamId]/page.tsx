@@ -32,8 +32,9 @@ import type { DraftPick, Deck } from "@/app/actions/draftActions";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
 import { Button } from "@/app/components/ui/button";
+import { createIdentitySwapPoll } from "@/app/actions/voteActions"; // <-- Add to top imports
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
-import { Target, Layers, BookOpen, ArrowLeftRight, Swords, BarChart3, Crown, Users, Loader2, AlertCircle, ExternalLink, CalendarDays, CheckCircle2, XCircle, Vote } from "lucide-react";
+import { MoonStar, Sun, Target, Layers, BookOpen, ArrowLeftRight, Swords, BarChart3, Crown, Users, Loader2, AlertCircle, ExternalLink, CalendarDays, CheckCircle2, XCircle, Vote } from "lucide-react";
 import { useSettings } from "@/contexts/SettingsContext";
 import { getCardImageUrl } from "@/app/utils/cardUtils";
 
@@ -369,7 +370,38 @@ export default function TeamPage() {
         </CardContent>
       </Card>
       <DraftStatusWidget variant="team" teamId={team.id} />
-      
+        {/*  Lorwyn/Shadowmoor Transformation Button ONLY for the Changelings/Mimics */}
+
+      {isUserTeamMember && (team.short_name === 'changelings' || team.short_name === 'mimics') && seasonPhase !== 'draft' && (
+        <Card className="mb-6 border-purple-500/50 bg-gradient-to-r from-purple-500/10 to-indigo-500/10">
+          <CardContent className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex-1">
+              <h3 className="font-bold text-lg mb-1 flex items-center gap-2">
+                {team.short_name === 'changelings' ? <MoonStar className="size-5 text-indigo-500"/> : <Sun className="size-5 text-amber-500"/>}
+                The Great Aurora
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                As long as the cosmos remain neutral, any team member may initiate a 12-hour vote to transform the team's identity.
+              </p>
+            </div>
+            <Button 
+              onClick={async () => {
+                if (!user?.id) return;
+                const activeIdentity = team.short_name === 'changelings' ? 'changelings' : 'mimics';
+                const result = await createIdentitySwapPoll(team.id, user.id, activeIdentity);
+                alert(result.message || result.error);
+                if (result.success) {
+                  // Reload the page to show the newly created poll in the Votes tab!
+                  window.location.reload(); 
+                }
+              }}
+              className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white shadow-md"
+            >
+              Initiate Transformation Vote
+            </Button>
+          </CardContent>
+        </Card>
+      )}
        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 items-start">
         <div className="w-full">
           <TeamCubucksDisplay 

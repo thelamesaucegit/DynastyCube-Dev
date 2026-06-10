@@ -1002,3 +1002,95 @@ export async function toggleTeamPollActive(pollId: string, teamId: string, isAct
     return { success: false, error: "Failed to toggle poll status" };
   }
 }
+
+// Add to the bottom of src/app/actions/voteActions.ts
+
+/**
+ * Automatically creates a 12-hour poll for the Changelings/Mimics to swap identity
+ */
+export async function createIdentitySwapPoll(
+  teamId: string,
+  userId: string,
+  currentIdentity: string
+) {
+  try {
+    const supabase = await createServerClient();
+
+    // 1. Verify Season is neutral and not drafting
+    const { data: season } = await supabase.from('seasons').select('day_night_status, phase').eq('is_active', true).single();
+    if (season?.day_night_status !== 'neutral' || season?.phase === 'draft') {
+       return { success: false, error: "The cosmos are aligned against you. Shapeshifting is currently disabled." };
+    }
+
+    // 2. Set the 12-hour timer
+    const endsAt = new Date();
+    endsAt.setHours(endsAt.getHours() + 12);
+
+    const title = currentIdentity === 'changelings' ? "Initiate The Great Aurora?" : "Let The Great Aurora Recede?";
+    const desc = currentIdentity === 'changelings' 
+      ? "Should we embrace the darkness and transform into the Shadowmoor Mimics? This poll ends in 12 hours."
+      : "Should we return to the light and transform back into the Lorwyn Changelings? This poll ends in 12 hours.";
+
+    // 3. Create the automated Team Poll
+    const { data: poll, error: pollError } = await supabase
+      .from("polls")
+      .insert({
+        title,
+        description: desc,
+        ends_at: endsAt.toISOString(),
+        allow_multiple_votes: false,
+        show_results_before_end: false,
+        vote_type: "team" as VoteType, 
+        created_by: userId,
+        is_active: true,
+        team_id: teamId,
+        // Using a custom trigger event so the backend knows what to do when it concludes
+        trigger_event: 'lorwyn_shadowmoor_swap' 
+      })
+      .select()
+      .single();
+
+    if (pollError) throw pollError;
+
+    // 4. Create the binary options
+    const pollOptions = [
+      { poll_id: poll.id, option_text: currentIdentity === 'changelings' ? "Transform into Mimics" : "Revert to Changelings", option_order: 1 },
+      { poll_id: poll.id, option_text: "Remain as we are", option_order: 2 },
+    ];
+
+    await supabase.from("poll_options").insert(pollOptions);
+
+    return { success: true, message: "Transformation poll initiated!" };
+  } catch (error) {
+    console.error("Error creating identity swap poll:", error);
+    return { success: false, error: "Failed to initiate transformation." };
+  }
+}
+
+/**
+ * This function should be called by your poll-resolution cron job or an admin 
+ * when a 'lorwyn_shadowmoor_swap' poll officially ends.
+ */
+export async function resolveIdentitySwapPoll(pollId: string, teamId: string) {
+  try {
+    const supabase = await createServerClient();
+    
+    // Calculate results using your existing RPC
+    const { data: resultsData } = await supabase.rpc("recalculate_poll_results", { p_poll_id: pollId, p_team_id: teamId });
+    const { data: pollResults } = await supabase.rpc("get_poll_results_by_type", { p_poll_id: pollId });
+    
+    const teamResult = (pollResults as TypedPollResults)?.team_results?.find(r => r.team_id === teamId);
+    
+    if (teamResult && teamResult.winning_option_text?.includes("Transform") || teamResult?.winning_option_text?.includes("Revert")) {
+       // Import and execute the cosmetic swap we built earlier!
+       const { toggleChangelingIdentity } = await import('@/app/actions/teamActions');
+       await toggleChangelingIdentity(teamId);
+       return { success: true, message: "The team has successfully transformed!" };
+    }
+
+    return { success: true, message: "The team chose to remain unchanged." };
+  } catch (error) {
+    console.error("Error resolving identity swap:", error);
+    return { success: false, error: "Resolution failed." };
+  }
+}
