@@ -44,8 +44,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
   const [availableCards, setAvailableCards] = useState<CardData[]>([]);
   const [draftedCards, setDraftedCards] = useState<DraftPick[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const [searchQuery, setSearchQuery] = useState(""); // <-- Note: This is searchQuery!
+  const [searchQuery, setSearchQuery] = useState("");
   const [colorFilters, setColorFilters] = useState<string[]>([]);
   const [matchAllColors, setMatchAllColors] = useState(false);
   const [excludeUnselected, setExcludeUnselected] = useState(false);
@@ -59,7 +58,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
   const [success, setSuccess] = useState<string | null>(null);
   const [cubucksBalance, setCubucksBalance] = useState<number>(0);
   const [_draftOrderEntries, setDraftOrderEntries] = useState<DraftOrderEntry[]>([]);
-
   const [sortBy, setSortBy] = useState<string>("card_name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -81,9 +79,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       const { session } = await getActiveDraftSession();
       const sessionId = session?.id || null;
       setActiveSessionId(sessionId);
-
       const poolToFetch = isFreeAgencyEnabled ? 'free' : 'draft';
-
       const picksPromise = teamId 
         ? getTeamDraftPicks(teamId, sessionId || undefined) 
         : Promise.resolve({ picks: [] });
@@ -91,14 +87,12 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       const balancePromise = teamId 
         ? getTeamBalance(teamId) 
         : Promise.resolve({ team: null });
-
       const [{ cards }, { picks }, { team }, { order }] = await Promise.all([
         getAvailableCardsForDraft(poolToFetch), 
         picksPromise,
         balancePromise,
         getActiveDraftOrder(),
       ]);
-
       setAvailableCards(cards);
       setDraftedCards(picks);
       if (team) setCubucksBalance(team.cubucks_balance);
@@ -123,31 +117,26 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       setError("Cannot draft card: No active draft session.");
       return;
     }
-
     if (draftedCards.some((pick) => pick.card_pool_id === card.id)) {
       setError("This specific card has already been drafted by your team.");
       setTimeout(() => setError(null), 3000);
       return;
     }
-
     const cardCost = card.cubucks_cost || 1;
     if (cubucksBalance < cardCost) {
       setError(`Insufficient Çubucks! Need ${cardCost}, you have ${cubucksBalance}`);
       setTimeout(() => setError(null), 5000);
       return;
     }
-
     setDrafting(card.id!);
     setError(null);
     setSuccess(null);
-
     try {
       const cubucksResult = await spendCubucksOnDraft(teamId, card.card_id, card.card_name, cardCost, card.id);
       if (!cubucksResult.success) {
         setError(cubucksResult.error || "Failed to spend Çubucks");
         return;
       }
-
       const pick: DraftPick = {
         team_id: teamId,
         card_pool_id: card.id,
@@ -207,13 +196,11 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
             return false;
         }
     }
-
     if (colorFilters.length > 0) {
       const wantColorless = colorFilters.includes("colorless");
       const wantedColors = colorFilters.filter(c => c !== "colorless");
       const cardColors = card.colors || [];
       const isColorless = cardColors.length === 0;
-
       if (wantColorless && wantedColors.length === 0) {
           if (!isColorless) return false;
       } else if (isColorless) {
@@ -222,22 +209,18 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
           const hasAll = wantedColors.every(c => cardColors.includes(c));
           const hasAny = wantedColors.some(c => cardColors.includes(c));
           const hasOnly = cardColors.every(c => wantedColors.includes(c));
-
           if (matchAllColors && excludeUnselected && !(hasAll && hasOnly)) return false;
           if (matchAllColors && !excludeUnselected && !hasAll) return false;
           if (!matchAllColors && excludeUnselected && !hasOnly) return false;
           if (!matchAllColors && !excludeUnselected && !hasAny && !(wantColorless && isColorless)) return false;
       }
     }
-
     if (filterType !== "all") {
       if (!card.card_type?.toLowerCase().includes(filterType.toLowerCase())) return false;
     }
-
     if (filterRarity !== "all") {
         if (!card.rarity || card.rarity.toLowerCase() !== filterRarity.toLowerCase()) return false;
     }
-
     if (filterCmc !== "all") {
       const cmc = card.cmc ?? 0;
       if (filterCmc === "0-1" && cmc > 1) return false;
@@ -245,7 +228,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       if (filterCmc === "4-5" && (cmc < 4 || cmc > 5)) return false;
       if (filterCmc === "6+" && cmc < 6) return false;
     }
-
     if (filterCubucks !== "all") {
       const cost = card.cubucks_cost ?? 1;
       if (filterCubucks === "0-1" && cost > 1) return false;
@@ -254,7 +236,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       if (filterCubucks === "6-9" && (cost < 6 || cost > 9)) return false;
       if (filterCubucks === "10+" && cost < 10) return false;
     }
-
     return true;
   });
 
@@ -266,7 +247,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
       case 'elo': valA = a.cubecobra_elo ?? 0; valB = b.cubecobra_elo ?? 0; break;
       default: valA = a.card_name.toLowerCase(); valB = b.card_name.toLowerCase();
     }
-
     if (typeof valA === 'string' && typeof valB === 'string') {
       return sortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
     } else {
@@ -321,13 +301,11 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
           ✓ {success}
         </div>
       )}
-
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg p-4 text-red-800 dark:text-red-200">
           ✗ {error}
         </div>
       )}
-
       {!isUserTeamMember && (
         <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg p-4">
           <p className="text-yellow-800 dark:text-yellow-200 text-sm">
@@ -336,7 +314,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
         </div>
       )}
 
-      {/* --- THE FIX: Passed 'searchQuery' and 'setSearchQuery' correctly! --- */}
       <PoolFilterBar
         searchTerm={searchQuery} setSearchTerm={setSearchQuery}
         filterColors={colorFilters} setFilterColors={setColorFilters}
@@ -349,7 +326,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
         sortBy={sortBy} setSortBy={setSortBy}
         sortOrder={sortOrder} setSortOrder={setSortOrder}
         uniqueTypes={uniqueTypes}
-        
         filteredCount={sortedAndFilteredCards.length}
         totalCount={availableCards.length}
         currentPage={currentPage}
@@ -386,7 +362,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
               <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="flex items-center gap-2 px-5 py-3 rounded-lg font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed min-w-[100px] justify-center touch-manipulation">Next →</button>
             </div>
           )}
-
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {paginatedCards.map((card) => {
               const isThisInstanceDrafted = draftedCards.some(p => p.card_pool_id === card.id);
@@ -395,9 +370,20 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
               const imageUrl = getCardImageUrl(card, useOldestArt);
               return (
                 <div key={card.id} className={`group relative bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden border-2 transition-all ${isThisInstanceDrafted ? "border-green-500 opacity-60" : "border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:shadow-lg"}`}>
-                  {imageUrl && (<div className="relative h-64"><Image src={imageUrl} alt={card.card_name} fill className="object-cover" /></div>)}
                   
-                  <div className="p-2">
+                  {/* THE FIX: Changed 'h-64 relative' and 'object-cover' to 'h-80 relative bg-zinc-950/40' and 'object-contain' */}
+                  {imageUrl && (
+                    <div className="relative h-80 bg-zinc-950/40 border-b border-border/10">
+                      <Image 
+                        src={imageUrl} 
+                        alt={card.card_name} 
+                        fill 
+                        className="object-contain" 
+                      />
+                    </div>
+                  )}
+                  
+                  <div className="p-2 bg-card">
                     <h4 className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{card.card_name}</h4>
                     <p className="text-xs text-gray-600 dark:text-gray-400 truncate">{card.card_set}</p>
                     {card.cubecobra_elo != null && (<p className="text-xs text-purple-600 dark:text-purple-400 font-medium mt-0.5">ELO: {card.cubecobra_elo.toLocaleString()}</p>)}
@@ -413,7 +399,6 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
               );
             })}
           </div>
-
           {totalPages > 1 && (
             <div className="flex items-center justify-between gap-2 mt-6 flex-wrap">
               <button onClick={() => { setCurrentPage(p => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }} disabled={currentPage === 1} className="flex items-center gap-2 px-5 py-3 rounded-lg font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed min-w-[100px] justify-center touch-manipulation">← Prev</button>
