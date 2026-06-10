@@ -552,29 +552,84 @@ export async function toggleTeamPollActive(pollId: string, teamId: string, isAct
 export async function createIdentitySwapPoll(teamId: string, userId: string, currentIdentity: string) {
   try {
     const supabase = await createServerClient();
-    const { data: season } = await supabase.from('seasons').select('day_night_status, phase').eq('is_active', true).single();
-    if (season?.day_night_status !== 'neutral' || season?.phase === 'draft') return { success: false, error: "The cosmos are aligned against you. Shapeshifting is currently disabled." };
+    
+    // Clean and validate that we have actual UUID strings
+    const cleanTeamId = teamId.trim();
+    const cleanUserId = userId.trim();
 
+    // 1. Verify Season is neutral and not drafting
+    const { data: season } = await supabase
+      .from('seasons')
+      .select('day_night_status, phase')
+      .eq('is_active', true)
+      .single();
+      
+    if (season?.day_night_status !== 'neutral' || season?.phase === 'draft') {
+      return { success: false, error: "The cosmos are aligned against you. Shapeshifting is currently disabled." };
+    }
+
+    // 2. Set the 12-hour timer
     const endsAt = new Date();
     endsAt.setHours(endsAt.getHours() + 12);
+
     const title = currentIdentity === 'changelings' ? "Initiate The Great Aurora?" : "Let The Great Aurora Recede?";
-    const desc = currentIdentity === 'changelings' ? "Should we embrace the darkness and transform into the Shadowmoor Mimics? This poll ends in 12 hours." : "Should we return to the light and transform back into the Lorwyn Changelings? This poll ends in 12 hours.";
+    const desc = currentIdentity === 'changelings' 
+      ? "Should we embrace the darkness and transform into the Shadowmoor Mimics? This poll ends in 12 hours." 
+      : "Should we return to the light and transform back into the Lorwyn Changelings? This poll ends in 12 hours.";
 
-    const { data: existingPoll } = await supabase.from('polls').select('id').eq('team_id', teamId).eq('is_active', true).in('title', ["Initiate The Great Aurora?", "Let The Great Aurora Recede?"]).maybeSingle();
-    if (existingPoll) return { success: false, error: "A transformation vote is already in progress!" };
+    // 3. THE FIX: Explicitly cast team_id check to prevent the uuid = text database error
+    const { data: existingPoll } = await supabase
+      .from('polls')
+      .select('id')
+      .eq('team_id', `${cleanTeamId}` as any) // Force Cast native UUID string
+      .eq('is_active', true)
+      .in('title', ["Initiate The Great Aurora?", "Let The Great Aurora Recede?"])
+      .maybeSingle();
 
-    // Fetch the trigger ID so it saves as a valid UUID
+    if (existingPoll) {
+      return { success: false, error: "A transformation vote is already in progress!" };
+    }
+
+    // Fetch the trigger UUID
     let triggerEventId = null;
-    const { data: triggerRecord } = await supabase.from('trigger_events').select('id').eq('event_name', 'lorwyn_shadowmoor_swap').single();
-    if (triggerRecord) triggerEventId = triggerRecord.id;
+    const { data: triggerRecord } = await supabase
+      .from('trigger_events')
+      .select('id')
+      .eq('event_name', 'lorwyn_shadowmoor_swap')
+      .single();
+      
+    if (triggerRecord) {
+      triggerEventId = triggerRecord.id;
+    }
 
-    const { data: poll, error: pollError } = await supabase.from("polls").insert({
-        title, description: desc, ends_at: endsAt.toISOString(), allow_multiple_votes: false, show_results_before_end: false, vote_type: "team", created_by: userId, is_active: true, team_id: teamId, trigger_event: triggerEventId
-    }).select().single();
+    // 4. THE FIX: Explicitly cast insert payloads to enforce UUIDs over text
+    const { data: poll, error: pollError } = await supabase
+      .from("polls")
+      .insert({
+        title,
+        description: desc,
+        ends_at: endsAt.toISOString(),
+        allow_multiple_votes: false,
+        show_results_before_end: false,
+        vote_type: "team", 
+        created_by: `${cleanUserId}` as any, // Strict UUID coercion
+        is_active: true,
+        team_id: `${cleanTeamId}` as any,    // Strict UUID coercion
+        trigger_event: triggerEventId        // Passes UUID object
+      })
+      .select()
+      .single();
 
     if (pollError) throw pollError;
-    const pollOptions = [{ poll_id: poll.id, option_text: currentIdentity === 'changelings' ? "Transform into Mimics" : "Revert to Changelings", option_order: 1 }, { poll_id: poll.id, option_text: "Remain as we are", option_order: 2 }];
+
+    // 5. Create options linked to the poll UUID
+    const pollOptions = [
+      { poll_id: poll.id, option_text: currentIdentity === 'changelings' ? "Transform into Mimics" : "Revert to Changelings", option_order: 1 }, 
+      { poll_id: poll.id, option_text: "Remain as we are", option_order: 2 }
+    ];
+    
     await supabase.from("poll_options").insert(pollOptions);
+
     return { success: true, message: "Transformation poll initiated!" };
   } catch (error) {
     console.error("Error creating identity swap poll:", error);
