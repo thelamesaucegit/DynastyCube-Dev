@@ -44,7 +44,7 @@ export default async function AboutPage() {
             The Dynasty Cube
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            A collaborative, living draft league in which Teams draft through the history of Magic, beginning with the earliest sets of 1993, and culminating in a metagame shaped entirely by player choice.
+            A collaborative, living draft league in which Teams draft through the history of Magic, culminating in a metagame shaped entirely by player choice.
           </p>
         </div>
       </section>
@@ -79,7 +79,7 @@ export default async function AboutPage() {
           The Three Pillars
         </h2>
         <p className="text-lg text-muted-foreground">
-          At its core, The Dynasty Cube combines a normal cube draft with the long-term planning of a dynasty sports league and the evolving horror of a community-driven &quot;e-splort&quot; simulation.
+          The Dynasty Cube combines a typical cube rotisserie draft with the long-term planning of a dynasty sports league and the ever-evolving, eldtrich horror of a community-driven &quot;e-splort&quot; simulation.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -91,7 +91,7 @@ export default async function AboutPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="text-muted-foreground">
-              Instead of passing hidden packs, players make draft picks publicly, one at a time, from a massive known pool. Every pick is visible and influences the direction every other Team takes.
+              Instead of passing hidden packs, players make draft picks publicly, one at a time, from a known pool of cards. Each pick influences the direction every other Team takes.
             </CardContent>
           </Card>
           <Card className="h-full">
@@ -102,7 +102,7 @@ export default async function AboutPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="text-muted-foreground">
-              Teams have one matchup per week, culminating in a playoff elimination tournament. Similarly to a fantasy sports league, Teams can trade cards and future draft picks to improve their &quot;roster&quot; now, or rebuild for the future.
+              Teams have one matchup per week consisting of several games played, culminating in a playoff elimination tournament. Teams can trade cards future draft picks and more to improve their &quot;roster&quot; now, or rebuild for the future.
             </CardContent>
           </Card>
           <Card className="h-full">

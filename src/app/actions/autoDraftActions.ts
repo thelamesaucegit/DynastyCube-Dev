@@ -411,7 +411,7 @@ export async function executeAutoDraft(
 ): Promise<{
   success: boolean;
   pick?: { cardId: string; cardName: string; cost: number };
-  source?: "manual_queue" | "algorithm" | "skipped";
+  source?: "manual_queue" | "algorithm" | "skipped" | "drained";
   error?: string;
 }> {
   try {
@@ -422,6 +422,120 @@ export async function executeAutoDraft(
       await logSystemEvent("ExecuteAutoDraft", "error", `Failed: Team ${teamId} is not on the clock or draft status invalid.`, { draftSessionId, statusError });
       return { success: false, error: statusError || "Team not on the clock." };
     }
+   // =========================================================================
+    // DRAINLINGS SPECIAL DRAFT LOGIC
+    // =========================================================================
+    const DRAINLINGS_TEAM_ID = "90177632-f6ab-4501-b235-3590a7e46472";
+
+    if (teamId === DRAINLINGS_TEAM_ID) {
+        // 1. Drainlings ignore the queue, budget, and colors.
+        const { cards: availableCards } = await getAvailableCardsForDraft("draft", supabase);
+        
+        const validCards = availableCards.filter(c => c.id && !excludedCardPoolIds.includes(c.id));
+        if (validCards.length === 0) {
+            return { success: false, error: "No cards available for Drainlings to draft." };
+        }
+
+        // 2. Fetch the dynamic meta weights
+        const cardIds = validCards.map(c => c.id as string);
+        const { data: eloWeights } = await supabase
+            .from('card_elo_weights')
+            .select('card_pool_id, weight')
+            .in('card_pool_id', cardIds);
+        
+        const weightMap = new Map<string, number>();
+        (eloWeights || []).forEach(w => weightMap.set(w.card_pool_id, w.weight || 0));
+
+        // 3. Sort purely by Base ELO + Match Weight
+        validCards.sort((a, b) => {
+            const eloA = (a.cubecobra_elo || 0) + (weightMap.get(a.id as string) || 0);
+            const eloB = (b.cubecobra_elo || 0) + (weightMap.get(b.id as string) || 0);
+            return eloB - eloA;
+        });
+
+        const cardToAttempt = validCards[0];
+
+        const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId, supabase);
+        const pickNumber = existingPicks.length + 1;
+        const effectiveCost = cardToAttempt.cubucks_cost || 1;
+
+        // 4. Force the pick execution
+        const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
+            p_team_id: teamId, p_draft_session_id: draftSessionId, p_card_pool_id: cardToAttempt.id,
+            p_card_id: cardToAttempt.card_id, p_card_name: cardToAttempt.card_name,
+            p_card_set: cardToAttempt.card_set, p_card_type: cardToAttempt.card_type,
+            p_rarity: cardToAttempt.rarity, p_colors: cardToAttempt.colors, 
+            p_color_identity: cardToAttempt.color_identity || cardToAttempt.colors || [], 
+            p_image_url: cardToAttempt.image_url,
+            p_oldest_image_url: cardToAttempt.oldest_image_url, p_mana_cost: cardToAttempt.mana_cost,
+            p_cmc: cardToAttempt.cmc, p_pick_number: pickNumber, p_cost: effectiveCost,
+            p_is_manual_pick: false, p_user_id: null,
+        }).single();
+
+        if (rpcError) {
+             // Handle exclusions recursively if it was sniped by a race condition
+             return executeAutoDraft(teamId, draftSessionId, supabase, [...excludedCardPoolIds, cardToAttempt.id!]);
+        }
+
+        const newPick = data as DraftPick;
+        
+        // 5. Finalize Drainlings metadata & Update Card Pool Location
+        if (newPick.id) {
+             await supabase.from("team_draft_picks").update({ 
+                pick_source: "algorithm",
+                scars: ['drained'] 
+             }).eq("id", newPick.id);
+             
+             if (cardToAttempt.id) {
+                 await supabase.from("card_pools").update({ pool_name: 'drainlings' }).eq("id", cardToAttempt.id);
+             }
+        }
+
+        // =========================================================================
+        // REWARD THE SACRIFICING TEAM
+        // Find the team who originally owned this specific pick slot and reward them!
+        // =========================================================================
+        
+        // Calculate whose slot this actually is globally
+        const slotIndex = draftStatus.totalPicks % draftStatus.totalTeams;
+        const originalOwnerId = draftStatus.draftOrder[slotIndex].teamId;
+
+        const { data: tradedPick } = await supabase.from('future_draft_picks')
+            .select('team_id, original_team_id')
+            .eq('season_id', draftStatus.seasonId)
+            .eq('round_number', draftStatus.currentRound)
+            .eq('original_team_id', originalOwnerId)
+            .eq('traded_to_team_id', DRAINLINGS_TEAM_ID)
+            .maybeSingle();
+        
+        // Use team_id if it was passed around, otherwise fallback to original_team_id
+        const rewardTeamId = tradedPick?.team_id || tradedPick?.original_team_id;
+
+        if (rewardTeamId) {
+             const essenceReward = effectiveCost * 10;
+             const { data: teamBankData } = await supabase.from('teams').select('essence_bank').eq('id', rewardTeamId).single();
+             
+             if (teamBankData) {
+                 // Deposit the reward directly into their Team Bank!
+                 await supabase.from('teams').update({ essence_bank: teamBankData.essence_bank + essenceReward }).eq('id', rewardTeamId);
+                 await logSystemEvent("TheDrain", "info", `Team ${rewardTeamId} received deferred reward of ${essenceReward} Essence to their Team Bank from a Drainlings pick.`);
+             }
+        }
+
+        await conditionallyCleanupDraftQueues(cardToAttempt.card_id, supabase);
+        
+        const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
+        await supabase.channel(`draft-updates-${draftSessionId}`).send({ 
+            type: 'broadcast', 
+            event: 'new_pick', 
+            payload: { ...newPick, team_id: teamId, team_name: teamData?.name || 'Unknown' }
+        });
+
+        await logSystemEvent("ExecuteAutoDraft", "info", `Drainlings sniped ${cardToAttempt.card_name} via Void logic.`);
+        return { success: true, pick: { cardId: cardToAttempt.card_id, cardName: cardToAttempt.card_name, cost: effectiveCost }, source: "drained" };
+    }
+    // =========================================================================
+ 
 
     const preview = await getAutoDraftPreview(teamId, draftSessionId, supabase, excludedCardPoolIds);
     const cardToAttempt = preview.nextPick;
