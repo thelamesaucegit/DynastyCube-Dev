@@ -11,133 +11,210 @@ async function processEssenceTransaction(
   cost: number,
   description: string
 ): Promise<{ success: boolean; error?: string }> {
-  // 1. Fetch current balance
   const { data: userData, error: userError } = await supabase
     .from('users')
     .select('essence_balance')
     .eq('id', userId)
     .single();
 
-  if (userError || !userData) {
-    return { success: false, error: "Failed to verify Essence balance." };
-  }
-
-  if (userData.essence_balance < cost) {
-    return { success: false, error: `Insufficient Essence. You need ${cost} €.` };
-  }
+  if (userError || !userData) return { success: false, error: "Failed to verify Essence balance." };
+  if (userData.essence_balance < cost) return { success: false, error: `Insufficient Essence. You need ${cost} €.` };
 
   const newBalance = userData.essence_balance - cost;
+  const { error: updateError } = await supabase.from('users').update({ essence_balance: newBalance }).eq('id', userId);
+  if (updateError) return { success: false, error: "Failed to deduct Essence." };
 
-  // 2. Deduct from balance
-  const { error: updateError } = await supabase
-    .from('users')
-    .update({ essence_balance: newBalance })
-    .eq('id', userId);
-
-  if (updateError) {
-    return { success: false, error: "Failed to deduct Essence." };
-  }
-
-  // 3. Log transaction
-  const { error: txError } = await supabase.from('essence_transactions').insert({
-    user_id: userId,
-    transaction_type: "spend",
-    amount: -cost,
-    balance_after: newBalance,
-    description: description,
-    created_by: userId
+  await supabase.from('essence_transactions').insert({
+    user_id: userId, transaction_type: "spend", amount: -cost, balance_after: newBalance, description, created_by: userId
   });
-
-  if (txError) {
-    console.error("Failed to log transaction:", txError);
-    // Non-fatal, let the transaction succeed
-  }
 
   return { success: true };
 }
+
+/**
+ * Standard Fisher-Yates shuffle algorithm
+ */
+function shuffleArray<T>(array: T[]): T[] {
+    const newArray = [...array];
+    for (let i = newArray.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+    }
+    return newArray;
+}
+
+/**
+ * Helper to fetch a properly constructed booster pack from Scryfall
+ */
+async function generateBoosterFromSet(setCode: string): Promise<any[]> {
+    // We strictly filter for first printings (no reprints), removing variants and double-sided cards
+    let scryfallUrl: string | null = `https://api.scryfall.com/cards/search?q=e:${setCode}+is:firstprint+-is:promo+-is:showcase+-border:borderless+-is:dfc+-is:mdfc`;
+    let allSetCards: any[] = [];
+
+    // Fetch all pages of the set
+    while (scryfallUrl) {
+        const response = await fetch(scryfallUrl, {
+            headers: { 'User-Agent': 'DynastyCube/1.0', 'Accept': 'application/json' }
+        });
+        
+        if (!response.ok) break; // End of pages or error
+        
+        const data = await response.json();
+        if (data.data) allSetCards.push(...data.data);
+        
+        scryfallUrl = data.has_more ? data.next_page : null;
+        if (scryfallUrl) await new Promise(r => setTimeout(r, 100)); // Respect Scryfall Rate Limits
+    }
+
+    if (allSetCards.length === 0) return [];
+
+    // Sort into rarities
+    const commons = shuffleArray(allSetCards.filter(c => c.rarity === 'common'));
+    const uncommons = shuffleArray(allSetCards.filter(c => c.rarity === 'uncommon'));
+    const raresAndMythics = shuffleArray(allSetCards.filter(c => c.rarity === 'rare' || c.rarity === 'mythic'));
+
+    // Construct the Pack: 1 R/M, 3 U, 11 C (with safety fallbacks if set is unusually small)
+    const pack = [
+        ...raresAndMythics.slice(0, 1),
+        ...uncommons.slice(0, 3),
+        ...commons.slice(0, 11)
+    ];
+
+    // If the set didn't have enough specific rarities (very rare, e.g. mini sets), 
+    // pad the rest of the 15 cards randomly from whatever is left.
+    if (pack.length < 15) {
+        const remainingNeeded = 15 - pack.length;
+        const usedIds = new Set(pack.map(c => c.id));
+        const unusedCards = shuffleArray(allSetCards.filter(c => !usedIds.has(c.id)));
+        pack.push(...unusedCards.slice(0, remainingNeeded));
+    }
+
+    // Map to DB Schema
+    return pack.map(card => {
+        const imageUris = card.image_uris as Record<string, string> | undefined;
+        return {
+            card_id: String(card.id),
+            card_name: String(card.name),
+            card_set: String((card.set as string).toUpperCase()),
+            card_type: String(card.type_line),
+            rarity: String(card.rarity),
+            colors: Array.isArray(card.colors) ? card.colors : [],
+            color_identity: Array.isArray(card.color_identity) ? card.color_identity : [],
+            image_url: imageUris?.normal || imageUris?.large || null,
+            oracle_id: String(card.oracle_id),
+            mana_cost: card.mana_cost ? String(card.mana_cost) : null,
+            cmc: typeof card.cmc === 'number' ? card.cmc : 0,
+            cubucks_cost: 0, 
+            pool_name: 'the_chamber' 
+        };
+    });
+}
+
 
 // ============================================================================
 // MARKETPLACE PURCHASES
 // ============================================================================
 
-/**
- * €150: Add a Booster Pack to The Chamber (at random).
- * Grabs 15 random cards (excluding un/funny/alchemy/mdfc) and drops them in 'the_chamber'.
- */
 export async function purchaseRandomBooster(): Promise<{ success: boolean; message?: string; error?: string }> {
   try {
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
-
     if (!user) return { success: false, error: "Not authenticated" };
 
     const COST = 150;
 
-    // 1. Process the payment
-    const payment = await processEssenceTransaction(supabase, user.id, COST, "Purchased: Random Booster to The Chamber");
+    // 1. Fetch an eligible random set
+    const { data: eligibleSets, error: setErr } = await supabase
+        .from('chamber_records')
+        .select('set_code, set_name')
+        .eq('added', false)
+        .eq('in_chamber', false);
+
+    if (setErr || !eligibleSets || eligibleSets.length === 0) {
+        return { success: false, error: "No eligible sets remain in the repository." };
+    }
+
+    // 2. Charge the user
+    const payment = await processEssenceTransaction(supabase, user.id, COST, "Purchased: Random Booster");
     if (!payment.success) return { success: false, error: payment.error };
 
-    // 2. Fetch 15 random cards using Scryfall API
-    // Using a robust query to filter out un-sets and dual-faced cards just like the escape room!
-    const scryfallQuery = "-is:ub -st:funny -is:dfc -is:mdfc";
-    const scryfallUrl = `https://api.scryfall.com/cards/random?q=${encodeURIComponent(scryfallQuery)}`;
+    // 3. Generate the Booster
+    const randomSet = eligibleSets[Math.floor(Math.random() * eligibleSets.length)];
+    const packCards = await generateBoosterFromSet(randomSet.set_code);
 
-    const generatedCards = [];
-
-    // Loop to fetch 15 distinct random cards
-    // Note: To be kind to Scryfall's rate limits, we should do this with a slight delay, 
-    // or fetch fewer if API limits become an issue. 15 rapid calls is okay for rare purchases.
-    for (let i = 0; i < 15; i++) {
-        const response = await fetch(scryfallUrl, {
-            headers: { 'User-Agent': 'DynastyCube/1.0', 'Accept': 'application/json' }
-        });
-        
-        if (response.ok) {
-            const card = await response.json();
-            const imageUris = card.image_uris as Record<string, string> | undefined;
-            
-            generatedCards.push({
-                card_id: String(card.id),
-                card_name: String(card.name),
-                card_set: String((card.set as string).toUpperCase()),
-                card_type: String(card.type_line),
-                rarity: String(card.rarity),
-                colors: Array.isArray(card.colors) ? card.colors : [],
-                color_identity: Array.isArray(card.color_identity) ? card.color_identity : [],
-                image_url: imageUris?.normal || imageUris?.large || null,
-                oracle_id: String(card.oracle_id),
-                mana_cost: card.mana_cost ? String(card.mana_cost) : null,
-                cmc: typeof card.cmc === 'number' ? card.cmc : 0,
-                cubucks_cost: 0, 
-                pool_name: 'the_chamber' // Direct to the chamber!
-            });
-        }
-        // Artificial delay of 100ms to respect Scryfall guidelines (max 10 requests per second)
-        await new Promise(r => setTimeout(r, 100));
-    }
-
-    if (generatedCards.length === 0) {
-        // Critical failure rollback
+    if (packCards.length === 0) {
         await supabase.from('users').update({ essence_balance: (await supabase.from('users').select('essence_balance').eq('id', user.id).single()).data?.essence_balance + COST }).eq('id', user.id);
-        return { success: false, error: "Failed to generate booster cards. Essence refunded." };
+        return { success: false, error: `Failed to extract cards from ${randomSet.set_name}. Essence refunded.` };
     }
 
-    // 3. Bulk insert the cards into The Chamber
-    const { error: insertError } = await supabase.from('card_pools').insert(generatedCards);
-
+    // 4. Insert into the Chamber
+    const { error: insertError } = await supabase.from('card_pools').insert(packCards);
     if (insertError) {
-        // Critical failure rollback
         await supabase.from('users').update({ essence_balance: (await supabase.from('users').select('essence_balance').eq('id', user.id).single()).data?.essence_balance + COST }).eq('id', user.id);
-        console.error("Pool Insert Error:", insertError);
         return { success: false, error: "Database error injecting cards. Essence refunded." };
     }
 
-    await logSystemEvent("Marketplace", "info", `User ${user.id} purchased a Random Booster for The Chamber (15 cards added).`);
-
-    return { success: true, message: `Successfully purchased! 15 random cards have materialized in The Chamber.` };
+    await logSystemEvent("Marketplace", "info", `User ${user.id} purchased a Random Booster (${randomSet.set_name}).`);
+    return { success: true, message: `Purchased a ${randomSet.set_name} Booster! 15 new cards added to The Chamber.` };
 
   } catch (error) {
     console.error("Error in purchaseRandomBooster:", error);
     return { success: false, error: "An unexpected error occurred." };
   }
 }
+
+export async function purchaseHomePlaneBooster(): Promise<{ success: boolean; message?: string; error?: string }> {
+    try {
+      const supabase = await createServerClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { success: false, error: "Not authenticated" };
+  
+      const COST = 100;
+  
+      // 1. Identify User's Team & Home Plane
+      const { data: teamMember } = await supabase.from('team_members').select('team_id').eq('user_id', user.id).single();
+      if (!teamMember) return { success: false, error: "You must be on a team to purchase this item." };
+
+      const { data: team } = await supabase.from('teams').select('plane, name').eq('id', teamMember.team_id).single();
+      if (!team || !team.plane) return { success: false, error: "Your team has no designated Home Plane." };
+  
+      // 2. Fetch eligible sets restricted by Plane
+      const { data: eligibleSets, error: setErr } = await supabase
+          .from('chamber_records')
+          .select('set_code, set_name')
+          .eq('added', false)
+          .eq('in_chamber', false)
+          .ilike('plane', `%${team.plane}%`);
+  
+      if (setErr || !eligibleSets || eligibleSets.length === 0) {
+          return { success: false, error: `No unreleased sets remain for the plane of ${team.plane}.` };
+      }
+  
+      // 3. Charge the user
+      const payment = await processEssenceTransaction(supabase, user.id, COST, `Purchased: Home Plane Booster (${team.plane})`);
+      if (!payment.success) return { success: false, error: payment.error };
+  
+      // 4. Generate the Booster
+      const randomSet = eligibleSets[Math.floor(Math.random() * eligibleSets.length)];
+      const packCards = await generateBoosterFromSet(randomSet.set_code);
+  
+      if (packCards.length === 0) {
+          await supabase.from('users').update({ essence_balance: (await supabase.from('users').select('essence_balance').eq('id', user.id).single()).data?.essence_balance + COST }).eq('id', user.id);
+          return { success: false, error: `Failed to extract cards from ${randomSet.set_name}. Essence refunded.` };
+      }
+  
+      // 5. Insert into the Chamber
+      const { error: insertError } = await supabase.from('card_pools').insert(packCards);
+      if (insertError) {
+          await supabase.from('users').update({ essence_balance: (await supabase.from('users').select('essence_balance').eq('id', user.id).single()).data?.essence_balance + COST }).eq('id', user.id);
+          return { success: false, error: "Database error injecting cards. Essence refunded." };
+      }
+  
+      await logSystemEvent("Marketplace", "info", `User ${user.id} purchased a Home Plane Booster (${randomSet.set_name}).`);
+      return { success: true, message: `Purchased a ${randomSet.set_name} Booster! 15 cards from ${team.plane} added to The Chamber.` };
+  
+    } catch (error) {
+      console.error("Error in purchaseHomePlaneBooster:", error);
+      return { success: false, error: "An unexpected error occurred." };
+    }
+  }
