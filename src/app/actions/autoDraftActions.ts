@@ -403,6 +403,7 @@ export async function getAutoDraftPreview(
 }
 
 // The main recursive function
+
 export async function executeAutoDraft(
   teamId: string,
   draftSessionId: string,
@@ -416,13 +417,14 @@ export async function executeAutoDraft(
 }> {
   try {
     const supabase = adminClient ?? createServiceClient();
-
     const { status: draftStatus, error: statusError } = await getDraftStatus(draftSessionId, supabase);
+    
     if (statusError || !draftStatus || draftStatus.onTheClock.teamId !== teamId) {
       await logSystemEvent("ExecuteAutoDraft", "error", `Failed: Team ${teamId} is not on the clock or draft status invalid.`, { draftSessionId, statusError });
       return { success: false, error: statusError || "Team not on the clock." };
     }
-   // =========================================================================
+
+    // =========================================================================
     // DRAINLINGS SPECIAL DRAFT LOGIC
     // =========================================================================
     const DRAINLINGS_TEAM_ID = "90177632-f6ab-4501-b235-3590a7e46472";
@@ -502,7 +504,7 @@ export async function executeAutoDraft(
 
         const { data: tradedPick } = await supabase.from('future_draft_picks')
             .select('team_id, original_team_id')
-            .eq('season_id', draftStatus.season_id)
+            .eq('season_id', draftStatus.seasonId)
             .eq('round_number', draftStatus.currentRound)
             .eq('original_team_id', originalOwnerId)
             .eq('traded_to_team_id', DRAINLINGS_TEAM_ID)
@@ -513,12 +515,19 @@ export async function executeAutoDraft(
 
         if (rewardTeamId) {
              const essenceReward = effectiveCost * 10;
+             
+             // Fetch current bank
              const { data: teamBankData } = await supabase.from('teams').select('essence_bank').eq('id', rewardTeamId).single();
              
              if (teamBankData) {
                  // Deposit the reward directly into their Team Bank!
                  await supabase.from('teams').update({ essence_bank: teamBankData.essence_bank + essenceReward }).eq('id', rewardTeamId);
-                 await logSystemEvent("TheDrain", "info", `Team ${rewardTeamId} received deferred reward of ${essenceReward} Essence to their Team Bank from a Drainlings pick.`);
+                 
+                 // Explicitly log the transaction to the system (No 'any' typing, and bypassing users table since it's a team reward)
+                 const descriptionText = `Deferred Drain Sacrifice Reward (Round ${draftStatus.currentRound}): "${cardToAttempt.card_name}"`;
+                 
+                 // Assuming you want the transaction visible to team members, we just tie it to a system ID or leave user_id null if allowed
+                 await logSystemEvent("TheDrain", "info", `Team ${rewardTeamId} received deferred reward of ${essenceReward} Essence to their Team Bank from a Drainlings pick (${cardToAttempt.card_name}).`);
              }
         }
 
@@ -534,8 +543,10 @@ export async function executeAutoDraft(
         await logSystemEvent("ExecuteAutoDraft", "info", `Drainlings sniped ${cardToAttempt.card_name} via Void logic.`);
         return { success: true, pick: { cardId: cardToAttempt.card_id, cardName: cardToAttempt.card_name, cost: effectiveCost }, source: "drained" };
     }
+
     // =========================================================================
- 
+    // STANDARD AUTO-DRAFT LOGIC
+    // =========================================================================
 
     const preview = await getAutoDraftPreview(teamId, draftSessionId, supabase, excludedCardPoolIds);
     const cardToAttempt = preview.nextPick;
@@ -554,32 +565,30 @@ export async function executeAutoDraft(
     const balance = teamBalance?.cubucks_balance ?? 0;
     const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId, supabase);
     const pickNumber = existingPicks.length + 1;
-
+    
     let baseCost = cardToAttempt.cubucks_cost || 1;
     if (pickNumber === 1) {
         baseCost = await applyHatModifier(teamId, baseCost, supabase);
     }
     
     const effectiveCost = (preview.source === "manual_queue" && balance <= 0) ? 0 : baseCost;
-
-       const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
+    
+    const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
         p_team_id: teamId, p_draft_session_id: draftSessionId, p_card_pool_id: cardToAttempt.id,
         p_card_id: cardToAttempt.card_id, p_card_name: cardToAttempt.card_name,
         p_card_set: cardToAttempt.card_set, p_card_type: cardToAttempt.card_type,
         p_rarity: cardToAttempt.rarity, p_colors: cardToAttempt.colors, 
-        p_color_identity: cardToAttempt.color_identity || cardToAttempt.colors || [], // <-- ADDED MISSING ARGUMENT HERE
+        p_color_identity: cardToAttempt.color_identity || cardToAttempt.colors || [],
         p_image_url: cardToAttempt.image_url,
         p_oldest_image_url: cardToAttempt.oldest_image_url, p_mana_cost: cardToAttempt.mana_cost,
         p_cmc: cardToAttempt.cmc, p_pick_number: pickNumber, p_cost: effectiveCost,
         p_is_manual_pick: preview.source === "manual_queue", p_user_id: null,
     }).single();
-
     
     if (rpcError) {
       const isAlreadyDrafted = 
         (rpcError.code === '23505' && rpcError.message.includes('unique_drafted_card_instance')) ||
         (rpcError.code === 'P0001' && rpcError.message.toLowerCase().includes('already been drafted'));
-
       if (isAlreadyDrafted) {
         await logSystemEvent("ExecuteAutoDraft", "warn", `Card taken: "${cardToAttempt.card_name}". Adding to exclusion list and retrying.`, { cardId: cardToAttempt.id });
         return executeAutoDraft(teamId, draftSessionId, supabase, [...excludedCardPoolIds, cardToAttempt.id!]);
@@ -597,22 +606,19 @@ export async function executeAutoDraft(
 
     const pickSource = preview.source === "manual_queue" ? "manual_queue" : "algorithm";
     
-       if (newPick.id) {
+    if (newPick.id) {
         const calculatedElo = (cardToAttempt as typeof cardToAttempt & { effective_elo?: number }).effective_elo 
                               || cardToAttempt.cubecobra_elo 
                               || null;
-
         await supabase.from("team_draft_picks").update({ 
             pick_source: pickSource,
             effective_elo: calculatedElo,
             algorithm_details: preview.algorithmDetails || null 
         }).eq("id", newPick.id);
     }
-
     
     await conditionallyCleanupDraftQueues(cardToAttempt.card_id, supabase);
     
-    // --- BROADCAST THE AUTODRAFT PICK TO THE UI ---
     const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
     await supabase.channel(`draft-updates-${draftSessionId}`).send({ 
         type: 'broadcast', 
@@ -637,6 +643,8 @@ export async function executeAutoDraft(
     return { success: false, error: errorMessage };
   }
 }
+
+
 export async function captainForcePick(teamId: string, cardPoolId: string, draftSessionId: string): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = await createServerClient();
