@@ -15,6 +15,16 @@ import { getUserEssenceBalance, type EssenceBalance } from "@/app/actions/essenc
 import { purchaseRandomBooster, purchaseHomePlaneBooster, searchCardsForManipulation, purchaseMarketManipulation } from "@/app/actions/marketplaceActions";
 import { toast } from "sonner";
 
+// Type-safe interface to replace "any"
+interface ManipulationCard {
+  id: string;
+  card_name: string;
+  card_set: string;
+  cubucks_cost: number;
+  image_url: string | null;
+  pool_name: string;
+}
+
 const MARKETPLACE_ITEMS = [
   {
     id: "random_booster",
@@ -39,7 +49,7 @@ const MARKETPLACE_ITEMS = [
     icon: <BookOpen className="size-6 text-amber-500" />,
     costText: "€2 per letter",
     isActive: true,
-    href: "/cypher" // Navigational Link
+    href: "/cypher" 
   },
   {
     id: "retrieve_lost",
@@ -108,7 +118,8 @@ export default function MarketplacePage() {
   // Modal State
   const [manipulationModalOpen, setManipulationModalOpen] = useState(false);
   const [manipulationSearch, setManipulationSearch] = useState("");
-  const [manipulationResults, setManipulationResults] = useState<any[]>([]);
+  // THE FIX: Explicitly typed array instead of any[]
+  const [manipulationResults, setManipulationResults] = useState<ManipulationCard[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
   const loadBalance = async () => {
@@ -125,7 +136,8 @@ export default function MarketplacePage() {
           if (manipulationSearch.trim().length >= 3) {
               setIsSearching(true);
               const res = await searchCardsForManipulation(manipulationSearch);
-              if (res.success) setManipulationResults(res.cards);
+              // THE FIX: Explicit cast matching the ManipulationCard interface
+              if (res.success && res.cards) setManipulationResults(res.cards as ManipulationCard[]);
               setIsSearching(false);
           } else {
               setManipulationResults([]);
@@ -198,6 +210,7 @@ export default function MarketplacePage() {
           </p>
         </div>
         
+        {/* PERSONAL ESSENCE STASH */}
         <Card className="border-emerald-500/30 bg-emerald-500/5 shadow-sm min-w-[200px] shrink-0">
           <CardContent className="p-4 flex flex-col items-center justify-center">
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Your Essence</p>
@@ -362,7 +375,8 @@ export default function MarketplacePage() {
                         </div>
                     ) : manipulationSearch.trim().length >= 3 ? (
                         <div className="text-center py-12 text-muted-foreground">
-                            No eligible cards found matching "{manipulationSearch}". <br/>
+                            {/* THE FIX: Properly escaped the double quotes inside JSX */}
+                            No eligible cards found matching &ldquo;{manipulationSearch}&rdquo;. <br/>
                             <span className="text-xs">(Cards currently held in a Team Pool or an active Draft Pool are ineligible.)</span>
                         </div>
                     ) : (
