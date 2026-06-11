@@ -506,24 +506,24 @@ export async function getTeamsWithDetails(
 
 export async function toggleChangelingIdentity(teamId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { success: false, error: "Not authenticated" };
+    // THE FIX: Use Admin client to allow background cron jobs to execute this without a user session!
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 
     // 1. Verify the current season is Neutral
-    const { data: season } = await supabase.from('seasons').select('day_night_status').eq('is_active', true).single();
+    const { data: season } = await supabaseAdmin.from('seasons').select('day_night_status, phase').eq('is_active', true).single();
     if (season?.day_night_status !== 'neutral') {
        return { success: false, error: `You cannot shapeshift while the season is locked to ${season?.day_night_status}.` };
     }
 
     // 2. Fetch the team's current identity
-    const { data: team } = await supabase.from('teams').select('active_identity').eq('id', teamId).single();
+    const { data: team } = await supabaseAdmin.from('teams').select('active_identity').eq('id', teamId).single();
     if (!team) return { success: false, error: "Team not found." };
 
     const newIdentityKey = team.active_identity === 'changelings' ? 'mimics' : 'changelings';
 
-    // 3. Fetch the cosmetic details from the new team_identities table!
-    const { data: identityData, error: identityError } = await supabase
+    // 3. Fetch the cosmetic details from the team_identities table
+    const { data: identityData, error: identityError } = await supabaseAdmin
         .from('team_identities')
         .select('name, emoji, primary_color, secondary_color')
         .eq('team_id', teamId)
@@ -535,7 +535,7 @@ export async function toggleChangelingIdentity(teamId: string): Promise<{ succes
     }
 
     // 4. Apply the cosmetic swap dynamically
-    const { error } = await supabase.from('teams').update({
+    const { error } = await supabaseAdmin.from('teams').update({
         active_identity: newIdentityKey,
         name: identityData.name,
         emoji: identityData.emoji,

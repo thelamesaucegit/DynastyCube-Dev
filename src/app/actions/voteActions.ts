@@ -636,14 +636,24 @@ export async function createIdentitySwapPoll(teamId: string, userId: string, cur
 
 export async function resolveIdentitySwapPoll(pollId: string, teamId: string) {
   try {
-    const supabase = await createServerClient();
-    await supabase.rpc("recalculate_poll_results", { p_poll_id: pollId, p_team_id: teamId });
-    const { data: pollResults } = await supabase.rpc("get_poll_results_by_type", { p_poll_id: pollId });
+    // THE FIX: Use Admin client for background cron execution
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+
+    await supabaseAdmin.rpc("recalculate_poll_results", { p_poll_id: pollId, p_team_id: teamId });
+    const { data: pollResults } = await supabaseAdmin.rpc("get_poll_results_by_type", { p_poll_id: pollId });
     const teamResult = (pollResults as TypedPollResults)?.team_results?.find(r => r.team_id === teamId);
     
+    // THE FIX: Close the poll so the cron job stops retrying it!
+    await supabaseAdmin.from('polls').update({ is_active: false }).eq('id', pollId);
+
     if (teamResult && (teamResult.winning_option_text?.includes("Transform") || teamResult.winning_option_text?.includes("Revert"))) {
        const { toggleChangelingIdentity } = await import('@/app/actions/teamActions');
-       await toggleChangelingIdentity(teamId);
+       const result = await toggleChangelingIdentity(teamId);
+       
+       if (!result.success) {
+           return { success: false, error: result.error };
+       }
        return { success: true, message: "The team has successfully transformed!" };
     }
     return { success: true, message: "The team chose to remain unchanged." };
@@ -655,16 +665,24 @@ export async function resolveIdentitySwapPoll(pollId: string, teamId: string) {
 
 export async function resolveCutVotePoll(pollId: string, teamId: string) {
   try {
-    const supabase = await createServerClient();
-    await supabase.rpc("recalculate_poll_results", { p_poll_id: pollId, p_team_id: teamId });
-    const { data: pollResults } = await supabase.rpc("get_poll_results_by_type", { p_poll_id: pollId });
+    // THE FIX: Use Admin client for background cron execution
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+
+    await supabaseAdmin.rpc("recalculate_poll_results", { p_poll_id: pollId, p_team_id: teamId });
+    const { data: pollResults } = await supabaseAdmin.rpc("get_poll_results_by_type", { p_poll_id: pollId });
     const teamResult = (pollResults as TypedPollResults)?.team_results?.find(r => r.team_id === teamId);
     
+    // THE FIX: Close the poll so the cron job stops retrying it!
+    await supabaseAdmin.from('polls').update({ is_active: false }).eq('id', pollId);
+
     if (teamResult && teamResult.winning_option_text?.startsWith("Cut ")) {
        const cardName = teamResult.winning_option_text.replace("Cut ", "");
-       const { data: pick } = await supabase.from("team_draft_picks").select("id, card_id").eq("team_id", teamId).eq("card_name", cardName).single();
+       const { data: pick } = await supabaseAdmin.from("team_draft_picks").select("id, card_id").eq("team_id", teamId).eq("card_name", cardName).single();
+       
        if (pick) {
           const { refundDraftPick } = await import('@/app/actions/cubucksActions');
+          // (Assuming refundDraftPick natively handles Admin fallbacks or can be executed safely)
           const result = await refundDraftPick(teamId, pick.id, pick.card_id, cardName);
           if (result.success) return { success: true, message: `Vote passed! ${cardName} was cut and refunded.` };
           else return { success: false, error: `Vote passed, but refund failed: ${result.error}` };
