@@ -4,7 +4,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { logSystemEvent } from "@/lib/systemLogger";
 
-// THE FIX: Use service client to bypass RLS for background tasks
+// Use service client to bypass RLS for background tasks
 function createServiceClient() {
     return createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -72,12 +72,10 @@ export async function processEscapeRoomRewards(seasonId: string, weekNumber: num
             const response = await fetch(scryfallUrl, {
                 headers: { 'User-Agent': 'DynastyCube/1.0', 'Accept': 'application/json' }
             });
-
             if (!response.ok) {
                 console.warn(`[EscapeRoom] Failed to find card for ${team.name} using query: ${scryfallQuery}`);
                 continue;
             }
-
             const card = await response.json();
 
             // 6. Insert the card into the global card_pools table first so it physically exists in the database
@@ -95,7 +93,8 @@ export async function processEscapeRoomRewards(seasonId: string, weekNumber: num
                 mana_cost: card.mana_cost ? String(card.mana_cost) : null,
                 cmc: typeof card.cmc === 'number' ? card.cmc : 0,
                 cubucks_cost: 0, // Free for now, Rollover will set it to 3 or 5% of cap
-                scars: ['escape'] // <-- Mark it!
+                scars: ['escape'], // <-- Mark it!
+                [...](asc_slot://start-slot-7)pool_name: 'draft' // <-- THE FIX: Explicitly assign to 'draft' pool to pass the foreign key constraint
             }).select('id').single();
 
             if (poolErr || !poolCard) throw new Error(`Pool insert failed: ${poolErr?.message}`);
