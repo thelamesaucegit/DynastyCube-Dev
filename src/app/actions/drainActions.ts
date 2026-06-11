@@ -85,9 +85,9 @@ const getRegiftResponse = (cardName: string) => {
 
 const getExperimentalItemResponse = (itemName: string) => {
     const responses = [
-        `YOUR TEAM'S REPEATED INSOLENCE HAS TRIGGERED AN ANOMALY. THE VOID SPITS OUT [ ${itemName.toUpperCase()} ].`,
-        `THE PARADOX OF YOUR REGIFTING HAS MANIFESTED PHYSICAL FORM. YOUR TEAM ACQUIRES [ ${itemName.toUpperCase()} ].`,
-        `FOR YOUR PERSISTENT IMPUDENCE, THE CUBE CURSES YOU WITH SCIENTIFIC BURDENS. YOU RECEIVED [ ${itemName.toUpperCase()} ].`
+        `THE VOID IS INTRIGUED BY YOUR RELENTLESS CURIOSITY. YOUR IMPUDENT REGIFTING HAS MANIFESTED A PHYSICAL ANOMALY. YOUR TEAM GRASPS [ ${itemName.toUpperCase()} ].`,
+        `REPETITION BREEDS PARADOX. THE CUBE FINDS YOUR PERSISTENT EXPERIMENTATION AMUSING. IT SPITS OUT [ ${itemName.toUpperCase()} ] AS A REWARD FOR YOUR HUBRIS.`,
+        `YOUR TEAM TEARS AT THE FABRIC OF THE MULTIVERSE WITH THIS REGIFTING. THE RESULTING TEAR YIELDS SCIENTIFIC RESIDUE. YOU HAVE ACQUIRED [ ${itemName.toUpperCase()} ].`
     ];
     return responses[Math.floor(Math.random() * responses.length)];
 };
