@@ -19,7 +19,7 @@ import { getRoleEmoji, getRoleDisplayName } from "@/app/utils/roleUtils";
 import { getTeamHats } from "@/app/actions/hatActions";
 import { DraftInterface } from "@/app/components/DraftInterface";
 import { DeckBuilder } from "@/app/components/DeckBuilder";
-import { TeamRoles } from "@/app/components/TeamRoles"; // <-- Imported for inline embedding
+import { TeamRoles } from "@/app/components/TeamRoles";
 import { TeamCubucksDisplay } from "@/app/components/TeamCubucksDisplay";
 import { MatchRecording } from "@/app/components/MatchRecording";
 import { MatchSchedulingWidget } from "@/app/components/team/MatchSchedulingWidget";
@@ -32,7 +32,7 @@ import { Badge } from "@/app/components/ui/badge";
 import { Button } from "@/app/components/ui/button";
 import { createIdentitySwapPoll, createTeamPoll } from "@/app/actions/voteActions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
-import { MoonStar, Sun, Target, Layers, BookOpen, ArrowLeftRight, Swords, BarChart3, Crown, Users, Loader2, AlertCircle, ExternalLink, CalendarDays, CheckCircle2, XCircle, Vote } from "lucide-react";
+import { MoonStar, Sun, Target, Layers, BookOpen, ArrowLeftRight, Swords, Crown, Users, Loader2, AlertCircle, ExternalLink, CalendarDays, CheckCircle2, XCircle, Vote } from "lucide-react";
 import { useSettings } from "@/contexts/SettingsContext";
 import { getCardImageUrl } from "@/app/utils/cardUtils";
 
@@ -69,7 +69,6 @@ interface TeamHatData {
   }[] | null;
 }
 
-// THE FIX: Decluttered the tabs to keep only the primary categories
 type TabType = "picks" | "decks" | "members" | "draft" | "trades" | "matches" | "votes" | "trophies";
 
 export default function TeamPage() {
@@ -97,9 +96,7 @@ export default function TeamPage() {
   const [activeDraftSessionId, setActiveDraftSessionId] = useState<string | null>(null);
   const [isVoting, setIsVoting] = useState(false);
 
-  const isUserTeamMember = team?.members?.some(
-    (member) => member.user_id === user?.id
-  ) || userRoles.length > 0;
+  const isUserTeamMember = team?.members?.some((member) => member.user_id === user?.id) || userRoles.length > 0;
 
   const loadTeamData = useCallback(async () => {
     if (!teamShortName) { return; }
@@ -298,7 +295,6 @@ export default function TeamPage() {
     }
   };
 
-  // THE FIX: Decluttered the tabs to keep only the consolidated categories
   const tabs: { id: TabType; label: string; icon: React.ReactNode; count?: number, disabled?: boolean }[] = [
     ...(isUserTeamMember ? [{ id: "draft" as TabType, label: "Draft & Free Agency", icon: <Target className="size-4" />, count: undefined, disabled: false }] : []),
     { id: "picks" as TabType, label: "Team Pool", icon: <Layers className="size-4" />, count: draftPicks.length },
@@ -335,7 +331,7 @@ export default function TeamPage() {
 
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8">
-      {/* Dynamic Aurora stylesheet injection */}
+      {/* THE FIX: Dynamic Aurora Stylesheet Injection */}
       <style jsx global>{`
         @keyframes aurora-flow {
           0% { background-position: 0% 50%; }
@@ -343,55 +339,41 @@ export default function TeamPage() {
           100% { background-position: 0% 50%; }
         }
         @keyframes aurora-shimmer {
-          0%, 100% { opacity: 0.85; filter: hue-rotate(0deg) saturate(1.1); }
-          50% { opacity: 0.98; filter: hue-rotate(15deg) saturate(1.4); }
+          0%, 100% { opacity: 0.6; filter: hue-rotate(0deg) saturate(1.2); }
+          50% { opacity: 1; filter: hue-rotate(20deg) saturate(1.5); }
         }
         .aurora-card-bg {
           position: relative;
           background: linear-gradient(
             135deg,
-            rgba(0, 20, 5, 0.9) 0%,
-            rgba(10, 45, 15, 0.95) 25%,
-            rgba(4, 30, 8, 0.98) 50%,
-            rgba(15, 55, 20, 0.95) 75%,
-            rgba(0, 15, 3, 0.9) 100%
+            rgba(0, 25, 10, 0.9) 0%,
+            rgba(10, 50, 20, 0.95) 25%,
+            rgba(4, 40, 15, 0.98) 50%,
+            rgba(15, 60, 25, 0.95) 75%,
+            rgba(0, 20, 5, 0.9) 100%
           );
           background-size: 400% 400%;
-          animation: aurora-flow 25s ease-in-out infinite;
+          animation: aurora-flow 20s ease infinite;
+          border-color: rgba(34, 197, 94, 0.5) !important;
+          box-shadow: 0 0 20px rgba(34, 197, 94, 0.2), inset 0 0 15px rgba(34, 197, 94, 0.1) !important;
           overflow: hidden;
-          border-color: rgba(34, 197, 94, 0.45) !important;
-          box-shadow: 0 0 25px rgba(34, 197, 94, 0.15), inset 0 0 15px rgba(34, 197, 94, 0.1) !important;
         }
         .aurora-stream {
           position: absolute;
           inset: -20px;
           background: radial-gradient(
             ellipse at top,
-            rgba(34, 197, 94, 0.35) 0%,
-            rgba(16, 185, 129, 0.2) 35%,
-            rgba(5, 150, 105, 0.05) 70%,
-            transparent 100%
+            rgba(74, 222, 128, 0.4) 0%,
+            rgba(16, 185, 129, 0.2) 40%,
+            transparent 70%
           );
           mix-blend-mode: screen;
-          filter: blur(12px);
-          animation: aurora-shimmer 8s ease-in-out infinite;
-          pointer-events: none;
-        }
-        .aurora-sparkle {
-          position: absolute;
-          inset: 0;
-          background-image: 
-            radial-gradient(1px 1px at 20px 30px, rgba(255, 255, 255, 0.6), transparent),
-            radial-gradient(1.5px 1.5px at 150px 80px, rgba(255, 255, 255, 0.8), transparent),
-            radial-gradient(1px 1px at 280px 120px, rgba(255, 255, 255, 0.5), transparent),
-            radial-gradient(2px 2px at 80px 240px, rgba(255, 255, 255, 0.7), transparent),
-            radial-gradient(1px 1px at 340px 290px, rgba(255, 255, 255, 0.4), transparent);
-          background-size: 400px 300px;
-          mix-blend-mode: color-dodge;
-          opacity: 0.4;
+          filter: blur(15px);
+          animation: aurora-shimmer 6s ease-in-out infinite alternate;
           pointer-events: none;
         }
       `}</style>
+      
       <Card className="mb-6">
         <CardContent className="pt-6">
           <div className="flex items-center gap-6">
@@ -442,11 +424,11 @@ export default function TeamPage() {
       </Card>
       
       <DraftStatusWidget variant="team" teamId={team.id} />
-      
+
+      {/* THE FIX: THE GREAT AURORA CARD WITH CSS INJECTION */}
       {isUserTeamMember && (team.short_name === 'changelings' || team.short_name === 'mimics') && seasonPhase !== 'draft' && (
-        <Card className="mb-6 aurora-card-bg border border-green-500/40 relative">
+        <Card className="mb-6 aurora-card-bg">
           <div className="aurora-stream" />
-          <div className="aurora-sparkle animate-pulse" />
           <CardContent className="pt-6 relative z-10 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex-1">
               <h3 className="font-extrabold text-lg mb-1 flex items-center gap-2 text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.4)]">
@@ -484,7 +466,7 @@ export default function TeamPage() {
         </div>
       </div>
 
-    <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabType)}>
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabType)}>
         <TabsList className="flex-wrap h-auto gap-1 mb-6">
           {tabs.map((tab) => (
             <TabsTrigger key={tab.id} value={tab.id} className="gap-1.5">
@@ -500,8 +482,6 @@ export default function TeamPage() {
         </TabsList>
         <Card>
           <CardContent className="pt-6">
-            
-            {/* DRAFT TAB */}
             <TabsContent value="draft">
               {activeTab === "draft" && isUserTeamMember && (
                 <div className="space-y-8">
@@ -529,7 +509,7 @@ export default function TeamPage() {
                               const isVoted = user?.id ? draftPreview.votes?.includes(user.id) : false;
                               return (
                                 <Button onClick={handleToggleVote} disabled={isVoting || !activeDraftSessionId} className={isVoted ? "bg-green-600 hover:bg-green-700 text-white" : ""} >
-                                  {isVoting && <Loader2 className="size-4 mr-2 animate-spin" />}
+                                  {isVoting && <Loader2 className="size-4 animate-spin mr-2" />}
                                   {!isVoting && <Vote className="size-4 mr-2" />}
                                   {isVoted ? "Retract Vote" : "Confirm pick for immediate submission"}
                                   <span className="ml-2 font-normal opacity-90">
@@ -571,8 +551,6 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
-
-            {/* TEAM POOL (PICKS) TAB */}
             <TabsContent value="picks">
               {activeTab === "picks" && (
                 <div>
@@ -650,8 +628,6 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
-
-            {/* DECKS (DECK BUILDER) TAB */}
             <TabsContent value="decks">
               {activeTab === "decks" && (
                 <div>
@@ -667,8 +643,6 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
-
-            {/* TRADES TAB */}
             <TabsContent value="trades">
               {activeTab === "trades" && (
                 <div>
@@ -689,8 +663,6 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
-
-            {/* MATCHES TAB */}
             <TabsContent value="matches">
               {activeTab === "matches" && (
                 <div className="space-y-6">
@@ -708,8 +680,6 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
-
-            {/* VOTES TAB */}
             <TabsContent value="votes">
               {activeTab === "votes" && isUserTeamMember && (
                 <div>
@@ -723,8 +693,6 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
-
-            {/* MEMBERS & ROLES TAB */}
             <TabsContent value="members">
               {activeTab === "members" && (
                 <div className="space-y-8">
@@ -783,23 +751,17 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
-
-              
-             {/* TROPHIES TAB */}
-            <TabsContent value="trophies">
-              {activeTab === "trophies" && (
-                <div>
-                  <div className="mb-6">
-                    <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
-                      <Crown className="size-5 text-yellow-500" /> Trophy Case
-                    </h2>
-                    <p className="text-sm text-muted-foreground">Historical championships won by {team.name}</p>
-                  </div>
-                  <TrophyCase teamId={team.id} />
+            {activeTab === "trophies" && (
+              <div>
+                <div className="mb-6">
+                  <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
+                    <Crown className="size-5 text-yellow-500" /> Trophy Case
+                  </h2>
+                  <p className="text-sm text-muted-foreground">Historical championships won by {team.name}</p>
                 </div>
-              )}
-            </TabsContent>
-
+                <TrophyCase teamId={team.id} />
+              </div>
+            )}
           </CardContent>
         </Card>
       </Tabs>
