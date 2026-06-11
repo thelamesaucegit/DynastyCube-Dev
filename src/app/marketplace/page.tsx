@@ -27,25 +27,25 @@ const MARKETPLACE_ITEMS = [
   {
     id: "random_booster",
     title: "Random Booster",
-    description: "Add a Booster Pack to The Draft Pool (at random).",
+    description: "Add a Booster Pack to The Chamber (at random).",
     icon: <Package className="size-6 text-blue-400" />,
   },
   {
     id: "home_booster",
     title: "Home Plane Booster",
-    description: "Add a Booster Pack from your Team's home plane to The Draft Pool (at random).",
+    description: "Add a Booster Pack from your Team's Home Plane to The Chamber (at random).",
     icon: <Map className="size-6 text-green-400" />,
   },
   {
     id: "reveal_truth",
     title: "Reveal",
-    description: "Reveal words from THE BOOK or any other redacted message on the site.",
+    description: "Reveal words from The Cypher.",
     icon: <BookOpen className="size-6 text-amber-400" />,
   },
   {
     id: "retrieve_lost",
     title: "Retrieve",
-    description: "Retrieve something lost.",
+    description: "Retrieve something Lost.",
     icon: <Search className="size-6 text-cyan-400" />,
   },
   {
@@ -75,7 +75,7 @@ const MARKETPLACE_ITEMS = [
   {
     id: "scarring",
     title: "Scarring",
-    description: "Apply a random Scar to a specified card in The Draft Pool, or a specified Scar to a random card.",
+    description: "Apply a random Scar to a specified card in The Draft Pool or The Chamber, or a specified Scar to a random card.",
     icon: <Skull className="size-6 text-red-500" />,
   },
   {
