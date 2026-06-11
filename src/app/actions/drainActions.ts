@@ -10,6 +10,14 @@ const DRAINLINGS_TEAM_ID = "90177632-f6ab-4501-b235-3590a7e46472";
 // Temporary in-memory session cache to hold warning progressions across the server environment.
 const sacrificeWarningCache = new Map<string, number>();
 
+// Strict interface to remove 'any' from the Hat logic
+interface TeamHatRecord {
+    id: string;
+    hat_id: number;
+    quantity: number;
+    hats: { hatName: string } | { hatName: string }[] | null;
+}
+
 // =========================================================================
 // RESPONSE GENERATORS (3+ responses for every outcome)
 // =========================================================================
@@ -187,13 +195,13 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
         return { success: true, message: getCubucksResponse(), type: "rejected" };
     }
 
-    // Fetch core user data
-    const { data: userData } = await supabaseAdmin.from('users').select('display_name, discord_username, essence_balance').eq('id', user.id).single();
+    // THE FIX: Included 'essence_total_earned' in the select payload!
+    const { data: userData } = await supabaseAdmin.from('users').select('display_name, discord_username, essence_balance, essence_total_earned').eq('id', user.id).single();
     const name1 = (userData?.display_name || "").toLowerCase();
     const name2 = (userData?.discord_username || "").toLowerCase();
     const currentEssence = userData?.essence_balance || 0;
+    const currentTotalEarned = userData?.essence_total_earned || 0;
 
-    // THE FIX: Select both `id` AND `team_id` so we can delete the team_members record later if they self-sacrifice!
     const { data: member } = await supabaseAdmin.from('team_members').select('id, team_id').eq('user_id', user.id).single();
     const teamId = member?.team_id || null;
 
@@ -223,9 +231,7 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
         sacrificeWarningCache.delete(user.id); 
 
         if (currentMembership && currentMembership.id) {
-            // Delete roles by team_member_id
             await supabaseAdmin.from('team_member_roles').delete().eq('team_member_id', currentMembership.id);
-            // Delete actual team membership using the id
             await supabaseAdmin.from('team_members').delete().eq('id', currentMembership.id);
         }
 
@@ -237,7 +243,6 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
         return { success: true, message: getSelfSacrificeFinalResponse(), type: "self" };
     }
 
-    // Reset warning cache if they type anything else
     sacrificeWarningCache.delete(user.id);
 
     // =========================================================================
@@ -252,34 +257,27 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
     // =========================================================================
     // 3. ESSENCE PURCHASE MECHANIC (Retrieve random card from Drainlings to Chamber)
     // =========================================================================
-    // Match strings like "150e", "150 essence", "€150"
     const essenceMatch = cleanOffer.match(/^[\s]*[€e]?[\s]*(essence)?[\s]*(\d+)[\s]*[€e]?[\s]*(essence)?[\s]*$/i);
     if (essenceMatch) {
         const amount = parseInt(essenceMatch[2], 10);
 
         if (amount <= currentEssence) {
-            // Find ALL cards in the drainlings pool
             const { data: drainCards } = await supabaseAdmin.from('team_draft_picks').select('id, card_id, card_name, cubucks_cost, card_pool_id').eq('team_id', DRAINLINGS_TEAM_ID);
             
             if (drainCards && drainCards.length > 0) {
-                // Filter eligible cards where bid >= 12x the card's cubuck cost
                 const eligibleCards = drainCards.filter(c => amount >= ((c.cubucks_cost || 1) * 12));
                 
                 if (eligibleCards.length > 0) {
-                    // Pick a random eligible card
                     const randomCard = eligibleCards[Math.floor(Math.random() * eligibleCards.length)];
-
-                    // Deduct Essence
                     const newBalance = currentEssence - amount;
+                    
                     await supabaseAdmin.from('users').update({ essence_balance: newBalance }).eq('id', user.id);
                     await supabaseAdmin.from('essence_transactions').insert({
                         user_id: user.id, transaction_type: "spend", amount: -amount, balance_after: newBalance, description: `Drain Retrieval Bid: ${amount}E`, created_by: user.id
                     });
 
-                    // Remove from Drainlings roster
                     await supabaseAdmin.from('team_draft_picks').delete().eq('id', randomCard.id);
 
-                    // Re-insert to The Chamber!
                     if (randomCard.card_pool_id) {
                         await supabaseAdmin.from('card_pools').update({ pool_name: 'the_chamber', was_drafted: false }).eq('id', randomCard.card_pool_id);
                     }
@@ -315,7 +313,6 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
                 .single();
             
             if (futurePick) {
-                // Trade the pick to the Drainlings!
                 await supabaseAdmin.from('future_draft_picks').update({
                     traded_to_team_id: DRAINLINGS_TEAM_ID,
                     is_traded: true
@@ -331,40 +328,40 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
     // 7. HAT SACRIFICE
     // =========================================================================
     if (cleanOffer.endsWith("hat")) {
-        // We use a properly typed generic return from Supabase to satisfy TS
         const { data: teamHats } = await supabaseAdmin.from('team_hats').select(`id, hat_id, quantity, hats!inner(hatName)`).eq('team_id', teamId);
         
-        // Find matching hat by name
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const matchingHat = (teamHats || []).find((h: any) => {
+        // THE FIX: Explicitly mapped via the TeamHatRecord interface to avoid "any"
+        const typedTeamHats = (teamHats || []) as unknown as TeamHatRecord[];
+        const matchingHat = typedTeamHats.find((h) => {
             const hatObj = Array.isArray(h.hats) ? h.hats[0] : h.hats;
             return hatObj?.hatName?.toLowerCase().includes(cleanOffer.replace(/the|a|an/gi, '').trim());
         });
 
         if (matchingHat) {
             const rawHatData = Array.isArray(matchingHat.hats) ? matchingHat.hats[0] : matchingHat.hats;
-            const hatName = rawHatData.hatName || "Hat";
+            const hatName = rawHatData?.hatName || "Hat";
             const hatId = matchingHat.hat_id;
 
-            // Delete one instance of the hat
             if (matchingHat.quantity > 1) {
                 await supabaseAdmin.from('team_hats').update({ quantity: matchingHat.quantity - 1 }).eq('id', matchingHat.id);
             } else {
                 await supabaseAdmin.from('team_hats').delete().eq('id', matchingHat.id);
             }
 
-            // Really Cool Hat Check
             if (hatId === 1) {
-                const userEssence = userData?.essence_balance || 0;
-                await supabaseAdmin.from('users').update({ essence_balance: userEssence + 500, essence_total_earned: (userData?.essence_total_earned || 0) + 500 }).eq('id', user.id);
-                await supabaseAdmin.from('essence_transactions').insert({ user_id: user.id, transaction_type: "grant", amount: 500, balance_after: userEssence + 500, description: `Sacrificed A Really Cool Hat`, created_by: user.id });
+                await supabaseAdmin.from('users').update({ 
+                    essence_balance: currentEssence + 500, 
+                    essence_total_earned: currentTotalEarned + 500 
+                }).eq('id', user.id);
+                
+                await supabaseAdmin.from('essence_transactions').insert({ 
+                    user_id: user.id, transaction_type: "grant", amount: 500, balance_after: currentEssence + 500, description: `Sacrificed A Really Cool Hat`, created_by: user.id 
+                });
 
                 return { success: true, message: getCoolHatResponse(), type: "card" };
             }
 
-            // Cursed Witch-Skin Hat Check
             if (hatId === 2) {
-                // Feign acceptance, then grant them the leveled up version (Assuming ID 3 is the cursed level 2)
                 await supabaseAdmin.from('team_hats').insert({ team_id: teamId, hat_id: 3, quantity: 1 }); 
                 return { success: true, message: getCursedHatResponse(), type: "rejected" };
             }
@@ -400,43 +397,33 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
         .maybeSingle();
 
     if (pick) {
-        // REGIFTING CHECK! Look in `the_drain` to see if ANY card with this exact card_id was previously sacrificed!
         const { data: prevDrain } = await supabaseAdmin.from('the_drain').select('id').eq('card_id', pick.card_id).limit(1).maybeSingle();
         
         const cardCost = pick.cubucks_cost || 1;
         const essenceReward = cardCost * 5; 
 
-        // 1. Transfer the card to the Drainlings
         await supabaseAdmin.from('team_draft_picks').update({ team_id: DRAINLINGS_TEAM_ID, acquisition_method: 'drained', scars: ['drained'] }).eq('id', pick.id);
 
-        // 2. Update card_pools
         if (pick.card_pool_id) {
             await supabaseAdmin.from('card_pools').update({ pool_name: 'drainlings' }).eq('id', pick.card_pool_id);
         }
 
-        // 3. Write to the_drain ledger
         await supabaseAdmin.from('the_drain').insert({
             card_id: pick.card_id, card_name: pick.card_name, card_set: pick.card_set, sacrificed_by_user_id: user.id, sacrificed_by_team_id: teamId, cubucks_value_at_sacrifice: cardCost, essence_rewarded: essenceReward
         });
 
-        // 4. Reward Essence
-        const userEssence = userData?.essence_balance || 0;
-        await supabaseAdmin.from('users').update({ essence_balance: userEssence + essenceReward, essence_total_earned: (userData?.essence_total_earned || 0) + essenceReward }).eq('id', user.id);
+        await supabaseAdmin.from('users').update({ essence_balance: currentEssence + essenceReward, essence_total_earned: currentTotalEarned + essenceReward }).eq('id', user.id);
         await supabaseAdmin.from('essence_transactions').insert({
-            user_id: user.id, transaction_type: "grant", amount: essenceReward, balance_after: userEssence + essenceReward, description: `Sacrifice Reward: "${pick.card_name}"`, created_by: user.id
+            user_id: user.id, transaction_type: "grant", amount: essenceReward, balance_after: currentEssence + essenceReward, description: `Sacrifice Reward: "${pick.card_name}"`, created_by: user.id
         });
 
         let finalMsg = getCardSacrificeResponse(pick.card_name, essenceReward);
 
-        // 5. REGIFTING OUTCOME
         if (prevDrain) {
             finalMsg = getRegiftResponse(pick.card_name);
-            
-            // Check if any other teammate has regifted before!
             const { data: teamRegifts } = await supabaseAdmin.from('the_drain').select('id').eq('sacrificed_by_team_id', teamId).neq('sacrificed_by_user_id', user.id).limit(1);
             
             if (teamRegifts && teamRegifts.length > 0) {
-                // Grant an experimental item! (Find one not currently assigned)
                 const { data: unassignedItem } = await supabaseAdmin.from('experimental_items').select('id, item_name').is('current_team_id', null).limit(1).maybeSingle();
                 
                 if (unassignedItem) {
