@@ -59,6 +59,7 @@ export interface DraftStatus {
   onDeck: DraftStatusTeam;
   currentRound: number;
   totalPicks: number;
+  season_id: string;
   totalTeams: number;
   seasonName: string;
   draftOrder: Array<DraftStatusTeam & { picksMade: number }>;
