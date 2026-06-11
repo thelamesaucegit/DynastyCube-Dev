@@ -57,20 +57,26 @@ export async function POST(request: Request): Promise<NextResponse> {
 
         console.log(`[Match-Runner API] Inserting into sim_matches...`);
 
-        // 1. Create the sim_matches record using strict casting
+        // THE FIX: Explicitly type the payload to bypass 'never[]' type inference errors
+        const payload: Record<string, string | null> = {
+            player1_info: `${team1Id} (AI: ${finalProfile1})`,
+            player2_info: `${team2Id} (AI: ${finalProfile2})`,
+            team1_id: team1Id,
+            team2_id: team2Id,
+            deck1_list: finalDeck1Content,
+            deck2_list: finalDeck2Content,
+            team1_name: team1_name || null,
+            team1_color: team1_color || null, 
+            team1_seccolor: team1_seccolor || null,
+            team2_name: team2_name || null,
+            team2_color: team2_color || null, 
+            team2_seccolor: team2_seccolor || null,
+        };
+
         const supabase = getSupabaseAdmin();
         const { data: simMatchData, error: simErr } = await supabase
             .from('sim_matches')
-            .insert({
-                player1_info: `${team1Id} (AI: ${finalProfile1})`,
-                player2_info: `${team2Id} (AI: ${finalProfile2})`,
-                team1_id: team1Id,
-                team2_id: team2Id,
-                deck1_list: finalDeck1Content,
-                deck2_list: finalDeck2Content,
-                team1_name, team1_color, team1_seccolor,
-                team2_name, team2_color, team2_seccolor,
-            })
+            .insert(payload)
             .select('id')
             .single();
 
