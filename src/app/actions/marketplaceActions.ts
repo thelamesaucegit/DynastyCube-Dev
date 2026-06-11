@@ -47,41 +47,35 @@ function shuffleArray<T>(array: T[]): T[] {
  * Helper to fetch a properly constructed booster pack from Scryfall
  */
 async function generateBoosterFromSet(setCode: string): Promise<any[]> {
-    // We strictly filter for first printings (no reprints), removing variants and double-sided cards
     let scryfallUrl: string | null = `https://api.scryfall.com/cards/search?q=e:${setCode}+is:firstprint+-is:promo+-is:showcase+-border:borderless+-is:dfc+-is:mdfc`;
     let allSetCards: any[] = [];
 
-    // Fetch all pages of the set
     while (scryfallUrl) {
         const response = await fetch(scryfallUrl, {
             headers: { 'User-Agent': 'DynastyCube/1.0', 'Accept': 'application/json' }
         });
         
-        if (!response.ok) break; // End of pages or error
+        if (!response.ok) break; 
         
         const data = await response.json();
         if (data.data) allSetCards.push(...data.data);
         
         scryfallUrl = data.has_more ? data.next_page : null;
-        if (scryfallUrl) await new Promise(r => setTimeout(r, 100)); // Respect Scryfall Rate Limits
+        if (scryfallUrl) await new Promise(r => setTimeout(r, 100)); 
     }
 
     if (allSetCards.length === 0) return [];
 
-    // Sort into rarities
     const commons = shuffleArray(allSetCards.filter(c => c.rarity === 'common'));
     const uncommons = shuffleArray(allSetCards.filter(c => c.rarity === 'uncommon'));
     const raresAndMythics = shuffleArray(allSetCards.filter(c => c.rarity === 'rare' || c.rarity === 'mythic'));
 
-    // Construct the Pack: 1 R/M, 3 U, 11 C (with safety fallbacks if set is unusually small)
     const pack = [
         ...raresAndMythics.slice(0, 1),
         ...uncommons.slice(0, 3),
         ...commons.slice(0, 11)
     ];
 
-    // If the set didn't have enough specific rarities (very rare, e.g. mini sets), 
-    // pad the rest of the 15 cards randomly from whatever is left.
     if (pack.length < 15) {
         const remainingNeeded = 15 - pack.length;
         const usedIds = new Set(pack.map(c => c.id));
@@ -89,7 +83,6 @@ async function generateBoosterFromSet(setCode: string): Promise<any[]> {
         pack.push(...unusedCards.slice(0, remainingNeeded));
     }
 
-    // Map to DB Schema
     return pack.map(card => {
         const imageUris = card.image_uris as Record<string, string> | undefined;
         return {
@@ -123,7 +116,6 @@ export async function purchaseRandomBooster(): Promise<{ success: boolean; messa
 
     const COST = 150;
 
-    // 1. Fetch an eligible random set
     const { data: eligibleSets, error: setErr } = await supabase
         .from('chamber_records')
         .select('set_code, set_name')
@@ -134,11 +126,9 @@ export async function purchaseRandomBooster(): Promise<{ success: boolean; messa
         return { success: false, error: "No eligible sets remain in the repository." };
     }
 
-    // 2. Charge the user
     const payment = await processEssenceTransaction(supabase, user.id, COST, "Purchased: Random Booster");
     if (!payment.success) return { success: false, error: payment.error };
 
-    // 3. Generate the Booster
     const randomSet = eligibleSets[Math.floor(Math.random() * eligibleSets.length)];
     const packCards = await generateBoosterFromSet(randomSet.set_code);
 
@@ -147,7 +137,6 @@ export async function purchaseRandomBooster(): Promise<{ success: boolean; messa
         return { success: false, error: `Failed to extract cards from ${randomSet.set_name}. Essence refunded.` };
     }
 
-    // 4. Insert into the Chamber
     const { error: insertError } = await supabase.from('card_pools').insert(packCards);
     if (insertError) {
         await supabase.from('users').update({ essence_balance: (await supabase.from('users').select('essence_balance').eq('id', user.id).single()).data?.essence_balance + COST }).eq('id', user.id);
@@ -171,14 +160,12 @@ export async function purchaseHomePlaneBooster(): Promise<{ success: boolean; me
   
       const COST = 100;
   
-      // 1. Identify User's Team & Home Plane
       const { data: teamMember } = await supabase.from('team_members').select('team_id').eq('user_id', user.id).single();
       if (!teamMember) return { success: false, error: "You must be on a team to purchase this item." };
 
       const { data: team } = await supabase.from('teams').select('plane, name').eq('id', teamMember.team_id).single();
       if (!team || !team.plane) return { success: false, error: "Your team has no designated Home Plane." };
   
-      // 2. Fetch eligible sets restricted by Plane
       const { data: eligibleSets, error: setErr } = await supabase
           .from('chamber_records')
           .select('set_code, set_name')
@@ -190,11 +177,9 @@ export async function purchaseHomePlaneBooster(): Promise<{ success: boolean; me
           return { success: false, error: `No unreleased sets remain for the plane of ${team.plane}.` };
       }
   
-      // 3. Charge the user
       const payment = await processEssenceTransaction(supabase, user.id, COST, `Purchased: Home Plane Booster (${team.plane})`);
       if (!payment.success) return { success: false, error: payment.error };
   
-      // 4. Generate the Booster
       const randomSet = eligibleSets[Math.floor(Math.random() * eligibleSets.length)];
       const packCards = await generateBoosterFromSet(randomSet.set_code);
   
@@ -203,7 +188,6 @@ export async function purchaseHomePlaneBooster(): Promise<{ success: boolean; me
           return { success: false, error: `Failed to extract cards from ${randomSet.set_name}. Essence refunded.` };
       }
   
-      // 5. Insert into the Chamber
       const { error: insertError } = await supabase.from('card_pools').insert(packCards);
       if (insertError) {
           await supabase.from('users').update({ essence_balance: (await supabase.from('users').select('essence_balance').eq('id', user.id).single()).data?.essence_balance + COST }).eq('id', user.id);
@@ -217,4 +201,99 @@ export async function purchaseHomePlaneBooster(): Promise<{ success: boolean; me
       console.error("Error in purchaseHomePlaneBooster:", error);
       return { success: false, error: "An unexpected error occurred." };
     }
-  }
+}
+
+
+// ============================================================================
+// MARKET MANIPULATION
+// ============================================================================
+
+export async function searchCardsForManipulation(query: string) {
+    try {
+        const supabase = await createServerClient();
+        
+        // Find if there's an active draft to filter out draft pool cards
+        const { data: activeDraft } = await supabase.from('draft_sessions').select('id').eq('status', 'active').maybeSingle();
+        const isActiveDraft = !!activeDraft;
+
+        // Base fetch
+        let dbQuery = supabase
+            .from('card_pools')
+            .select('id, card_name, card_set, cubucks_cost, image_url, pool_name')
+            .ilike('card_name', `%${query}%`)
+            .eq('hidden', false)
+            .limit(30);
+
+        if (isActiveDraft) {
+            dbQuery = dbQuery.neq('pool_name', 'draft');
+        }
+
+        const { data: cards, error } = await dbQuery;
+        if (error || !cards) return { success: false, cards: [] };
+
+        if (cards.length === 0) return { success: true, cards: [] };
+
+        // Exclude cards currently existing on a team roster
+        const cardIds = cards.map(c => c.id);
+        const { data: drafted } = await supabase.from('team_draft_picks').select('card_pool_id').in('card_pool_id', cardIds);
+        const draftedIds = new Set(drafted?.map(d => d.card_pool_id) || []);
+
+        const eligibleCards = cards.filter(c => !draftedIds.has(c.id)).slice(0, 10); // Return top 10
+
+        return { success: true, cards: eligibleCards };
+    } catch (e) {
+        console.error("Error searching cards:", e);
+        return { success: false, cards: [] };
+    }
+}
+
+export async function purchaseMarketManipulation(
+    cardPoolId: string, 
+    direction: 'increase' | 'decrease'
+): Promise<{ success: boolean; message?: string; error?: string }> {
+    try {
+        const supabase = await createServerClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { success: false, error: "Not authenticated" };
+
+        const COST = 100;
+
+        // 1. Double-check eligibility to prevent race conditions
+        const { data: card } = await supabase.from('card_pools').select('id, card_name, cubucks_cost, pool_name').eq('id', cardPoolId).single();
+        if (!card) return { success: false, error: "Card not found." };
+
+        const { data: drafted } = await supabase.from('team_draft_picks').select('id').eq('card_pool_id', cardPoolId).maybeSingle();
+        if (drafted) return { success: false, error: "This card was just acquired by a team and is no longer eligible." };
+
+        const { data: activeDraft } = await supabase.from('draft_sessions').select('id').eq('status', 'active').maybeSingle();
+        if (activeDraft && card.pool_name === 'draft') return { success: false, error: "Cards in the Draft Pool are ineligible during an active draft." };
+
+        // 2. Math calculations
+        const currentCost = card.cubucks_cost || 1;
+        let newCost = direction === 'increase' ? currentCost + 1 : currentCost - 1;
+        
+        if (newCost < 1) {
+            return { success: false, error: "Market failure: A card's cost cannot be reduced below Ç1." };
+        }
+
+        // 3. Process payment
+        const payment = await processEssenceTransaction(supabase, user.id, COST, `Market Manipulation: ${direction}d cost of ${card.card_name}`);
+        if (!payment.success) return { success: false, error: payment.error };
+
+        // 4. Update the Card
+        const { error: updateError } = await supabase.from('card_pools').update({ cubucks_cost: newCost }).eq('id', cardPoolId);
+        
+        if (updateError) {
+            // Refund on critical failure
+            await supabase.from('users').update({ essence_balance: (await supabase.from('users').select('essence_balance').eq('id', user.id).single()).data?.essence_balance + COST }).eq('id', user.id);
+            return { success: false, error: "Database error altering market. Essence refunded." };
+        }
+
+        await logSystemEvent("Marketplace", "info", `User ${user.id} manipulated market: ${card.card_name} changed from ${currentCost} to ${newCost}.`);
+        
+        return { success: true, message: `Successfully ${direction}d the cost of ${card.card_name} to Ç${newCost}!` };
+    } catch (e) {
+        console.error("Error manipulating market:", e);
+        return { success: false, error: "An unexpected error occurred." };
+    }
+}
