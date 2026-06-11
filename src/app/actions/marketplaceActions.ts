@@ -4,9 +4,9 @@
 import { createServerClient } from "@/lib/supabase";
 import { logSystemEvent } from "@/lib/systemLogger";
 
-// Helper to reliably deduct Essence and log the transaction
+// THE FIX: Typed supabase client strictly using ReturnType rather than any
 async function processEssenceTransaction(
-  supabase: any,
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
   userId: string,
   cost: number,
   description: string
@@ -45,10 +45,12 @@ function shuffleArray<T>(array: T[]): T[] {
 
 /**
  * Helper to fetch a properly constructed booster pack from Scryfall
+ * THE FIX: Replaced any[] with typed Record arrays
  */
-async function generateBoosterFromSet(setCode: string): Promise<any[]> {
+async function generateBoosterFromSet(setCode: string): Promise<Record<string, string | number | string[] | null>[]> {
     let scryfallUrl: string | null = `https://api.scryfall.com/cards/search?q=e:${setCode}+is:firstprint+-is:promo+-is:showcase+-border:borderless+-is:dfc+-is:mdfc`;
-    let allSetCards: any[] = [];
+    // THE FIX: Changed 'let' to 'const' and typed 'any' as 'Record<string, unknown>'
+    const allSetCards: Record<string, unknown>[] = [];
 
     while (scryfallUrl) {
         const response = await fetch(scryfallUrl, {
@@ -58,7 +60,7 @@ async function generateBoosterFromSet(setCode: string): Promise<any[]> {
         if (!response.ok) break; 
         
         const data = await response.json();
-        if (data.data) allSetCards.push(...data.data);
+        if (data.data) allSetCards.push(...(data.data as Record<string, unknown>[]));
         
         scryfallUrl = data.has_more ? data.next_page : null;
         if (scryfallUrl) await new Promise(r => setTimeout(r, 100)); 
@@ -78,8 +80,8 @@ async function generateBoosterFromSet(setCode: string): Promise<any[]> {
 
     if (pack.length < 15) {
         const remainingNeeded = 15 - pack.length;
-        const usedIds = new Set(pack.map(c => c.id));
-        const unusedCards = shuffleArray(allSetCards.filter(c => !usedIds.has(c.id)));
+        const usedIds = new Set(pack.map(c => c.id as string));
+        const unusedCards = shuffleArray(allSetCards.filter(c => !usedIds.has(c.id as string)));
         pack.push(...unusedCards.slice(0, remainingNeeded));
     }
 
@@ -91,8 +93,8 @@ async function generateBoosterFromSet(setCode: string): Promise<any[]> {
             card_set: String((card.set as string).toUpperCase()),
             card_type: String(card.type_line),
             rarity: String(card.rarity),
-            colors: Array.isArray(card.colors) ? card.colors : [],
-            color_identity: Array.isArray(card.color_identity) ? card.color_identity : [],
+            colors: Array.isArray(card.colors) ? (card.colors as string[]) : [],
+            color_identity: Array.isArray(card.color_identity) ? (card.color_identity as string[]) : [],
             image_url: imageUris?.normal || imageUris?.large || null,
             oracle_id: String(card.oracle_id),
             mana_cost: card.mana_cost ? String(card.mana_cost) : null,
@@ -102,7 +104,6 @@ async function generateBoosterFromSet(setCode: string): Promise<any[]> {
         };
     });
 }
-
 
 // ============================================================================
 // MARKETPLACE PURCHASES
@@ -203,7 +204,6 @@ export async function purchaseHomePlaneBooster(): Promise<{ success: boolean; me
     }
 }
 
-
 // ============================================================================
 // MARKET MANIPULATION
 // ============================================================================
@@ -212,11 +212,9 @@ export async function searchCardsForManipulation(query: string) {
     try {
         const supabase = await createServerClient();
         
-        // Find if there's an active draft to filter out draft pool cards
         const { data: activeDraft } = await supabase.from('draft_sessions').select('id').eq('status', 'active').maybeSingle();
         const isActiveDraft = !!activeDraft;
 
-        // Base fetch
         let dbQuery = supabase
             .from('card_pools')
             .select('id, card_name, card_set, cubucks_cost, image_url, pool_name')
@@ -230,15 +228,13 @@ export async function searchCardsForManipulation(query: string) {
 
         const { data: cards, error } = await dbQuery;
         if (error || !cards) return { success: false, cards: [] };
-
         if (cards.length === 0) return { success: true, cards: [] };
 
-        // Exclude cards currently existing on a team roster
         const cardIds = cards.map(c => c.id);
         const { data: drafted } = await supabase.from('team_draft_picks').select('card_pool_id').in('card_pool_id', cardIds);
         const draftedIds = new Set(drafted?.map(d => d.card_pool_id) || []);
 
-        const eligibleCards = cards.filter(c => !draftedIds.has(c.id)).slice(0, 10); // Return top 10
+        const eligibleCards = cards.filter(c => !draftedIds.has(c.id)).slice(0, 10); 
 
         return { success: true, cards: eligibleCards };
     } catch (e) {
@@ -258,7 +254,6 @@ export async function purchaseMarketManipulation(
 
         const COST = 100;
 
-        // 1. Double-check eligibility to prevent race conditions
         const { data: card } = await supabase.from('card_pools').select('id, card_name, cubucks_cost, pool_name').eq('id', cardPoolId).single();
         if (!card) return { success: false, error: "Card not found." };
 
@@ -268,23 +263,20 @@ export async function purchaseMarketManipulation(
         const { data: activeDraft } = await supabase.from('draft_sessions').select('id').eq('status', 'active').maybeSingle();
         if (activeDraft && card.pool_name === 'draft') return { success: false, error: "Cards in the Draft Pool are ineligible during an active draft." };
 
-        // 2. Math calculations
         const currentCost = card.cubucks_cost || 1;
-        let newCost = direction === 'increase' ? currentCost + 1 : currentCost - 1;
+        // THE FIX: Changed 'let' to 'const'
+        const newCost = direction === 'increase' ? currentCost + 1 : currentCost - 1;
         
         if (newCost < 1) {
             return { success: false, error: "Market failure: A card's cost cannot be reduced below Ç1." };
         }
 
-        // 3. Process payment
         const payment = await processEssenceTransaction(supabase, user.id, COST, `Market Manipulation: ${direction}d cost of ${card.card_name}`);
         if (!payment.success) return { success: false, error: payment.error };
 
-        // 4. Update the Card
         const { error: updateError } = await supabase.from('card_pools').update({ cubucks_cost: newCost }).eq('id', cardPoolId);
         
         if (updateError) {
-            // Refund on critical failure
             await supabase.from('users').update({ essence_balance: (await supabase.from('users').select('essence_balance').eq('id', user.id).single()).data?.essence_balance + COST }).eq('id', user.id);
             return { success: false, error: "Database error altering market. Essence refunded." };
         }
