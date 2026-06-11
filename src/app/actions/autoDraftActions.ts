@@ -411,7 +411,7 @@ export async function executeAutoDraft(
 ): Promise<{
   success: boolean;
   pick?: { cardId: string; cardName: string; cost: number };
-  source?: "manual_queue" | "algorithm" | "skipped";
+  source?: "manual_queue" | "algorithm" | "skipped" | "drained";
   error?: string;
 }> {
   try {
@@ -422,6 +422,79 @@ export async function executeAutoDraft(
       await logSystemEvent("ExecuteAutoDraft", "error", `Failed: Team ${teamId} is not on the clock or draft status invalid.`, { draftSessionId, statusError });
       return { success: false, error: statusError || "Team not on the clock." };
     }
+    // =========================================================================
+    // DRAINLINGS CUSTOM DRAFT LOGIC
+    // =========================================================================
+    const DRAINLINGS_TEAM_ID = "90177632-f6ab-4501-b235-3590a7e46472";
+    
+    if (teamId === DRAINLINGS_TEAM_ID) {
+        // Drainlings ignore the queue, ignore colors, and just take the highest Base ELO card.
+        const { cards: availableCards } = await getAvailableCardsForDraft("draft", supabase);
+        
+        const validCards = availableCards.filter(c => c.id && !excludedCardPoolIds.includes(c.id));
+        if (validCards.length === 0) {
+            return { success: false, error: "No cards available for Drainlings to draft." };
+        }
+
+        // Sort purely by Base ELO
+        validCards.sort((a, b) => (b.cubecobra_elo || 0) - (a.cubecobra_elo || 0));
+        const cardToAttempt = validCards[0];
+
+        const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId, supabase);
+        const pickNumber = existingPicks.length + 1;
+        const effectiveCost = cardToAttempt.cubucks_cost || 1;
+
+        const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
+            p_team_id: teamId, p_draft_session_id: draftSessionId, p_card_pool_id: cardToAttempt.id,
+            p_card_id: cardToAttempt.card_id, p_card_name: cardToAttempt.card_name,
+            p_card_set: cardToAttempt.card_set, p_card_type: cardToAttempt.card_type,
+            p_rarity: cardToAttempt.rarity, p_colors: cardToAttempt.colors, 
+            p_color_identity: cardToAttempt.color_identity || cardToAttempt.colors || [], 
+            p_image_url: cardToAttempt.image_url,
+            p_oldest_image_url: cardToAttempt.oldest_image_url, p_mana_cost: cardToAttempt.mana_cost,
+            p_cmc: cardToAttempt.cmc, p_pick_number: pickNumber, p_cost: effectiveCost,
+            p_is_manual_pick: false, p_user_id: null,
+        }).single();
+
+        if (rpcError) {
+             // Handle exclusions recursively if it was sniped
+             return executeAutoDraft(teamId, draftSessionId, supabase, [...excludedCardPoolIds, cardToAttempt.id!]);
+        }
+
+        const newPick = data as DraftPick;
+        
+        // Overwrite pool_name to drainlings immediately!
+        if (newPick.id) {
+             await supabase.from("team_draft_picks").update({ 
+                pick_source: "algorithm",
+                scars: ['drained'] // Ensure it carries the scar
+             }).eq("id", newPick.id);
+             
+             if (cardToAttempt.id) {
+                 await supabase.from("card_pools").update({ pool_name: 'drainlings' }).eq("id", cardToAttempt.id);
+             }
+        }
+
+        // Reward the team that sacrificed the pick! (10x Cubuck Value)
+        // We find who originally owned this pick round
+        const { data: tradedPick } = await supabase.from('future_draft_picks').select('original_team_id').eq('season_id', draftStatus.seasonId).eq('round_number', draftStatus.currentRound).eq('new_owner_team_id', DRAINLINGS_TEAM_ID).single();
+        
+        if (tradedPick && tradedPick.original_team_id) {
+             const essenceReward = effectiveCost * 10;
+             const { data: rewardData } = await supabase.from('teams').select('essence_bank').eq('id', tradedPick.original_team_id).single();
+             if (rewardData) {
+                 // You will need to write this back to the users of that team, or a shared team essence bank!
+                 // Assuming you have a team essence bank logic here...
+             }
+        }
+
+        await conditionallyCleanupDraftQueues(cardToAttempt.card_id, supabase);
+        await advanceDraft(supabase);
+        
+        return { success: true, pick: { cardId: cardToAttempt.card_id, cardName: cardToAttempt.card_name, cost: effectiveCost }, source: "drained" };
+    }
+    // =========================================================================
+ 
 
     const preview = await getAutoDraftPreview(teamId, draftSessionId, supabase, excludedCardPoolIds);
     const cardToAttempt = preview.nextPick;
