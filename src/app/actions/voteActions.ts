@@ -526,6 +526,7 @@ export async function createTeamPoll(
     if (new Date(endsAt) <= new Date()) return { success: false, error: "End date must be in the future" };
 
     const isCutPoll = title.trim().startsWith("Cut ");
+    let finalTriggerEvent = null;
     
     if (!isCutPoll) {
       const { data: isCaptain } = await supabase.rpc("user_has_team_role", { p_user_id: userId, p_team_id: teamId, p_role: "captain" });
@@ -535,9 +536,11 @@ export async function createTeamPoll(
       const { count, error: countError } = await supabase.from("polls").select("id", { count: "exact", head: true }).eq("team_id", teamId).eq("created_by", userId).like("title", "Cut %").gte("created_at", oneDayAgo);
       if (countError) throw countError;
       if (count && count >= 1) return { success: false, error: "You can only initiate one cut vote per 24 hours." };
+      
+      // We can now safely tag this!
+      finalTriggerEvent = 'cut_card_vote';
     }
 
-    // THE FIX: Because we validated permissions in TS, we use the Admin Client to bypass the flawed RLS policy
     const { createClient } = await import("@supabase/supabase-js");
     const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 
@@ -551,7 +554,7 @@ export async function createTeamPoll(
         created_by: userId, 
         is_active: true, 
         team_id: teamId,
-        trigger_event: null // Must be null due to schema constraint
+        trigger_event: finalTriggerEvent // <-- Uses the actual string!
       }).select().single();
 
     if (pollError) throw pollError;
@@ -598,7 +601,6 @@ export async function createIdentitySwapPoll(teamId: string, userId: string, cur
       
     if (existingPoll) return { success: false, error: "A transformation vote is already in progress!" };
 
-    // THE FIX: Use Admin Client to bypass the Captain-only RLS policy!
     const { createClient } = await import("@supabase/supabase-js");
     const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 
@@ -612,7 +614,7 @@ export async function createIdentitySwapPoll(teamId: string, userId: string, cur
         created_by: userId, 
         is_active: true, 
         team_id: teamId,
-        trigger_event: null // Must be null due to schema constraint!
+        trigger_event: 'lorwyn_shadowmoor_swap' // <-- Uses the actual string!
     }).select().single();
 
     if (pollError) throw pollError;
@@ -629,6 +631,7 @@ export async function createIdentitySwapPoll(teamId: string, userId: string, cur
     return { success: false, error: "Failed to initiate transformation." };
   }
 }
+
 
 
 export async function resolveIdentitySwapPoll(pollId: string, teamId: string) {
