@@ -502,7 +502,7 @@ export async function executeAutoDraft(
 
         const { data: tradedPick } = await supabase.from('future_draft_picks')
             .select('team_id, original_team_id')
-            .eq('season_id', draftStatus.seasonId)
+            .eq('season_id', draftStatus.season_id)
             .eq('round_number', draftStatus.currentRound)
             .eq('original_team_id', originalOwnerId)
             .eq('traded_to_team_id', DRAINLINGS_TEAM_ID)
