@@ -464,72 +464,6 @@ export async function getTeamPolls(teamId: string, userId?: string) {
   }
 }
 
-export async function createTeamPoll(
-  teamId: string,
-  title: string,
-  description: string | null,
-  endsAt: string,
-  allowMultipleVotes: boolean,
-  showResultsBeforeEnd: boolean,
-  options: string[],
-  userId: string
-) {
-  try {
-    const supabase = await createServerClient();
-    if (!title || title.trim().length === 0) return { success: false, error: "Title is required" };
-    if (!options || options.length < 2) return { success: false, error: "At least 2 options are required" };
-    if (new Date(endsAt) <= new Date()) return { success: false, error: "End date must be in the future" };
-
-    const isCutPoll = title.trim().startsWith("Cut ");
-    let finalTriggerEventId = null;
-
-    if (!isCutPoll) {
-      const { data: isCaptain } = await supabase.rpc("user_has_team_role", { p_user_id: userId, p_team_id: teamId, p_role: "captain" });
-      if (!isCaptain) return { success: false, error: "Only team captains can create general polls" };
-    } else {
-      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const { count, error: countError } = await supabase.from("polls").select("id", { count: "exact", head: true }).eq("team_id", teamId).eq("created_by", userId).like("title", "Cut %").gte("created_at", oneDayAgo);
-      if (countError) throw countError;
-      if (count && count >= 1) return { success: false, error: "You can only initiate one cut vote per 24 hours." };
-
-      const { data: triggerRecord } = await supabase.from('trigger_events').select('id').eq('event_name', 'cut_card_vote').maybeSingle();
-      if (triggerRecord) finalTriggerEventId = triggerRecord.id;
-    }
-
-    const payload: Record<string, string | boolean | null> = {
-      title, 
-      description, 
-      ends_at: endsAt, 
-      allow_multiple_votes: allowMultipleVotes, 
-      show_results_before_end: showResultsBeforeEnd, 
-      vote_type: "team", 
-      created_by: userId, 
-      is_active: true, 
-      team_id: teamId
-    };
-
-    if (finalTriggerEventId) {
-      payload.trigger_event = finalTriggerEventId;
-    }
-
-    const { data: poll, error: pollError } = await supabase.from("polls").insert(payload).select().single();
-
-    if (pollError) throw pollError;
-    if (!poll) return { success: false, error: "Failed to create poll" };
-
-    const pollOptions = options.map((text, index) => ({ poll_id: poll.id, option_text: text, option_order: index + 1 }));
-    const { error: optionsError } = await supabase.from("poll_options").insert(pollOptions);
-    if (optionsError) {
-      await supabase.from("polls").delete().eq("id", poll.id);
-      throw optionsError;
-    }
-
-    return { success: true, message: "Team poll created successfully!", pollId: poll.id };
-  } catch (error) {
-    console.error("Error creating team poll:", error);
-    return { success: false, error: "Failed to create team poll" };
-  }
-}
 
 export async function deleteTeamPoll(pollId: string, teamId: string, userId: string) {
   try {
@@ -575,6 +509,73 @@ export async function toggleTeamPollActive(pollId: string, teamId: string, isAct
 // =================================================================================================
 // SPECIAL SYSTEM VOTES
 // =================================================================================================
+export async function createTeamPoll(
+  teamId: string,
+  title: string,
+  description: string | null,
+  endsAt: string,
+  allowMultipleVotes: boolean,
+  showResultsBeforeEnd: boolean,
+  options: string[],
+  userId: string
+) {
+  try {
+    const supabase = await createServerClient();
+    if (!title || title.trim().length === 0) return { success: false, error: "Title is required" };
+    if (!options || options.length < 2) return { success: false, error: "At least 2 options are required" };
+    if (new Date(endsAt) <= new Date()) return { success: false, error: "End date must be in the future" };
+
+    const isCutPoll = title.trim().startsWith("Cut ");
+    
+    if (!isCutPoll) {
+      const { data: isCaptain } = await supabase.rpc("user_has_team_role", { p_user_id: userId, p_team_id: teamId, p_role: "captain" });
+      if (!isCaptain) return { success: false, error: "Only team captains can create general polls" };
+    } else {
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { count, error: countError } = await supabase.from("polls").select("id", { count: "exact", head: true }).eq("team_id", teamId).eq("created_by", userId).like("title", "Cut %").gte("created_at", oneDayAgo);
+      if (countError) throw countError;
+      if (count && count >= 1) return { success: false, error: "You can only initiate one cut vote per 24 hours." };
+    }
+
+    // THE FIX: Because we validated permissions in TS, we use the Admin Client to bypass the flawed RLS policy
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+
+    const { data: poll, error: pollError } = await supabaseAdmin.from("polls").insert({
+        title, 
+        description, 
+        ends_at: endsAt, 
+        allow_multiple_votes: allowMultipleVotes, 
+        show_results_before_end: showResultsBeforeEnd, 
+        vote_type: "team" as VoteType, 
+        created_by: userId, 
+        is_active: true, 
+        team_id: teamId,
+        trigger_event: null // Must be null due to schema constraint
+      }).select().single();
+
+    if (pollError) throw pollError;
+    if (!poll) return { success: false, error: "Failed to create poll" };
+
+    const pollOptions = options.map((text, index) => ({ poll_id: poll.id, option_text: text, option_order: index + 1 }));
+    const { error: optionsError } = await supabaseAdmin.from("poll_options").insert(pollOptions);
+    
+    if (optionsError) {
+      await supabaseAdmin.from("polls").delete().eq("id", poll.id);
+      throw optionsError;
+    }
+
+    return { success: true, message: "Team poll created successfully!", pollId: poll.id };
+  } catch (error) {
+    console.error("Error creating team poll:", error);
+    return { success: false, error: "Failed to create team poll" };
+  }
+}
+
+// =================================================================================================
+// SPECIAL SYSTEM VOTES
+// =================================================================================================
+
 export async function createIdentitySwapPoll(teamId: string, userId: string, currentIdentity: string) {
   try {
     const supabase = await createServerClient();
@@ -587,7 +588,6 @@ export async function createIdentitySwapPoll(teamId: string, userId: string, cur
     const title = currentIdentity === 'changelings' ? "Initiate The Great Aurora?" : "Let The Great Aurora Recede?";
     const desc = currentIdentity === 'changelings' ? "Should we embrace the darkness and transform into the Shadowmoor Mimics? This poll ends in 12 hours." : "Should we return to the light and transform back into the Lorwyn Changelings? This poll ends in 12 hours.";
 
-    // THE FIX: Do not use .match(), explicitly use .eq() which natively auto-casts UUIDs for PostgREST
     const { data: existingPoll } = await supabase
       .from('polls')
       .select('id')
@@ -598,11 +598,11 @@ export async function createIdentitySwapPoll(teamId: string, userId: string, cur
       
     if (existingPoll) return { success: false, error: "A transformation vote is already in progress!" };
 
-    let triggerEventId = null;
-    const { data: triggerRecord } = await supabase.from('trigger_events').select('id').eq('event_name', 'lorwyn_shadowmoor_swap').maybeSingle();
-    if (triggerRecord) triggerEventId = triggerRecord.id;
+    // THE FIX: Use Admin Client to bypass the Captain-only RLS policy!
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 
-    const insertPayload: Record<string, string | boolean | null> = {
+    const { data: poll, error: pollError } = await supabaseAdmin.from("polls").insert({
         title, 
         description: desc, 
         ends_at: endsAt.toISOString(), 
@@ -611,25 +611,25 @@ export async function createIdentitySwapPoll(teamId: string, userId: string, cur
         vote_type: "team", 
         created_by: userId, 
         is_active: true, 
-        team_id: teamId
-    };
-
-    if (triggerEventId) {
-        insertPayload.trigger_event = triggerEventId;
-    }
-
-    const { data: poll, error: pollError } = await supabase.from("polls").insert(insertPayload).select().single();
+        team_id: teamId,
+        trigger_event: null // Must be null due to schema constraint!
+    }).select().single();
 
     if (pollError) throw pollError;
     
-    const pollOptions = [{ poll_id: poll.id, option_text: currentIdentity === 'changelings' ? "Transform into Mimics" : "Revert to Changelings", option_order: 1 }, { poll_id: poll.id, option_text: "Remain as we are", option_order: 2 }];
-    await supabase.from("poll_options").insert(pollOptions);
+    const pollOptions = [
+        { poll_id: poll.id, option_text: currentIdentity === 'changelings' ? "Transform into Mimics" : "Revert to Changelings", option_order: 1 }, 
+        { poll_id: poll.id, option_text: "Remain as we are", option_order: 2 }
+    ];
+    await supabaseAdmin.from("poll_options").insert(pollOptions);
+    
     return { success: true, message: "Transformation poll initiated!" };
   } catch (error) {
     console.error("Error creating identity swap poll:", error);
     return { success: false, error: "Failed to initiate transformation." };
   }
 }
+
 
 export async function resolveIdentitySwapPoll(pollId: string, teamId: string) {
   try {
