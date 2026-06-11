@@ -4,7 +4,7 @@
 import { createServerClient } from "@/lib/supabase";
 import { logSystemEvent } from "@/lib/systemLogger";
 
-// THE FIX: Typed supabase client strictly using ReturnType rather than any
+// Typed supabase client strictly using ReturnType rather than any
 async function processEssenceTransaction(
   supabase: Awaited<ReturnType<typeof createServerClient>>,
   userId: string,
@@ -45,15 +45,15 @@ function shuffleArray<T>(array: T[]): T[] {
 
 /**
  * Helper to fetch a properly constructed booster pack from Scryfall
- * THE FIX: Replaced any[] with typed Record arrays
+ * THE FIX: Explicit Response type annotation added to fix implicit any circular inference loops
  */
 async function generateBoosterFromSet(setCode: string): Promise<Record<string, string | number | string[] | null>[]> {
     let scryfallUrl: string | null = `https://api.scryfall.com/cards/search?q=e:${setCode}+is:firstprint+-is:promo+-is:showcase+-border:borderless+-is:dfc+-is:mdfc`;
-    // THE FIX: Changed 'let' to 'const' and typed 'any' as 'Record<string, unknown>'
     const allSetCards: Record<string, unknown>[] = [];
 
     while (scryfallUrl) {
-        const response = await fetch(scryfallUrl, {
+        // THE FIX: Explicitly typed as Response
+        const response: Response = await fetch(scryfallUrl, {
             headers: { 'User-Agent': 'DynastyCube/1.0', 'Accept': 'application/json' }
         });
         
@@ -264,7 +264,6 @@ export async function purchaseMarketManipulation(
         if (activeDraft && card.pool_name === 'draft') return { success: false, error: "Cards in the Draft Pool are ineligible during an active draft." };
 
         const currentCost = card.cubucks_cost || 1;
-        // THE FIX: Changed 'let' to 'const'
         const newCost = direction === 'increase' ? currentCost + 1 : currentCost - 1;
         
         if (newCost < 1) {
