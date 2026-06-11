@@ -4,6 +4,13 @@
 import { createServerClient } from "@/lib/supabase";
 import { logSystemEvent } from "@/lib/systemLogger";
 
+// Hardcoded UUID for the Drainlings
+const DRAINLINGS_TEAM_ID = "90177632-f6ab-4501-b235-3590a7e46472";
+
+// Temporary in-memory session cache to hold warning progressions across the server environment.
+// It will naturally reset on server reloads, which is highly thematic for "The Void shifting"!
+const sacrificeWarningCache = new Map<string, number>();
+
 export async function offerToTheDrain(offer: string): Promise<{ success: boolean; message: string; type: "card" | "self" | "rejected" | "unauthenticated" }> {
     if (offer.length > 150) {
         return { success: true, message: "YOUR HUBRIS EXCEEDS YOUR GRASP. THE CUBE REJECTS THIS GIFT.", type: "rejected" };
@@ -21,24 +28,96 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
         return { success: true, message: "SILENCE IS NO TRIBUTE. THE CUBE REJECTS THIS GIFT.", type: "rejected" };
     }
 
-    // 1. Self Sacrifice Check
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+
+    // =========================================================================
+    // 1. PROGRESSIVE 3-STEP SELF SACRIFICE CHECK
+    // =========================================================================
     const { data: userData } = await supabase.from('users').select('display_name, discord_username').eq('id', user.id).single();
     const name1 = (userData?.display_name || "").toLowerCase();
     const name2 = (userData?.discord_username || "").toLowerCase();
 
     if (cleanOffer === name1 || cleanOffer === name2) {
-        const selfResponses = [
-            "THE CUBE ADMIRES YOUR COMMITMENT. PERHAPS WE WILL WELCOME YOU <strong>ANOTHER TIME</strong>.",
-            "YOUR FLESH IS WILLING, BUT THE MAW IS CLOSED. <strong>WAIT</strong>.",
-            "A NOBLE SACRIFICE. BUT THE CUBE DEMANDS <strong>PATIENCE</strong>."
-        ];
-        await logSystemEvent("TheDrain", "info", `User ${user.id} attempted self-sacrifice.`);
-        return { success: true, message: selfResponses[Math.floor(Math.random() * selfResponses.length)], type: "self" };
+        // Fetch current team membership
+        const { data: currentMembership } = await supabaseAdmin
+            .from('team_members')
+            .select('id, team_id')
+            .eq('user_id', user.id)
+            .single();
+
+        // If they are already a Drainling, reject the sacrifice
+        if (currentMembership && currentMembership.team_id === DRAINLINGS_TEAM_ID) {
+            return { 
+                success: true, 
+                message: "YOU ARE ALREADY ONE WITH THE VOID. THERE IS NOTHING LEFT TO CONSUME.", 
+                type: "self" 
+            };
+        }
+
+        // Check the current progression step for this user
+        const currentStep = sacrificeWarningCache.get(user.id) || 0;
+
+        if (currentStep === 0) {
+            // STEP 1 Warning
+            sacrificeWarningCache.set(user.id, 1);
+            await logSystemEvent("TheDrain", "info", `User ${user.id} initiated self-sacrifice (Step 1 Warning sent).`);
+            
+            return {
+                success: true,
+                message: "YOUR FLESH IS WILLING, BUT THE MAW IS WIDE. ARE YOU PREPARED TO ABANDON YOUR ALIGNMENT? SPEAK YOUR NAME AGAIN TO AFFIRM.",
+                type: "self"
+            };
+        } 
+        
+        if (currentStep === 1) {
+            // STEP 2 Warning
+            sacrificeWarningCache.set(user.id, 2);
+            await logSystemEvent("TheDrain", "info", `User ${user.id} confirmed self-sacrifice (Step 2 Warning sent).`);
+            
+            return {
+                success: true,
+                message: "THE BLIND ETERNITIES STIR. THERE IS NO RETURN FROM THE ABYSS. IF YOU TRULY WISH TO UNRAVEL, SPEAK YOUR NAME ONE FINAL TIME.",
+                type: "self"
+            };
+        }
+
+        // STEP 3: Complete the Sacrifice
+        sacrificeWarningCache.delete(user.id); // Reset cache
+
+        if (currentMembership) {
+            // Delete all current roles
+            await supabaseAdmin.from('team_member_roles').delete().eq('team_member_id', currentMembership.id);
+            // Delete current team membership
+            await supabaseAdmin.from('team_members').delete().eq('id', currentMembership.id);
+        }
+
+        // Insert them into the Drainlings team
+        const { error: insertError } = await supabaseAdmin.from('team_members').insert({
+            user_id: user.id,
+            team_id: DRAINLINGS_TEAM_ID,
+            user_email: userData?.display_name || userData?.discord_username || user.email
+        });
+
+        if (insertError) {
+            console.error("Self Sacrifice Error:", insertError);
+            return { success: true, message: "THE MAW CHOKES. AN ERROR OCCURRED DURING CONSUMPTION.", type: "rejected" };
+        }
+
+        await logSystemEvent("TheDrain", "warn", `User ${user.id} (${name1 || name2}) fully executed self-sacrifice and joined the Drainlings.`);
+        
+        return { 
+            success: true, 
+            message: "THE CUBE ACCEPTS YOUR FLESH. YOU ARE NOW ONE WITH THE DRAINLINGS OF THE BLIND ETERNITIES.", 
+            type: "self" 
+        };
     }
 
+    // Reset warning cache if they type anything else, breaking the consecutive sequence!
+    sacrificeWarningCache.delete(user.id);
+
     // =========================================================================
-    // THE FIX: Enforce Season Phase Constraint
-    // Prevent liquidating cards for Essence outside of the regular season
+    // Enforce Season Phase Constraint for Card Sacrifices
     // =========================================================================
     const { data: seasonData } = await supabase.from('seasons').select('phase').eq('is_active', true).single();
     if (seasonData?.phase !== 'season') {
@@ -49,11 +128,12 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
         };
     }
 
-    // 2. Card Sacrifice Check 
+    // =========================================================================
+    // 2. CARD SACRIFICE CHECK
+    // =========================================================================
     const { data: member } = await supabase.from('team_members').select('team_id').eq('user_id', user.id).single();
     
     if (member?.team_id) {
-        // Look for non-keeper cards in their pool matching the exact name
         const { data: pick } = await supabase
             .from('team_draft_picks')
             .select('id, card_id, card_name, card_set, cubucks_cost, card_pool_id')
@@ -64,16 +144,10 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
             .maybeSingle();
 
         if (pick) {
-            const { createClient } = await import("@supabase/supabase-js");
-            const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
-
             const cardCost = pick.cubucks_cost || 1;
             const essenceReward = cardCost * 5; 
 
-            // Drainlings hardcoded team UUID
-            const DRAINLINGS_TEAM_ID = "90177632-f6ab-4501-b235-3590a7e46472";
-
-            // 1. Transfer the card to the Drainlings in the active team picks table
+            // 1. Transfer the card to the Drainlings
             const { error: transferError } = await supabaseAdmin
                 .from('team_draft_picks')
                 .update({ 
@@ -130,7 +204,9 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
         }
     }
 
-    // Default Rejection 
+    // =========================================================================
+    // 3. DEFAULT REJECTION
+    // =========================================================================
     const rejectResponses = [
         "THE CUBE REJECTS THIS GIFT.",
         "<strong>WORTHLESS DROSS</strong>. THE CUBE REJECTS THIS GIFT.",
