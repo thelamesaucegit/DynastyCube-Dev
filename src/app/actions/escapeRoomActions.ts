@@ -94,7 +94,7 @@ export async function processEscapeRoomRewards(seasonId: string, weekNumber: num
                 cmc: typeof card.cmc === 'number' ? card.cmc : 0,
                 cubucks_cost: 0, // Free for now, Rollover will set it to 3 or 5% of cap
                 scars: ['escape'], // <-- Mark it!
-                [...](asc_slot://start-slot-7)pool_name: 'draft' // <-- THE FIX: Explicitly assign to 'draft' pool to pass the foreign key constraint
+                pool_name: 'draft' // <-- THE FIX: Explicitly assign to 'draft' pool to pass the foreign key constraint
             }).select('id').single();
 
             if (poolErr || !poolCard) throw new Error(`Pool insert failed: ${poolErr?.message}`);
