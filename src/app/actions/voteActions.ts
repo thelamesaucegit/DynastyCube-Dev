@@ -310,7 +310,7 @@ export async function createPoll(
 
     let triggerEventId = null;
     if (triggerEventName) {
-       const { data: triggerRecord } = await supabase.from('trigger_events').select('id').eq('event_name', triggerEventName).single();
+       const { data: triggerRecord } = await supabase.from('trigger_events').select('id').eq('event_name', triggerEventName).maybeSingle();
        if (triggerRecord) triggerEventId = triggerRecord.id;
     }
 
@@ -492,7 +492,7 @@ export async function createTeamPoll(
       if (countError) throw countError;
       if (count && count >= 1) return { success: false, error: "You can only initiate one cut vote per 24 hours." };
 
-      const { data: triggerRecord } = await supabase.from('trigger_events').select('id').eq('event_name', 'cut_card_vote').single();
+      const { data: triggerRecord } = await supabase.from('trigger_events').select('id').eq('event_name', 'cut_card_vote').maybeSingle();
       if (triggerRecord) finalTriggerEventId = triggerRecord.id;
     }
 
@@ -578,8 +578,6 @@ export async function toggleTeamPollActive(pollId: string, teamId: string, isAct
 export async function createIdentitySwapPoll(teamId: string, userId: string, currentIdentity: string) {
   try {
     const supabase = await createServerClient();
-    const cleanTeamId = teamId.trim();
-    const cleanUserId = userId.trim();
 
     const { data: season } = await supabase.from('seasons').select('day_night_status, phase').eq('is_active', true).single();
     if (season?.day_night_status !== 'neutral' || season?.phase === 'draft') return { success: false, error: "The cosmos are aligned against you. Shapeshifting is currently disabled." };
@@ -589,20 +587,21 @@ export async function createIdentitySwapPoll(teamId: string, userId: string, cur
     const title = currentIdentity === 'changelings' ? "Initiate The Great Aurora?" : "Let The Great Aurora Recede?";
     const desc = currentIdentity === 'changelings' ? "Should we embrace the darkness and transform into the Shadowmoor Mimics? This poll ends in 12 hours." : "Should we return to the light and transform back into the Lorwyn Changelings? This poll ends in 12 hours.";
 
-    // THE FIX: Strict structural match for Supabase payload 
-    const queryPayload: Record<string, string | boolean> = {
-      team_id: cleanTeamId,
-      is_active: true
-    };
-    
-    const { data: existingPoll } = await supabase.from('polls').select('id').match(queryPayload).in('title', ["Initiate The Great Aurora?", "Let The Great Aurora Recede?"]).maybeSingle();
+    // THE FIX: Do not use .match(), explicitly use .eq() which natively auto-casts UUIDs for PostgREST
+    const { data: existingPoll } = await supabase
+      .from('polls')
+      .select('id')
+      .eq('team_id', teamId)
+      .eq('is_active', true)
+      .in('title', ["Initiate The Great Aurora?", "Let The Great Aurora Recede?"])
+      .maybeSingle();
+      
     if (existingPoll) return { success: false, error: "A transformation vote is already in progress!" };
 
     let triggerEventId = null;
-    const { data: triggerRecord } = await supabase.from('trigger_events').select('id').eq('event_name', 'lorwyn_shadowmoor_swap').single();
+    const { data: triggerRecord } = await supabase.from('trigger_events').select('id').eq('event_name', 'lorwyn_shadowmoor_swap').maybeSingle();
     if (triggerRecord) triggerEventId = triggerRecord.id;
 
-    // THE FIX: Exact literal typing mapped cleanly
     const insertPayload: Record<string, string | boolean | null> = {
         title, 
         description: desc, 
@@ -610,18 +609,19 @@ export async function createIdentitySwapPoll(teamId: string, userId: string, cur
         allow_multiple_votes: false, 
         show_results_before_end: false, 
         vote_type: "team", 
-        created_by: cleanUserId, 
+        created_by: userId, 
         is_active: true, 
-        team_id: cleanTeamId
+        team_id: teamId
     };
 
     if (triggerEventId) {
-       insertPayload.trigger_event = triggerEventId;
+        insertPayload.trigger_event = triggerEventId;
     }
 
     const { data: poll, error: pollError } = await supabase.from("polls").insert(insertPayload).select().single();
 
     if (pollError) throw pollError;
+    
     const pollOptions = [{ poll_id: poll.id, option_text: currentIdentity === 'changelings' ? "Transform into Mimics" : "Revert to Changelings", option_order: 1 }, { poll_id: poll.id, option_text: "Remain as we are", option_order: 2 }];
     await supabase.from("poll_options").insert(pollOptions);
     return { success: true, message: "Transformation poll initiated!" };
