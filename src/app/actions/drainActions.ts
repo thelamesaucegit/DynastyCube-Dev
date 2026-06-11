@@ -4,12 +4,14 @@
 import { createServerClient } from "@/lib/supabase";
 import { logSystemEvent } from "@/lib/systemLogger";
 
-// The hardcoded UUID for the Drainlings Team
+// Hardcoded UUID for the Drainlings
 const DRAINLINGS_TEAM_ID = "90177632-f6ab-4501-b235-3590a7e46472";
+
+// Temporary in-memory session cache to hold warning progressions across the server environment.
 const sacrificeWarningCache = new Map<string, number>();
 
 // =========================================================================
-// RESPONSE GENERATORS
+// RESPONSE GENERATORS (3+ responses for every outcome)
 // =========================================================================
 const getSelfSacrificeResponse = () => {
     const responses = [
@@ -87,16 +89,16 @@ const getExperimentalItemResponse = (itemName: string) => {
     const responses = [
         `THE VOID IS INTRIGUED BY YOUR RELENTLESS CURIOSITY. YOUR IMPUDENT REGIFTING HAS MANIFESTED A PHYSICAL ANOMALY. YOUR TEAM GRASPS [ ${itemName.toUpperCase()} ].`,
         `REPETITION BREEDS PARADOX. THE CUBE FINDS YOUR PERSISTENT EXPERIMENTATION AMUSING. IT SPITS OUT [ ${itemName.toUpperCase()} ] AS A REWARD FOR YOUR HUBRIS.`,
-        `YOUR TEAM TEARS AT THE FABRIC OF THE MULTIVERSE WITH THIS REGIFTING. THE RESULTING TEAR YIELDS SCIENTIFIC RESIDUE. YOU HAVE ACQUIRED [ ${itemName.toUpperCase()} ].`
+        `YOUR TEAM TEARS AT THE FABRIC OF RULES WITH THIS REGIFTING. THE RESULTING TEAR YIELDS SCIENTIFIC RESIDUE. YOU HAVE ACQUIRED [ ${itemName.toUpperCase()} ].`
     ];
     return responses[Math.floor(Math.random() * responses.length)];
 };
 
 const getFuturePickResponse = (round: number) => {
     const responses = [
-        `YOUR FUTURE HAS BEEN SOLD. WE WILL DRAFT IN ROUND ${round} IN YOUR STEAD. YOUR ESSENCE WILL WAIT UNTIL THEN.`,
+        `YOUR FUTURE HAS BEEN SOLD. THE DRAINLINGS WILL DRAFT IN ROUND ${round} IN YOUR STEAD. YOUR ESSENCE WILL WAIT UNTIL THEN.`,
         `THE CUBE CLAIMS YOUR ROUND ${round} PICK. THE SHADOWS SHALL DRAFT FOR YOU. YOUR REWARD IS DEFERRED.`,
-        `A GAMBLE WITH TIME ITSELF. THE MAW TAKES YOUR ROUND ${round} SLOT. YOU WILL BE PAID WHEN WE FEED.`
+        `A GAMBLE WITH TIME ITSELF. THE MAW TAKES YOUR ROUND ${round} SLOT. YOU WILL BE PAID WHEN THE DRAINLINGS FEED.`
     ];
     return responses[Math.floor(Math.random() * responses.length)];
 };
@@ -147,7 +149,6 @@ const getDefaultRejectResponse = () => {
     return responses[Math.floor(Math.random() * responses.length)];
 };
 
-
 export async function offerToTheDrain(offer: string): Promise<{ success: boolean; message: string; type: "card" | "self" | "rejected" | "unauthenticated" }> {
     if (offer.length > 150) {
         return { success: true, message: "YOUR HUBRIS EXCEEDS YOUR GRASP. THE CUBE REJECTS THIS GIFT.", type: "rejected" };
@@ -192,7 +193,9 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
     const name2 = (userData?.discord_username || "").toLowerCase();
     const currentEssence = userData?.essence_balance || 0;
 
-    const { data: member } = await supabaseAdmin.from('team_members').select('team_id').eq('user_id', user.id).single();
+    // THE FIX: Select both `id` AND `team_id` so we can delete the team_members record later if they self-sacrifice!
+    const { data: member } = await supabaseAdmin.from('team_members').select('id, team_id').eq('user_id', user.id).single();
+    const teamId = member?.team_id || null;
 
     // =========================================================================
     // 1. SELF SACRIFICE CHECK (The 3-Step Warning)
@@ -219,8 +222,10 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
         // STEP 3: Complete Sacrifice
         sacrificeWarningCache.delete(user.id); 
 
-        if (currentMembership) {
+        if (currentMembership && currentMembership.id) {
+            // Delete roles by team_member_id
             await supabaseAdmin.from('team_member_roles').delete().eq('team_member_id', currentMembership.id);
+            // Delete actual team membership using the id
             await supabaseAdmin.from('team_members').delete().eq('id', currentMembership.id);
         }
 
@@ -236,10 +241,10 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
     sacrificeWarningCache.delete(user.id);
 
     // =========================================================================
-    // 2. OTHER USER SACRIFICE CHECK
+    // 2. OTHER USERNAME SACRIFICE CHECK
     // =========================================================================
-    const { data: otherUser } = await supabaseAdmin.from('users').select('id, display_name').or(`display_name.ilike.${cleanOffer},discord_username.ilike.${cleanOffer}`).single();
-    if (otherUser) {
+    const { data: otherUser } = await supabaseAdmin.from('users').select('id, display_name').or(`display_name.ilike.${cleanOffer},discord_username.ilike.${cleanOffer}`).maybeSingle();
+    if (otherUser && otherUser.id !== user.id) {
         await logSystemEvent("TheDrain", "info", `User ${user.id} tried to sacrifice another user: ${otherUser.display_name}`);
         return { success: true, message: getOtherUserResponse(otherUser.display_name || cleanOffer), type: "rejected" };
     }
@@ -248,27 +253,27 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
     // 3. ESSENCE PURCHASE MECHANIC (Retrieve random card from Drainlings to Chamber)
     // =========================================================================
     // Match strings like "150e", "150 essence", "€150"
-    const essenceMatch = cleanOffer.match(/^(\d+)\s*(e|essence|€)$/i) || cleanOffer.match(/^(€)\s*(\d+)$/i);
+    const essenceMatch = cleanOffer.match(/^[\s]*[€e]?[\s]*(essence)?[\s]*(\d+)[\s]*[€e]?[\s]*(essence)?[\s]*$/i);
     if (essenceMatch) {
-        const bidAmount = parseInt(essenceMatch[1] || essenceMatch[2], 10);
+        const amount = parseInt(essenceMatch[2], 10);
 
-        if (bidAmount <= currentEssence) {
+        if (amount <= currentEssence) {
             // Find ALL cards in the drainlings pool
             const { data: drainCards } = await supabaseAdmin.from('team_draft_picks').select('id, card_id, card_name, cubucks_cost, card_pool_id').eq('team_id', DRAINLINGS_TEAM_ID);
             
             if (drainCards && drainCards.length > 0) {
                 // Filter eligible cards where bid >= 12x the card's cubuck cost
-                const eligibleCards = drainCards.filter(c => bidAmount >= ((c.cubucks_cost || 1) * 12));
+                const eligibleCards = drainCards.filter(c => amount >= ((c.cubucks_cost || 1) * 12));
                 
                 if (eligibleCards.length > 0) {
                     // Pick a random eligible card
                     const randomCard = eligibleCards[Math.floor(Math.random() * eligibleCards.length)];
 
                     // Deduct Essence
-                    const newBalance = currentEssence - bidAmount;
+                    const newBalance = currentEssence - amount;
                     await supabaseAdmin.from('users').update({ essence_balance: newBalance }).eq('id', user.id);
                     await supabaseAdmin.from('essence_transactions').insert({
-                        user_id: user.id, transaction_type: "spend", amount: -bidAmount, balance_after: newBalance, description: `Drain Retrieval Bid: ${bidAmount}E`, created_by: user.id
+                        user_id: user.id, transaction_type: "spend", amount: -amount, balance_after: newBalance, description: `Drain Retrieval Bid: ${amount}E`, created_by: user.id
                     });
 
                     // Remove from Drainlings roster
@@ -276,10 +281,10 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
 
                     // Re-insert to The Chamber!
                     if (randomCard.card_pool_id) {
-                        await supabaseAdmin.from('card_pools').update({ pool_name: 'the_chamber' }).eq('id', randomCard.card_pool_id);
+                        await supabaseAdmin.from('card_pools').update({ pool_name: 'the_chamber', was_drafted: false }).eq('id', randomCard.card_pool_id);
                     }
 
-                    await logSystemEvent("TheDrain", "info", `User ${user.id} spent ${bidAmount} Essence to retrieve ${randomCard.card_name} back to The Chamber.`);
+                    await logSystemEvent("TheDrain", "info", `User ${user.id} spent ${amount} Essence to retrieve ${randomCard.card_name} back to The Chamber.`);
                     return { success: true, message: getEssencePurchaseResponse(randomCard.card_name), type: "card" };
                 }
             }
@@ -287,134 +292,166 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
     }
 
     // =========================================================================
-    // TEAM-GATED CHECKS (Hats, Future Picks, Current Cards)
+    // REQUIRE TEAM MEMBERSHIP FROM THIS POINT ON
     // =========================================================================
-    if (member?.team_id) {
+    if (!teamId) {
+        return { success: true, message: "ONLY THOSE BOUND TO A TEAM MAY OFFER TRIBUTE.", type: "rejected" };
+    }
 
-        // --- HAT LOGIC ---
-        if (cleanOffer.endsWith("hat") && cleanOffer.trim().split(" ").length > 1) {
-            // Check if team owns this specific hat
-            const { data: ownedHats } = await supabaseAdmin.from('team_hats').select(`id, hat_id, quantity, hats:hats!inner(hatName)`).eq('team_id', member.team_id);
-            
-            const matchingHat = (ownedHats || []).find(h => {
-                const hatObj = Array.isArray(h.hats) ? h.hats[0] : h.hats;
-                return hatObj?.hatName?.toLowerCase().includes(cleanOffer.replace(/the|a|an/gi, '').trim());
-            });
+    // =========================================================================
+    // 6. FUTURE DRAFT PICK SACRIFICE
+    // =========================================================================
+    const pickMatch = cleanOffer.match(/(?:my )?(?:next |future )?(?:draft )?pick(?: in )?(?:round )?(\d+)?/i);
+    if (pickMatch) {
+        const roundNum = pickMatch[1] ? parseInt(pickMatch[1], 10) : 1; 
 
-            if (matchingHat) {
-                const hatData = Array.isArray(matchingHat.hats) ? matchingHat.hats[0] : matchingHat.hats;
-                const hatName = hatData?.hatName?.toLowerCase() || "";
-
-                if (hatName.includes("really cool hat")) {
-                    await supabaseAdmin.from('team_hats').delete().eq('id', matchingHat.id); // Destroy Hat
-                    // Reward 500 Essence
-                    await supabaseAdmin.from('users').update({ essence_balance: currentEssence + 500 }).eq('id', user.id);
-                    await logSystemEvent("TheDrain", "info", `User ${user.id} sacrificed A Really Cool Hat for 500 Essence.`);
-                    return { success: true, message: getCoolHatResponse(), type: "card" };
-                }
-                
-                if (hatName.includes("cursed") || hatName.includes("witch")) {
-                    // Level it up (worsening the curse) and feign acceptance!
-                    const { data: hatDefinition } = await supabaseAdmin.from('hats').select('hatLevel').eq('hatId', matchingHat.hat_id).single();
-                    if (hatDefinition) {
-                        // Increase overage/curse severity
-                        await supabaseAdmin.from('team_hats').update({ highest_overage: (matchingHat.highest_overage || hatDefinition.hatLevel || 1) + 1 }).eq('id', matchingHat.id);
-                        await logSystemEvent("TheDrain", "info", `User ${user.id} tried to sacrifice the Cursed Hat. It leveled up instead.`);
-                        return { success: true, message: getCursedHatResponse(), type: "card" };
-                    }
-                }
-            } else {
-                // Phrase ends in Hat, has multiple words, but they don't own it
-                return { success: true, message: getFakeHatResponse(), type: "rejected" };
-            }
-        }
-
-        // --- FUTURE DRAFT PICK LOGIC ---
-        // Matches inputs like "Round 2 pick", "Draft pick round 3"
-        const pickMatch = cleanOffer.match(/round\s*(\d+)/i) || cleanOffer.match(/(\d+)(st|nd|rd|th)?\s*round/i);
-        if (pickMatch && cleanOffer.includes("pick")) {
-            const roundNum = parseInt(pickMatch[1], 10);
-            
-            // Check if they own this future pick
-            const { data: futurePick } = await supabaseAdmin.from('future_draft_picks').select('id, season_id').eq('team_id', member.team_id).eq('round_number', roundNum).single();
+        const { data: activeSeason } = await supabaseAdmin.from('seasons').select('id, phase').eq('is_active', true).single();
+        if (activeSeason) {
+            const { data: futurePick } = await supabaseAdmin.from('future_draft_picks')
+                .select('id')
+                .eq('season_id', activeSeason.id)
+                .eq('original_team_id', teamId)
+                .eq('round_number', roundNum)
+                .single();
             
             if (futurePick) {
                 // Trade the pick to the Drainlings!
                 await supabaseAdmin.from('future_draft_picks').update({
-                    team_id: DRAINLINGS_TEAM_ID,
                     traded_to_team_id: DRAINLINGS_TEAM_ID,
                     is_traded: true
                 }).eq('id', futurePick.id);
 
-                await logSystemEvent("TheDrain", "info", `User ${user.id} sacrificed Round ${roundNum} future pick to The Drainlings.`);
+                await logSystemEvent("TheDrain", "info", `Team ${teamId} sacrificed Round ${roundNum} future pick to The Drainlings.`);
                 return { success: true, message: getFuturePickResponse(roundNum), type: "card" };
             }
-        }
-
-        // --- STANDARD CARD SACRIFICE LOGIC ---
-        // Enforce Season Phase Constraint for Card Sacrifices
-        const { data: seasonData } = await supabaseAdmin.from('seasons').select('phase').eq('is_active', true).single();
-        if (seasonData?.phase !== 'season') {
-            return { success: true, message: "THE MAW SLUMBERS. TRIBUTES ARE ONLY CONSUMED DURING THE REGULAR SEASON.", type: "rejected" };
-        }
-
-        const { data: pick } = await supabaseAdmin.from('team_draft_picks').select('id, card_id, card_name, card_set, cubucks_cost, card_pool_id').eq('team_id', member.team_id).ilike('card_name', cleanOffer).eq('is_keeper', false).limit(1).maybeSingle();
-
-        if (pick) {
-            const cardCost = pick.cubucks_cost || 1;
-            const essenceReward = cardCost * 5; 
-
-            // Check REGIFTING (Has this card been sacrificed before?)
-            const { data: previousSacrifice } = await supabaseAdmin.from('the_drain').select('id').eq('card_id', pick.card_id).limit(1).maybeSingle();
-            const isRegift = !!previousSacrifice;
-
-            // 1. Transfer the card to the Drainlings
-            const { error: transferError } = await supabaseAdmin.from('team_draft_picks').update({ team_id: DRAINLINGS_TEAM_ID, acquisition_method: 'drained', scars: ['drained'] }).eq('id', pick.id);
-            if (transferError) return { success: true, message: "THE VOID SHUDDERS AND REJECTS YOUR OFFERING. AN ERROR OCCURRED.", type: "rejected" };
-
-            // 2. Update the card_pools pool_name to 'drainlings'
-            if (pick.card_pool_id) await supabaseAdmin.from('card_pools').update({ pool_name: 'drainlings' }).eq('id', pick.card_pool_id);
-
-            // 3. Write the receipt to the_drain ledger
-            await supabaseAdmin.from('the_drain').insert({
-                card_id: pick.card_id, card_name: pick.card_name, card_set: pick.card_set, sacrificed_by_user_id: user.id, sacrificed_by_team_id: member.team_id, cubucks_value_at_sacrifice: cardCost, essence_rewarded: essenceReward
-            });
-
-            // 4. Reward the User
-            await supabaseAdmin.from('users').update({
-                essence_balance: currentEssence + essenceReward, essence_total_earned: (userData?.essence_total_earned || 0) + essenceReward
-            }).eq('id', user.id);
-
-            await supabaseAdmin.from('essence_transactions').insert({
-                user_id: user.id, transaction_type: "grant", amount: essenceReward, balance_after: currentEssence + essenceReward, description: `Sacrifice Reward: "${pick.card_name}"`, created_by: user.id
-            });
-
-            let finalMsg = getCardSacrificeResponse(pick.card_name, essenceReward);
-
-            // 5. Apply Regift/Experimental Item logic
-            if (isRegift) {
-                finalMsg = getRegiftResponse(pick.card_name);
-                
-                // Check if any other teammate has regifted before!
-                const { data: teamRegifts } = await supabaseAdmin.from('the_drain').select('id').eq('sacrificed_by_team_id', member.team_id).neq('sacrificed_by_user_id', user.id).limit(1);
-                
-                if (teamRegifts && teamRegifts.length > 0) {
-                    // Grant an experimental item! (Find one not currently assigned)
-                    const { data: unassignedItem } = await supabaseAdmin.from('experimental_items').select('id, item_name').is('current_team_id', null).limit(1).maybeSingle();
-                    if (unassignedItem) {
-                        await supabaseAdmin.from('experimental_items').update({ current_team_id: member.team_id, granted_at: new Date().toISOString() }).eq('id', unassignedItem.id);
-                        finalMsg += `\n\n${getExperimentalItemResponse(unassignedItem.item_name)}`;
-                    }
-                }
-            }
-
-            await logSystemEvent("TheDrain", "info", `User ${user.id} successfully sacrificed: ${pick.card_name} for ${essenceReward} Essence. Regift: ${isRegift}`);
-            return { success: true, message: finalMsg, type: "card" };
         }
     }
 
     // =========================================================================
-    // 4. DEFAULT REJECTION
+    // 7. HAT SACRIFICE
+    // =========================================================================
+    if (cleanOffer.endsWith("hat")) {
+        // We use a properly typed generic return from Supabase to satisfy TS
+        const { data: teamHats } = await supabaseAdmin.from('team_hats').select(`id, hat_id, quantity, hats!inner(hatName)`).eq('team_id', teamId);
+        
+        // Find matching hat by name
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const matchingHat = (teamHats || []).find((h: any) => {
+            const hatObj = Array.isArray(h.hats) ? h.hats[0] : h.hats;
+            return hatObj?.hatName?.toLowerCase().includes(cleanOffer.replace(/the|a|an/gi, '').trim());
+        });
+
+        if (matchingHat) {
+            const rawHatData = Array.isArray(matchingHat.hats) ? matchingHat.hats[0] : matchingHat.hats;
+            const hatName = rawHatData.hatName || "Hat";
+            const hatId = matchingHat.hat_id;
+
+            // Delete one instance of the hat
+            if (matchingHat.quantity > 1) {
+                await supabaseAdmin.from('team_hats').update({ quantity: matchingHat.quantity - 1 }).eq('id', matchingHat.id);
+            } else {
+                await supabaseAdmin.from('team_hats').delete().eq('id', matchingHat.id);
+            }
+
+            // Really Cool Hat Check
+            if (hatId === 1) {
+                const userEssence = userData?.essence_balance || 0;
+                await supabaseAdmin.from('users').update({ essence_balance: userEssence + 500, essence_total_earned: (userData?.essence_total_earned || 0) + 500 }).eq('id', user.id);
+                await supabaseAdmin.from('essence_transactions').insert({ user_id: user.id, transaction_type: "grant", amount: 500, balance_after: userEssence + 500, description: `Sacrificed A Really Cool Hat`, created_by: user.id });
+
+                return { success: true, message: getCoolHatResponse(), type: "card" };
+            }
+
+            // Cursed Witch-Skin Hat Check
+            if (hatId === 2) {
+                // Feign acceptance, then grant them the leveled up version (Assuming ID 3 is the cursed level 2)
+                await supabaseAdmin.from('team_hats').insert({ team_id: teamId, hat_id: 3, quantity: 1 }); 
+                return { success: true, message: getCursedHatResponse(), type: "rejected" };
+            }
+
+            return { success: true, message: `THE CUBE ACCEPTS YOUR TRIBUTE. "${hatName}" HAS BEEN CONSUMED.`, type: "card" };
+        } else {
+            const words = cleanOffer.split(' ');
+            const nonArticles = words.filter(w => !['the', 'a', 'an'].includes(w));
+            if (nonArticles.length > 1) {
+                return { success: true, message: getFakeHatResponse(), type: "rejected" };
+            }
+        }
+    }
+
+    // =========================================================================
+    // Enforce Season Phase Constraint for Card Sacrifices
+    // =========================================================================
+    const { data: seasonData } = await supabase.from('seasons').select('phase').eq('is_active', true).single();
+    if (seasonData?.phase !== 'season') {
+        return { success: true, message: "THE MAW SLUMBERS. TRIBUTES ARE ONLY CONSUMED DURING THE REGULAR SEASON.", type: "rejected" };
+    }
+
+    // =========================================================================
+    // 8. CARD SACRIFICE
+    // =========================================================================
+    const { data: pick } = await supabaseAdmin
+        .from('team_draft_picks')
+        .select('id, card_id, card_name, card_set, cubucks_cost, card_pool_id')
+        .eq('team_id', teamId)
+        .ilike('card_name', cleanOffer)
+        .eq('is_keeper', false)
+        .limit(1)
+        .maybeSingle();
+
+    if (pick) {
+        // REGIFTING CHECK! Look in `the_drain` to see if ANY card with this exact card_id was previously sacrificed!
+        const { data: prevDrain } = await supabaseAdmin.from('the_drain').select('id').eq('card_id', pick.card_id).limit(1).maybeSingle();
+        
+        const cardCost = pick.cubucks_cost || 1;
+        const essenceReward = cardCost * 5; 
+
+        // 1. Transfer the card to the Drainlings
+        await supabaseAdmin.from('team_draft_picks').update({ team_id: DRAINLINGS_TEAM_ID, acquisition_method: 'drained', scars: ['drained'] }).eq('id', pick.id);
+
+        // 2. Update card_pools
+        if (pick.card_pool_id) {
+            await supabaseAdmin.from('card_pools').update({ pool_name: 'drainlings' }).eq('id', pick.card_pool_id);
+        }
+
+        // 3. Write to the_drain ledger
+        await supabaseAdmin.from('the_drain').insert({
+            card_id: pick.card_id, card_name: pick.card_name, card_set: pick.card_set, sacrificed_by_user_id: user.id, sacrificed_by_team_id: teamId, cubucks_value_at_sacrifice: cardCost, essence_rewarded: essenceReward
+        });
+
+        // 4. Reward Essence
+        const userEssence = userData?.essence_balance || 0;
+        await supabaseAdmin.from('users').update({ essence_balance: userEssence + essenceReward, essence_total_earned: (userData?.essence_total_earned || 0) + essenceReward }).eq('id', user.id);
+        await supabaseAdmin.from('essence_transactions').insert({
+            user_id: user.id, transaction_type: "grant", amount: essenceReward, balance_after: userEssence + essenceReward, description: `Sacrifice Reward: "${pick.card_name}"`, created_by: user.id
+        });
+
+        let finalMsg = getCardSacrificeResponse(pick.card_name, essenceReward);
+
+        // 5. REGIFTING OUTCOME
+        if (prevDrain) {
+            finalMsg = getRegiftResponse(pick.card_name);
+            
+            // Check if any other teammate has regifted before!
+            const { data: teamRegifts } = await supabaseAdmin.from('the_drain').select('id').eq('sacrificed_by_team_id', teamId).neq('sacrificed_by_user_id', user.id).limit(1);
+            
+            if (teamRegifts && teamRegifts.length > 0) {
+                // Grant an experimental item! (Find one not currently assigned)
+                const { data: unassignedItem } = await supabaseAdmin.from('experimental_items').select('id, item_name').is('current_team_id', null).limit(1).maybeSingle();
+                
+                if (unassignedItem) {
+                    await supabaseAdmin.from('experimental_items').update({ current_team_id: teamId, granted_at: new Date().toISOString() }).eq('id', unassignedItem.id);
+                    finalMsg += `\n\n${getExperimentalItemResponse(unassignedItem.item_name)}`;
+                }
+            }
+        }
+
+        await logSystemEvent("TheDrain", "info", `User ${user.id} successfully sacrificed: ${pick.card_name} for ${essenceReward} Essence. Regift: ${!!prevDrain}`);
+        return { success: true, message: finalMsg, type: "card" };
+    }
+
+    // =========================================================================
+    // 9. DEFAULT REJECTION
     // =========================================================================
     await logSystemEvent("TheDrain", "warn", `User ${user.id} offered invalid tribute: "${offer}"`);
     return { success: true, message: getDefaultRejectResponse(), type: "rejected" };
