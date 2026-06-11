@@ -2,10 +2,10 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/app/components/ui/card";
+import { Card, CardContent } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
-import { BookOpen, Sparkles, Key, Loader2, LockOpen } from "lucide-react";
+import { BookOpen, Key, Loader2, LockOpen } from "lucide-react";
 import { toast } from "sonner";
 import { getObfuscatedCyphers, submitCypherGuess, purchaseCypherWord, type ObfuscatedCypher, type CypherToken } from "@/app/actions/cypherActions";
 import { getUserEssenceBalance } from "@/app/actions/essenceActions";
@@ -40,7 +40,7 @@ export default function CypherPage() {
     if (res.success) {
         toast.success(res.message);
         setGuessInput("");
-        await loadData(); // Refresh UI to show the new word
+        await loadData(); 
     } else {
         toast.error(res.error);
     }
@@ -52,7 +52,6 @@ export default function CypherPage() {
       const cost = token.length * 2;
       
       if (!confirm(`Spend ${cost} Essence to force-reveal this ${token.length}-letter word?`)) return;
-
       const res = await purchaseCypherWord(cypherId, token.wordIndex);
       if (res.success) {
           toast.success(res.message);
@@ -63,14 +62,15 @@ export default function CypherPage() {
   };
 
   if (loading) {
-      return <div className="flex justify-center py-20"><Loader2 className="size-10 animate-spin text-purple-500" /></div>;
+      return <div className="flex justify-center py-20"><Loader2 className="size-10 animate-spin text-amber-500" /></div>;
   }
 
   return (
     <div className="container max-w-5xl mx-auto px-4 py-8">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-6">
         <div>
-          <h1 className="text-4xl font-black tracking-tight flex items-center gap-3 text-purple-600 dark:text-purple-400">
+          {/* THE FIX: Changed purple header coloring to golden yellow (text-amber-500) */}
+          <h1 className="text-4xl font-black tracking-tight flex items-center gap-3 text-amber-500 dark:text-amber-400">
             <BookOpen className="size-10" />
             The Cypher
           </h1>
@@ -80,11 +80,12 @@ export default function CypherPage() {
           </p>
         </div>
         
-        <Card className="border-purple-500/30 bg-purple-500/5 shadow-sm min-w-[200px] shrink-0">
+        {/* THE FIX: Changed purple container and currency symbol to gold borders and € symbol */}
+        <Card className="border-amber-500/30 bg-amber-500/5 shadow-sm min-w-[200px] shrink-0">
           <CardContent className="p-4 flex flex-col items-center justify-center">
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Your Essence</p>
-            <div className="text-4xl font-black text-purple-600 dark:text-purple-400 flex items-center gap-2 drop-shadow-sm">
-                {balance} <Sparkles className="size-8" />
+            <div className="text-4xl font-black text-amber-500 dark:text-amber-400 flex items-center gap-2 drop-shadow-sm">
+                {balance} <span className="font-semibold text-3xl">€</span>
             </div>
           </CardContent>
         </Card>
@@ -95,7 +96,8 @@ export default function CypherPage() {
           <AccordionItem key={cypher.id} value={cypher.id} className="border border-border/50 bg-card rounded-lg overflow-hidden shadow-sm">
             <AccordionTrigger className="px-6 py-4 hover:bg-muted/50 transition-colors">
                 <div className="flex items-center gap-3 text-lg font-bold">
-                    <Key className="size-5 text-purple-500" />
+                    {/* THE FIX: Changed purple key icon to golden yellow */}
+                    <Key className="size-5 text-amber-500" />
                     {cypher.title}
                 </div>
             </AccordionTrigger>
@@ -110,10 +112,11 @@ export default function CypherPage() {
                         onKeyDown={(e) => e.key === 'Enter' && handleGuess(cypher.id)}
                         className="max-w-xs"
                     />
+                    {/* THE FIX: Changed decode button from purple to golden yellow (bg-amber-600) */}
                     <Button 
                         onClick={() => handleGuess(cypher.id)}
                         disabled={guessingId === cypher.id || !guessInput.trim()}
-                        className="bg-purple-600 hover:bg-purple-700 text-white"
+                        className="bg-amber-600 hover:bg-amber-700 text-white font-bold"
                     >
                         {guessingId === cypher.id ? <Loader2 className="size-4 animate-spin mr-2"/> : <Key className="size-4 mr-2"/>}
                         Decode
@@ -125,16 +128,17 @@ export default function CypherPage() {
                     {cypher.tokens.map((token, idx) => {
                         if (!token.isWord) return <span key={idx} className="whitespace-pre-wrap">{token.text}</span>;
                         
+                        {/* THE FIX: Changed revealed word color from purple to blue (text-blue-600 / dark:text-blue-400) */}
                         if (token.isRevealed) {
-                            return <span key={idx} className="text-purple-700 dark:text-purple-400 font-bold transition-all">{token.text}</span>;
+                            return <span key={idx} className="text-blue-600 dark:text-blue-400 font-bold transition-all">{token.text}</span>;
                         }
 
-                        // Hidden Block - Clickable to purchase
+                        {/* THE FIX: Changed hidden card block hover states from purple to golden yellow */}
                         return (
                             <span 
                                 key={idx} 
                                 onClick={() => handlePurchase(cypher.id, token)}
-                                className="cursor-pointer text-muted-foreground hover:text-purple-500 transition-colors bg-muted-foreground/20 hover:bg-purple-500/20 rounded px-1 mx-0.5 select-none inline-flex items-center gap-1 group"
+                                className="cursor-pointer text-muted-foreground hover:text-amber-500 transition-colors bg-muted-foreground/20 hover:bg-amber-500/20 rounded px-1 mx-0.5 select-none inline-flex items-center gap-1 group"
                                 title={`Reveal for ${token.length! * 2} Essence`}
                             >
                                 {token.text}
