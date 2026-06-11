@@ -1,12 +1,9 @@
 // src/app/api/match-runner/[matchId]/route.ts
-
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
-// Using the Promise-based params type as required by your build environment.
-export async function GET(request: Request, { params }: { params: Promise<{ matchId: string }> }) {
-  // Awaiting the promise as required.
-  const { matchId } = await params;
+export async function GET(request: Request, context: { params: Promise<{ matchId: string }> }) {
+  const { matchId } = await context.params;
 
   if (!matchId || matchId === 'undefined') {
     return NextResponse.json({ error: "Invalid or missing match ID provided." }, { status: 400 });
@@ -15,7 +12,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ matc
   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 
   try {
-    // --- FIX: Select BOTH 'winner' and 'game_states' to prevent the race condition ---
     const { data, error } = await supabase
       .from('sim_matches')
       .select('winner, game_states')
@@ -23,18 +19,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ matc
       .single();
 
     if (error) {
-      if (error.code === 'PGRST116') { // Row not found, match is pending
-        // --- FIX: Return the full expected response shape so the frontend doesn't crash ---
+      if (error.code === 'PGRST116') { 
         return NextResponse.json({ winner: null, isReplayReady: false });
       }
-      throw error; // For other unexpected DB errors
+      throw error; 
     }
     
-    // --- FIX: Calculate the isReplayReady flag ---
-    // The replay is ready only if the game_states array exists and is not empty.
     const isReplayReady = !!(data?.game_states && Array.isArray(data.game_states) && data.game_states.length > 0);
 
-    // --- FIX: Return both winner and the isReplayReady flag ---
     return NextResponse.json({ 
       winner: data?.winner || null,
       isReplayReady: isReplayReady 
@@ -45,4 +37,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ matc
     console.error(`[POLL_ERROR] for matchId ${matchId}:`, errorMessage);
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
+}
+
+export async function POST(request: Request, context: { params: Promise<{ matchId: string }> }) {
+    const { matchId } = await context.params;
+    return NextResponse.json({ error: `Method Not Allowed. Use GET to poll match status for ${matchId}` }, { status: 405 });
 }

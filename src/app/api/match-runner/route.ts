@@ -1,9 +1,9 @@
 // src/app/api/match-runner/route.ts
-
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 let _supabaseAdmin: ReturnType<typeof createClient> | null = null;
+
 function getSupabaseAdmin() {
   if (!_supabaseAdmin) {
     _supabaseAdmin = createClient(
@@ -14,8 +14,14 @@ function getSupabaseAdmin() {
   return _supabaseAdmin;
 }
 
+// Fallback to prevent 405 errors if pinged by a GET request
+export async function GET() {
+    return NextResponse.json({ error: "Method Not Allowed. Please use POST to dispatch matches." }, { status: 405 });
+}
+
 export async function POST(request: Request): Promise<NextResponse> {
     let scheduleId: string | undefined;
+
     try {
         const body = await request.json();
         
@@ -28,7 +34,7 @@ export async function POST(request: Request): Promise<NextResponse> {
             team1_name, team1_color, team1_seccolor,
             team2_name, team2_color, team2_seccolor
         } = body;
-
+        
         scheduleId = reqScheduleId;
         
         console.log(`\n[Match-Runner API] 🚀 MATCH RECEIVED! Schedule ID: ${scheduleId}`);
@@ -51,9 +57,9 @@ export async function POST(request: Request): Promise<NextResponse> {
 
         console.log(`[Match-Runner API] Inserting into sim_matches...`);
 
-        // 1. Create the sim_matches record
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: simMatch, error: simErr } = await (getSupabaseAdmin() as any)
+        // 1. Create the sim_matches record using strict casting
+        const supabase = getSupabaseAdmin();
+        const { data: simMatchData, error: simErr } = await supabase
             .from('sim_matches')
             .insert({
                 player1_info: `${team1Id} (AI: ${finalProfile1})`,
@@ -68,17 +74,23 @@ export async function POST(request: Request): Promise<NextResponse> {
             .select('id')
             .single();
 
-        if (simErr || !simMatch) {
+        if (simErr || !simMatchData) {
             throw new Error(`sim_matches insert failed: ${simErr?.message}`);
         }
 
+        // Type safety conversion
+        const simMatch = simMatchData as unknown as { id: string };
         const matchId = simMatch.id;
         console.log(`[Match-Runner API] Successfully created sim_match_id: ${matchId}`);
 
         // 2. Send to sim server
-        const simServerUrl = process.env.SIM_SERVER_URL ?? 'http://localhost:3001';
-        console.log(`[Match-Runner API] Pinging ForgeSim Server at: ${simServerUrl}/run-match`);
+        // Ensure SIM_SERVER_URL also does not end in a slash!
+        let simServerUrl = process.env.SIM_SERVER_URL ?? 'http://localhost:3001';
+        if (simServerUrl.endsWith('/')) {
+            simServerUrl = simServerUrl.slice(0, -1);
+        }
 
+        console.log(`[Match-Runner API] Pinging ForgeSim Server at: ${simServerUrl}/run-match`);
         const simRes = await fetch(`${simServerUrl}/run-match`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -100,8 +112,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
         // 3. Conditionally update the schedule table
         if (scheduleId) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { error: schedErr } = await (getSupabaseAdmin() as any)
+            const { error: schedErr } = await supabase
                 .from('schedule')
                 .update({ status: 'in_progress', sim_match_id: matchId })
                 .eq('id', scheduleId)
@@ -120,8 +131,8 @@ export async function POST(request: Request): Promise<NextResponse> {
         console.error(`\n[Match-Runner API] ❌ ERROR for schedule ${scheduleId ?? 'manual run'}:`, msg);
         
         if (scheduleId) {
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             await (getSupabaseAdmin() as any).from('schedule').update({ status: 'validated' }).eq('id', scheduleId);
+             const supabase = getSupabaseAdmin();
+             await supabase.from('schedule').update({ status: 'validated' }).eq('id', scheduleId);
         }
         return NextResponse.json({ error: msg }, { status: 500 });
     }

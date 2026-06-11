@@ -366,7 +366,7 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
 
             // Check REGIFTING (Has this card been sacrificed before?)
             const { data: previousSacrifice } = await supabaseAdmin.from('the_drain').select('id').eq('card_id', pick.card_id).limit(1).maybeSingle();
-            let isRegift = !!previousSacrifice;
+            const isRegift = !!previousSacrifice;
 
             // 1. Transfer the card to the Drainlings
             const { error: transferError } = await supabaseAdmin.from('team_draft_picks').update({ team_id: DRAINLINGS_TEAM_ID, acquisition_method: 'drained', scars: ['drained'] }).eq('id', pick.id);
