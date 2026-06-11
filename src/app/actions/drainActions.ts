@@ -30,7 +30,7 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
 
     if (cleanOffer === name1 || cleanOffer === name2) {
         const selfResponses = [
-            "THE CUBE ADMIRES YOUR COMMITMENT. PERHAPS WE WILL WELCOME YOU _ANOTHER TIME_.",
+            "THE CUBE ADMIRES YOUR COMMITMENT. PERHAPS WE WILL WELCOME YOU <strong>ANOTHER TIME</strong>.",
             "YOUR FLESH IS WILLING, BUT THE MAW IS CLOSED. WAIT.",
             "A NOBLE SACRIFICE. BUT THE CUBE DEMANDS PATIENCE."
         ];
