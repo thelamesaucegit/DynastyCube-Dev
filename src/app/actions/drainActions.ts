@@ -31,7 +31,7 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
     if (cleanOffer === name1 || cleanOffer === name2) {
         const selfResponses = [
             "THE CUBE ADMIRES YOUR COMMITMENT. PERHAPS WE WILL WELCOME YOU <strong>ANOTHER TIME</strong>.",
-            "YOUR FLESH IS WILLING, BUT THE MAW IS CLOSED. WAIT.",
+            "YOUR FLESH IS WILLING, BUT THE MAW IS CLOSED. <strong>WAIT</strong>.",
             "A NOBLE SACRIFICE. BUT THE CUBE DEMANDS PATIENCE."
         ];
         await logSystemEvent("TheDrain", "info", `User ${user.id} attempted self-sacrifice.`);
@@ -66,7 +66,7 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
     // 3. Default Rejection (Not a card they own, not themselves)
     const rejectResponses = [
         "THE CUBE REJECTS THIS GIFT.",
-        "WORTHLESS DROSS. THE CUBE REJECTS THIS GIFT.",
+        "<strong>WORTHLESS DROSS</strong>. THE CUBE REJECTS THIS GIFT.",
         "DO NOT INSULT THE ABYSS. THE CUBE REJECTS THIS GIFT.",
         "A PATHETIC OFFERING. THE CUBE REJECTS THIS GIFT.",
         "THE MAW SPITS IT BACK. THE CUBE REJECTS THIS GIFT.",
