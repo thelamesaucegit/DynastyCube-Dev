@@ -7,6 +7,9 @@ import type { ReplayCardData, EntityId, ClientCard } from '@/types';
 import { getCardImageUrl } from '@/app/utils/cardUtils'; 
 import { styles } from '../board/styles';
 
+// ========================================================================
+// Token Image Cache & Fetcher
+// ========================================================================
 const tokenImageCache: Record<string, string | null | undefined> = {};
 const pendingRequests: Record<string, Promise<string | null> | undefined> = {};
 
@@ -14,10 +17,14 @@ async function fetchTokenImageFromScryfall(rawName: string): Promise<string | nu
     const cleanName = rawName.replace(/ Token$/i, '');
     
     const cachedImage = tokenImageCache[cleanName];
-    if (cachedImage !== undefined) return cachedImage;
+    if (cachedImage !== undefined) {
+        return cachedImage;
+    }
     
     const pending = pendingRequests[cleanName];
-    if (pending) return pending;
+    if (pending) {
+        return pending;
+    }
 
     const request = (async () => {
         try {
@@ -46,6 +53,9 @@ async function fetchTokenImageFromScryfall(rawName: string): Promise<string | nu
     return request;
 }
 
+// ========================================================================
+// Keyword Icon Mapping
+// ========================================================================
 const KEYWORD_ICONS: Record<string, string> = {
   FLYING: '🕊️', Flying: '🕊️',
   FIRST_STRIKE: '⚡', 'First Strike': '⚡',
@@ -64,6 +74,10 @@ const KEYWORD_ICONS: Record<string, string> = {
   FLASH: '⚡', Flash: '⚡'
 };
 
+// ========================================================================
+// Main Component
+// ========================================================================
+
 interface ReplayGameCardProps {
   id?: EntityId; 
   cardData: ReplayCardData;
@@ -78,12 +92,12 @@ export function ReplayGameCard({ id, cardData, card, isTapped = false, useOldest
   const dbImageUrl = getCardImageUrl(cardData, useOldestArt);
   const [scryfallUrl, setScryfallUrl] = useState<string | null>(null);
 
+  // 1. EXTRACT ALL LIVE STATS & STATUSES
   const hasPT = card?.power !== undefined && card?.toughness !== undefined && card?.power !== null;
   const power = card?.power;
   const toughness = card?.toughness;
   
-  // CRITICAL FIX: Ensure safe object extraction if 'counters' is completely omitted by backend
-  const safeCounters = (card?.counters ? (card.counters as Record<string, number>) : {});
+  const safeCounters = (card?.counters as Record<string, number> | undefined) || {};
   
   const plusOneCounters = safeCounters['PLUS_ONE_PLUS_ONE'] || safeCounters['P1P1'] || safeCounters['+1/+1'] || 0;
   const minusOneCounters = safeCounters['MINUS_ONE_MINUS_ONE'] || safeCounters['M1M1'] || safeCounters['-1/-1'] || 0;
@@ -107,6 +121,10 @@ export function ReplayGameCard({ id, cardData, card, isTapped = false, useOldest
 
   const finalImageUrl = dbImageUrl || scryfallUrl;
 
+  // ========================================================================
+  // RENDER HELPERS FOR OVERLAYS
+  // ========================================================================
+  
   const renderOverlays = () => (
       <>
         {isSummoningSick && (
@@ -149,6 +167,10 @@ export function ReplayGameCard({ id, cardData, card, isTapped = false, useOldest
         {(safeCounters['LORE'] || safeCounters['Lore']) ? <div style={styles.sagaLoreBadge}>📖 {safeCounters['LORE'] || safeCounters['Lore']}</div> : null}
       </>
   );
+
+  // ========================================================================
+  // RENDER BRANCHES
+  // ========================================================================
 
   if (!finalImageUrl) {
     if (isToken) {
