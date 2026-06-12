@@ -36,7 +36,7 @@ export function ReplayCardStack({
   
   // IDENTIFY BASIC LANDS
   // Check if it's a land AND if its type line includes the word 'Basic'
-  const isBasicLand = group.card.cardTypes.includes('Land') && (group.card.typeLine?.includes('Basic') || cardImageData?.card_type?.includes('Basic'));
+  const isBasicLand = safeCardTypes.includes('Land') && (safeTypeLine.includes('Basic') || safeCardDataTypeLine.includes('Basic'));
 
   if (group.count === 1) {
     if (!cardImageData) return null;
