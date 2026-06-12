@@ -17,10 +17,14 @@ async function fetchTokenImageFromScryfall(rawName: string): Promise<string | nu
     const cleanName = rawName.replace(/ Token$/i, '');
     
     const cachedImage = tokenImageCache[cleanName];
-    if (cachedImage !== undefined) return cachedImage;
+    if (cachedImage !== undefined) {
+        return cachedImage;
+    }
     
     const pending = pendingRequests[cleanName];
-    if (pending) return pending;
+    if (pending) {
+        return pending;
+    }
 
     const request = (async () => {
         try {
@@ -50,7 +54,7 @@ async function fetchTokenImageFromScryfall(rawName: string): Promise<string | nu
 }
 
 // ========================================================================
-// Keyword Icon Mapping (Aggressively maps ENUM formats)
+// Keyword Icon Mapping
 // ========================================================================
 const KEYWORD_ICONS: Record<string, string> = {
   FLYING: '🕊️', Flying: '🕊️',
@@ -88,24 +92,23 @@ export function ReplayGameCard({ id, cardData, card, isTapped = false, useOldest
   const dbImageUrl = getCardImageUrl(cardData, useOldestArt);
   const [scryfallUrl, setScryfallUrl] = useState<string | null>(null);
 
-  // 1. EXTRACT ALL LIVE STATS & STATUSES (Using the strict ClientCard interface names)
+  // 1. EXTRACT ALL LIVE STATS & STATUSES
   const hasPT = card?.power !== undefined && card?.toughness !== undefined && card?.power !== null;
   const power = card?.power;
   const toughness = card?.toughness;
   
   const safeCounters = (card?.counters as Record<string, number> | undefined) || {};
   
-  // CRITICAL FIX: Aggressively hunt for the serialized Enum value for counters
   const plusOneCounters = safeCounters['PLUS_ONE_PLUS_ONE'] || safeCounters['P1P1'] || safeCounters['+1/+1'] || 0;
   const minusOneCounters = safeCounters['MINUS_ONE_MINUS_ONE'] || safeCounters['M1M1'] || safeCounters['-1/-1'] || 0;
   const netCounters = plusOneCounters - minusOneCounters;
 
-  // CRITICAL FIX: Check the official `hasSummoningSickness` interface property
+  const safeCard = card as Record<string, unknown> | undefined;
+
+  const isToken = Boolean(safeCard?.isToken) || cardData.card_type?.toLowerCase().includes('token') || cardData.name.toLowerCase().includes('token');
   const isSummoningSick = Boolean(card?.hasSummoningSickness);
-  const isToken = Boolean(card?.isToken) || cardData.card_type?.toLowerCase().includes('token') || cardData.name.toLowerCase().includes('token');
-  const keywords: string[] = Array.isArray(card?.keywords) ? (card?.keywords as string[]) : [];
+  const keywords: string[] = Array.isArray(safeCard?.keywords) ? (safeCard?.keywords as string[]) : [];
   
-  // Fetch Scryfall Token Art
   useEffect(() => {
       let isMounted = true;
       if (!dbImageUrl && isToken && cardData.name) {
@@ -124,14 +127,12 @@ export function ReplayGameCard({ id, cardData, card, isTapped = false, useOldest
   
   const renderOverlays = () => (
       <>
-        {/* SUMMONING SICKNESS */}
         {isSummoningSick && (
             <div style={{...styles.summoningSicknessOverlay, zIndex: 5}}>
                 <span style={{...styles.summoningSicknessIcon, fontSize: '24px'}}>💤</span>
             </div>
         )}
 
-        {/* INNATE KEYWORDS (Top Left) */}
         {keywords.length > 0 && (
             <div style={{...styles.keywordIconsContainer, zIndex: 10}}>
                 {keywords.map(kw => {
@@ -146,26 +147,22 @@ export function ReplayGameCard({ id, cardData, card, isTapped = false, useOldest
             </div>
         )}
 
-        {/* LIVE P/T (Bottom Right) */}
         {hasPT && (
             <div style={{ ...styles.ptOverlay, backgroundColor: 'rgba(0,0,0,0.75)', color: 'white', fontWeight: 'bold', fontSize: '14px', zIndex: 10 }}>
                 {power}/{toughness}
             </div>
         )}
 
-        {/* +/- COUNTERS (Bottom Right, slightly higher) */}
         {netCounters !== 0 && (
             <div style={{ ...styles.counterBadge, zIndex: 10 }}>
                 <span style={styles.counterBadgeText}>{netCounters > 0 ? `+${netCounters}/+${netCounters}` : `${netCounters}/${netCounters}`}</span>
             </div>
         )}
         
-        {/* SPECIFIC KEYWORD COUNTERS FROM STYLES */}
         {(safeCounters['FLYING'] || safeCounters['Flying']) ? <div style={styles.flyingCounterBadge}>🕊️</div> : null}
         {(safeCounters['FIRST_STRIKE'] || safeCounters['First Strike']) ? <div style={styles.firstStrikeCounterBadge}>⚡</div> : null}
         {(safeCounters['LIFELINK'] || safeCounters['Lifelink']) ? <div style={styles.lifelinkCounterBadge}>❤️</div> : null}
         
-        {/* OTHER TRACKED COUNTERS */}
         {(safeCounters['CHARGE'] || safeCounters['Charge']) ? <div style={styles.chargeCounterBadge}>⚡ {safeCounters['CHARGE'] || safeCounters['Charge']}</div> : null}
         {(safeCounters['LORE'] || safeCounters['Lore']) ? <div style={styles.sagaLoreBadge}>📖 {safeCounters['LORE'] || safeCounters['Lore']}</div> : null}
       </>

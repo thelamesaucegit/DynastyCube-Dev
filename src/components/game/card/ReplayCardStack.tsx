@@ -23,28 +23,25 @@ export function ReplayCardStack({
 }) {
   const responsive = useResponsiveContext();
 
-  if (!responsive) {
-    return null;
-  }
+  if (!responsive) return null;
 
   const cardImageData = cardDataMap[group.card.name];
   const baseWidth = overrideWidth ?? responsive.battlefieldCardWidth;
   const baseHeight = overrideHeight ?? responsive.battlefieldCardHeight;
-  const typeLine = group.card.typeLine || '';
- const cardDataTypeLine = cardImageData?.card_type || '';
-  const cardTypes = group.card.cardTypes || [];
+
+  const safeTypeLine = group.card.typeLine || '';
+  const safeCardDataTypeLine = cardImageData?.card_type || '';
+  const safeCardTypes = group.card.cardTypes || [];
   
-  // IDENTIFY BASIC LANDS
-  // Check if it's a land AND if its type line includes the word 'Basic'
-  const isBasicLand = group.card.cardTypes.includes('Land') && (group.card.typeLine?.includes('Basic') || cardImageData?.card_type?.includes('Basic'));
+  const isBasicLand = safeCardTypes.includes('Land') && (safeTypeLine.includes('Basic') || safeCardDataTypeLine.includes('Basic'));
 
   if (group.count === 1) {
     if (!cardImageData) return null;
     
-    // BASIC LAND: Strip CardPreview and disable pointer events
     if (isBasicLand) {
         return (
-            <div style={{ pointerEvents: 'none', zIndex: -1 }}>
+            // CRITICAL FIX: Removed zIndex: -1 so the land doesn't sink beneath the background
+            <div style={{ pointerEvents: 'none' }}>
                 <ReplayGameCard
                   id={group.card.id}
                   cardData={{ name: group.card.name, card_type: cardImageData.card_type, image_url: cardImageData.image_url, oldest_image_url: cardImageData.oldest_image_url }}
@@ -58,7 +55,6 @@ export function ReplayCardStack({
         );
     }
 
-    // STANDARD CARD
     return (
       <CardPreview card={{ card_name: group.card.name, image_url: cardImageData.image_url, oldest_image_url: cardImageData.oldest_image_url }}>
         <ReplayGameCard
@@ -80,15 +76,15 @@ export function ReplayCardStack({
   const totalWidth = containerWidth + stackOffset * (group.count - 1);
 
   return (
-    <div style={{ position: 'relative', width: totalWidth, height: baseHeight, display: 'flex', alignItems: 'flex-end', pointerEvents: isBasicLand ? 'none' : 'auto', zIndex: isBasicLand ? -1 : 'auto' }}>
+    // CRITICAL FIX: Removed zIndex: -1 here as well
+    <div style={{ position: 'relative', width: totalWidth, height: baseHeight, display: 'flex', alignItems: 'flex-end', pointerEvents: isBasicLand ? 'none' : 'auto' }}>
       {group.cards.map((card, index) => {
         const individualCardImageData = cardDataMap[card.name];
         if (!individualCardImageData) return null;
         
-        // BASIC LAND STACK: No preview wrapper
         if (isBasicLand) {
             return (
-              <div key={card.id} style={{ position: 'absolute', left: index * stackOffset, top: 0, bottom: 0, display: 'flex', alignItems: 'flex-end', zIndex: index - 100 }}>
+              <div key={card.id} style={{ position: 'absolute', left: index * stackOffset, top: 0, bottom: 0, display: 'flex', alignItems: 'flex-end', zIndex: index }}>
                   <ReplayGameCard
                     id={card.id}
                     cardData={{ name: card.name, card_type: individualCardImageData.card_type, image_url: individualCardImageData.image_url, oldest_image_url: individualCardImageData.oldest_image_url }}
@@ -102,7 +98,6 @@ export function ReplayCardStack({
             );
         }
 
-        // STANDARD STACK
         return (
           <div key={card.id} style={{ position: 'absolute', left: index * stackOffset, top: 0, bottom: 0, display: 'flex', alignItems: 'flex-end', zIndex: index }}>
             <CardPreview card={{ card_name: card.name, image_url: individualCardImageData.image_url, oldest_image_url: individualCardImageData.oldest_image_url }}>
