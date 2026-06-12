@@ -17,14 +17,10 @@ async function fetchTokenImageFromScryfall(rawName: string): Promise<string | nu
     const cleanName = rawName.replace(/ Token$/i, '');
     
     const cachedImage = tokenImageCache[cleanName];
-    if (cachedImage !== undefined) {
-        return cachedImage;
-    }
+    if (cachedImage !== undefined) return cachedImage;
     
     const pending = pendingRequests[cleanName];
-    if (pending) {
-        return pending;
-    }
+    if (pending) return pending;
 
     const request = (async () => {
         try {
@@ -54,24 +50,24 @@ async function fetchTokenImageFromScryfall(rawName: string): Promise<string | nu
 }
 
 // ========================================================================
-// Keyword Icon Mapping
+// Keyword Icon Mapping (Aggressively maps ENUM formats)
 // ========================================================================
 const KEYWORD_ICONS: Record<string, string> = {
-  Flying: '🕊️',
-  'First Strike': '⚡',
-  'Double Strike': '🌩️',
-  Trample: '🦏',
-  Haste: '🏃',
-  Lifelink: '❤️',
-  Deathtouch: '☠️',
-  Menace: '👹',
-  Vigilance: '🛡️',
-  Reach: '🏹',
-  Defender: '🧱',
-  Indestructible: '💎',
-  Hexproof: '🌟',
-  Ward: '🔮',
-  Flash: '⚡'
+  FLYING: '🕊️', Flying: '🕊️',
+  FIRST_STRIKE: '⚡', 'First Strike': '⚡',
+  DOUBLE_STRIKE: '🌩️', 'Double Strike': '🌩️',
+  TRAMPLE: '🦏', Trample: '🦏',
+  HASTE: '🏃', Haste: '🏃',
+  LIFELINK: '❤️', Lifelink: '❤️',
+  DEATHTOUCH: '☠️', Deathtouch: '☠️',
+  MENACE: '👹', Menace: '👹',
+  VIGILANCE: '🛡️', Vigilance: '🛡️',
+  REACH: '🏹', Reach: '🏹',
+  DEFENDER: '🧱', Defender: '🧱',
+  INDESTRUCTIBLE: '💎', Indestructible: '💎',
+  HEXPROOF: '🌟', Hexproof: '🌟',
+  WARD: '🔮', Ward: '🔮',
+  FLASH: '⚡', Flash: '⚡'
 };
 
 // ========================================================================
@@ -92,27 +88,22 @@ export function ReplayGameCard({ id, cardData, card, isTapped = false, useOldest
   const dbImageUrl = getCardImageUrl(cardData, useOldestArt);
   const [scryfallUrl, setScryfallUrl] = useState<string | null>(null);
 
-    if (card?.power || cardData.name.toLowerCase().includes('token') || Object.keys(card?.counters || {}).length > 0) {
-      console.log(`[Card Forensics] ${cardData.name}:`, JSON.parse(JSON.stringify(card)));
-  }
-  // 1. EXTRACT ALL LIVE STATS & STATUSES
-  const hasPT = card?.power !== undefined && card?.toughness !== undefined;
+  // 1. EXTRACT ALL LIVE STATS & STATUSES (Using the strict ClientCard interface names)
+  const hasPT = card?.power !== undefined && card?.toughness !== undefined && card?.power !== null;
   const power = card?.power;
   const toughness = card?.toughness;
   
-  // Safely cast counters to a generic dictionary to bypass strict CounterType indexing rules
   const safeCounters = (card?.counters as Record<string, number> | undefined) || {};
   
-  const plusOneCounters = safeCounters['+1/+1'] || 0;
-  const minusOneCounters = safeCounters['-1/-1'] || 0;
+  // CRITICAL FIX: Aggressively hunt for the serialized Enum value for counters
+  const plusOneCounters = safeCounters['PLUS_ONE_PLUS_ONE'] || safeCounters['P1P1'] || safeCounters['+1/+1'] || 0;
+  const minusOneCounters = safeCounters['MINUS_ONE_MINUS_ONE'] || safeCounters['M1M1'] || safeCounters['-1/-1'] || 0;
   const netCounters = plusOneCounters - minusOneCounters;
 
-  // Safely cast the card object to extract potentially undocumented boolean flags and arrays without alerting the compiler
-  const safeCard = card as Record<string, unknown> | undefined;
-
-  const isToken = Boolean(safeCard?.isToken) || cardData.card_type?.toLowerCase().includes('token') || cardData.name.toLowerCase().includes('token');
-  const isSummoningSick = Boolean(safeCard?.isSummoningSick || safeCard?.sickness);
-  const keywords: string[] = Array.isArray(safeCard?.keywords) ? (safeCard?.keywords as string[]) : [];
+  // CRITICAL FIX: Check the official `hasSummoningSickness` interface property
+  const isSummoningSick = Boolean(card?.hasSummoningSickness);
+  const isToken = Boolean(card?.isToken) || cardData.card_type?.toLowerCase().includes('token') || cardData.name.toLowerCase().includes('token');
+  const keywords: string[] = Array.isArray(card?.keywords) ? (card?.keywords as string[]) : [];
   
   // Fetch Scryfall Token Art
   useEffect(() => {
@@ -144,7 +135,7 @@ export function ReplayGameCard({ id, cardData, card, isTapped = false, useOldest
         {keywords.length > 0 && (
             <div style={{...styles.keywordIconsContainer, zIndex: 10}}>
                 {keywords.map(kw => {
-                    const icon = KEYWORD_ICONS[kw];
+                    const icon = KEYWORD_ICONS[kw] || KEYWORD_ICONS[kw.toUpperCase()];
                     if (!icon) return null;
                     return (
                         <div key={kw} style={styles.keywordIconWrapper} title={kw}>
@@ -170,13 +161,13 @@ export function ReplayGameCard({ id, cardData, card, isTapped = false, useOldest
         )}
         
         {/* SPECIFIC KEYWORD COUNTERS FROM STYLES */}
-        {safeCounters['Flying'] ? <div style={styles.flyingCounterBadge}>🕊️</div> : null}
-        {safeCounters['First Strike'] ? <div style={styles.firstStrikeCounterBadge}>⚡</div> : null}
-        {safeCounters['Lifelink'] ? <div style={styles.lifelinkCounterBadge}>❤️</div> : null}
+        {(safeCounters['FLYING'] || safeCounters['Flying']) ? <div style={styles.flyingCounterBadge}>🕊️</div> : null}
+        {(safeCounters['FIRST_STRIKE'] || safeCounters['First Strike']) ? <div style={styles.firstStrikeCounterBadge}>⚡</div> : null}
+        {(safeCounters['LIFELINK'] || safeCounters['Lifelink']) ? <div style={styles.lifelinkCounterBadge}>❤️</div> : null}
         
         {/* OTHER TRACKED COUNTERS */}
-        {safeCounters['Charge'] ? <div style={styles.chargeCounterBadge}>⚡ {safeCounters['Charge']}</div> : null}
-        {safeCounters['Lore'] ? <div style={styles.sagaLoreBadge}>📖 {safeCounters['Lore']}</div> : null}
+        {(safeCounters['CHARGE'] || safeCounters['Charge']) ? <div style={styles.chargeCounterBadge}>⚡ {safeCounters['CHARGE'] || safeCounters['Charge']}</div> : null}
+        {(safeCounters['LORE'] || safeCounters['Lore']) ? <div style={styles.sagaLoreBadge}>📖 {safeCounters['LORE'] || safeCounters['Lore']}</div> : null}
       </>
   );
 
