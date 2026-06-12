@@ -211,30 +211,52 @@ export async function purchaseHomePlaneBooster(): Promise<{ success: boolean; me
 export async function searchCardsForManipulation(query: string) {
     try {
         const supabase = await createServerClient();
-        
-        const { data: activeDraft } = await supabase.from('draft_sessions').select('id').eq('status', 'active').maybeSingle();
+
+        const { data: activeDraft } = await supabase
+            .from('draft_sessions')
+            .select('id')
+            .eq('status', 'active')
+            .maybeSingle();
         const isActiveDraft = !!activeDraft;
 
-        let dbQuery = supabase
+        // Query card_pools
+        let poolQuery = supabase
             .from('card_pools')
             .select('id, card_name, card_set, cubucks_cost, image_url, pool_name')
             .ilike('card_name', `%${query}%`)
             .eq('hidden', false)
             .limit(30);
 
+        // Only exclude draft pool cards if a draft is active
         if (isActiveDraft) {
-            dbQuery = dbQuery.neq('pool_name', 'draft');
+            poolQuery = poolQuery.neq('pool_name', 'draft');
         }
 
-        const { data: cards, error } = await dbQuery;
-        if (error || !cards) return { success: false, cards: [] };
+        // Query the_chamber (no draft restriction applies here)
+        const chamberQuery = supabase
+            .from('the_chamber')
+            .select('id, card_name, card_set, cubucks_cost, image_url, pool_name')
+            .ilike('card_name', `%${query}%`)
+            .eq('hidden', false)
+            .limit(30);
+
+        const [{ data: poolCards, error: poolError }, { data: chamberCards, error: chamberError }] =
+            await Promise.all([poolQuery, chamberQuery]);
+
+        if (poolError || chamberError) return { success: false, cards: [] };
+
+        const cards = [...(poolCards || []), ...(chamberCards || [])];
         if (cards.length === 0) return { success: true, cards: [] };
 
+        // Filter out cards already drafted (only relevant for card_pools, but safe to run across all ids)
         const cardIds = cards.map(c => c.id);
-        const { data: drafted } = await supabase.from('team_draft_picks').select('card_pool_id').in('card_pool_id', cardIds);
-        const draftedIds = new Set(drafted?.map(d => d.card_pool_id) || []);
+        const { data: drafted } = await supabase
+            .from('team_draft_picks')
+            .select('card_pool_id')
+            .in('card_pool_id', cardIds);
 
-        const eligibleCards = cards.filter(c => !draftedIds.has(c.id)).slice(0, 10); 
+        const draftedIds = new Set(drafted?.map(d => d.card_pool_id) || []);
+        const eligibleCards = cards.filter(c => !draftedIds.has(c.id)).slice(0, 10);
 
         return { success: true, cards: eligibleCards };
     } catch (e) {
@@ -244,7 +266,7 @@ export async function searchCardsForManipulation(query: string) {
 }
 
 export async function purchaseMarketManipulation(
-    cardPoolId: string, 
+    cardPoolId: string,
     direction: 'increase' | 'decrease'
 ): Promise<{ success: boolean; message?: string; error?: string }> {
     try {
@@ -254,34 +276,88 @@ export async function purchaseMarketManipulation(
 
         const COST = 100;
 
-        const { data: card } = await supabase.from('card_pools').select('id, card_name, cubucks_cost, pool_name').eq('id', cardPoolId).single();
+        // Check card_pools first, then fall back to the_chamber
+        let card: { id: string; card_name: string; cubucks_cost: number; pool_name: string; source: 'card_pools' | 'the_chamber' } | null = null;
+
+        const { data: poolCard } = await supabase
+            .from('card_pools')
+            .select('id, card_name, cubucks_cost, pool_name')
+            .eq('id', cardPoolId)
+            .maybeSingle();
+
+        if (poolCard) {
+            card = { ...poolCard, source: 'card_pools' };
+        } else {
+            const { data: chamberCard } = await supabase
+                .from('the_chamber')
+                .select('id, card_name, cubucks_cost, pool_name')
+                .eq('id', cardPoolId)
+                .maybeSingle();
+
+            if (chamberCard) {
+                card = { ...chamberCard, source: 'the_chamber' };
+            }
+        }
+
         if (!card) return { success: false, error: "Card not found." };
 
-        const { data: drafted } = await supabase.from('team_draft_picks').select('id').eq('card_pool_id', cardPoolId).maybeSingle();
+        // Draft pick check (only meaningful for card_pools, but harmless to run universally)
+        const { data: drafted } = await supabase
+            .from('team_draft_picks')
+            .select('id')
+            .eq('card_pool_id', cardPoolId)
+            .maybeSingle();
         if (drafted) return { success: false, error: "This card was just acquired by a team and is no longer eligible." };
 
-        const { data: activeDraft } = await supabase.from('draft_sessions').select('id').eq('status', 'active').maybeSingle();
-        if (activeDraft && card.pool_name === 'draft') return { success: false, error: "Cards in the Draft Pool are ineligible during an active draft." };
+        // Draft session restriction: only block card_pools cards with pool_name='draft'
+        const { data: activeDraft } = await supabase
+            .from('draft_sessions')
+            .select('id')
+            .eq('status', 'active')
+            .maybeSingle();
+        if (activeDraft && card.source === 'card_pools' && card.pool_name === 'draft') {
+            return { success: false, error: "Cards in the Draft Pool are ineligible during an active draft." };
+        }
 
         const currentCost = card.cubucks_cost || 1;
         const newCost = direction === 'increase' ? currentCost + 1 : currentCost - 1;
-        
+
         if (newCost < 1) {
             return { success: false, error: "Market failure: A card's cost cannot be reduced below Ç1." };
         }
 
-        const payment = await processEssenceTransaction(supabase, user.id, COST, `Market Manipulation: ${direction}d cost of ${card.card_name}`);
+        const payment = await processEssenceTransaction(
+            supabase,
+            user.id,
+            COST,
+            `Market Manipulation: ${direction}d cost of ${card.card_name}`
+        );
         if (!payment.success) return { success: false, error: payment.error };
 
-        const { error: updateError } = await supabase.from('card_pools').update({ cubucks_cost: newCost }).eq('id', cardPoolId);
-        
+        const table = card.source;
+        const { error: updateError } = await supabase
+            .from(table)
+            .update({ cubucks_cost: newCost })
+            .eq('id', cardPoolId);
+
         if (updateError) {
-            await supabase.from('users').update({ essence_balance: (await supabase.from('users').select('essence_balance').eq('id', user.id).single()).data?.essence_balance + COST }).eq('id', user.id);
+            await supabase
+                .from('users')
+                .update({
+                    essence_balance:
+                        (await supabase.from('users').select('essence_balance').eq('id', user.id).single())
+                            .data?.essence_balance + COST
+                })
+                .eq('id', user.id);
             return { success: false, error: "Database error altering market. Essence refunded." };
         }
 
-        await logSystemEvent("Marketplace", "info", `User ${user.id} manipulated market: ${card.card_name} changed from ${currentCost} to ${newCost}.`);
-        
+        await logSystemEvent(
+            "Marketplace",
+            "info",
+            `User ${user.id} manipulated market: ${card.card_name} changed from ${currentCost} to ${newCost}.`
+        );
+
         return { success: true, message: `Successfully ${direction}d the cost of ${card.card_name} to Ç${newCost}!` };
     } catch (e) {
         console.error("Error manipulating market:", e);
