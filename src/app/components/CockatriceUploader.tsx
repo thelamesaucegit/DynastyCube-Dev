@@ -104,7 +104,7 @@ export default function CockatriceUploader() {
       const arrayBuffer = await file.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
 
-      // 1. Load Protobuf Schema (Simplified mapping for demonstration)
+      // 1. Load Protobuf Schema
       const root = new protobuf.Root();
       root.define("cockatrice")
           .add(new protobuf.Type("GameReplay")
@@ -123,7 +123,6 @@ export default function CockatriceUploader() {
       const { success, cards } = await fetchReplayMetadata(uniqueNames);
       if (!success) throw new Error("Failed to fetch card metadata from the database.");
 
-      // Create a dictionary for instant lookups during translation
       const cardDbMap = new Map<string, any>();
       cards?.forEach(c => cardDbMap.set(c.card_name.toLowerCase(), c));
 
@@ -131,18 +130,39 @@ export default function CockatriceUploader() {
       const argentumReplay = buildArgentumStates(replayObject, cardDbMap);
 
       if (argentumReplay.length > 0) {
-         console.log("Final Argentum Replay Payload:", argentumReplay);
-         toast.success(`Successfully converted and enriched ${argentumReplay.length} game states!`);
+         console.log(`Converted ${argentumReplay.length} states. Uploading to database...`);
+         
+         // --- THE NEW API CALL ---
+         const response = await fetch('/api/pvp-replays', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({
+                 argentum_game_states: argentumReplay,
+                 original_filename: file.name,
+                 // TODO: You can pass match_id, team1_id, etc. here if you have them in the component state!
+             })
+         });
+
+         const result = await response.json();
+
+         if (!response.ok || !result.success) {
+             throw new Error(result.error || "Failed to save the replay to the database.");
+         }
+
+         toast.success(`Successfully saved PvP replay to the database!`);
+      } else {
+         toast.warning("Replay was parsed, but no valid game states were generated.");
       }
 
     } catch (error) {
       console.error("Error decoding .cor file:", error);
-      toast.error("Failed to parse the Cockatrice Replay. Ensure it is a valid .cor file.");
+      toast.error(error instanceof Error ? error.message : "Failed to parse the Cockatrice Replay.");
     } finally {
       setIsProcessing(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
+
 
   /**
    * The State Machine Translator
