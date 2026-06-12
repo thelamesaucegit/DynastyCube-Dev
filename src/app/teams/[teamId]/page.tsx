@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
+
 import { TrophyCase } from "@/app/components/team/TrophyCase";
 import { TeamEssenceDisplay } from "@/app/components/team/TeamEssenceDisplay";
 import { getTeamByShortName } from "@/app/actions/teamActions";
@@ -17,6 +18,8 @@ import { getAutoDraftPreview, toggleQueuePickVote, type AutoDraftPreviewResult }
 import { getCurrentUserRolesForTeam, getTeamMembersWithRoles, type TeamMemberWithRoles } from "@/app/actions/roleActions";
 import { getRoleEmoji, getRoleDisplayName } from "@/app/utils/roleUtils";
 import { getTeamHats } from "@/app/actions/hatActions";
+import { createIdentitySwapPoll, createTeamPoll } from "@/app/actions/voteActions";
+
 import { DraftInterface } from "@/app/components/DraftInterface";
 import { DeckBuilder } from "@/app/components/DeckBuilder";
 import { TeamRoles } from "@/app/components/TeamRoles";
@@ -26,11 +29,12 @@ import { MatchSchedulingWidget } from "@/app/components/team/MatchSchedulingWidg
 import { TeamVoting } from "@/app/components/team/TeamVoting";
 import { DraftStatusWidget } from "@/app/components/DraftStatusWidget";
 import { DraftQueueManager } from "@/app/components/DraftQueueManager";
+import CockatriceUploader from "@/app/components/CockatriceUploader"; // THE FIX: Imported the new uploader!
+
 import type { DraftPick, Deck } from "@/app/actions/draftActions";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
 import { Button } from "@/app/components/ui/button";
-import { createIdentitySwapPoll, createTeamPoll } from "@/app/actions/voteActions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
 import { MoonStar, Sun, Target, Layers, BookOpen, ArrowLeftRight, Swords, Crown, Users, Loader2, AlertCircle, ExternalLink, CalendarDays, CheckCircle2, XCircle, Vote } from "lucide-react";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -74,7 +78,6 @@ type TabType = "picks" | "decks" | "members" | "draft" | "trades" | "matches" | 
 export default function TeamPage() {
   const params = useParams();
   const teamShortName = params?.teamId as string;
-
   const { user } = useAuth();
   const { useOldestArt } = useSettings();
 
@@ -86,21 +89,26 @@ export default function TeamPage() {
   const [teamHats, setTeamHats] = useState<TeamHatData[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>("picks");
+
   const [undrafting, setUndrafting] = useState<string | null>(null);
   const [undraftMessage, setUndraftMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [cubucksRefreshKey, setCubucksRefreshKey] = useState(0);
+
   const [seasonPhase, setSeasonPhase] = useState<string | null>(null);
   const [togglingKeeper, setTogglingKeeper] = useState<string | null>(null);
   const isFreeAgencyActive = seasonPhase === "season";
+
   const [draftPreview, setDraftPreview] = useState<AutoDraftPreviewResult | null>(null);
   const [activeDraftSessionId, setActiveDraftSessionId] = useState<string | null>(null);
   const [isVoting, setIsVoting] = useState(false);
 
   const isUserTeamMember = team?.members?.some((member) => member.user_id === user?.id) || userRoles.length > 0;
+  const hasMatchPermissions = userRoles.includes("captain") || userRoles.includes("pilot");
 
   const loadTeamData = useCallback(async () => {
     if (!teamShortName) { return; }
     setLoading(true);
+
     try {
       const { team: foundTeam, error: teamError } = await getTeamByShortName(teamShortName);
       if (teamError || !foundTeam) {
@@ -110,8 +118,10 @@ export default function TeamPage() {
       const seasonResult = await getCurrentSeason();
       const currentPhase = seasonResult.season?.phase || null;
       setSeasonPhase(currentPhase);
+
       const teamUUID = foundTeam.id;
       let sessionId: string | null = null;
+
       if (currentPhase === 'draft') {
         const { session: activeSession } = await getActiveDraftSession();
         sessionId = activeSession?.id || null;
@@ -157,6 +167,7 @@ export default function TeamPage() {
 
       const isMember = foundTeam.members?.some((m) => m.user_id === user?.id) || rolesResult.roles.length > 0;
       let defaultTab: TabType = "picks";
+
       if (currentPhase === "preseason" || currentPhase === "draft") {
         defaultTab = isMember ? "draft" : "picks";
       } else if (currentPhase === "season" || currentPhase === "playoffs") {
@@ -164,6 +175,7 @@ export default function TeamPage() {
       } else if (currentPhase === "postseason") {
         defaultTab = isMember ? "votes" : "picks";
       }
+
       setActiveTab(defaultTab);
     } catch (error) {
       console.error("[TeamPage] Critical error loading team data:", error);
@@ -182,6 +194,7 @@ export default function TeamPage() {
     const { picks } = await getTeamDraftPicks(team.id, activeDraftSessionId);
     setDraftPicks(picks);
     setCubucksRefreshKey((prev) => prev + 1);
+
     const preview = await getAutoDraftPreview(team.id, activeDraftSessionId);
     setDraftPreview(preview);
   };
@@ -215,13 +228,16 @@ export default function TeamPage() {
       return;
     }
     if (!pick.id || undrafting || !team || !user) return;
+
     const hasCutPermission = userRoles.includes("captain") || userRoles.includes("pilot") || userRoles.includes("broker");
 
     if (hasCutPermission) {
         const confirmed = window.confirm(`Are you sure you want to cut "${pick.card_name}"? The Çubucks spent will be refunded to the team.`);
         if (!confirmed) return;
+
         setUndrafting(pick.id);
         setUndraftMessage(null);
+
         try {
           const result = await refundDraftPick(team.id, pick.id, pick.card_id, pick.card_name);
           if (result.success) {
@@ -243,6 +259,7 @@ export default function TeamPage() {
 
     const confirmed = window.confirm(`You do not have direct permission to cut cards. Would you like to initiate a team vote to cut "${pick.card_name}"?`);
     if (!confirmed) return;
+
     setUndrafting(pick.id);
     try {
         const endsAt = new Date();
@@ -258,6 +275,7 @@ export default function TeamPage() {
             [`Cut ${pick.card_name}`, "Keep it"],
             user.id
         );
+
         if (result.success) {
             setUndraftMessage({ type: "success", text: `A 12-hour team vote to cut ${pick.card_name} has been initiated! Check the Votes tab.` });
         } else {
@@ -280,6 +298,7 @@ export default function TeamPage() {
       return;
     }
     setTogglingKeeper(pick.id);
+
     try {
       const result = await toggleKeeperStatus(pick.id, !pick.is_keeper);
       if (result.success) {
@@ -425,7 +444,6 @@ export default function TeamPage() {
       
       <DraftStatusWidget variant="team" teamId={team.id} />
 
-      {/* THE FIX: THE GREAT AURORA CARD WITH CSS INJECTION */}
       {isUserTeamMember && (team.short_name === 'changelings' || team.short_name === 'mimics') && seasonPhase !== 'draft' && (
         <Card className="mb-6 aurora-card-bg">
           <div className="aurora-stream" />
@@ -480,6 +498,7 @@ export default function TeamPage() {
             </TabsTrigger>
           ))}
         </TabsList>
+
         <Card>
           <CardContent className="pt-6">
             <TabsContent value="draft">
@@ -551,6 +570,7 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
+
             <TabsContent value="picks">
               {activeTab === "picks" && (
                 <div>
@@ -562,12 +582,14 @@ export default function TeamPage() {
                       <Badge variant="outline" className="bg-primary/5"> Keepers: {currentKeepersCount} / 8 </Badge>
                     )}
                   </div>
+
                   {undraftMessage && (
                     <div className={`mb-4 p-4 rounded-lg border flex items-center gap-2 ${ undraftMessage.type === "success" ? "bg-accent text-foreground" : "bg-destructive/10 border-destructive/30 text-destructive" }`} >
                       {undraftMessage.type === "success" ? <CheckCircle2 className="size-4 shrink-0" /> : <XCircle className="size-4 shrink-0" />}
                       {undraftMessage.text}
                     </div>
                   )}
+
                   {draftPicks.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground">
                       <Layers className="size-10 mx-auto mb-3 opacity-50" />
@@ -581,6 +603,7 @@ export default function TeamPage() {
                         const isToggling = togglingKeeper === pick.id;
                         const isKeeper = pick.is_keeper;
                         const imageUrl = getCardImageUrl(pick, useOldestArt);
+
                         return (
                           <div key={pick.id} className={`group relative bg-muted rounded-lg overflow-hidden border transition-all hover:shadow-md ${isKeeper && isUserTeamMember ? 'ring-2 ring-green-500 shadow-[0_0_15px_rgba(34,197,94,0.3)] border-green-500' : 'hover:border-primary/50'}`}>
                             {imageUrl && (
@@ -605,6 +628,7 @@ export default function TeamPage() {
                                 <Badge className="mt-1.5 bg-green-600 hover:bg-green-600 text-[10px] uppercase font-bold tracking-wider"> KEEPER </Badge>
                               )}
                             </div>
+
                             {isUserTeamMember && (
                               <>
                                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
@@ -628,6 +652,7 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
+
             <TabsContent value="decks">
               {activeTab === "decks" && (
                 <div>
@@ -643,6 +668,7 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
+
             <TabsContent value="trades">
               {activeTab === "trades" && (
                 <div>
@@ -663,6 +689,7 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
+
             <TabsContent value="matches">
               {activeTab === "matches" && (
                 <div className="space-y-6">
@@ -672,14 +699,28 @@ export default function TeamPage() {
                     </h2>
                     <p className="text-sm text-muted-foreground">Schedule match times and record results</p>
                   </div>
+
                   <MatchSchedulingWidget teamId={team.id} userRoles={userRoles} />
+
                   <div>
                     <h3 className="text-lg font-semibold mb-4">Record Match Results</h3>
                     <MatchRecording teamId={team.id} />
                   </div>
+
+                  {/* THE FIX: COCKATRICE UPLOADER SECTION */}
+                  {isUserTeamMember && hasMatchPermissions && (
+                    <div className="pt-6 border-t border-border/50 mt-6">
+                      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                        Upload Match Replay
+                      </h3>
+                      <CockatriceUploader />
+                    </div>
+                  )}
+
                 </div>
               )}
             </TabsContent>
+
             <TabsContent value="votes">
               {activeTab === "votes" && isUserTeamMember && (
                 <div>
@@ -693,6 +734,7 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
+
             <TabsContent value="members">
               {activeTab === "members" && (
                 <div className="space-y-8">
@@ -751,6 +793,7 @@ export default function TeamPage() {
                 </div>
               )}
             </TabsContent>
+
             {activeTab === "trophies" && (
               <div>
                 <div className="mb-6">
@@ -762,6 +805,7 @@ export default function TeamPage() {
                 <TrophyCase teamId={team.id} />
               </div>
             )}
+
           </CardContent>
         </Card>
       </Tabs>
