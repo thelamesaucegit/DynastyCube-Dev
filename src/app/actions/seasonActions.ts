@@ -5,6 +5,9 @@ import { createServerClient } from "@/lib/supabase";
 import { importNextSetToChamber } from "./chamberActions";
 import { generateDraftOrder } from "./draftOrderActions";
 import { logSystemEvent } from "@/lib/systemLogger";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+
 
 export interface CardCostChange {
   card_id: string;
@@ -12,6 +15,28 @@ export interface CardCostChange {
   old_cost: number;
   new_cost: number;
   was_drafted: boolean;
+}
+
+// ============================================================================
+// DIAGNOSTIC TRACKER HELPER
+// ============================================================================
+async function trackTargetCard(supabase: SupabaseClient, stepContext: string) {
+    const targetId = "58fadab6-317b-43cb-aa0d-8bffdc896d13"; // Black Lotus
+    try {
+        const { data } = await supabase
+            .from('card_pools')
+            .select('card_name, cubucks_cost, pool_name, was_drafted, times_drafted')
+            .eq('id', targetId)
+            .maybeSingle();
+
+        if (data) {
+            console.log(`[CardTracker] 🔍 [${stepContext}] ${data.card_name} | Cost: ${data.cubucks_cost} | Pool: ${data.pool_name} | Drafted: ${data.was_drafted} | Times Drafted: ${data.times_drafted}`);
+        } else {
+            console.log(`[CardTracker] 🔍 [${stepContext}] Card not found in DB! (It may have been purged or deleted)`);
+        }
+    } catch (e) {
+        console.error(`[CardTracker] ❌ [${stepContext}] Error fetching target card:`, e);
+    }
 }
 
 /**
@@ -33,6 +58,8 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
         const { error: backupErr } = await supabase.rpc('backup_rollover_state');
         if (backupErr) throw new Error(`Failed to create staging snapshot: ${backupErr.message}`);
 
+        await trackTargetCard(supabase, "0. Start of Pipeline");
+
         // =====================================================================
         // --- EXECUTE THE VALVE ---
         // =====================================================================
@@ -47,7 +74,6 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
                 .maybeSingle();
 
             let releaseValve = false;
-
             if (valvePoll) {
                 const { data: options } = await supabase.from('poll_options').select('id, option_text').eq('poll_id', valvePoll.id);
                 const { data: votes } = await supabase.from('poll_votes').select('option_id, vote_weight').eq('poll_id', valvePoll.id);
@@ -86,6 +112,8 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
             console.error("[SeasonRollover] Error executing The Valve:", valveCatchErr);
             await logSystemEvent("TheValve", "warn", `Error executing The Valve logic`, { error: String(valveCatchErr) });
         }
+
+        await trackTargetCard(supabase, "1. After The Valve");
 
         // =====================================================================
         // --- STEP 1: IDENTIFY OLD & CREATE NEW SEASON ---
@@ -130,20 +158,24 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
             .from('team_draft_picks')
             .update({ is_keeper: true })
             .contains('scars', ['escape']);
-
         if (protectErr) console.error("[SeasonRollover] Failed to protect escape cards:", protectErr);
 
+        await trackTargetCard(supabase, "2. Before Cost Rollover RPC");
+
         // =====================================================================
-               // =====================================================================
         // --- STEP 2: ROLLOVER COSTS & NATURAL RETIREMENT ---
         console.log("[SeasonRollover] Running Cost Economy & Retirements...");
         const { error: costErr } = await supabase.rpc('rollover_season_costs', { p_new_season_id: newSeason.id, p_previous_season_id: oldSeason.id });
         if (costErr) throw new Error(`Cost Rollover RPC failed: ${costErr.message}`);
 
+        await trackTargetCard(supabase, "3. After Cost Rollover RPC");
+
         // THE FIX 1: Run natural Free Agency purge (Drops 0-cost cards immediately)
         console.log("[SeasonRollover] Processing Natural Free Agency (0-cost cards)...");
         const { error: natFreeErr } = await supabase.rpc('process_natural_free_agency');
         if (natFreeErr) throw new Error(`Natural Free Agency RPC failed: ${natFreeErr.message}`);
+
+        await trackTargetCard(supabase, "4. After Natural Free Agency RPC");
 
         // =====================================================================
         // --- STEP 3: PROMOTE EXISTING STAGING POOLS ---
@@ -152,6 +184,7 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
         const { error: promoteErr } = await supabase.rpc('promote_staging_pools');
         if (promoteErr) throw new Error(`Promote Staging Pools RPC failed: ${promoteErr.message}`);
 
+        await trackTargetCard(supabase, "5. After Promote Staging Pools RPC");
 
        // =====================================================================
         // --- NEW META EVENT: THE RAT PLAGUE ---
@@ -169,6 +202,8 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
             console.error("[SeasonRollover] Failed to execute Rat Plague:", ratCatchErr);
         }
 
+        await trackTargetCard(supabase, "6. After Rat Plague RPC");
+
         // =====================================================================
         // --- STEP 4: CULL POOLS TO MAKE ROOM FOR THE CHAMBER ---
         // Now that Draft holds exactly the survivors, we trim the fat if needed.
@@ -176,11 +211,15 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
         const { error: cullErr } = await supabase.rpc('cull_pools_for_chamber');
         if (cullErr) throw new Error(`Cull Pools RPC failed: ${cullErr.message}`);
 
+        await trackTargetCard(supabase, "7. After Cull Pools RPC");
+
         // =====================================================================
         // --- STEP 5: FLUSH THE CHAMBER TABLE ---
         console.log("[SeasonRollover] Flushing The Chamber to Card Pools...");
         const { error: flushErr } = await supabase.rpc('flush_chamber_to_pools');
         if (flushErr) throw new Error(`Flush Chamber RPC failed: ${flushErr.message}`);
+
+        await trackTargetCard(supabase, "8. After Flush Chamber RPC");
 
         // =====================================================================
         // --- ESCAPE ROOM: DOWNGRADE TO TEMPORARY & SPIKE COSTS ---
@@ -211,7 +250,6 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
         const { error: resetTeamsError } = await supabase.from('teams').update({ is_escaped: false, locked_in: false }).not('id', 'is', null);
         if (resetTeamsError) throw new Error(`Failed to reset team status: ${resetTeamsError.message}`);
 
-
         // =====================================================================
         // --- STEP 6: CALCULATE AND SET DYNAMIC CAP ---
         console.log("[SeasonRollover] Calculating dynamic salary cap...");
@@ -224,10 +262,13 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
         const { error: allocErr } = await supabase.rpc('allocate_season_budgets', { p_season_id: newSeason.id });
         if (allocErr) throw new Error(`Budget Allocation RPC failed: ${allocErr.message}`);
         console.log("[SeasonRollover] 🏦 Team budgets allocated and ledger updated.");
+
+        await trackTargetCard(supabase, "9. After Budgets Allocated");
       
         // --- STEP 7: REFILL THE CHAMBER & BACKFILL METADATA ---
         console.log("[SeasonRollover] Refilling The Chamber...");
         const importResult = await importNextSetToChamber();
+
         if (!importResult.success) {
             console.warn("[SeasonRollover] Chamber import returned an issue:", importResult.message);
         } else {
@@ -253,16 +294,20 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
             if (allResortIds && allResortIds.length > 0) {
                 const shuffled = allResortIds.sort(() => 0.5 - Math.random());
                 const selected = shuffled.slice(0, 20).map(card => card.id);
+
                 const { error: revealErr } = await supabase
                     .from('resort_pool')
                     .update({ hidden: false })
                     .in('id', selected);
+
                 if (revealErr) throw new Error(revealErr.message);
                 console.log(`[SeasonRollover] Successfully revealed 20 random Resort Pool lands!`);
             }
         } catch (resortErr) {
             console.error("[SeasonRollover] Failed to rotate Resort Pool:", resortErr);
         }
+
+        await trackTargetCard(supabase, "10. Before Draft Order Generation");
 
         // =====================================================================
         // --- STEP 8: DRAFT ORDER & SCHEDULING ---
@@ -288,10 +333,14 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
             start_time: startTime,
             started_by: null,
         });
+
         if (draftErr) throw new Error(`Failed to insert draft session: ${JSON.stringify(draftErr)}`);
         
         await supabase.from('countdown_timers').delete().eq('is_active', true);
         console.log("[SeasonRollover] ✅ Rollover complete! New draft scheduled.");
+
+        await trackTargetCard(supabase, "11. End of Rollover Pipeline");
+
         return { success: true };
 
     } catch (error) {
