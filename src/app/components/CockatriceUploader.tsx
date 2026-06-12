@@ -1,14 +1,12 @@
 //src/app/components/CockatriceUploader.tsx
-
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/app/components/ui/card";
-import { Button } from "@/app/components/ui/button";
-import { Upload, FileCode2, Loader2 } from "lucide-react";
+import { Upload, FileCode2, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import * as protobuf from "protobufjs";
-import { fetchReplayMetadata } from "@/app/actions/replayActions"; // The server action we just made!
+import { fetchReplayMetadata, getReplayUploaderData, findMatchIdForTeams, type DbCardMeta, type UploaderTeam } from "@/app/actions/replayActions";
 
 // ============================================================================
 // ARGENTUM STATE TYPES 
@@ -78,13 +76,46 @@ export default function CockatriceUploader() {
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Recursive helper to find all "cardName" or "name" fields in the raw Protobuf JSON
+  // Form State
+  const [teams, setTeams] = useState<UploaderTeam[]>([]);
+  const [activeWeekId, setActiveWeekId] = useState<string | null>(null);
+  const [team1Id, setTeam1Id] = useState<string>("");
+  const [team2Id, setTeam2Id] = useState<string>("");
+  const [matchId, setMatchId] = useState<string | null>(null);
+  const [isSearchingMatch, setIsSearchingMatch] = useState(false);
+
+  useEffect(() => {
+      const loadContext = async () => {
+          const res = await getReplayUploaderData();
+          if (res.success) {
+              setTeams(res.teams);
+              setActiveWeekId(res.activeWeekId);
+              if (res.userTeamId) setTeam1Id(res.userTeamId);
+          }
+      };
+      loadContext();
+  }, []);
+
+  useEffect(() => {
+      const findMatch = async () => {
+          if (team1Id && team2Id && activeWeekId) {
+              setIsSearchingMatch(true);
+              const res = await findMatchIdForTeams(team1Id, team2Id, activeWeekId);
+              setMatchId(res.matchId);
+              setIsSearchingMatch(false);
+          } else {
+              setMatchId(null);
+          }
+      };
+      findMatch();
+  }, [team1Id, team2Id, activeWeekId]);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const extractUniqueCardNames = (obj: any, namesSet = new Set<string>()): string[] => {
     if (!obj) return Array.from(namesSet);
     if (typeof obj === 'object') {
         if (obj.cardName && typeof obj.cardName === 'string') namesSet.add(obj.cardName);
         if (obj.name && typeof obj.name === 'string') namesSet.add(obj.name);
-        
         Object.values(obj).forEach(val => extractUniqueCardNames(val, namesSet));
     } else if (Array.isArray(obj)) {
         obj.forEach(item => extractUniqueCardNames(item, namesSet));
@@ -93,6 +124,10 @@ export default function CockatriceUploader() {
   };
 
   const processCorFile = async (file: File) => {
+    if (!team1Id || !team2Id) {
+        toast.error("Please select both teams before uploading.");
+        return;
+    }
     if (!file.name.endsWith('.cor')) {
       toast.error("Invalid file type. Please upload a .cor file.");
       return;
@@ -104,7 +139,6 @@ export default function CockatriceUploader() {
       const arrayBuffer = await file.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
 
-      // 1. Load Protobuf Schema
       const root = new protobuf.Root();
       root.define("cockatrice")
           .add(new protobuf.Type("GameReplay")
@@ -112,43 +146,43 @@ export default function CockatriceUploader() {
               .add(new protobuf.Field("eventList", 2, "bytes", "repeated"))
           );
       const GameReplayMessage = root.lookupType("cockatrice.GameReplay");
-      
       const decodedMessage = GameReplayMessage.decode(uint8Array);
       const replayObject = GameReplayMessage.toObject(decodedMessage, { longs: String, enums: String, bytes: Array });
 
-      // 2. Extract Card Names & Fetch Metadata from card_pools
       const uniqueNames = extractUniqueCardNames(replayObject);
-      console.log(`Extracted ${uniqueNames.length} unique card names from replay. Fetching metadata...`);
-      
       const { success, cards } = await fetchReplayMetadata(uniqueNames);
       if (!success) throw new Error("Failed to fetch card metadata from the database.");
 
-      const cardDbMap = new Map<string, any>();
+      const cardDbMap = new Map<string, DbCardMeta>();
       cards?.forEach(c => cardDbMap.set(c.card_name.toLowerCase(), c));
 
       // 3. Transform to Argentum State Machine
       const argentumReplay = buildArgentumStates(replayObject, cardDbMap);
 
       if (argentumReplay.length > 0) {
-         console.log(`Converted ${argentumReplay.length} states. Uploading to database...`);
-         
-         // --- THE NEW API CALL ---
+         const t1 = teams.find(t => t.id === team1Id);
+         const t2 = teams.find(t => t.id === team2Id);
+
          const response = await fetch('/api/pvp-replays', {
              method: 'POST',
              headers: { 'Content-Type': 'application/json' },
              body: JSON.stringify({
                  argentum_game_states: argentumReplay,
                  original_filename: file.name,
-                 // TODO: You can pass match_id, team1_id, etc. here if you have them in the component state!
+                 match_id: matchId,
+                 team1_id: team1Id,
+                 team2_id: team2Id,
+                 team1_name: t1?.name,
+                 team1_color: t1?.primary_color,
+                 team1_seccolor: t1?.secondary_color,
+                 team2_name: t2?.name,
+                 team2_color: t2?.primary_color,
+                 team2_seccolor: t2?.secondary_color
              })
          });
 
          const result = await response.json();
-
-         if (!response.ok || !result.success) {
-             throw new Error(result.error || "Failed to save the replay to the database.");
-         }
-
+         if (!response.ok || !result.success) throw new Error(result.error || "Failed to save the replay.");
          toast.success(`Successfully saved PvP replay to the database!`);
       } else {
          toast.warning("Replay was parsed, but no valid game states were generated.");
@@ -163,16 +197,10 @@ export default function CockatriceUploader() {
     }
   };
 
-
-  /**
-   * The State Machine Translator
-   * Steps through the Cockatrice events, uses our database map to enrich cards, and builds Argentum.
-   */
-  const buildArgentumStates = (cockatriceData: any, cardDbMap: Map<string, any>): SpectatorStateUpdate[] => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
+  const buildArgentumStates = (cockatriceData: any, cardDbMap: Map<string, DbCardMeta>): SpectatorStateUpdate[] => {
       const states: SpectatorStateUpdate[] = [];
-      
-      // Base skeleton
-      let currentState: SpectatorStateUpdate = {
+      const currentState: SpectatorStateUpdate = {
           gameSessionId: "imported-cor-match",
           player1Id: "p1", player2Id: "p2",
           player1Name: "Player 1", player2Name: "Player 2",
@@ -187,23 +215,8 @@ export default function CockatriceUploader() {
               turnNumber: 0, isGameOver: false, winnerId: null, combat: null, gameLog: []
           }
       };
-
-      // Example of enriching a card during the step-through:
-      // function createClientCard(cockatriceCardName: string, entityId: string): ClientCard {
-      //     const dbMeta = cardDbMap.get(cockatriceCardName.toLowerCase());
-      //     return {
-      //         entityId: entityId,
-      //         name: cockatriceCardName,
-      //         imageUri: dbMeta?.image_url || dbMeta?.oldest_image_url || undefined,
-      //         cardTypes: dbMeta?.card_type ? dbMeta.card_type.split(' ') : [],
-      //         isTapped: false, isAttacking: false, isBlocking: false, damage: 0, targets: []
-      //     };
-      // }
-
-      // ... Iteration logic over cockatriceData.eventList ...
       
-      states.push(JSON.parse(JSON.stringify(currentState))); // Push final state
-
+      states.push(JSON.parse(JSON.stringify(currentState))); 
       return states;
   };
 
@@ -215,11 +228,53 @@ export default function CockatriceUploader() {
           Import Cockatrice Replay
         </CardTitle>
         <CardDescription>
-          Upload a binary <code>.cor</code> file. It will be enriched with Dynasty Cube database metadata and converted to an Argentum state.
+          Select the competing teams, then upload a <code>.cor</code> file.
         </CardDescription>
       </CardHeader>
       
       <CardContent>
+        {/* DROPDOWNS FOR TEAM SELECTION */}
+        <div className="space-y-4 mb-6">
+          <div className="grid grid-cols-2 gap-4">
+              <div>
+                  <label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Team 1</label>
+                  <select 
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                      value={team1Id}
+                      onChange={(e) => setTeam1Id(e.target.value)}
+                  >
+                      <option value="" disabled>Select Team...</option>
+                      {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+              </div>
+              <div>
+                  <label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Team 2</label>
+                  <select 
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                      value={team2Id}
+                      onChange={(e) => setTeam2Id(e.target.value)}
+                  >
+                      <option value="" disabled>Select Team...</option>
+                      {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+              </div>
+          </div>
+
+          {/* MATCH STATUS INDICATOR */}
+          {team1Id && team2Id && (
+              <div className="bg-muted/30 p-3 rounded-md border text-sm flex items-center gap-2">
+                  {isSearchingMatch ? (
+                      <><Loader2 className="size-4 animate-spin text-muted-foreground" /> Searching schedule...</>
+                  ) : matchId ? (
+                      <><CheckCircle2 className="size-4 text-emerald-500" /> Linked to active weekly match!</>
+                  ) : (
+                      <><AlertCircle className="size-4 text-amber-500" /> No active match found. Will upload unlinked.</>
+                  )}
+              </div>
+          )}
+        </div>
+
+        {/* FILE UPLOAD ZONE */}
         <div 
           className={`relative border-2 border-dashed rounded-xl p-10 flex flex-col items-center justify-center transition-all duration-200 ease-in-out cursor-pointer group 
             ${isDragging ? "border-emerald-500 bg-emerald-500/10" : "border-muted-foreground/30 hover:border-emerald-500/50 hover:bg-emerald-500/5"}`}
@@ -253,5 +308,6 @@ export default function CockatriceUploader() {
     </Card>
   );
 }
+
 
 
