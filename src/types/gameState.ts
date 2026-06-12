@@ -58,7 +58,7 @@ export interface ClientCard {
   readonly name: string
   readonly manaCost: string
   readonly manaValue: number
-  readonly typeLine?: string 
+  readonly typeLine: string
   readonly cardTypes: readonly string[]
   readonly subtypes: readonly string[]
   readonly colors: readonly Color[]

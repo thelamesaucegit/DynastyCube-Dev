@@ -30,7 +30,10 @@ export function ReplayCardStack({
   const cardImageData = cardDataMap[group.card.name];
   const baseWidth = overrideWidth ?? responsive.battlefieldCardWidth;
   const baseHeight = overrideHeight ?? responsive.battlefieldCardHeight;
-
+  const typeLine = group.card.typeLine || '';
+ const cardDataTypeLine = cardImageData?.card_type || '';
+  const cardTypes = group.card.cardTypes || [];
+  
   // IDENTIFY BASIC LANDS
   // Check if it's a land AND if its type line includes the word 'Basic'
   const isBasicLand = group.card.cardTypes.includes('Land') && (group.card.typeLine?.includes('Basic') || cardImageData?.card_type?.includes('Basic'));
