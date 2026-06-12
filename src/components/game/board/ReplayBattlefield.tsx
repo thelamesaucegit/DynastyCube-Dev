@@ -88,7 +88,9 @@ function ReplayGroupWithAttachments({
                     <div key={attachment.id || index} style={{ position: 'absolute', left: parentTapped ? index * attachmentPeek : 0, top: parentTapped ? 0 : index * attachmentPeek, zIndex: index, pointerEvents: 'none' }}>
                          <CardPreview card={{ card_name: attachment.name, image_url: attachmentData.image_url, oldest_image_url: attachmentData.oldest_image_url }}>
                             <ReplayGameCard 
+                                id={attachment.id}
                                 cardData={{ name: attachment.name, card_type: attachmentData.card_type, image_url: attachmentData.image_url, oldest_image_url: attachmentData.oldest_image_url }} 
+                                card={attachment}
                                 isTapped={parentTapped} 
                                 useOldestArt={useOldestArt} 
                                 width={`${cardWidth}px`}
@@ -121,7 +123,6 @@ interface ReplayBattlefieldProps {
 export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldestArt }: ReplayBattlefieldProps) {
     const responsive = useResponsiveContext();
 
-    // FIX: Reverted to a unified back row instead of an artificially split Top/Bottom row
     const { groupedFrontRow, groupedBackRow } = useMemo(() => { 
         const playerId = isOpponent ? snapshot.player2Id : snapshot.player1Id;
         if (!playerId) return { groupedFrontRow: [], groupedBackRow: [] };
@@ -135,8 +136,17 @@ export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldest
         }).filter((c): c is ClientCard => c !== null) : [];
         
         const independentCards = allCardsInZone.filter(c => !c.attachedTo);
-        const frontRowCards = independentCards.filter(c => c.cardTypes.includes('Creature') || c.cardTypes.includes('Planeswalker'));
-        const backRowCards = independentCards.filter(c => !c.cardTypes.includes('Creature') && !c.cardTypes.includes('Planeswalker'));
+        
+        // CRITICAL FIX: Add safe fallback arrays for cardTypes to prevent crashes
+        const frontRowCards = independentCards.filter(c => {
+            const types = c.cardTypes || [];
+            return types.includes('Creature') || types.includes('Planeswalker');
+        });
+        
+        const backRowCards = independentCards.filter(c => {
+            const types = c.cardTypes || [];
+            return !types.includes('Creature') && !types.includes('Planeswalker');
+        });
         
         const combat = snapshot.gameState.combat || snapshot.combat;
         const attackers = combat?.attackers?.map(a => a.creatureId) || [];
@@ -146,7 +156,7 @@ export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldest
             const getFrontRank = (c: ClientCard) => {
                 if (attackers.includes(c.id)) return 1;
                 if (blockers.includes(c.id)) return 2;
-                if (c.cardTypes.includes('Planeswalker')) return 3;
+                if ((c.cardTypes || []).includes('Planeswalker')) return 3;
                 if (!c.isTapped) return 4;
                 return 5;
             };
@@ -158,11 +168,12 @@ export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldest
 
         backRowCards.sort((a, b) => {
             const getBackRank = (c: ClientCard) => {
-                
-                if (c.cardTypes.includes('Land') && c.typeLine.includes('Basic')) return 0;
-                if (c.cardTypes.includes('Land')) return 1;
-                if (c.cardTypes.includes('Enchantment')) return 2;
-                if (c.cardTypes.includes('Artifact')) return 3;
+                const types = c.cardTypes || [];
+                // CRITICAL FIX: Safe optional chaining on typeLine to prevent the crash!
+                if (types.includes('Land') && c.typeLine?.includes('Basic')) return 0;
+                if (types.includes('Land')) return 1;
+                if (types.includes('Enchantment')) return 2;
+                if (types.includes('Artifact')) return 3;
                 return 4;
             };
             const rankA = getBackRank(a);
@@ -178,7 +189,6 @@ export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldest
         };
     }, [snapshot, isOpponent]);
 
-    // FIX: Ensure math looks at the combined unified back row for scaling logic
     const { fittingWidth, fittingHeight } = useMemo(() => {
         const availableWidth = responsive.viewportWidth - (responsive.containerPadding * 2) - responsive.pileWidth - 64; 
         const maxCardsInAnyRow = Math.max(groupedFrontRow.length, groupedBackRow.length, 1);
