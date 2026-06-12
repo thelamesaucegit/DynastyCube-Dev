@@ -41,9 +41,9 @@ const getSelfSacrificeFinalResponse = () => {
 
 const getCardSacrificeResponse = (cardName: string, reward: number) => {
     const responses = [
-        `THE CUBE ACCEPTS YOUR OFFERING. "${cardName}" HAS BEEN CONSUMED. YOU RECEIVE ${reward} ESSENCE.`,
-        `A WORTHY TRIBUTE. "${cardName}" IS GONE. TAKE THESE ${reward} ESSENCE.`,
-        `THE VOID SWALLOWS "${cardName}" WHOLE. ${reward} ESSENCE MATERIALIZES IN YOUR GRASP.`
+        `THE CUBE ACCEPTS YOUR OFFERING. "${cardName}" HAS BEEN CONSUMED. YOUR TEAM RECEIVES ${reward} ESSENCE.`,
+        `A WORTHY TRIBUTE. "${cardName}" IS GONE. YOUR TEAM CLAIMS ${reward} ESSENCE.`,
+        `THE VOID SWALLOWS "${cardName}" WHOLE. ${reward} ESSENCE MATERIALIZES IN YOUR TEAM'S VAULT.`
     ];
     return responses[Math.floor(Math.random() * responses.length)];
 };
@@ -59,9 +59,9 @@ const getOtherUserResponse = (username: string) => {
 
 const getCoolHatResponse = () => {
     const responses = [
-        "YOUR SARTORIAL TASTE AMUSES THE CUBE. TAKE THIS ESSENCE AND BE GONE.",
-        "A TRULY EXCELLENT ACCESSORY. THE MAW GRANTS YOU 500 ESSENCE IN EXCHANGE FOR YOUR FASHION SENSE.",
-        "THE CUBE NODS APPROVINGLY. A REALLY COOL HAT DESERVES A REALLY COOL REWARD."
+        "YOUR SARTORIAL TASTE AMUSES THE CUBE. YOUR TEAM TAKES THIS ESSENCE AND YOU MAY BE GONE.",
+        "A TRULY EXCELLENT ACCESSORY. THE MAW GRANTS YOUR TEAM 500 ESSENCE IN EXCHANGE FOR YOUR FASHION SENSE.",
+        "THE CUBE NODS APPROVINGLY. A REALLY COOL HAT DESERVES A REALLY COOL REWARD FOR YOUR ALLIES."
     ];
     return responses[Math.floor(Math.random() * responses.length)];
 };
@@ -104,9 +104,9 @@ const getExperimentalItemResponse = (itemName: string) => {
 
 const getFuturePickResponse = (round: number) => {
     const responses = [
-        `YOUR FUTURE HAS BEEN SOLD. THE DRAINLINGS WILL DRAFT IN ROUND ${round} IN YOUR STEAD. YOUR ESSENCE WILL WAIT UNTIL THEN.`,
-        `THE CUBE CLAIMS YOUR ROUND ${round} PICK. THE SHADOWS SHALL DRAFT FOR YOU. YOUR REWARD IS DEFERRED.`,
-        `A GAMBLE WITH TIME ITSELF. THE MAW TAKES YOUR ROUND ${round} SLOT. YOU WILL BE PAID WHEN THE DRAINLINGS FEED.`
+        `YOUR FUTURE HAS BEEN SOLD. THE DRAINLINGS WILL DRAFT IN ROUND ${round} IN YOUR STEAD. YOUR TEAM'S ESSENCE WILL WAIT UNTIL THEN.`,
+        `THE CUBE CLAIMS YOUR ROUND ${round} PICK. THE SHADOWS SHALL DRAFT FOR YOU. YOUR TEAM'S REWARD IS DEFERRED.`,
+        `A GAMBLE WITH TIME ITSELF. THE MAW TAKES YOUR ROUND ${round} SLOT. YOUR TEAM WILL BE PAID WHEN THE DRAINLINGS FEED.`
     ];
     return responses[Math.floor(Math.random() * responses.length)];
 };
@@ -195,15 +195,21 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
         return { success: true, message: getCubucksResponse(), type: "rejected" };
     }
 
-    // THE FIX: Included 'essence_total_earned' in the select payload!
+    // Fetch core user data
     const { data: userData } = await supabaseAdmin.from('users').select('display_name, discord_username, essence_balance, essence_total_earned').eq('id', user.id).single();
     const name1 = (userData?.display_name || "").toLowerCase();
     const name2 = (userData?.discord_username || "").toLowerCase();
     const currentEssence = userData?.essence_balance || 0;
-    const currentTotalEarned = userData?.essence_total_earned || 0;
 
     const { data: member } = await supabaseAdmin.from('team_members').select('id, team_id').eq('user_id', user.id).single();
     const teamId = member?.team_id || null;
+
+    // Fetch Team Bank to properly add to it later
+    let currentTeamBank = 0;
+    if (teamId) {
+        const { data: tData } = await supabaseAdmin.from('teams').select('essence_bank').eq('id', teamId).single();
+        currentTeamBank = tData?.essence_bank || 0;
+    }
 
     // =========================================================================
     // 1. SELF SACRIFICE CHECK (The 3-Step Warning)
@@ -256,6 +262,7 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
 
     // =========================================================================
     // 3. ESSENCE PURCHASE MECHANIC (Retrieve random card from Drainlings to Chamber)
+    // NOTE: Purchases are made using personal essence.
     // =========================================================================
     const essenceMatch = cleanOffer.match(/^[\s]*[€e]?[\s]*(essence)?[\s]*(\d+)[\s]*[€e]?[\s]*(essence)?[\s]*$/i);
     if (essenceMatch) {
@@ -330,7 +337,6 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
     if (cleanOffer.endsWith("hat")) {
         const { data: teamHats } = await supabaseAdmin.from('team_hats').select(`id, hat_id, quantity, hats!inner(hatName)`).eq('team_id', teamId);
         
-        // THE FIX: Explicitly mapped via the TeamHatRecord interface to avoid "any"
         const typedTeamHats = (teamHats || []) as unknown as TeamHatRecord[];
         const matchingHat = typedTeamHats.find((h) => {
             const hatObj = Array.isArray(h.hats) ? h.hats[0] : h.hats;
@@ -349,15 +355,12 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
             }
 
             if (hatId === 1) {
-                await supabaseAdmin.from('users').update({ 
-                    essence_balance: currentEssence + 500, 
-                    essence_total_earned: currentTotalEarned + 500 
-                }).eq('id', user.id);
+                // THE FIX: Award Essence to the TEAM bank, not the User
+                await supabaseAdmin.from('teams').update({ 
+                    essence_bank: currentTeamBank + 500
+                }).eq('id', teamId);
                 
-                await supabaseAdmin.from('essence_transactions').insert({ 
-                    user_id: user.id, transaction_type: "grant", amount: 500, balance_after: currentEssence + 500, description: `Sacrificed A Really Cool Hat`, created_by: user.id 
-                });
-
+                await logSystemEvent("TheDrain", "info", `User ${user.id} sacrificed A Really Cool Hat. 500 Essence awarded to Team ${teamId}.`);
                 return { success: true, message: getCoolHatResponse(), type: "card" };
             }
 
@@ -412,10 +415,8 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
             card_id: pick.card_id, card_name: pick.card_name, card_set: pick.card_set, sacrificed_by_user_id: user.id, sacrificed_by_team_id: teamId, cubucks_value_at_sacrifice: cardCost, essence_rewarded: essenceReward
         });
 
-        await supabaseAdmin.from('users').update({ essence_balance: currentEssence + essenceReward, essence_total_earned: currentTotalEarned + essenceReward }).eq('id', user.id);
-        await supabaseAdmin.from('essence_transactions').insert({
-            user_id: user.id, transaction_type: "grant", amount: essenceReward, balance_after: currentEssence + essenceReward, description: `Sacrifice Reward: "${pick.card_name}"`, created_by: user.id
-        });
+        // THE FIX: Reward Essence to the TEAM bank, not the User
+        await supabaseAdmin.from('teams').update({ essence_bank: currentTeamBank + essenceReward }).eq('id', teamId);
 
         let finalMsg = getCardSacrificeResponse(pick.card_name, essenceReward);
 
@@ -433,7 +434,7 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
             }
         }
 
-        await logSystemEvent("TheDrain", "info", `User ${user.id} successfully sacrificed: ${pick.card_name} for ${essenceReward} Essence. Regift: ${!!prevDrain}`);
+        await logSystemEvent("TheDrain", "info", `User ${user.id} successfully sacrificed: ${pick.card_name} for ${essenceReward} Essence to Team ${teamId}. Regift: ${!!prevDrain}`);
         return { success: true, message: finalMsg, type: "card" };
     }
 
