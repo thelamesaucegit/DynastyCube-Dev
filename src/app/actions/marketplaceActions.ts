@@ -100,7 +100,7 @@ async function generateBoosterFromSet(setCode: string): Promise<Record<string, s
             mana_cost: card.mana_cost ? String(card.mana_cost) : null,
             cmc: typeof card.cmc === 'number' ? card.cmc : 0,
             cubucks_cost: 0, 
-            pool_name: 'the_chamber' 
+            pool_name: 'chamber' 
         };
     });
 }
@@ -138,7 +138,7 @@ export async function purchaseRandomBooster(): Promise<{ success: boolean; messa
         return { success: false, error: `Failed to extract cards from ${randomSet.set_name}. Essence refunded.` };
     }
 
-    const { error: insertError } = await supabase.from('card_pools').insert(packCards);
+    const { error: insertError } = await supabase.from('the_chamber').insert(packCards);
     if (insertError) {
         await supabase.from('users').update({ essence_balance: (await supabase.from('users').select('essence_balance').eq('id', user.id).single()).data?.essence_balance + COST }).eq('id', user.id);
         return { success: false, error: "Database error injecting cards. Essence refunded." };
@@ -189,7 +189,7 @@ export async function purchaseHomePlaneBooster(): Promise<{ success: boolean; me
           return { success: false, error: `Failed to extract cards from ${randomSet.set_name}. Essence refunded.` };
       }
   
-      const { error: insertError } = await supabase.from('card_pools').insert(packCards);
+      const { error: insertError } = await supabase.from('the_chamber').insert(packCards);
       if (insertError) {
           await supabase.from('users').update({ essence_balance: (await supabase.from('users').select('essence_balance').eq('id', user.id).single()).data?.essence_balance + COST }).eq('id', user.id);
           return { success: false, error: "Database error injecting cards. Essence refunded." };
