@@ -92,6 +92,9 @@ export function ReplayGameCard({ id, cardData, card, isTapped = false, useOldest
   const dbImageUrl = getCardImageUrl(cardData, useOldestArt);
   const [scryfallUrl, setScryfallUrl] = useState<string | null>(null);
 
+    if (card?.power || cardData.name.toLowerCase().includes('token') || Object.keys(card?.counters || {}).length > 0) {
+      console.log(`[Card Forensics] ${cardData.name}:`, JSON.parse(JSON.stringify(card)));
+  }
   // 1. EXTRACT ALL LIVE STATS & STATUSES
   const hasPT = card?.power !== undefined && card?.toughness !== undefined;
   const power = card?.power;
