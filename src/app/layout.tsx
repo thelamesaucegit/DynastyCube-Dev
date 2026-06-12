@@ -18,7 +18,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="dark" suppressHydrationWarning>
       <head>
         {/* New Favicon Link */}
         <link rel="icon" href="/images/logo/logo.jpg" sizes="any" />
