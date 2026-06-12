@@ -1,15 +1,12 @@
-//src/app/actions/chamberActions.ts
-
+// src/app/actions/chamberActions.ts
 "use server";
 
 import { createServerClient } from "@/lib/supabase";
 import { fetchAllCards, searchAllCards, ScryfallCard } from "@/lib/scryfall-client";
-import { type CardData } from "./cardActions"; // We'll reuse this interface
+import { type CardData } from "./cardActions";
 
 // Helper to create a Supabase client
 async function getSupabaseClient() {
-  // Assuming you have a standard way to create a service role client for admin actions
-  // If not, we can use the user-based client. For admin tasks, service role is safer.
   const { createClient } = await import("@supabase/supabase-js");
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 }
@@ -18,6 +15,7 @@ async function getSupabaseClient() {
 function calculateCubucksCost(card: ScryfallCard): number {
     const legalities = card.legalities;
     let cost = 1;
+
     if (legalities.legacy === 'banned' && legalities.vintage !== 'restricted') {
         cost *= 3;
     }
@@ -42,7 +40,7 @@ export async function importNextSetToChamber(): Promise<{
       .from("chamber_records")
       .select("*")
       .eq("added", false)
-     .eq("in_chamber", false) 
+      .eq("in_chamber", false) 
       .eq("bonus", false)
       .order("set_num", { ascending: true })
       .limit(1)
@@ -60,7 +58,6 @@ export async function importNextSetToChamber(): Promise<{
     // 2. Construct the Scryfall search query...
     const scryfallQuery = `(set:${nextSet.set_code}) -is:reprint -banned:vintage -oracle:banding -oracle:"bands with" -oracle:" ante"`;
     
-    // --- THIS IS THE FIX ---
     // 3. Fetch all matching cards using the new `searchAllCards` function.
     const { cards: scryfallResults, errors: fetchErrors } = await searchAllCards(scryfallQuery);
 
@@ -71,28 +68,31 @@ export async function importNextSetToChamber(): Promise<{
     if (scryfallResults.length === 0) {
         console.warn(`No cards found for set ${nextSet.set_name} matching the criteria.`);
     }
-// --- HELPER TO EXTRACT ORACLE TEXT ---
-        interface ScryfallFace { oracle_text?: string; }
-        interface ScryfallData { oracle_text?: string; card_faces?: ScryfallFace[]; }
 
-        const extractOracleText = (rawCard: unknown) => {
-            const card = rawCard as ScryfallData;
-            if (card.oracle_text) return card.oracle_text;
-            if (card.card_faces) {
-                return card.card_faces.map((face: ScryfallFace) => face.oracle_text).filter(Boolean).join('\n//\n');
-            }
-            return null;
-        };
+    // --- HELPER TO EXTRACT ORACLE TEXT ---
+    interface ScryfallFace { oracle_text?: string; }
+    interface ScryfallData { oracle_text?: string; card_faces?: ScryfallFace[]; }
+
+    const extractOracleText = (rawCard: unknown) => {
+        const card = rawCard as ScryfallData;
+        if (card.oracle_text) return card.oracle_text;
+        if (card.card_faces) {
+            return card.card_faces.map((face: ScryfallFace) => face.oracle_text).filter(Boolean).join('\n//\n');
+        }
+        return null;
+    };
+
     // 4. Prepare card data for insertion...
     const cardsToInsert: Array<Omit<CardData, "id" | "created_at" | "rating_updated_at">> = scryfallResults.map(card => {
         const finalCost = calculateCubucksCost(card);
+
         return {
             card_id: card.id,
             card_name: card.name,
             card_set: card.set_name,
             card_type: card.type_line,
             rarity: card.rarity,
-          oracle_text: extractOracleText(card),
+            oracle_text: extractOracleText(card),
             colors: card.colors || [],
             color_identity: card.color_identity || [],
             image_url: card.image_uris?.normal || card.image_uris?.small,
@@ -101,7 +101,7 @@ export async function importNextSetToChamber(): Promise<{
             mana_cost: card.mana_cost,
             cmc: card.cmc || 0,
             cubucks_cost: finalCost,
-            pool_name: 'chamber',
+            pool_name: 'chamber', // Valid FK name for the chamber
         };
     });
 
@@ -124,9 +124,27 @@ export async function importNextSetToChamber(): Promise<{
       throw new Error(`Cards were imported, but failed to update record for ${nextSet.set_code}: ${updateRecordError.message}`);
     }
 
+    // =========================================================================
+    // THE FIX: DYNAMICALLY SYNC ELO IMMEDIATELY UPON IMPORT
+    // =========================================================================
+    console.log(`[Chamber Actions] Triggering ELO Sync for newly imported cards in the_chamber...`);
+    try {
+        const { updateAllCubecobraElo } = await import('@/app/actions/cardRatingActions');
+        const syncResult = await updateAllCubecobraElo('the_chamber');
+        
+        if (!syncResult.success) {
+            console.warn(`[Chamber Actions] Minor Warning: ELO sync returned false during import. Log: ${syncResult.message}`);
+        } else {
+            console.log(`[Chamber Actions] ELO Sync complete for new chamber set!`);
+        }
+    } catch (eloErr) {
+        console.error(`[Chamber Actions] Critical Error running ELO sync after import:`, eloErr);
+        // We log it but do not throw, so the user still gets a success message for the base import.
+    }
+
     return {
       success: true,
-      message: `Successfully processed set '${nextSet.set_name}'.`,
+      message: `Successfully processed set '${nextSet.set_name}' and synced CubeCobra ELO.`,
       importedSetName: nextSet.set_name,
       cardsAdded: cardsToInsert.length,
       errors: fetchErrors,
