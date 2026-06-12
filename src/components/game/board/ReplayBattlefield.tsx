@@ -158,6 +158,8 @@ export function ReplayBattlefield({ isOpponent, snapshot, cardDataMap, useOldest
 
         backRowCards.sort((a, b) => {
             const getBackRank = (c: ClientCard) => {
+                
+                if (c.cardTypes.includes('Land') && c.typeLine.includes('Basic')) return 0;
                 if (c.cardTypes.includes('Land')) return 1;
                 if (c.cardTypes.includes('Enchantment')) return 2;
                 if (c.cardTypes.includes('Artifact')) return 3;
