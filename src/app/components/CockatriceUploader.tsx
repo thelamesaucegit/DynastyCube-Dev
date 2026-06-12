@@ -8,29 +8,16 @@ import { Button } from "@/app/components/ui/button";
 import { Upload, FileCode2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import * as protobuf from "protobufjs";
+import { fetchReplayMetadata } from "@/app/actions/replayActions"; // The server action we just made!
 
 // ============================================================================
-// ARGENTUM STATE TYPES (Mapped perfectly from ArgentumData.java)
+// ARGENTUM STATE TYPES 
 // ============================================================================
-export interface TargetInfo {
-  entityId: string;
-  type: string;
-}
-
-export interface ZoneId {
-  zoneType: string;
-  ownerId: string;
-}
-
-export interface CombatGroup {
-  attackerId: string;
-  blockers: string[];
-}
-
-export interface CombatState {
-  groups: CombatGroup[];
-  attackers: string[];
-}
+export interface TargetInfo { entityId: string; type: string; }
+export interface ZoneId { zoneType: string; ownerId: string; }
+export interface CombatGroup { attackerId: string; blockers: string[]; }
+export interface CombatState { groups: CombatGroup[]; attackers: string[]; }
+export interface ClientPlayer { playerId: string; name: string; life: number; }
 
 export interface ClientCard {
   entityId: string;
@@ -40,8 +27,8 @@ export interface ClientCard {
   isTapped: boolean;
   isAttacking: boolean;
   isBlocking: boolean;
-  power?: number;
-  toughness?: number;
+  power?: number | null;
+  toughness?: number | null;
   damage: number;
   attachedTo?: string | null;
   targets: TargetInfo[];
@@ -52,12 +39,6 @@ export interface ClientZone {
   cardIds: string[];
   size: number;
   isVisible: boolean;
-}
-
-export interface ClientPlayer {
-  playerId: string;
-  name: string;
-  life: number;
 }
 
 export interface ClientGameState {
@@ -97,6 +78,20 @@ export default function CockatriceUploader() {
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Recursive helper to find all "cardName" or "name" fields in the raw Protobuf JSON
+  const extractUniqueCardNames = (obj: any, namesSet = new Set<string>()): string[] => {
+    if (!obj) return Array.from(namesSet);
+    if (typeof obj === 'object') {
+        if (obj.cardName && typeof obj.cardName === 'string') namesSet.add(obj.cardName);
+        if (obj.name && typeof obj.name === 'string') namesSet.add(obj.name);
+        
+        Object.values(obj).forEach(val => extractUniqueCardNames(val, namesSet));
+    } else if (Array.isArray(obj)) {
+        obj.forEach(item => extractUniqueCardNames(item, namesSet));
+    }
+    return Array.from(namesSet);
+  };
+
   const processCorFile = async (file: File) => {
     if (!file.name.endsWith('.cor')) {
       toast.error("Invalid file type. Please upload a .cor file.");
@@ -106,44 +101,38 @@ export default function CockatriceUploader() {
     setIsProcessing(true);
 
     try {
-      // 1. Read the raw binary data
       const arrayBuffer = await file.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
 
-      // 2. Load the Cockatrice Protobuf Schema
-      // NOTE: In a production environment, you should download the exact `game_replay.proto` 
-      // from the Cockatrice GitHub, place it in your `public/` folder, and load it via:
-      // await protobuf.load("/game_replay.proto");
-      
-      // For this implementation, we will use a dynamically constructed minimal Root 
-      // to extract the EventList payload based on standard Cockatrice schemas.
+      // 1. Load Protobuf Schema (Simplified mapping for demonstration)
       const root = new protobuf.Root();
       root.define("cockatrice")
           .add(new protobuf.Type("GameReplay")
               .add(new protobuf.Field("replayId", 1, "int32"))
               .add(new protobuf.Field("eventList", 2, "bytes", "repeated"))
           );
-
       const GameReplayMessage = root.lookupType("cockatrice.GameReplay");
       
-      // 3. Decode the Binary!
-      // This will throw if the binary format is completely malformed
       const decodedMessage = GameReplayMessage.decode(uint8Array);
-      const replayObject = GameReplayMessage.toObject(decodedMessage, {
-          longs: String,
-          enums: String,
-          bytes: Array
-      });
+      const replayObject = GameReplayMessage.toObject(decodedMessage, { longs: String, enums: String, bytes: Array });
 
-      console.log("Successfully unpacked .cor Protobuf:", replayObject);
+      // 2. Extract Card Names & Fetch Metadata from card_pools
+      const uniqueNames = extractUniqueCardNames(replayObject);
+      console.log(`Extracted ${uniqueNames.length} unique card names from replay. Fetching metadata...`);
+      
+      const { success, cards } = await fetchReplayMetadata(uniqueNames);
+      if (!success) throw new Error("Failed to fetch card metadata from the database.");
 
-      // 4. Transform to Argentum State Machine
-      const argentumReplay = buildArgentumStates(replayObject);
+      // Create a dictionary for instant lookups during translation
+      const cardDbMap = new Map<string, any>();
+      cards?.forEach(c => cardDbMap.set(c.card_name.toLowerCase(), c));
+
+      // 3. Transform to Argentum State Machine
+      const argentumReplay = buildArgentumStates(replayObject, cardDbMap);
 
       if (argentumReplay.length > 0) {
          console.log("Final Argentum Replay Payload:", argentumReplay);
-         toast.success(`Successfully converted ${argentumReplay.length} game states!`);
-         // TODO: POST this `argentumReplay` array to your database or Simulation API!
+         toast.success(`Successfully converted and enriched ${argentumReplay.length} game states!`);
       }
 
     } catch (error) {
@@ -157,12 +146,12 @@ export default function CockatriceUploader() {
 
   /**
    * The State Machine Translator
-   * Steps through the dumb UI events of Cockatrice and builds the Smart Argentum state.
+   * Steps through the Cockatrice events, uses our database map to enrich cards, and builds Argentum.
    */
-  const buildArgentumStates = (cockatriceData: any): SpectatorStateUpdate[] => {
+  const buildArgentumStates = (cockatriceData: any, cardDbMap: Map<string, any>): SpectatorStateUpdate[] => {
       const states: SpectatorStateUpdate[] = [];
       
-      // Base skeleton initialized
+      // Base skeleton
       let currentState: SpectatorStateUpdate = {
           gameSessionId: "imported-cor-match",
           player1Id: "p1", player2Id: "p2",
@@ -179,13 +168,21 @@ export default function CockatriceUploader() {
           }
       };
 
-      // TODO: Iterate over cockatriceData.eventList
-      // Because Cockatrice event lists are deeply nested extensions, you will need 
-      // to map the internal byte payloads to things like "MoveCard", "SetLife", etc.
-      // Every time you detect a phase change or a major action, push a deep copy of `currentState` to `states`.
+      // Example of enriching a card during the step-through:
+      // function createClientCard(cockatriceCardName: string, entityId: string): ClientCard {
+      //     const dbMeta = cardDbMap.get(cockatriceCardName.toLowerCase());
+      //     return {
+      //         entityId: entityId,
+      //         name: cockatriceCardName,
+      //         imageUri: dbMeta?.image_url || dbMeta?.oldest_image_url || undefined,
+      //         cardTypes: dbMeta?.card_type ? dbMeta.card_type.split(' ') : [],
+      //         isTapped: false, isAttacking: false, isBlocking: false, damage: 0, targets: []
+      //     };
+      // }
+
+      // ... Iteration logic over cockatriceData.eventList ...
       
-      // Example placeholder push:
-      states.push(JSON.parse(JSON.stringify(currentState)));
+      states.push(JSON.parse(JSON.stringify(currentState))); // Push final state
 
       return states;
   };
@@ -198,7 +195,7 @@ export default function CockatriceUploader() {
           Import Cockatrice Replay
         </CardTitle>
         <CardDescription>
-          Upload a binary <code>.cor</code> file to automatically unpack and translate it into an Argentum-compatible JSON history.
+          Upload a binary <code>.cor</code> file. It will be enriched with Dynasty Cube database metadata and converted to an Argentum state.
         </CardDescription>
       </CardHeader>
       
@@ -220,7 +217,7 @@ export default function CockatriceUploader() {
           {isProcessing ? (
             <div className="flex flex-col items-center gap-3 text-emerald-600 dark:text-emerald-400">
               <Loader2 className="size-10 animate-spin" />
-              <p className="font-bold tracking-widest uppercase text-sm">Translating to Argentum...</p>
+              <p className="font-bold tracking-widest uppercase text-sm">Decoding & Enriching...</p>
             </div>
           ) : (
             <>
@@ -236,4 +233,5 @@ export default function CockatriceUploader() {
     </Card>
   );
 }
+
 
