@@ -22,7 +22,7 @@ import { Card, CardContent, CardTitle } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { Badge } from "@/app/components/ui/badge";
 import { Input } from "@/app/components/ui/input";
-import { Loader2, ArrowLeft, AlertCircle, X, Send, MessageSquare } from "lucide-react";
+import { Loader2, ArrowLeft, AlertCircle, X, Send, MessageSquare, Ban } from "lucide-react"; // THE FIX: Added 'Ban' import!
 
 interface TeamMember {
   user_id: string;
