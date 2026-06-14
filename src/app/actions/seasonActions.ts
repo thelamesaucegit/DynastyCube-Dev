@@ -170,12 +170,25 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
 
         await trackTargetCard(supabase, "3. After Cost Rollover RPC");
 
-        // THE FIX 1: Run natural Free Agency purge (Drops 0-cost cards immediately)
         console.log("[SeasonRollover] Processing Natural Free Agency (0-cost cards)...");
         const { error: natFreeErr } = await supabase.rpc('process_natural_free_agency');
         if (natFreeErr) throw new Error(`Natural Free Agency RPC failed: ${natFreeErr.message}`);
 
         await trackTargetCard(supabase, "4. After Natural Free Agency RPC");
+
+        // THE FIX 1: Explicitly purge all "temporary" cards before they can be promoted!
+        console.log("[SeasonRollover] Purging expired Temporary (Escape Room) cards...");
+        const { count: purgedTemporaryCount, error: purgeErr } = await supabase
+            .from('card_pools')
+            .delete()
+            .contains('scars', ['temporary']);
+        
+        if (purgeErr) throw new Error(`Temporary Card Purge failed: ${purgeErr.message}`);
+        console.log(`[SeasonRollover] Purged ${purgedTemporaryCount || 0} temporary cards from the database.`);
+
+        // Also clean them off any straggler team rosters just in case!
+        await supabase.from('team_draft_picks').delete().contains('scars', ['temporary']);
+
 
         // =====================================================================
         // --- STEP 3: PROMOTE EXISTING STAGING POOLS ---
