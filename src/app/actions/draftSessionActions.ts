@@ -725,7 +725,7 @@ export async function completeDraft(
                      }
 
                      const matchupsPerWeek = Math.floor(activeTeams.length / 2);
-                     const weekDurationMs = isTestSeason ? (matchupsPerWeek * 3 * 30 * 60000) : (7 * 86400000); 
+                     const weekDurationMs = isTestSeason ? (matchupsPerWeek * 3 * 10 * 60000) : (7 * 86400000); 
                      let currentMatchCursor = new Date(week1Start.getTime());
                      let totalMatchups = 0, totalGames = 0;
 
