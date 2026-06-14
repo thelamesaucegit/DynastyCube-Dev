@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from "react";
 import { use } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getTeamsWithMembers } from "@/app/actions/teamActions";
+import { getTeamsWithMembers, getTeamsWithDetails } from "@/app/actions/teamActions";
 import {
   getTeamTrades,
   getTradeDetails,
@@ -16,6 +16,7 @@ import {
   areTradesEnabled,
   type TradeItem as TradeItemType,
 } from "@/app/actions/tradeActions";
+import { getCurrentSeason } from "@/app/actions/seasonPhaseActions"; // Added to fetch active phase
 import Link from "next/link";
 import { Card, CardContent, CardTitle } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
@@ -28,10 +29,11 @@ interface TeamMember {
 }
 
 interface Team {
-  id: string;         // UUID primary key
-  short_name: string; // URL slug e.g. 'shards'
+  id: string;         
+  short_name: string; 
   name: string;
   emoji: string;
+  is_escaped?: boolean; // Track escape status
   members?: TeamMember[];
 }
 
@@ -63,13 +65,16 @@ export default function TradesPage({ params }: TradesPageProps) {
   const { teamId } = use(params);
   const { user } = useAuth();
   const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
-
+  
   const isUserTeamMember = currentTeam?.members?.some(
     (member) => member.user_id === user?.id
   ) ?? false;
+
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
   const [tradesEnabled, setTradesEnabled] = useState(true);
+  const [seasonPhase, setSeasonPhase] = useState<string | null>(null);
+  
   const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);
   const [selectedTradeItems, setSelectedTradeItems] = useState<TradeItemType[]>([]);
   const [selectedTradeMessages, setSelectedTradeMessages] = useState<TradeMessage[]>([]);
@@ -94,8 +99,23 @@ export default function TradesPage({ params }: TradesPageProps) {
       const { enabled } = await areTradesEnabled();
       setTradesEnabled(enabled);
 
+      const seasonResult = await getCurrentSeason();
+      setSeasonPhase(seasonResult.season?.phase || null);
+
+      // Fetch detailed teams for escapes verification
+      const detailsResult = await getTeamsWithDetails(true);
+      const teamsDetails = detailsResult.teams || [];
+
       const teams = await getTeamsWithMembers();
-      const current = teams.find((t) => t.short_name === teamId);
+      const enrichedTeams: Team[] = teams.map(t => {
+          const detail = teamsDetails.find(d => d.id === t.id);
+          return {
+              ...t,
+              is_escaped: detail?.is_escaped || false
+          };
+      });
+
+      const current = enrichedTeams.find((t) => t.short_name === teamId);
       setCurrentTeam(current || null);
 
       const { trades: teamTrades } = await getTeamTrades(current?.id ?? teamId);
@@ -111,7 +131,6 @@ export default function TradesPage({ params }: TradesPageProps) {
     try {
       const { items } = await getTradeDetails(tradeId);
       setSelectedTradeItems(items || []);
-
       const { messages } = await getTradeMessages(tradeId);
       setSelectedTradeMessages(messages || []);
     } catch (error) {
@@ -120,8 +139,11 @@ export default function TradesPage({ params }: TradesPageProps) {
   };
 
   const handleAcceptTrade = async (tradeId: string) => {
+    if (seasonPhase === "playoffs") {
+        alert("Trading and trade execution are locked during the Playoffs!");
+        return;
+    }
     if (!confirm("Are you sure you want to accept this trade?")) return;
-
     try {
       const result = await acceptTrade(tradeId);
       if (result.success) {
@@ -138,7 +160,6 @@ export default function TradesPage({ params }: TradesPageProps) {
 
   const handleRejectTrade = async (tradeId: string) => {
     if (!confirm("Are you sure you want to reject this trade?")) return;
-
     try {
       const result = await rejectTrade(tradeId);
       if (result.success) {
@@ -155,7 +176,6 @@ export default function TradesPage({ params }: TradesPageProps) {
 
   const handleCancelTrade = async (tradeId: string) => {
     if (!confirm("Are you sure you want to cancel this trade proposal?")) return;
-
     try {
       const result = await cancelTrade(tradeId);
       if (result.success) {
@@ -172,7 +192,6 @@ export default function TradesPage({ params }: TradesPageProps) {
 
   const handleSendMessage = async () => {
     if (!selectedTradeId || !newMessage.trim()) return;
-
     setSendingMessage(true);
     try {
       const result = await addTradeMessage(selectedTradeId, newMessage);
@@ -210,7 +229,6 @@ export default function TradesPage({ params }: TradesPageProps) {
     const diff = deadlineDate.getTime() - now.getTime();
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const days = Math.floor(hours / 24);
-
     if (diff < 0) return "Expired";
     if (days > 0) return `${days}d ${hours % 24}h`;
     return `${hours}h`;
@@ -251,6 +269,8 @@ export default function TradesPage({ params }: TradesPageProps) {
     );
   }
 
+  const isPlayoffsActive = seasonPhase === "playoffs";
+
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8">
       {/* Header */}
@@ -271,12 +291,21 @@ export default function TradesPage({ params }: TradesPageProps) {
               : `View ${currentTeam.name}'s trade proposals and negotiations`}
           </p>
         </div>
-        {tradesEnabled && isUserTeamMember && (
+        {tradesEnabled && !isPlayoffsActive && isUserTeamMember && (
           <Button asChild>
             <Link href={`/teams/${teamId}/trades/new`}>+ New Trade</Link>
           </Button>
         )}
       </div>
+
+      {isPlayoffsActive && (
+        <Card className="mb-6 border-destructive bg-destructive/10">
+          <CardContent className="pt-6 flex items-center gap-3">
+            <Ban className="h-5 w-5 text-destructive shrink-0" />
+            <p className="font-semibold text-destructive">Trading is completely locked during the active Playoffs phase!</p>
+          </CardContent>
+        </Card>
+      )}
 
       {!tradesEnabled && (
         <Card className="mb-6 border-orange-500/50">
@@ -324,7 +353,7 @@ export default function TradesPage({ params }: TradesPageProps) {
               {filter === "outgoing" && "No outgoing trade proposals"}
               {filter === "history" && "No trade history"}
             </p>
-            {tradesEnabled && filter !== "history" && isUserTeamMember && (
+            {tradesEnabled && !isPlayoffsActive && filter !== "history" && isUserTeamMember && (
               <Button asChild>
                 <Link href={`/teams/${teamId}/trades/new`}>Create a Trade</Link>
               </Button>
@@ -339,7 +368,6 @@ export default function TradesPage({ params }: TradesPageProps) {
             const otherTeam = isIncoming
               ? { name: trade.from_team_name, emoji: trade.from_team_emoji }
               : { name: trade.to_team_name, emoji: trade.to_team_emoji };
-
             return (
               <Card
                 key={trade.id}
@@ -369,11 +397,9 @@ export default function TradesPage({ params }: TradesPageProps) {
                       </div>
                     </div>
                   </div>
-
                   <p className="text-sm text-muted-foreground mb-4">
                     Created {new Date(trade.created_at).toLocaleDateString()}
                   </p>
-
                   {/* Actions */}
                   <div className="flex items-center gap-2">
                     <Button
@@ -382,7 +408,7 @@ export default function TradesPage({ params }: TradesPageProps) {
                     >
                       View Details
                     </Button>
-                    {isPending && isIncoming && isUserTeamMember && (
+                    {isPending && isIncoming && isUserTeamMember && !isPlayoffsActive && (
                       <>
                         <Button
                           variant="outline"
@@ -430,7 +456,6 @@ export default function TradesPage({ params }: TradesPageProps) {
                 <X className="h-5 w-5" />
               </Button>
             </div>
-
             {/* Trade Items */}
             <CardContent className="pt-6">
               <h3 className="text-xl font-bold mb-4">Trade Items</h3>
@@ -452,7 +477,6 @@ export default function TradesPage({ params }: TradesPageProps) {
                 ))}
               </div>
             </CardContent>
-
             {/* Messages */}
             <div className="p-6 border-t">
               <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
