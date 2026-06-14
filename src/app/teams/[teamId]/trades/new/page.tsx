@@ -3,10 +3,11 @@
 
 import React, { useState, useEffect } from "react";
 import { use } from "react";
-import { getTeamsWithMembers } from "@/app/actions/teamActions";
+import { getTeamsWithMembers, getTeamsWithDetails } from "@/app/actions/teamActions";
 import { getTeamDraftPicks } from "@/app/actions/draftActions";
 import { getSeasons } from "@/app/actions/cubucksActions";
 import { createTrade, areTradesEnabled, type TradeItem } from "@/app/actions/tradeActions";
+import { getCurrentSeason } from "@/app/actions/seasonPhaseActions"; // Added to fetch active phase
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { DraftPick } from "@/app/actions/draftActions";
@@ -21,6 +22,7 @@ interface Team {
   name: string;
   emoji: string;
   is_hidden?: boolean;
+  is_escaped?: boolean; // Track escape status
 }
 
 interface Season {
@@ -36,20 +38,19 @@ interface TradePageProps {
 export default function CreateTradePage({ params }: TradePageProps) {
   const { teamId } = use(params);
   const router = useRouter();
-
   const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   
   const [myDraftPicks, setMyDraftPicks] = useState<DraftPick[]>([]);
-  const [theirDraftPicks, setTheirDraftPicks] = useState<DraftPick[]>([]); // <-- NEW: To store their roster
-
+  const [theirDraftPicks, setTheirDraftPicks] = useState<DraftPick[]>([]);
   const [seasons, setSeasons] = useState<Season[]>([]);
   
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tradesEnabled, setTradesEnabled] = useState(true);
+  const [seasonPhase, setSeasonPhase] = useState<string | null>(null);
 
   // My Trade items
   const [myOfferedCards, setMyOfferedCards] = useState<string[]>([]);
@@ -57,10 +58,9 @@ export default function CreateTradePage({ params }: TradePageProps) {
   const [myOfferedEssence, setMyOfferedEssence] = useState<number>(0);
 
   // Their Trade items
-  const [theirOfferedCards, setTheirOfferedCards] = useState<string[]>([]); // <-- NEW: To store requested cards
+  const [theirOfferedCards, setTheirOfferedCards] = useState<string[]>([]);
   const [theirOfferedPicks, setTheirOfferedPicks] = useState<{ round: number; seasonId: string }[]>([]);
   const [theirOfferedEssence, setTheirOfferedEssence] = useState<number>(0);
-
   const [deadlineDays, setDeadlineDays] = useState<number>(3);
 
   useEffect(() => {
@@ -68,12 +68,11 @@ export default function CreateTradePage({ params }: TradePageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId]);
 
-  // THE FIX: Automatically fetch the target team's roster when selected!
   useEffect(() => {
     if (selectedTeamId) {
       getTeamDraftPicks(selectedTeamId).then(({ picks }) => {
         setTheirDraftPicks(picks);
-        setTheirOfferedCards([]); // Reset requested cards if they change teams
+        setTheirOfferedCards([]); 
       });
     } else {
       setTheirDraftPicks([]);
@@ -88,11 +87,41 @@ export default function CreateTradePage({ params }: TradePageProps) {
       const { enabled } = await areTradesEnabled();
       setTradesEnabled(enabled);
 
+      const seasonResult = await getCurrentSeason();
+      const phase = seasonResult.season?.phase || null;
+      setSeasonPhase(phase);
+
+      if (phase === "playoffs") {
+        setError("Trades are completely locked during the Playoffs.");
+      }
+
+      // Fetch teams with detail stats to extract the is_escaped status
+      const detailsResult = await getTeamsWithDetails(true);
+      const teamsDetails = detailsResult.teams || [];
+
       const teams = await getTeamsWithMembers();
-      const current = teams.find((t) => t.short_name === teamId);
+      
+      const enrichedTeams: Team[] = teams.map(t => {
+          const detail = teamsDetails.find(d => d.id === t.id);
+          return {
+              ...t,
+              is_escaped: detail?.is_escaped || false,
+              is_hidden: detail?.is_hidden || false
+          };
+      });
+
+      const current = enrichedTeams.find((t) => t.short_name === teamId);
       setCurrentTeam(current || null);
 
-      setAllTeams(teams.filter((t) => t.id !== current?.id && t.is_hidden === false));
+      // Filter eligible partners: Escape statuses must match exactly!
+      if (current) {
+          const partners = enrichedTeams.filter(
+              (t) => t.id !== current.id && 
+              t.is_hidden === false && 
+              (current.is_escaped === t.is_escaped) // Strict escape matching
+          );
+          setAllTeams(partners);
+      }
 
       const { picks } = await getTeamDraftPicks(current?.id ?? teamId);
       setMyDraftPicks(picks);
@@ -101,7 +130,7 @@ export default function CreateTradePage({ params }: TradePageProps) {
       setSeasons(allSeasons as unknown as Season[]);
     } catch (err) {
       console.error("Error loading data:", err);
-      setError("Failed to load data");
+      setError("Failed to load trade parameters.");
     } finally {
       setLoading(false);
     }
@@ -137,9 +166,18 @@ export default function CreateTradePage({ params }: TradePageProps) {
 
   const handleSubmitTrade = async () => {
     setError(null);
-
+    if (seasonPhase === "playoffs") {
+      setError("Trades are completely locked during the Playoffs.");
+      return;
+    }
     if (!selectedTeamId) {
       setError("Please select a team to trade with");
+      return;
+    }
+
+    const partner = allTeams.find(t => t.id === selectedTeamId);
+    if (currentTeam?.is_escaped !== partner?.is_escaped) {
+      setError("Escape misalignment: Escaped teams can only trade with other escaped teams.");
       return;
     }
 
@@ -231,7 +269,7 @@ export default function CreateTradePage({ params }: TradePageProps) {
       <div className="container max-w-7xl mx-auto px-4 py-8">
         <div className="flex flex-col items-center justify-center py-20">
           <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
-          <p className="text-muted-foreground">Loading...</p>
+          <p className="text-muted-foreground">Loading trade variables...</p>
         </div>
       </div>
     );
@@ -245,6 +283,21 @@ export default function CreateTradePage({ params }: TradePageProps) {
             <Ban className="h-12 w-12 text-orange-500 mx-auto mb-3" />
             <h2 className="text-2xl font-bold mb-2">Trades Disabled</h2>
             <p className="text-muted-foreground mb-4">The trade system is currently disabled by an administrator.</p>
+            <Button asChild><Link href={`/teams/${teamId}`}>Back to Team</Link></Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (seasonPhase === "playoffs") {
+    return (
+      <div className="container max-w-4xl mx-auto px-4 py-8">
+        <Card className="border-destructive">
+          <CardContent className="pt-6 text-center">
+            <Ban className="h-12 w-12 text-destructive mx-auto mb-3" />
+            <h2 className="text-2xl font-bold mb-2 text-destructive">Trades Locked</h2>
+            <p className="text-muted-foreground mb-4 font-semibold">Trading is completely frozen during the active Playoff phase.</p>
             <Button asChild><Link href={`/teams/${teamId}`}>Back to Team</Link></Button>
           </CardContent>
         </Card>
@@ -279,6 +332,13 @@ export default function CreateTradePage({ params }: TradePageProps) {
         </Button>
         <h1 className="text-4xl font-bold tracking-tight mb-2">Create Trade Proposal</h1>
         <p className="text-lg text-muted-foreground">Propose a trade with another team</p>
+        <div className="mt-3">
+          {currentTeam.is_escaped ? (
+             <Badge className="bg-emerald-600">Escaped Team (Eligible only with other Escaped Teams)</Badge>
+          ) : (
+             <Badge variant="outline">Regular Season Team (No Escaped Partners)</Badge>
+          )}
+        </div>
       </div>
 
       {error && (
