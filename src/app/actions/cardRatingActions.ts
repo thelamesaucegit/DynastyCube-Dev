@@ -32,7 +32,7 @@ const S3_BUCKET_URL = "https://cubecobra-public.s3.amazonaws.com/";
  * NEW (Corrected): Fetches the required JSON files from CubeCobra's public S3 bucket
  * and builds the ELO map directly from the simpleCardDict.
  */
-async function fetchEloMapFromS3(): Promise<Map<string, number>> {
+export async function fetchEloMapFromS3(): Promise<Map<string, number>> {
   try {
     console.log("Fetching ELO data from CubeCobra S3 bucket...");
 
@@ -72,7 +72,7 @@ async function fetchEloMapFromS3(): Promise<Map<string, number>> {
 /**
  * Helper: Update a table's cubecobra_elo using a pre-fetched ELO map
  */
-async function updateTableCubecobraElo(
+export async function updateTableCubecobraElo(
   tableName: PoolTableName | "team_draft_picks",
   eloMap: Map<string, number>
 ): Promise<CardRatingResult> {
