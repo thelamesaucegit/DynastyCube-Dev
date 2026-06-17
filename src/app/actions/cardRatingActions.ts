@@ -147,7 +147,8 @@ export async function updateTableCubecobraElo(
  * REPLACED: This now uses the S3 data source instead of a specific cube
  */
 export async function updateAllCubecobraElo(
-  tableName?: PoolTableName
+  tableName?: PoolTableName,
+  systemOverride: boolean = false 
 ): Promise<{
   success: boolean;
   results: CardRatingResult[];
