@@ -620,9 +620,10 @@ async function scheduleNextWeekJIT(seasonId: string, weekNumber: number) {
     const { data: pendingMatches } = await supabase.from('schedule').select('*').eq('season_id', seasonId).eq('week_number', weekNumber).eq('status', 'scheduled').order('id');
     
     if (!pendingMatches || pendingMatches.length === 0) return;
-
     const now = new Date();
-    let offsetMinutes = 10;
+    
+    // THE FIX: Space out testing simulations by 10 minutes so they match the stream schedule
+    let offsetMinutes = 10; 
     
     for (const match of pendingMatches) {
         const matchDate = new Date(now.getTime() + (offsetMinutes * 60000));
@@ -630,6 +631,7 @@ async function scheduleNextWeekJIT(seasonId: string, weekNumber: number) {
         offsetMinutes += 10;
     }
 }
+
 
 function getTargetDateCT(baseDate: Date, addDays: number, targetHourCT: number): Date {
     const d = new Date(baseDate);
@@ -651,7 +653,6 @@ export async function generateInitialPlayoffBracket(seasonId: string, isTestSeas
     
     const { data: activeTeams } = await supabase.from('teams').select('id').eq('is_hidden', false);
     const activeTeamIds = activeTeams?.map(t => t.id) || [];
-
     const { data: standings, error: standingsErr } = await supabase
         .from('team_records_view')
         .select('*')
@@ -660,20 +661,19 @@ export async function generateInitialPlayoffBracket(seasonId: string, isTestSeas
         .order('game_wins', { ascending: false });
     
     if (standingsErr || !standings || standings.length < 2) return;
-
     const playoffSpots = Math.floor(standings.length / 2.0);
     const playoffTeams = standings.slice(0, playoffSpots);
     
     const roundNumber = 100;
-
     const { data: existingWeek } = await supabase.from('schedule_weeks')
         .select('id').eq('season_id', seasonId).eq('week_number', roundNumber).maybeSingle();
     
     if (existingWeek) return;
-
-    const baseStart = new Date(Date.now() + 10 * 60000);
+    
+    const baseStart = new Date(Date.now()); 
+    // THE FIX: Set the exact bounds for the playoff week utilizing the 10-minute cadence
     const weekEnd = isTestSeason 
-        ? new Date(baseStart.getTime() + (playoffSpots * 9 * 10 * 60000)) 
+        ? new Date(baseStart.getTime() + (playoffSpots * 3 * 10 * 60000)) 
         : new Date(baseStart.getTime() + 7 * 86400000);
 
     const { data: playoffWeek, error: weekErr } = await supabase.from('schedule_weeks').insert({
@@ -697,9 +697,122 @@ export async function generateInitialPlayoffBracket(seasonId: string, isTestSeas
         if (matchup) matchupsToSchedule.push(matchup);
         left++; right--;
     }
-
     await buildSequentialAlternatingSchedule(seasonId, playoffWeek.id, roundNumber, matchupsToSchedule, isTestSeason, false);
 }
+
+
+export async function advancePlayoffBracket(seasonId: string, isTestSeason: boolean) {
+    console.log(`[PlayoffGen] 🔄 ADVANCING PLAYOFF BRACKET for Season: ${seasonId}`);
+    const supabase = createServiceClient();
+    
+    const { data: lastRound } = await supabase.from('schedule_weeks')
+        .select('week_number')
+        .eq('season_id', seasonId).eq('is_playoff_week', true)
+        .order('week_number', { ascending: false }).limit(1).single();
+        
+    if (!lastRound) return;
+
+    const currentRoundNum = lastRound.week_number;
+    const { data: currentMatchups } = await supabase.from('weekly_matchups')
+        .select('winner_team_id').eq('season_id', seasonId).eq('week_number', currentRoundNum);
+    const advancingTeams = currentMatchups?.map(m => m.winner_team_id).filter(Boolean) || [];
+
+    // --- CHAMPIONSHIP ENDS HERE ---
+    if (advancingTeams.length <= 1) {
+        console.log(`[PLAYOFFS] 👑 Championship complete! Winner: ${advancingTeams[0]}`);
+        await logSystemEvent("Playoffs", "info", `Championship complete! Winner: ${advancingTeams[0]}`);
+        
+        await supabase.from('seasons').update({ phase: 'postseason' }).eq('id', seasonId);
+        
+        let offSeasonEnd: Date;
+        if (isTestSeason) {
+            offSeasonEnd = new Date(Date.now() + 5 * 60000);
+        } else {
+            const d = new Date();
+            let daysToThu = (4 - d.getUTCDay() + 7) % 7;
+            if (daysToThu === 0) daysToThu = 7; 
+            const targetDate = new Date(d.getTime() + (daysToThu + 7) * 86400000);
+            offSeasonEnd = getTargetDateCT(targetDate, 0, 12); 
+        }
+
+        try {
+            const { data: activeTeams } = await supabase.from('teams').select('id').eq('is_hidden', false);
+            const activeTeamIds = activeTeams?.map(t => t.id) || [];
+            
+            if (activeTeamIds.length > 0) {
+                const { data: standings } = await supabase
+                    .from('team_records_view')
+                    .select('team_id')
+                    .in('team_id', activeTeamIds)
+                    .order('wins', { ascending: true })     
+                    .order('game_wins', { ascending: true }) 
+                    .limit(1)
+                    .single();
+
+                if (standings?.team_id) {
+                    const valveDeadline = new Date(offSeasonEnd.getTime() - (isTestSeason ? 60000 : 3600000));
+                    const { data: newPoll, error: pollErr } = await supabase.from('polls').insert({
+                        title: "THE VALVE",
+                        description: "Your team has suffered the most this season. You hold the power to turn THE VALVE and purge the realm's most hated card. What is your choice?",
+                        ends_at: valveDeadline.toISOString(),
+                        is_active: true, allow_multiple_votes: false, show_results_before_end: false,
+                        vote_type: 'team', team_id: standings.team_id
+                    }).select('id').single();
+
+                    if (newPoll && !pollErr) {
+                        await supabase.from('poll_options').insert([
+                            { poll_id: newPoll.id, option_text: "RELEASE THE VALVE", option_order: 1 },
+                            { poll_id: newPoll.id, option_text: "LEAVE THE VALVE SHUT", option_order: 2 }
+                        ]);
+                        await logSystemEvent("TheValve", "info", `Valve vote spawned for team ${standings.team_id}.`);
+                    }
+                }
+            }
+        } catch (valveErr) { console.error(valveErr); }
+        
+        await supabase.from('countdown_timers').update({ is_active: false }).eq('is_active', true);
+        await supabase.from('countdown_timers').insert({
+            title: 'Offseason Curation & Next Draft', end_time: offSeasonEnd.toISOString(),
+            link_text: 'View Final Standings', link_url: '/teams', is_active: true
+        });
+        return;
+    }
+
+    const nextRoundNum = currentRoundNum + 1;
+    const { data: existingWeek } = await supabase.from('schedule_weeks')
+        .select('id').eq('season_id', seasonId).eq('week_number', nextRoundNum).maybeSingle();
+    if (existingWeek) return;
+
+    const isChampionship = advancingTeams.length === 2;
+    const baseStart = new Date(Date.now()); 
+
+    // THE FIX: Set the exact bounds for the next playoff week utilizing the 10-minute cadence
+    const weekEnd = isTestSeason 
+        ? new Date(baseStart.getTime() + (Math.floor(advancingTeams.length / 2) * 3 * 10 * 60000)) 
+        : new Date(baseStart.getTime() + 7 * 86400000);
+
+    const { data: playoffWeek, error: weekErr } = await supabase.from('schedule_weeks').insert({
+        season_id: seasonId, week_number: nextRoundNum,
+        start_date: baseStart.toISOString(), end_date: weekEnd.toISOString(),
+        deck_submission_deadline: baseStart.toISOString(), match_completion_deadline: weekEnd.toISOString(),
+        is_playoff_week: true, is_championship_week: isChampionship, notes: isChampionship ? `Championship` : `Playoffs Round ${nextRoundNum - 99}`
+    }).select('id').single();
+
+    if (weekErr || !playoffWeek) return;
+
+    const matchupsToSchedule = [];
+    let left = 0; let right = advancingTeams.length - 1;
+    while (left < right) {
+        const { data: matchup, error: matchErr } = await supabase.from('weekly_matchups').insert({
+            season_id: seasonId, week_number: nextRoundNum, team1_id: advancingTeams[left], team2_id: advancingTeams[right], is_playoff: true
+        }).select('id, team1_id, team2_id').single(); 
+
+        if (!matchErr && matchup) matchupsToSchedule.push(matchup);
+        left++; right--;
+    }
+    await buildSequentialAlternatingSchedule(seasonId, playoffWeek.id, nextRoundNum, matchupsToSchedule, isTestSeason, isChampionship);
+}
+
 
 async function triggerOffseason(seasonId: string, isTestSeason: boolean, supabase: SupabaseClient) {
     console.log(`[AUTOMATION] 👑 Championship Concluded! Triggering Postseason for Season: ${seasonId}`);
@@ -732,164 +845,7 @@ async function triggerOffseason(seasonId: string, isTestSeason: boolean, supabas
     });
 }
 
-/**
- * Evaluates winners of the current playoff round and builds the next round (or ends season).
- */
-export async function advancePlayoffBracket(seasonId: string, isTestSeason: boolean) {
-    console.log(`[PlayoffGen] 🔄 ADVANCING PLAYOFF BRACKET for Season: ${seasonId}`);
-    const supabase = createServiceClient();
-    
-    const { data: lastRound } = await supabase.from('schedule_weeks')
-        .select('week_number')
-        .eq('season_id', seasonId).eq('is_playoff_week', true)
-        .order('week_number', { ascending: false }).limit(1).single();
-        
-    if (!lastRound) {
-        console.warn(`[PlayoffGen] ⚠️ Could not find last playoff round!`);
-        return;
-    }
 
-    const currentRoundNum = lastRound.week_number;
-    console.log(`[PlayoffGen] Current Round is ${currentRoundNum}. Fetching winners...`);
-
-    const { data: currentMatchups } = await supabase.from('weekly_matchups')
-        .select('winner_team_id').eq('season_id', seasonId).eq('week_number', currentRoundNum);
-
-    const advancingTeams = currentMatchups?.map(m => m.winner_team_id).filter(Boolean) || [];
-
-    // --- CHAMPIONSHIP ENDS HERE ---
-    if (advancingTeams.length <= 1) {
-        console.log(`[PLAYOFFS] 👑 Championship complete! Winner: ${advancingTeams[0]}`);
-        await logSystemEvent("Playoffs", "info", `Championship complete! Winner: ${advancingTeams[0]}`);
-        
-        const { error: phaseErr } = await supabase.from('seasons').update({ phase: 'postseason' }).eq('id', seasonId);
-        if (phaseErr) console.error("[AUTOMATION] Failed to update season phase to postseason:", phaseErr);
-        
-        let offSeasonEnd: Date;
-        if (isTestSeason) {
-            offSeasonEnd = new Date(Date.now() + 5 * 60000);
-        } else {
-            const d = new Date();
-            let daysToThu = (4 - d.getUTCDay() + 7) % 7;
-            if (daysToThu === 0) daysToThu = 7; 
-            const targetDate = new Date(d.getTime() + (daysToThu + 7) * 86400000);
-            offSeasonEnd = getTargetDateCT(targetDate, 0, 12); 
-        }
-
-              // =========================================================================
-        // --- NEW: THE VALVE VOTE SPAWNER ---
-        // =========================================================================
-        try {
-            console.log(`[PlayoffGen] Identifying worst team to grant The Valve...`);
-            const { data: activeTeams } = await supabase.from('teams').select('id').eq('is_hidden', false);
-            const activeTeamIds = activeTeams?.map(t => t.id) || [];
-            
-            if (activeTeamIds.length > 0) {
-                const { data: standings } = await supabase
-                    .from('team_records_view')
-                    .select('team_id')
-                    .in('team_id', activeTeamIds)
-                    .order('wins', { ascending: true })      // Fewest wins
-                    .order('game_wins', { ascending: true }) // Tiebreaker
-                    .limit(1)
-                    .single();
-
-                if (standings?.team_id) {
-                    // Deadline is 1 hour before the offseason timer expires (1 min for test)
-                    const valveDeadline = new Date(offSeasonEnd.getTime() - (isTestSeason ? 60000 : 3600000));
-                    
-                    // Insert into the REAL polls table
-                    const { data: newPoll, error: pollErr } = await supabase.from('polls').insert({
-                        title: "THE VALVE",
-                        description: "Your team has suffered the most this season. You hold the power to turn THE VALVE and purge the realm's most hated card. What is your choice?",
-                        ends_at: valveDeadline.toISOString(),
-                        is_active: true,
-                        allow_multiple_votes: false,
-                        show_results_before_end: false,
-                        vote_type: 'team',
-                        team_id: standings.team_id
-                    }).select('id').single();
-
-                    if (newPoll && !pollErr) {
-                        // Insert the two options into poll_options
-                        await supabase.from('poll_options').insert([
-                            { poll_id: newPoll.id, option_text: "RELEASE THE VALVE", option_order: 1 },
-                            { poll_id: newPoll.id, option_text: "LEAVE THE VALVE SHUT", option_order: 2 }
-                        ]);
-                        await logSystemEvent("TheValve", "info", `Valve vote spawned for team ${standings.team_id}.`);
-                    } else {
-                        console.error("[PlayoffGen] Failed to spawn Valve vote:", pollErr);
-                    }
-                }
-            }
-        } catch (valveErr) {
-            console.error("[PlayoffGen] Failed to execute Valve spawn logic:", valveErr);
-        }
-        // =========================================================================
-
-        
-        await supabase.from('countdown_timers').update({ is_active: false }).eq('is_active', true);
-        await supabase.from('countdown_timers').insert({
-            title: 'Offseason Curation & Next Draft',
-            end_time: offSeasonEnd.toISOString(),
-            link_text: 'View Final Standings',
-            link_url: '/teams',
-            is_active: true
-        });
-        return;
-    }
-
-    const nextRoundNum = currentRoundNum + 1;
-    
-    // --- ANTI-RACE CONDITION CHECK ---
-    const { data: existingWeek } = await supabase.from('schedule_weeks')
-        .select('id').eq('season_id', seasonId).eq('week_number', nextRoundNum).maybeSingle();
-
-    if (existingWeek) {
-        console.log(`[PlayoffGen] ⚠️ Round ${nextRoundNum} already exists! Another thread beat us to it. Skipping.`);
-        return;
-    }
-
-    const isChampionship = advancingTeams.length === 2;
-    console.log(`[PlayoffGen] Creating Round ${nextRoundNum} (IsChampionship: ${isChampionship})`);
-
-    const baseStart = new Date(Date.now() + 10 * 60000);
-    const weekEnd = isTestSeason 
-        ? new Date(baseStart.getTime() + (Math.floor(advancingTeams.length / 2) * 9 * 10 * 60000)) 
-        : new Date(baseStart.getTime() + 7 * 86400000);
-
-    const { data: playoffWeek, error: weekErr } = await supabase.from('schedule_weeks').insert({
-        season_id: seasonId, week_number: nextRoundNum,
-        start_date: baseStart.toISOString(), end_date: weekEnd.toISOString(),
-        deck_submission_deadline: baseStart.toISOString(), match_completion_deadline: weekEnd.toISOString(),
-        is_playoff_week: true, is_championship_week: isChampionship, notes: isChampionship ? `Championship` : `Playoffs Round ${nextRoundNum - 99}`
-    }).select('id').single();
-
-    if (weekErr || !playoffWeek) {
-        console.error(`[PlayoffGen] ❌ Failed to create next playoff week!`, weekErr?.message);
-        await logSystemEvent("Playoffs", "error", `Failed to create playoff week ${nextRoundNum}`, { error: weekErr?.message });
-        return;
-    }
-
-    const matchupsToSchedule = [];
-    let left = 0; let right = advancingTeams.length - 1;
-
-    while (left < right) {
-        const { data: matchup, error: matchErr } = await supabase.from('weekly_matchups').insert({
-            season_id: seasonId, week_number: nextRoundNum, team1_id: advancingTeams[left], team2_id: advancingTeams[right], is_playoff: true
-        }).select('id, team1_id, team2_id').single(); 
-
-        if (matchErr) {
-            console.error(`[PlayoffGen] ❌ Matchup Insert Failed:`, matchErr.message);
-            await logSystemEvent("Playoffs", "error", `Failed to create weekly matchup`, { error: matchErr.message });
-        } else if (matchup) {
-            matchupsToSchedule.push(matchup);
-        }
-        left++; right--;
-    }
-
-    await buildSequentialAlternatingSchedule(seasonId, playoffWeek.id, nextRoundNum, matchupsToSchedule, isTestSeason, isChampionship);
-}
 
 /**
  * Builds the 1-thread alternating schedule.
@@ -905,28 +861,53 @@ async function buildSequentialAlternatingSchedule(
     console.log(`[PlayoffGen] 🗓️ Building individual games for Week ${weekNum}...`);
     const supabase = createServiceClient(); 
     
-    const { data: seasonData, error: seasonErr } = await supabase
-        .from('seasons')
-        .select('season_number')
-        .eq('id', seasonId)
-        .single();
-    
-    if (seasonErr) {
-        console.error(`[PlayoffGen] ❌ Failed to fetch season number:`, seasonErr.message);
-    }
-    
+    const { data: seasonData } = await supabase.from('seasons').select('season_number').eq('id', seasonId).single();
     const seasonNumber = seasonData?.season_number || null;
     
     const requiredGames = isTestSeason ? 3 : (isChampionship ? 9 : 7); 
     const totalGames = matchups.length * requiredGames;
-    const timeSlots: Date[] = [];
     
+    let simCursor: Date;
+    let streamCursor: Date;
+
+    // We fetch the week data so we know the start bound
+    const { data: weekData } = await supabase.from('schedule_weeks').select('start_date').eq('id', weekId).single();
+    const baseWeekStart = new Date(weekData?.start_date || Date.now());
+
     if (isTestSeason) {
-        const now = new Date();
-        for (let i = 0; i < totalGames; i++) {
-            timeSlots.push(new Date(now.getTime() + (10 * 60000) + (i * 10 * 60000)));
+        // THE FIX: Simulations process immediately, but stream outputs are offset by 10 minutes.
+        simCursor = new Date(baseWeekStart.getTime());
+        streamCursor = new Date(simCursor.getTime() + (10 * 60000));
+        
+        let successCount = 0;
+        for (let gameIndex = 0; gameIndex < requiredGames; gameIndex++) {
+            for (const matchup of matchups) {
+                const { error } = await supabase.from('schedule').insert({
+                    season_id: seasonId, season_number: seasonNumber, week_id: weekId, week_number: weekNum,
+                    team1_id: matchup.team1_id, team2_id: matchup.team2_id, weekly_matchup_id: matchup.id,
+                    match_date: simCursor.toISOString(), status: 'scheduled',
+                    team1_ai_profile: 'default', team2_ai_profile: 'default'  
+                });
+
+                if (!error) successCount++;
+
+                // Shift everything by exactly 10 minutes
+                simCursor = new Date(simCursor.getTime() + (10 * 60000));
+                streamCursor = new Date(streamCursor.getTime() + (10 * 60000));
+            }
         }
+        
+        // Update the Week boundary to explicitly match the end of the broadcast
+        await supabase.from("schedule_weeks").update({
+            end_date: streamCursor.toISOString(),
+            match_completion_deadline: streamCursor.toISOString()
+        }).eq('id', weekId);
+
+        console.log(`[PlayoffGen] ✅ Scheduled ${successCount}/${totalGames} games (10m offset) for Week ${weekNum}!`);
+
     } else {
+        // Non-test production scheduling
+        const timeSlots: Date[] = [];
         const now = new Date();
         if (isChampionship) {
             const baseStart = getTargetDateCT(now, 10, 10); 
@@ -940,39 +921,23 @@ async function buildSequentialAlternatingSchedule(
             }
             timeSlots.reverse(); 
         }
-    }
-
-    let slotIndex = 0;
-    let successCount = 0;
-
-    for (let gameIndex = 0; gameIndex < requiredGames; gameIndex++) {
-        for (const matchup of matchups) {
-            const { error } = await supabase.from('schedule').insert({
-                season_id: seasonId,
-                season_number: seasonNumber,
-                week_id: weekId,
-                week_number: weekNum,
-                team1_id: matchup.team1_id,
-                team2_id: matchup.team2_id,
-                weekly_matchup_id: matchup.id,
-                match_date: timeSlots[slotIndex].toISOString(),
-                status: 'scheduled',
-                team1_ai_profile: 'default', 
-                team2_ai_profile: 'default'  
-            });
-
-            if (error) {
-                console.error(`[PlayoffGen] ❌ Schedule Insert Failed for Matchup ${matchup.id}:`, error.message);
-                await logSystemEvent("Playoffs", "error", `Failed to insert schedule row`, { error: error.message });
-            } else {
-                successCount++;
+        
+        let slotIndex = 0;
+        for (let gameIndex = 0; gameIndex < requiredGames; gameIndex++) {
+            for (const matchup of matchups) {
+                // Buffer simulation by 30 mins before broadcast
+                const simTime = new Date(timeSlots[slotIndex].getTime() - 30 * 60000); 
+                
+                await supabase.from('schedule').insert({
+                    season_id: seasonId, season_number: seasonNumber, week_id: weekId, week_number: weekNum,
+                    team1_id: matchup.team1_id, team2_id: matchup.team2_id, weekly_matchup_id: matchup.id,
+                    match_date: simTime.toISOString(), status: 'scheduled',
+                    team1_ai_profile: 'default', team2_ai_profile: 'default'  
+                });
+                slotIndex++;
             }
-            slotIndex++;
         }
     }
-    
-    console.log(`[PlayoffGen] ✅ Successfully scheduled ${successCount}/${totalGames} games for Week ${weekNum}!`);
-    await logSystemEvent("Playoffs", "info", `Scheduled ${successCount}/${totalGames} games for Week ${weekNum}`);
 }
     
 // --- SMART ELO WEIGHTING HELPERS ---
