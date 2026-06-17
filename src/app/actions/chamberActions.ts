@@ -4,6 +4,7 @@
 import { createServerClient } from "@/lib/supabase";
 import { fetchAllCards, searchAllCards, ScryfallCard } from "@/lib/scryfall-client";
 import { type CardData } from "./cardActions";
+import { fetchEloMapFromS3 } from "./cardRatingActions"; // THE FIX: Import S3 Fetcher
 
 // Helper to create a Supabase client
 async function getSupabaseClient() {
@@ -11,17 +12,11 @@ async function getSupabaseClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 }
 
-// Re-using the cost calculation logic from cardActions
 function calculateCubucksCost(card: ScryfallCard): number {
     const legalities = card.legalities;
     let cost = 1;
-
-    if (legalities.legacy === 'banned' && legalities.vintage !== 'restricted') {
-        cost *= 3;
-    }
-    if (legalities.vintage === 'restricted') {
-        cost *= 5;
-    }
+    if (legalities.legacy === 'banned' && legalities.vintage !== 'restricted') cost *= 3;
+    if (legalities.vintage === 'restricted') cost *= 5;
     return cost;
 }
 
@@ -35,7 +30,6 @@ export async function importNextSetToChamber(): Promise<{
   const supabase = await getSupabaseClient();
 
   try {
-    // 1. Find the next set to import...
     const { data: nextSet, error: fetchSetError } = await supabase
       .from("chamber_records")
       .select("*")
@@ -55,21 +49,12 @@ export async function importNextSetToChamber(): Promise<{
 
     console.log(`Found next set to import: ${nextSet.set_name} (Code: ${nextSet.set_code})`);
 
-    // 2. Construct the Scryfall search query...
     const scryfallQuery = `(set:${nextSet.set_code}) -is:reprint -banned:vintage -oracle:banding -oracle:"bands with" -oracle:" ante"`;
     
-    // 3. Fetch all matching cards using the new `searchAllCards` function.
     const { cards: scryfallResults, errors: fetchErrors } = await searchAllCards(scryfallQuery);
+    if (fetchErrors.length > 0) console.error("Scryfall fetch errors:", fetchErrors);
+    if (scryfallResults.length === 0) console.warn(`No cards found for set ${nextSet.set_name}.`);
 
-    if (fetchErrors.length > 0) {
-        console.error("Scryfall fetch errors:", fetchErrors);
-    }
-    
-    if (scryfallResults.length === 0) {
-        console.warn(`No cards found for set ${nextSet.set_name} matching the criteria.`);
-    }
-
-    // --- HELPER TO EXTRACT ORACLE TEXT ---
     interface ScryfallFace { oracle_text?: string; }
     interface ScryfallData { oracle_text?: string; card_faces?: ScryfallFace[]; }
 
@@ -82,9 +67,15 @@ export async function importNextSetToChamber(): Promise<{
         return null;
     };
 
-    // 4. Prepare card data for insertion...
-    const cardsToInsert: Array<Omit<CardData, "id" | "created_at" | "rating_updated_at">> = scryfallResults.map(card => {
+    // THE FIX: Fetch the ELO Map before transforming so we can attach it INLINE
+    console.log(`[Chamber Actions] Fetching S3 ELO map to hydrate new cards inline...`);
+    const eloMap = await fetchEloMapFromS3();
+
+    // Note: We removed rating_updated_at from the Omit so we can assign it inline!
+    const cardsToInsert: Array<Omit<CardData, "id" | "created_at">> = scryfallResults.map(card => {
         const finalCost = calculateCubucksCost(card);
+        const rawElo = eloMap.get(card.name.toLowerCase());
+        const elo = rawElo != null ? Math.round(rawElo) : undefined;
 
         return {
             card_id: card.id,
@@ -101,11 +92,12 @@ export async function importNextSetToChamber(): Promise<{
             mana_cost: card.mana_cost,
             cmc: card.cmc || 0,
             cubucks_cost: finalCost,
-            pool_name: 'chamber', // Valid FK name for the chamber
+            cubecobra_elo: elo, // <--- HYDRATED INLINE
+            rating_updated_at: elo != null ? new Date().toISOString() : undefined, // <--- HYDRATED INLINE
+            pool_name: 'chamber', 
         };
     });
 
-    // 5. Insert the new cards...
     if (cardsToInsert.length > 0) {
         const { error: insertError } = await supabase.from("the_chamber").insert(cardsToInsert);
         if (insertError) {
@@ -113,7 +105,6 @@ export async function importNextSetToChamber(): Promise<{
         }
     }
 
-    // 6. Update the record...
     const { error: updateRecordError } = await supabase
       .from("chamber_records")
       .update({ in_chamber: true })
@@ -124,32 +115,13 @@ export async function importNextSetToChamber(): Promise<{
       throw new Error(`Cards were imported, but failed to update record for ${nextSet.set_code}: ${updateRecordError.message}`);
     }
 
-    // =========================================================================
-    // THE FIX: DYNAMICALLY SYNC ELO IMMEDIATELY UPON IMPORT
-    // =========================================================================
-    console.log(`[Chamber Actions] Triggering ELO Sync for newly imported cards in the_chamber...`);
-    try {
-        const { updateAllCubecobraElo } = await import('@/app/actions/cardRatingActions');
-        const syncResult = await updateAllCubecobraElo('the_chamber');
-        
-        if (!syncResult.success) {
-            console.warn(`[Chamber Actions] Minor Warning: ELO sync returned false during import. Log: ${syncResult.message}`);
-        } else {
-            console.log(`[Chamber Actions] ELO Sync complete for new chamber set!`);
-        }
-    } catch (eloErr) {
-        console.error(`[Chamber Actions] Critical Error running ELO sync after import:`, eloErr);
-        // We log it but do not throw, so the user still gets a success message for the base import.
-    }
-
     return {
       success: true,
-      message: `Successfully processed set '${nextSet.set_name}' and synced CubeCobra ELO.`,
+      message: `Successfully processed set '${nextSet.set_name}' and hydrated CubeCobra ELOs.`,
       importedSetName: nextSet.set_name,
       cardsAdded: cardsToInsert.length,
       errors: fetchErrors,
     };
-
   } catch (error) {
     const message = error instanceof Error ? error.message : "An unknown error occurred.";
     console.error("Error in importNextSetToChamber:", message);

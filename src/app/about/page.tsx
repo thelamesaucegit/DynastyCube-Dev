@@ -171,7 +171,8 @@ A custom built algorithm informs the prioritization of each card in the draft fo
             </p>
             <p className="p-6 md:p-8 italic text-muted-foreground space-y-5 text-lg">
 Upon completion of The Draft, a simple deck will be automatically generated for each Team and submitted as the default deck for the upcoming weekly matchup. Simulated matches are scheduled throughout Thursday - Tuesday. Additionally, members of each Team may coordinate &quot;Best-of-Three&quot; PvP matches against their weekly opponent - these PvP matches are weighted double their simulated counterparts for determining weekly match outcomes and Season records.
-          </div>
+         </p>
+            </div>
           <div>
             <h3 className="text-xl font-semibold mb-2">3. The Off-Season</h3>
             <p className="text-muted-foreground">
@@ -181,7 +182,8 @@ Upon completion of The Draft, a simple deck will be automatically generated for 
    
             <p className="p-6 md:p-8 italic text-muted-foreground space-y-5 text-lg">
 Any cards that went undrafted reduce in value, while cards that were drafted increse. Cards that remained unclaimed by any Team for multiple Seasons become &quot;Retired&quot; and are removed from the available card pool entirely. The following Season, The League budget allowed for each Team is adjusted, but the most expensive cards become more costly to retain.     
-          </div>
+        </p>
+</div>
         </div>
       </section>
 
