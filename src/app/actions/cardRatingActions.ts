@@ -59,7 +59,7 @@ export async function fetchEloMapFromS3(): Promise<Map<string, number>> {
 /**
  * Helper: Update a table's cubecobra_elo using a pre-fetched ELO map
  */
-async function updateTableCubecobraElo(
+export async function updateTableCubecobraElo(
   tableName: PoolTableName | "team_draft_picks",
   eloMap: Map<string, number>,
   systemOverride: boolean = false // THE FIX: Allow cron jobs to bypass user auth
