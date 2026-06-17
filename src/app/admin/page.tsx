@@ -21,11 +21,13 @@ import { GlossaryManagement } from "../components/admin/GlossaryManagement";
 import { DraftOrderManagement } from "../components/admin/DraftOrderManagement";
 import { DraftSessionManagement } from "../components/admin/DraftSessionManagement";
 import { EssenceManagement } from "../components/admin/EssenceManagement";
-import { CypherManagement } from "@/app/components/admin/CypherManagement"; // <-- IMPORT CYPHER
+import { CypherManagement } from "@/app/components/admin/CypherManagement"; 
 import { getTeamsWithMembers } from "../actions/teamActions";
 import { getCardPool } from "../actions/cardActions";
 import { SimMatchScheduler } from "@/app/components/admin/SimMatchScheduler";
 import { getAllSeasons, getActiveSeasonNumber } from "@/app/actions/scheduleActions";
+import { PvpReplayList } from "@/app/components/admin/PvpReplayList"; 
+
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
@@ -145,6 +147,15 @@ export default function AdminPage() {
             <Button asChild><a href="/admin/match-runner" className="inline-flex items-center gap-2">Open Match Runner <ArrowRight className="size-4" /></a></Button>
           </CardContent>
         </Card>
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg"><Play className="size-5" /> PvP Replay Uploads</CardTitle>
+                <CardDescription>Manage and view imported Cockatrice (.cor) match replays uploaded by players.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <PvpReplayList />
+            </CardContent>
+            </Card>
       );
       case "draft-order": return <DraftOrderManagement />;
       case "draft-session": return <DraftSessionManagement />;
