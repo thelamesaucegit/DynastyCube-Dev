@@ -68,9 +68,9 @@ export const ReportButton: React.FC = () => {
   };
 
   // Define the modal content separately
-  const modalContent = isOpen ? (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[9999] animate-in fade-in duration-200">
-      <div className="relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl">
+ const modalContent = isOpen ? (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[99999] animate-in fade-in duration-200 pointer-events-auto">
+    <div className="relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl">
         {/* Header */}
         <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-5 flex items-center justify-between shrink-0 rounded-t-xl">
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
