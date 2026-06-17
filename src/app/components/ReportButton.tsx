@@ -69,7 +69,10 @@ export const ReportButton: React.FC = () => {
 
   // Define the modal content separately
  const modalContent = isOpen ? (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[99999] animate-in fade-in duration-200 pointer-events-auto">
+    <div 
+      onClick={(e) => e.stopPropagation()} // THE FIX: Prevent tap events from bubbling to elements behind the modal
+    onTouchStart={(e) => e.stopPropagation()} 
+      className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[99999] animate-in fade-in duration-200 pointer-events-auto">
     <div className="relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl">
         {/* Header */}
         <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-5 flex items-center justify-between shrink-0 rounded-t-xl">
@@ -132,11 +135,12 @@ export const ReportButton: React.FC = () => {
                 Select User
               </label>
               <select
-                value={reportedUserId}
-                onChange={(e) => setReportedUserId(e.target.value)}
-                required
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-              >
+  value={reportedUserId}
+  onChange={(e) => setReportedUserId(e.target.value)}
+  required
+  className="relative z-50 pointer-events-auto w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+>
+
                 <option value="">Select a user...</option>
                 {users.map((user) => (
                   <option key={user.id} value={user.id}>
@@ -181,14 +185,15 @@ export const ReportButton: React.FC = () => {
               Title
             </label>
             <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-              maxLength={200}
-              placeholder="Brief summary of the issue..."
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-            />
+  type="text"
+  value={title}
+  onChange={(e) => setTitle(e.target.value)}
+  required
+  maxLength={200}
+  placeholder="Brief summary of the issue..."
+  className="relative z-50 pointer-events-auto w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+/>
+
           </div>
 
           {/* Description */}
@@ -197,13 +202,14 @@ export const ReportButton: React.FC = () => {
               Description
             </label>
             <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              required
-              rows={4}
-              placeholder="Provide detailed information about the issue..."
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-            />
+  value={description}
+  onChange={(e) => setDescription(e.target.value)}
+  required
+  rows={4}
+  placeholder="Provide detailed information about the issue..."
+  className="relative z-50 pointer-events-auto w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+/>
+
           </div>
 
           {/* Error Message */}
