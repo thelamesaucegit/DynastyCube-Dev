@@ -74,7 +74,8 @@ export async function fetchEloMapFromS3(): Promise<Map<string, number>> {
  */
 export async function updateTableCubecobraElo(
   tableName: PoolTableName | "team_draft_picks",
-  eloMap: Map<string, number>
+  eloMap: Map<string, number>,
+  systemOverride: boolean = false 
 ): Promise<CardRatingResult> {
   try {
     const supabase = await createServerClient();
