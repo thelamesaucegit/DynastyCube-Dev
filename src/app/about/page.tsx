@@ -162,8 +162,8 @@ export default async function AboutPage() {
               Each round, each Team picks one card from the Draft Pool at a time, in reverse standings order from the previous Season. This repeats until each Team has constructed their Team Pool. Starting from Magic&apos;s earliest sets, The League drafts sequentially through history.
             </p>
  <p className="italic text-muted-foreground text-lg">
-A custom built algorithm informs the prioritization of each card in the draft for each Team - users may manually adjust their Team's draft priority, 
-   but if they don't each Team will make intelligent draft selections based on the most powerful cards available in addition to what colors they have already drafted and what colors are still &quot;open&quot;.            
+A custom built algorithm informs the prioritization of each card in the draft for each Team - users may manually adjust their Team&apos;s draft priority, 
+   but if they don&apos;t each Team will make intelligent draft selections based on the most powerful cards available in addition to what colors they have already drafted and what colors are still &quot;open&quot;.            
  </p>
           </div>
           
