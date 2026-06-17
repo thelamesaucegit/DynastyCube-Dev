@@ -138,16 +138,19 @@ export default function AdminPage() {
       case "news": return <NewsManagement />;
       case "votes": return <VoteManagement />;
       case "matches": return (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg"><Swords className="size-5" /> Forge Match Simulator</CardTitle>
-            <CardDescription>Use the dedicated match runner page to simulate a match between two decklists using custom AI profiles and record the results.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button asChild><a href="/admin/match-runner" className="inline-flex items-center gap-2">Open Match Runner <ArrowRight className="size-4" /></a></Button>
-          </CardContent>
-        </Card>
-        <Card>
+        <div className="space-y-8">
+            <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg"><Swords className="size-5" /> Forge Match Simulator</CardTitle>
+                <CardDescription>Use the dedicated match runner page to simulate a match between two decklists using custom AI profiles and record the results.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Button asChild><a href="/admin/match-runner" className="inline-flex items-center gap-2">Open Match Runner <ArrowRight className="size-4" /></a></Button>
+            </CardContent>
+            </Card>
+
+            {/* THE FIX: ADD THE NEW PVP REPLAY LIST TO THE MATCHES TAB! */}
+            <Card>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg"><Play className="size-5" /> PvP Replay Uploads</CardTitle>
                 <CardDescription>Manage and view imported Cockatrice (.cor) match replays uploaded by players.</CardDescription>
@@ -156,6 +159,7 @@ export default function AdminPage() {
                 <PvpReplayList />
             </CardContent>
             </Card>
+        </div>
       );
       case "draft-order": return <DraftOrderManagement />;
       case "draft-session": return <DraftSessionManagement />;
