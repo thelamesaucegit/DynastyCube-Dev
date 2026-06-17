@@ -259,7 +259,7 @@ export async function computeAutoDraftPick(
     }
 
     const DEFAULT_ELO = 1000;
-    const LAND_ELO_MODIFIER = 0.80; 
+    const LAND_ELO_MODIFIER = 0.85; 
     const BASE_BONUS = 0.03; 
     const BONUS_DECAY = 0.90; 
     const colorModifiers: Record<string, number> = { W: 1, U: 1, B: 1, R: 1, G: 1 };
