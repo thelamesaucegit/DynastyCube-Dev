@@ -231,7 +231,8 @@ export async function computeAutoDraftPick(
     const { team: teamBalanceData } = await getTeamBalance(teamId, supabase);
     const balance = teamBalanceData?.cubucks_balance ?? 0;
     
-    const totalRounds = 40; 
+    // Total picks required to complete a roster
+    const totalRounds = 30; // THE FIX: Changed from 40 to 30 based on your requirement
     const picksMade = teamPicks.length;
     const remainingPicks = Math.max(1, totalRounds - picksMade);
     const targetAvgCost = Math.max(0, balance) / remainingPicks;
@@ -242,17 +243,30 @@ export async function computeAutoDraftPick(
 
     if (targetError) return { recommendation: null, algorithmDetails: null, error: targetError.message };
     
-    // STRICT TYPING FIX: Cast the unknown RPC response to our new interface
     const smartTargets = (rawTargets || []) as SmartDraftTarget[];
-    
     if (smartTargets.length === 0) return { recommendation: null, algorithmDetails: null, error: "No available cards in the pool" };
 
-    // STRICT TYPING FIX: explicitly type 'card' in the filter
-    const candidatePool = smartTargets.filter((card: SmartDraftTarget) => 
-        card.id && 
-        !excludedCardPoolIds.includes(card.id) &&
-        (card.cubucks_cost || 0) <= balance
-    );
+    // =========================================================================
+    // THE FIX: POVERTY HARD CAP LOGIC
+    // =========================================================================
+    // If the team has exactly enough (or fewer) Cubucks to finish the draft with 1-cost cards,
+    // they enter Poverty Mode. They can ONLY draft cards that cost exactly 1 (or 0).
+    const isPovertyMode = balance <= remainingPicks;
+    const isApproachingPoverty = balance <= (remainingPicks + 10);
+
+    const candidatePool = smartTargets.filter((card: SmartDraftTarget) => {
+        if (!card.id || excludedCardPoolIds.includes(card.id)) return false;
+        
+        const cost = card.cubucks_cost || 1;
+        
+        // Ensure they can technically afford it right now
+        if (cost > balance) return false;
+
+        // The Hard Cap: Strip out all expensive cards if in poverty
+        if (isPovertyMode && cost > 1) return false;
+
+        return true;
+    });
       
     if (candidatePool.length === 0) {
         return { recommendation: null, algorithmDetails: null, error: "No valid or affordable cards available." };
@@ -285,17 +299,21 @@ export async function computeAutoDraftPick(
     }
     const maxTeamAffinity = Math.max(...Object.values(colorModifiers), 1);
 
-    // 4. Evaluate Candidates using BUDGET TAX and AFFINITY
-    // STRICT TYPING FIX: explicitly type 'card' in the map
+    // 4. Evaluate Candidates using PROGRESSIVE BUDGET TAX and AFFINITY
     const sortedCandidates = candidatePool
         .map((card: SmartDraftTarget) => {
             let elo = card.smart_elo; 
-            const cost = card.cubucks_cost || 0;
+            const cost = card.cubucks_cost || 1;
 
+            // THE FIX: Progressive Value Shifting
             if (cost < targetAvgCost) {
+                // Reward cheap cards
                 elo += (targetAvgCost - cost) * 10;
             } else if (cost > targetAvgCost) {
-                elo -= Math.pow(cost - targetAvgCost, 1.5) * 15;
+                // Penalize expensive cards. 
+                // If approaching poverty, drastically increase the penalty so the AI avoids them!
+                const penaltyMultiplier = isApproachingPoverty ? 35 : 15;
+                elo -= Math.pow(cost - targetAvgCost, 1.5) * penaltyMultiplier;
             }
 
             const fuzzAmount = Math.floor(Math.random() * 101) - 50; 
@@ -329,7 +347,6 @@ export async function computeAutoDraftPick(
                     affinity = maxTeamAffinity; 
                 }
             }
-
             return { ...card, effective_elo: elo * affinity };
         })
         .sort((a, b) => b.effective_elo - a.effective_elo);
@@ -354,7 +371,6 @@ export async function computeAutoDraftPick(
         };
     }
 
-    // STRICT TYPING FIX: Safe cast via unknown avoids the 'any' linter error
     return { recommendation: bestPick as unknown as CardData, algorithmDetails: algoDetails };
   } catch (error) {
     console.error("Error computing auto-draft pick:", error);
