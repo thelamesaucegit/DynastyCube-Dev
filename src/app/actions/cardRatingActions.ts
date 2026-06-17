@@ -1,21 +1,17 @@
-//src/app/actions/cardRatingActions.ts
-
+// src/app/actions/cardRatingActions.ts
 "use server";
 
 import { createServerClient } from "@/lib/supabase";
-import type { PoolTableName } from "./cardActions"; // Import the type
+import type { PoolTableName } from "./cardActions"; 
 
-
-// NEW: Helper interfaces for the S3 data structures
 interface SimpleCard {
   name: string;
   elo?: number;
 }
 
 interface SimpleCardDict {
-  [key: string]: SimpleCard; // Key is Oracle ID
+  [key: string]: SimpleCard; 
 }
-
 
 interface CardRatingResult {
   success: boolean;
@@ -29,29 +25,24 @@ interface CardRatingResult {
 const S3_BUCKET_URL = "https://cubecobra-public.s3.amazonaws.com/";
 
 /**
- * NEW (Corrected): Fetches the required JSON files from CubeCobra's public S3 bucket
- * and builds the ELO map directly from the simpleCardDict.
+ * NEW: Exported so it can be used natively during Card Imports!
  */
-async function fetchEloMapFromS3(): Promise<Map<string, number>> {
+export async function fetchEloMapFromS3(): Promise<Map<string, number>> {
   try {
     console.log("Fetching ELO data from CubeCobra S3 bucket...");
-
-    // 1. Fetch the card dictionary with ELO scores (this is all we need)
     const simpleCardDictResponse = await fetch(`${S3_BUCKET_URL}export/simpleCardDict.json`);
+
     if (!simpleCardDictResponse.ok) {
       throw new Error("Failed to fetch simpleCardDict.json from S3");
     }
-    const simpleCardDict: SimpleCardDict = await simpleCardDictResponse.json();
 
+    const simpleCardDict: SimpleCardDict = await simpleCardDictResponse.json();
     console.log("Successfully fetched S3 data. Building ELO map...");
 
-    // 2. Create the final ELO map (lowercase name -> elo)
     const eloMap = new Map<string, number>();
 
-    // Iterate directly through the card dictionary
     for (const oracleId in simpleCardDict) {
       const cardData = simpleCardDict[oracleId];
-      // Check if the card has a name and a numeric ELO score
       if (cardData && cardData.name && typeof cardData.elo === 'number') {
         eloMap.set(cardData.name.toLowerCase(), cardData.elo);
       }
@@ -59,28 +50,26 @@ async function fetchEloMapFromS3(): Promise<Map<string, number>> {
     
     console.log(`ELO map built successfully with ${eloMap.size} entries.`);
     return eloMap;
-
   } catch (error) {
     console.error("Error fetching or processing CubeCobra S3 data:", error);
-    // Return an empty map on failure to prevent downstream errors
     return new Map<string, number>();
   }
 }
-
-
 
 /**
  * Helper: Update a table's cubecobra_elo using a pre-fetched ELO map
  */
 async function updateTableCubecobraElo(
   tableName: PoolTableName | "team_draft_picks",
-  eloMap: Map<string, number>
+  eloMap: Map<string, number>,
+  systemOverride: boolean = false // THE FIX: Allow cron jobs to bypass user auth
 ): Promise<CardRatingResult> {
   try {
     const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return { success: false, message: "Not authenticated" };
+    
+    if (!systemOverride) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { success: false, message: "Not authenticated" };
     }
 
     const { data: cards, error: fetchError } = await supabase
@@ -90,6 +79,7 @@ async function updateTableCubecobraElo(
     if (fetchError) {
       return { success: false, message: `Database error: ${fetchError.message}` };
     }
+
     if (!cards || cards.length === 0) {
       return { success: true, updatedCount: 0, message: `No cards found in ${tableName}` };
     }
@@ -100,20 +90,18 @@ async function updateTableCubecobraElo(
     let notFoundCount = 0;
     const updateErrors: string[] = [];
 
-    // --- REVERTING TO THE FOR...OF LOOP FOR RELIABILITY ---
     for (const card of cards) {
       const elo = eloMap.get(card.card_name.toLowerCase());
       
       if (elo == null) {
         notFoundCount++;
-        continue; // Skip this card
+        continue;
       }
 
-      // Perform a single update for this card
       const { error: updateError } = await supabase
         .from(tableName)
         .update({
-          cubecobra_elo: Math.round(elo), // Keep the rounding fix
+          cubecobra_elo: Math.round(elo),
           rating_updated_at: new Date().toISOString(),
         })
         .eq("id", card.id);
@@ -126,7 +114,6 @@ async function updateTableCubecobraElo(
         updatedCount++;
       }
     }
-    // --- END OF LOOP ---
 
     return {
       success: updateErrors.length === 0,
@@ -142,11 +129,9 @@ async function updateTableCubecobraElo(
   }
 }
 
-/**
- * REPLACED: This now uses the S3 data source instead of a specific cube
- */
 export async function updateAllCubecobraElo(
-  tableName?: PoolTableName
+  tableName?: PoolTableName,
+  systemOverride: boolean = false // THE FIX: Allow cron jobs to bypass user auth
 ): Promise<{
   success: boolean;
   results: CardRatingResult[];
@@ -154,9 +139,10 @@ export async function updateAllCubecobraElo(
 }> {
   try {
     const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return { success: false, results: [], message: "Not authenticated" };
+    
+    if (!systemOverride) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { success: false, results: [], message: "Not authenticated" };
     }
     
     console.log(`Starting CubeCobra ELO sync. Target: ${tableName || 'All Tables'}`);
@@ -170,11 +156,11 @@ export async function updateAllCubecobraElo(
     const tablesToSync: PoolTableName[] = tableName ? [tableName] : ["card_pools", "the_chamber", "resort_pool"];
 
     for (const table of tablesToSync) {
-        const result = await updateTableCubecobraElo(table, eloMap);
+        const result = await updateTableCubecobraElo(table, eloMap, systemOverride);
         syncResults.push({ ...result, message: `[${table}] ${result.message}` });
     }
 
-   const draftResult = await updateTableCubecobraElo("team_draft_picks", eloMap);
+    const draftResult = await updateTableCubecobraElo("team_draft_picks", eloMap, systemOverride);
     syncResults.push({ ...draftResult, message: `[team_draft_picks] ${draftResult.message}` });
 
     const totalUpdated = syncResults.reduce((sum, res) => sum + (res.updatedCount || 0), 0);
@@ -192,60 +178,3 @@ export async function updateAllCubecobraElo(
     return { success: false, results: [], message: `Unexpected error: ${message}` };
   }
 }
-
-// NOTE: The single-table update functions and the test function are now deprecated
-// as they rely on the old cube-specific fetch. You can either remove them
-// or leave them if they are used elsewhere for testing specific cubes.
-// For simplicity, I'm leaving them out of this final version.
-
-/**
- * TEMPORARY DEBUGGING TOOL
- * Fetches data and compares a sample card from your DB against the generated ELO map.
- */
-export async function debugEloSync(): Promise<object> {
-  try {
-    const supabase = await createServerClient();
-    
-    // 1. Get one sample card from your database
-    const { data: dbCard, error: dbError } = await supabase
-      .from("card_pools")
-      .select("card_name")
-      .limit(1)
-      .single();
-      
-    if (dbError || !dbCard) {
-      return { error: "Could not fetch a sample card from your card_pools table.", details: dbError };
-    }
-    
-    const dbCardName = dbCard.card_name;
-    const dbCardNameLower = dbCardName.toLowerCase();
-
-    // 2. Run the same S3 fetching logic
-    const s3EloMap = await fetchEloMapFromS3();
-
-    // 3. Perform the lookup and inspection
-    const lookupResult = s3EloMap.get(dbCardNameLower);
-    const keyExists = s3EloMap.has(dbCardNameLower);
-    
-    // 4. Get a sample of the keys from the S3 ELO map
-    const sampleEloMapKeys = Array.from(s3EloMap.keys()).slice(0, 10);
-    
-    // 5. Return a detailed report
-    return {
-      dbCardName,
-      dbCardNameLower,
-      eloMapSize: s3EloMap.size,
-      sampleEloMapKeys,
-      keyExists,
-      lookupResult: lookupResult === undefined ? "Not Found" : lookupResult,
-      message: `Checked for '${dbCardNameLower}'. Found in map: ${keyExists}.`,
-    };
-    
-  } catch (error) {
-    return {
-      error: "A critical error occurred during the debug sync.",
-      message: error instanceof Error ? error.message : String(error)
-    };
-  }
-}
-
