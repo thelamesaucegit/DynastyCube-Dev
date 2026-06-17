@@ -155,35 +155,44 @@ export default async function AboutPage() {
         <h2 className="text-3xl font-bold">How The League Works</h2>
 
         <div className="space-y-6 pl-4 border-l-2 border-muted">
+          
           <div>
             <h3 className="text-xl font-semibold mb-2">1. The Draft</h3>
             <p className="text-muted-foreground">
               Each round, each Team picks one card from the Draft Pool at a time, in reverse standings order from the previous Season. This repeats until each Team has constructed their Team Pool. Starting from Magic&apos;s earliest sets, The League drafts sequentially through history.
             </p>
- <p className="p-6 md:p-8 italic text-muted-foreground space-y-5 text-lg">
-A custom built algorithm informs the prioritization of each card in the draft for each Team - users may manually adjust their Team's draft priority, but if they don't each Team will make intelligent draft selections based on the most powerful cards available in addition to what colors they have already drafted and what colors are still &quot;open&quot;.            </p>
-            
+ <p className="italic text-muted-foreground text-lg">
+A custom built algorithm informs the prioritization of each card in the draft for each Team - users may manually adjust their Team's draft priority, 
+   but if they don't each Team will make intelligent draft selections based on the most powerful cards available in addition to what colors they have already drafted and what colors are still &quot;open&quot;.            
+ </p>
           </div>
+          
           <div>
             <h3 className="text-xl font-semibold mb-2">2. The Season</h3>
             <p className="text-muted-foreground">
               Each week, Teams will submit a deck from their drafted pools and play out matches to determine rankings, leading up to the Championship match. Teams collaborate on strategies, acquire undrafted cards from THE WIRE or Free Agent Pool, and trade cards and other resources with one another.
             </p>
-            <p className="p-6 md:p-8 italic text-muted-foreground space-y-5 text-lg">
-Upon completion of The Draft, a simple deck will be automatically generated for each Team and submitted as the default deck for the upcoming weekly matchup. Simulated matches are scheduled throughout Thursday - Tuesday. Additionally, members of each Team may coordinate &quot;Best-of-Three&quot; PvP matches against their weekly opponent - these PvP matches are weighted double their simulated counterparts for determining weekly match outcomes and Season records.
+            
+ <p className="italic text-muted-foreground text-lg">
+Upon completion of The Draft, a simple deck will be automatically generated for each Team and submitted as the default deck for the upcoming weekly matchup. 
+   Simulated matches are scheduled throughout Thursday - Tuesday. 
+   Additionally, members of each Team may coordinate &quot;Best-of-Three&quot; PvP matches against their weekly opponent - these PvP matches are weighted double their simulated counterparts for determining weekly match outcomes and Season records.
          </p>
             </div>
+
+          
           <div>
             <h3 className="text-xl font-semibold mb-2">3. The Off-Season</h3>
             <p className="text-muted-foreground">
               After the Championship, The Cube shifts. Older cards become harder to retain, and the <em>next</em> chronological Magic set is added the Draft Pool. The Teams then convene to vote on new rules, shaping the environment for the coming Season.
             </p>
-<p className="p-6 md:p-8 italic text-muted-foreground space-y-5 text-lg">
-   
-            <p className="p-6 md:p-8 italic text-muted-foreground space-y-5 text-lg">
-Any cards that went undrafted reduce in value, while cards that were drafted increse. Cards that remained unclaimed by any Team for multiple Seasons become &quot;Retired&quot; and are removed from the available card pool entirely. The following Season, The League budget allowed for each Team is adjusted, but the most expensive cards become more costly to retain.     
+            
+ <p className="italic text-muted-foreground text-lg">
+   Any cards that went undrafted reduce in value, while cards that were drafted increse. Cards that remained unclaimed by any Team for multiple Seasons become &quot;Retired&quot; and are removed from the available card pool entirely. 
+   The following Season, The League budget allowed for each Team is adjusted, but the most expensive cards become more costly to retain.     
         </p>
 </div>
+          
         </div>
       </section>
 
