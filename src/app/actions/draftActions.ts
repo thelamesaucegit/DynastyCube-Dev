@@ -259,16 +259,39 @@ export async function getTeamDraftPicks(
 ): Promise<{ picks: DraftPick[]; error?: string }> {
     const supabase = adminClient ?? createServiceClient();
   try {
-    let query = supabase.from("team_draft_picks").select("*").eq("team_id", teamId);
+    // THE FIX: Join 'card_pools' to fetch the real, live cubucks_cost from the master card pool table!
+    let query = supabase
+      .from("team_draft_picks")
+      .select(`
+        *,
+        card_pools!team_draft_picks_card_pool_id_fkey (
+          cubucks_cost
+        )
+      `)
+      .eq("team_id", teamId);
+
     if (draftSessionId) {
       query = query.eq("draft_session_id", draftSessionId);
     }
+    
     const { data, error } = await query.order("pick_number", { ascending: true });
+    
     if (error) {
       console.error("Error fetching draft picks:", error);
       return { picks: [], error: error.message };
     }
-    return { picks: data || [] };
+
+    // Map the returned joined relation onto our flat DraftPick interface!
+    const mappedPicks: DraftPick[] = (data || []).map((pick: any) => {
+        const poolData = Array.isArray(pick.card_pools) ? pick.card_pools[0] : pick.card_pools;
+        return {
+            ...pick,
+            // Use the joined cost if available, otherwise fall back to the roster value
+            cubucks_cost: poolData?.cubucks_cost ?? pick.cubucks_cost ?? 1
+        };
+    });
+
+    return { picks: mappedPicks };
   } catch (error) {
     console.error("Unexpected error fetching draft picks:", error);
     return { picks: [], error: "An unexpected error occurred" };
