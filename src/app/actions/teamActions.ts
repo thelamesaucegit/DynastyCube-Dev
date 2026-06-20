@@ -239,7 +239,7 @@ export async function executeTeamTransformation(
 ): Promise<{ success: boolean; error?: string }> {
     if (!teamId) return { success: false, error: "Team ID is required." };
 
-    const supabase = createServiceRoleClient(); // Assuming you have this helper
+    const supabase = createServiceClient(); // Assuming you have this helper
     try {
         const { error } = await supabase
             .from('teams')
