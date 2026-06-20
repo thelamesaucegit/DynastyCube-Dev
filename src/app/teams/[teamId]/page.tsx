@@ -420,18 +420,21 @@ export default function TeamPage() {
             </div>
                        <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-4 w-full">
-                {/* THE FIX: Added min-w-0 here to allow the text container to shrink, 
-                    and added 'truncate' to the text elements so they don't break the layout! */}
+                {/*  Replaced 'truncate' with fluid typography 'clamp' sizing,
+                    allowing the text to dynamically shrink on narrow displays rather than cutting off! */}
                 <div className="flex-1 min-w-0 pr-4">
-                  <h1 className="text-3xl font-bold tracking-tight mb-1 break-words" title={team.name}>
+                  <h1 
+                    className="font-bold tracking-tight mb-1 text-[length:clamp(1.25rem,4.5vw,1.875rem)] leading-tight break-words"
+                    title={team.name}
+                  >
                     {team.name}
                   </h1>
-                  <p className="text-lg text-muted-foreground italic break-words" title={team.motto}>
+                  <p className="text-sm sm:text-base md:text-lg text-muted-foreground italic truncate" title={team.motto}>
                     &quot;{team.motto}&quot;
                   </p>
                 </div>
                 
-                {/* THE FIX: Ensured the button NEVER shrinks using shrink-0 */}
+                {/* Keep the button protected from shrinking */}
                 <Button asChild className="shrink-0">
                   <Link href={`/teams/${teamShortName}/trades`} className="shrink-0">
                     <ArrowLeftRight className="size-4 mr-2 hidden sm:inline-block" /> 
