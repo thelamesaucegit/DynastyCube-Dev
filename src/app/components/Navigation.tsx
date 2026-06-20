@@ -10,7 +10,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { NotificationBell } from "./NotificationBell";
 import { MessageDropdown } from "./MessageDropdown";
-import { ReportButton } from "./ReportButton";
+import { ReportButton, ReportModalOverlay } from "./ReportButton";
 import { Button } from "./ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { createClient } from "@/lib/supabase/client"; 
@@ -104,7 +104,8 @@ export default function Navigation() {
   const isDropdownActive = (paths: string[]) => paths.some(path => pathname.startsWith(path));
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+   <>
+     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container max-w-7xl mx-auto flex h-16 items-center justify-between px-4">
         <div className="flex items-center gap-8">
           <Link href="/" className="flex items-center gap-2 transition-opacity hover:opacity-80 shrink-0">
@@ -391,10 +392,11 @@ export default function Navigation() {
                     )}
                   </>
                 )}
-                {/* Bottom Buttons */}
+                 {/* Bottom Buttons */}
                 {user && (
                   <div className="flex items-center gap-3 px-4 py-2 border-t mt-4 pt-6">
-                    <ReportButton />
+                    {/* THE FIX: Close the Sheet when clicked to destroy the focus trap! */}
+                    <ReportButton onClick={() => setMobileMenuOpen(false)} />
                     <MessageDropdown />
                     <NotificationBell />
                   </div>
@@ -405,5 +407,8 @@ export default function Navigation() {
         </div>
       </div>
     </header>
+        {/* THE FIX: Mounted natively outside the header so it sits above everything organically! */}
+      <ReportModalOverlay />
+    </>
   );
 }
