@@ -207,9 +207,12 @@ export async function getPollResults(pollId: string) {
 export async function castVote(pollId: string, optionIds: string[], userId: string) {
   try {
     const supabase = await createServerClient();
+    
+    console.log("[Debug] 1. Starting poll fetch...");
     const { data: poll, error: pollError } = await supabase.from("polls").select("allow_multiple_votes, ends_at, vote_type").eq("id", pollId).single();
-
     if (pollError) throw pollError;
+    console.log("[Debug] 1. Success.");
+
     if (!poll) return { success: false, error: "Poll not found" };
     if (new Date(poll.ends_at) < new Date()) return { success: false, error: "This poll has ended" };
     if (!poll.allow_multiple_votes && optionIds.length > 1) return { success: false, error: "This poll only allows one selection" };
@@ -218,46 +221,44 @@ export async function castVote(pollId: string, optionIds: string[], userId: stri
     let voteWeight = 1;
 
     if (poll.vote_type === "team" || poll.vote_type === "republic" || poll.vote_type === "blessing_event") {
-      const { data: userTeamId } = await supabase.rpc("get_user_team_for_voting", { p_user_id: userId });
+      console.log("[Debug] 2. Starting get_user_team_for_voting RPC...");
+      const { data: userTeamId, error: teamErr } = await supabase.rpc("get_user_team_for_voting", { p_user_id: userId });
+      if (teamErr) throw teamErr;
+      console.log("[Debug] 2. Success.");
+      
       if (!userTeamId) return { success: false, error: "You must be on a team to vote in this poll" };
       teamId = userTeamId;
+      
       if (poll.vote_type === "republic") {
-        const { data: weight } = await supabase.rpc("get_user_vote_weight", { p_user_id: userId, p_team_id: teamId });
+        console.log("[Debug] 3. Starting get_user_vote_weight RPC...");
+        const { data: weight, error: weightErr } = await supabase.rpc("get_user_vote_weight", { p_user_id: userId, p_team_id: teamId });
+        if (weightErr) throw weightErr;
+        console.log("[Debug] 3. Success.");
         voteWeight = weight || 1;
       }
     }
 
-    if (poll.vote_type === "blessing_event") {
-        // This part is fine as it is
-        await supabase.from("blessing_allocations").delete().eq("poll_id", pollId).eq("user_id", userId);
-        if (optionIds.length > 0) {
-            const allocations = optionIds.map((opt) => ({ poll_id: pollId, option_id: opt, team_id: teamId, user_id: userId, voted_yes: true }));
-            const { error: insertError } = await supabase.from("blessing_allocations").insert(allocations);
-            if (insertError) throw insertError;
-        }
-        return { success: true, message: "Allocations saved successfully!" };
-    } 
-
-    // THE FIX: Call the type-safe RPC function to delete the vote
+    console.log("[Debug] 4. Starting delete_poll_vote RPC...");
     const { error: deleteError } = await supabase.rpc('delete_poll_vote', {
         p_poll_id: pollId,
         p_user_id: userId
     });
-
-    if (deleteError) {
-        // Log the specific error and re-throw to be caught by the main try-catch block
-        console.error("RPC delete_poll_vote failed:", deleteError);
-        throw deleteError;
-    }
+    if (deleteError) throw deleteError;
+    console.log("[Debug] 4. Success.");
 
     if (optionIds.length > 0) {
+      console.log("[Debug] 5. Starting poll_votes insert...");
       const votes = optionIds.map((optionId) => ({ poll_id: pollId, option_id: optionId, user_id: userId, team_id: teamId, vote_weight: voteWeight }));
       const { error: insertError } = await supabase.from("poll_votes").insert(votes);
       if (insertError) throw insertError;
+      console.log("[Debug] 5. Success.");
     }
 
     if (poll.vote_type === "team" || poll.vote_type === "republic") {
-      await supabase.rpc("recalculate_poll_results", { p_poll_id: pollId, p_team_id: teamId });
+      console.log("[Debug] 6. Starting recalculate_poll_results RPC...");
+      const { error: recalcErr } = await supabase.rpc("recalculate_poll_results", { p_poll_id: pollId, p_team_id: teamId });
+      if (recalcErr) throw recalcErr;
+      console.log("[Debug] 6. Success.");
     }
 
     return { success: true, message: "Vote cast successfully!" };
