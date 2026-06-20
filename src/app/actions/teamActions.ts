@@ -225,6 +225,27 @@ export async function addMemberToTeam(
   }
 }
 
+
+export async function executeTeamTransformation(
+    teamId: string | null,
+    newIdentity: 'mimics' | 'changelings'
+): Promise<{ success: boolean; error?: string }> {
+    if (!teamId) return { success: false, error: "Team ID is required." };
+
+    const supabase = createServiceRoleClient(); // Assuming you have this helper
+    try {
+        const { error } = await supabase
+            .from('teams')
+            .update({ active_identity: newIdentity })
+            .eq('id', teamId);
+
+        if (error) throw error;
+
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: (e as Error).message };
+    }
+}
 /**
  * Add a user to a team by user_id (returns member_id for role assignment)
  */
