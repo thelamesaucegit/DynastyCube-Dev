@@ -78,6 +78,14 @@ export interface TeamWithDetails {
   } | null;
 }
 
+// Service Role client for bypassing RLS after admin verification
+function createServiceRoleClient() {
+  return createSupabaseJsClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_KEY!
+  );
+}
+
 /**
  * Get all users for dropdown selection (Admin only)
  */
