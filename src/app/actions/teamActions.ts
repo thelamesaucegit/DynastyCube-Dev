@@ -1,6 +1,6 @@
 // src/app/actions/teamActions.ts
 "use server";
-
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
 
 // 1. Define the exact shape returned by the RPC
@@ -76,6 +76,13 @@ export interface TeamWithDetails {
     image_url: string | null;
     card_name: string;
   } | null;
+}
+
+function createServiceClient() {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_KEY!
+  );
 }
 
 /**
@@ -232,7 +239,7 @@ export async function executeTeamTransformation(
 ): Promise<{ success: boolean; error?: string }> {
     if (!teamId) return { success: false, error: "Team ID is required." };
 
-    const supabase = createServiceRoleClient(); // Assuming you have this helper
+    const supabase = createServiceClient(); // Assuming you have this helper
     try {
         const { error } = await supabase
             .from('teams')
