@@ -11,9 +11,8 @@ import {
   undraftAllCards,
   clearCardPool,
   backfillImportedCards,
-  promoteSeasonData, // <--- NEW IMPORT
+  promoteSeasonData,
 } from "@/app/actions/cardActions";
-
 import type { CardData, PoolTableName } from "@/app/actions/cardActions";
 import { getPoolCardsWithStatus } from "@/app/actions/poolActions";
 import type { PoolCard } from "@/app/actions/poolActions";
@@ -34,6 +33,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/app/components/ui/select";
+import { Switch } from "@/app/components/ui/switch";
+import { Label } from "@/app/components/ui/label";
+import { ShieldAlert } from "lucide-react";
+// Import our new server action!
+import { purgeAndSyncOldestIds } from "@/app/actions/adminActions"; 
 
 interface MTGCard {
   id: string;
@@ -68,22 +72,28 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+
   const [bulkText, setBulkText] = useState("");
   const [bulkCost, setBulkCost] = useState("1");
   const [bulkImporting, setBulkImporting] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
-  const [promoting, setPromoting] = useState(false); // <--- NEW STATE
+  const [promoting, setPromoting] = useState(false);
+  // NEW STATE: Deep Purge toggle
+  const [enableDeepPurge, setEnableDeepPurge] = useState(false);
+
   const [bulkResult, setBulkResult] = useState<{
       added: number;
     failed: { name: string; reason: string }[];
     eloSyncMessage?: string;
   } | null>(null);
+
   const [poolCards, setPoolCards] = useState<PoolCard[]>([]);
   const [clearFilter, setClearFilter] = useState<"all" | "undrafted" | "drafted" | null>(null);
   const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
     loadCards();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePool]);
 
   const loadCards = async () => {
@@ -97,6 +107,7 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
       } else {
         setCards(poolResult.cards);
       }
+
       if (activePool === "card_pools") {
         const statusResult = await getPoolCardsWithStatus();
         setPoolCards(statusResult.cards || []);
@@ -284,24 +295,46 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
   };
 
   const handleBackfillImported = async () => {
-      if (!confirm(`This will scan the ${poolConfigs.find(p => p.table === activePool)?.label} for any imported cards missing Scryfall data and attempt to backfill them. Continue?`)) return;
-      setBackfilling(true);
-      try {
-          const result = await backfillImportedCards(activePool);
-          if (result.success) {
-              toast.success(`Successfully backfilled ${result.updated} card(s) from Scryfall!`);
-              await loadCards(); 
-          } else {
-              toast.error(result.error || "Failed to run backfill.");
+      // THE FIX: Switch statement for Deep Purge vs Standard Backfill
+      if (enableDeepPurge) {
+          if (!confirm(`WARNING: This will query Scryfall for ALL cards in your database to overwrite their IDs with their true first printings. This process can take several minutes and is highly intensive. Continue?`)) return;
+          
+          setBackfilling(true);
+          toast.loading("Running Deep Purge & Reimport...", { id: 'deep-purge' });
+          try {
+              const result = await purgeAndSyncOldestIds();
+              if (result.success) {
+                  toast.success(`Deep Purge complete! Synced ${result.updated} cards.`, { id: 'deep-purge' });
+                  await loadCards();
+              } else {
+                  toast.error(result.error || "Failed to run Deep Purge.", { id: 'deep-purge' });
+              }
+          } catch (err) {
+              toast.error("An unexpected error occurred during Deep Purge.", { id: 'deep-purge' });
+          } finally {
+              setBackfilling(false);
           }
-      } catch (err) {
-          toast.error("An unexpected error occurred during backfill.");
-      } finally {
-          setBackfilling(false);
+      } else {
+          // Standard Backfill logic
+          if (!confirm(`This will scan the ${poolConfigs.find(p => p.table === activePool)?.label} for any imported cards missing Scryfall data and attempt to backfill them. Continue?`)) return;
+          
+          setBackfilling(true);
+          try {
+              const result = await backfillImportedCards(activePool);
+              if (result.success) {
+                  toast.success(`Successfully backfilled ${result.updated} card(s) from Scryfall!`);
+                  await loadCards(); 
+              } else {
+                  toast.error(result.error || "Failed to run backfill.");
+              }
+          } catch (err) {
+              toast.error("An unexpected error occurred during backfill.");
+          } finally {
+              setBackfilling(false);
+          }
       }
   };
 
-  // --- NEW HANDLER FOR PROMOTE SEASON ---
   const handlePromoteSeason = async () => {
     if (!confirm("WARNING: This will DESTROY all current cards and draft picks in the active pool, replacing them with the card_pools_next table. Are you absolutely sure?")) return;
     setPromoting(true);
@@ -389,22 +422,37 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
       </div>
 
       <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-300 dark:border-amber-700 rounded-lg p-6 mb-6">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex justify-between items-start mb-4">
             <div>
                 <h3 className="font-semibold text-lg">Bulk Import & Sync</h3>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground mb-4">
                 Paste card names (one per line) to import full card data and sync ELO ratings.
                 </p>
+
+                {/* THE FIX: Add the Toggle Switch right above the buttons */}
+                <div className="flex items-center gap-2 mb-2 p-3 bg-muted/50 rounded-lg border border-border inline-flex">
+                    <Switch 
+                        id="deep-purge" 
+                        checked={enableDeepPurge} 
+                        onCheckedChange={setEnableDeepPurge} 
+                        className="data-[state=checked]:bg-orange-500"
+                    />
+                    <Label htmlFor="deep-purge" className="font-bold flex items-center gap-1.5 cursor-pointer">
+                        <ShieldAlert className="size-4 text-orange-500" /> Enable Deep ID Purge Overwrite
+                    </Label>
+                </div>
             </div>
+
             {/* BUTTON GROUP FOR BACKFILL & PROMOTE */}
             <div className="flex gap-2">
                 <button 
                     onClick={handleBackfillImported} 
                     disabled={backfilling || promoting} 
-                    className="admin-btn bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50"
+                    className={`admin-btn text-white disabled:opacity-50 ${enableDeepPurge ? "bg-orange-600 hover:bg-orange-700" : "bg-indigo-600 hover:bg-indigo-700"}`}
                 >
-                    {backfilling ? "Scanning..." : "Fix Missing Scryfall Data"}
+                    {backfilling ? "Processing..." : enableDeepPurge ? "Execute Deep Purge Sync" : "Fix Missing Scryfall Data"}
                 </button>
+
                 <button 
                     onClick={handlePromoteSeason} 
                     disabled={backfilling || promoting} 

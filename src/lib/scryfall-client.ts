@@ -377,3 +377,51 @@ export function extractRatingData(card: ScryfallCard) {
     updatedAt: new Date().toISOString(),
   };
 }
+
+export async function fetchOldestPrintingsByName(cardNames: string[]): Promise<Map<string, { id: string, oracle_id: string, image_url: string }>> {
+  const validNames = [...new Set(cardNames.filter(n => n && typeof n === 'string' && n.trim().length > 0))];
+  const result = new Map<string, { id: string, oracle_id: string, image_url: string }>();
+
+  if (validNames.length === 0) return result;
+
+  // Batching 15 at a time to prevent URL length limits with long card names
+  const BATCH_SIZE = 15;
+
+  for (let i = 0; i < validNames.length; i += BATCH_SIZE) {
+    const batch = validNames.slice(i, i + BATCH_SIZE);
+    
+    // Construct the query: (!"Name 1" or !"Name 2") prefer:oldest
+    // We strip internal quotes from card names to prevent syntax breaking
+    const nameQueries = batch.map(name => `!"${name.replace(/"/g, '')}"`).join(" or ");
+    const query = `(${nameQueries}) prefer:oldest`;
+    
+    let nextPageUrl: string | null = `${SCRYFALL_API_BASE}/cards/search?q=${encodeURIComponent(query)}`;
+
+    try {
+      while (nextPageUrl) {
+        await waitForRateLimit();
+        
+        const response: Response = await fetch(nextPageUrl, { headers: SCRYFALL_HEADERS });
+        if (!response.ok) break;
+
+        const resJson = await response.json();
+        const foundCards = (resJson.data || []) as ScryfallCard[];
+
+        for (const card of foundCards) {
+          const imageUrl = card.image_uris?.normal || card.image_uris?.small || "";
+          result.set(card.name.toLowerCase(), {
+            id: card.id,
+            oracle_id: card.oracle_id,
+            image_url: imageUrl
+          });
+        }
+        
+        nextPageUrl = resJson.has_more ? resJson.next_page : null;
+      }
+    } catch (error) {
+      console.error(`Error in fetchOldestPrintingsByName (Batch starting at index ${i}):`, error);
+    }
+  }
+
+  return result;
+}
