@@ -123,7 +123,7 @@ export const ReportModalOverlay: React.FC = () => {
           <div>
             <label className="block text-xs uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">Report Type</label>
             <div className="grid grid-cols-2 gap-3">
-              {[
+                            {[
                 { value: "bad_actor", label: "👤 Bad Actor", desc: "User behavior" },
                 { value: "bug", label: "🐛 Bug", desc: "Technical issue" },
                 { value: "issue", label: "⚙️ Issue", desc: "General problem" },
@@ -132,7 +132,8 @@ export const ReportModalOverlay: React.FC = () => {
                 <button
                   key={type.value}
                   type="button"
-                  onClick={() => setReportType(type.value as any)}
+                  // THE FIX: Explicitly typed string union literal instead of 'any'
+                  onClick={() => setReportType(type.value as "bad_actor" | "bug" | "issue" | "other")}
                   className={`p-3 border-2 rounded-lg text-left transition-all ${
                     reportType === type.value
                       ? "border-orange-600 dark:border-orange-400 bg-orange-50 dark:bg-orange-900/20"
@@ -143,6 +144,7 @@ export const ReportModalOverlay: React.FC = () => {
                   <div className="text-[11px] text-gray-500 dark:text-gray-400">{type.desc}</div>
                 </button>
               ))}
+
             </div>
           </div>
 
@@ -163,7 +165,7 @@ export const ReportModalOverlay: React.FC = () => {
             </div>
           )}
 
-          <div>
+                   <div>
             <label className="block text-xs uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">Severity</label>
             <div className="grid grid-cols-4 gap-2">
               {[
@@ -175,7 +177,8 @@ export const ReportModalOverlay: React.FC = () => {
                 <button
                   key={sev.value}
                   type="button"
-                  onClick={() => setSeverity(sev.value as any)}
+                  // THE FIX: Explicitly typed string union literal instead of 'any'
+                  onClick={() => setSeverity(sev.value as "low" | "medium" | "high" | "critical")}
                   className={`p-2 border-2 rounded-lg text-xs font-bold transition-all ${
                     severity === sev.value
                       ? sev.color
@@ -187,6 +190,7 @@ export const ReportModalOverlay: React.FC = () => {
               ))}
             </div>
           </div>
+
 
           <div>
             <label className="block text-xs uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-1.5">Title</label>
