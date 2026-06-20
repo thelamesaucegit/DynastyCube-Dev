@@ -228,24 +228,27 @@ export async function castVote(pollId: string, optionIds: string[], userId: stri
     }
 
     if (poll.vote_type === "blessing_event") {
-      await supabase.from("blessing_allocations").delete().eq("poll_id", pollId).eq("user_id", userId);
-      if (optionIds.length > 0) {
-        const allocations = optionIds.map((opt) => ({ poll_id: pollId, option_id: opt, team_id: teamId, user_id: userId, voted_yes: true }));
-        const { error: insertError } = await supabase.from("blessing_allocations").insert(allocations);
-        if (insertError) throw insertError;
-      }
-      return { success: true, message: "Allocations saved successfully!" };
+        // This part is fine as it is
+        await supabase.from("blessing_allocations").delete().eq("poll_id", pollId).eq("user_id", userId);
+        if (optionIds.length > 0) {
+            const allocations = optionIds.map((opt) => ({ poll_id: pollId, option_id: opt, team_id: teamId, user_id: userId, voted_yes: true }));
+            const { error: insertError } = await supabase.from("blessing_allocations").insert(allocations);
+            if (insertError) throw insertError;
+        }
+        return { success: true, message: "Allocations saved successfully!" };
     } 
 
-    // THE FIX: The Supabase client needs to know these are UUIDs for the delete filter.
-    // The `.eq()` filter can be strict about types.
-    const { error: deleteError } = await supabase
-      .from("poll_votes")
-      .delete()
-      .eq("poll_id", pollId as any) // Cast to satisfy the check
-      .eq("user_id", userId);
+    // THE FIX: Call the type-safe RPC function to delete the vote
+    const { error: deleteError } = await supabase.rpc('delete_poll_vote', {
+        p_poll_id: pollId,
+        p_user_id: userId
+    });
 
-    if (deleteError) throw deleteError;
+    if (deleteError) {
+        // Log the specific error and re-throw to be caught by the main try-catch block
+        console.error("RPC delete_poll_vote failed:", deleteError);
+        throw deleteError;
+    }
 
     if (optionIds.length > 0) {
       const votes = optionIds.map((optionId) => ({ poll_id: pollId, option_id: optionId, user_id: userId, team_id: teamId, vote_weight: voteWeight }));
@@ -260,12 +263,10 @@ export async function castVote(pollId: string, optionIds: string[], userId: stri
     return { success: true, message: "Vote cast successfully!" };
   } catch (error) {
     console.error("Error casting vote:", error);
-    // Return the specific Postgres error message to the client
     const dbError = error as { message?: string };
     return { success: false, error: dbError.message || "Failed to cast vote" };
   }
 }
-
 
 export async function removeVote(pollId: string, userId: string) {
   try {
@@ -276,12 +277,11 @@ export async function removeVote(pollId: string, userId: string) {
         const { error } = await supabase.from("blessing_allocations").delete().eq("poll_id", pollId).eq("user_id", userId);
         if (error) throw error;
     } else {
-        // THE FIX: Apply the same type safety here for the delete operation.
-        const { error } = await supabase
-          .from("poll_votes")
-          .delete()
-          .eq("poll_id", pollId as any)
-          .eq("user_id", userId);
+        // THE FIX: Use the same RPC function here for consistency and type safety
+        const { error } = await supabase.rpc('delete_poll_vote', {
+            p_poll_id: pollId,
+            p_user_id: userId
+        });
         if (error) throw error;
     }
 
