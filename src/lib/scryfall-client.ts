@@ -140,60 +140,51 @@ export async function fetchOldestPrintings(oracleIds: string[]): Promise<Map<str
 
   const imageUrlMap = new Map<string, string>();
   
-  // THE FIX: Chunk the oracle_ids into batches of 75 to respect Scryfall's strict API limits
-  const BATCH_SIZE = 75;
+  // We can safely batch up to 20 Oracle IDs at a time because the query output is now guaranteed 
+  // to be exactly 1 card per Oracle ID!
+  const BATCH_SIZE = 20;
   
   for (let i = 0; i < validIds.length; i += BATCH_SIZE) {
     const batch = validIds.slice(i, i + BATCH_SIZE);
-    const identifiers = batch.map(id => ({ oracle_id: id }));
     
-    await waitForRateLimit();
+    // Construct the query: (oracle_id:id1 or oracle_id:id2) prefer:oldest
+    const idQueries = batch.map(id => `oracle_id:${id}`).join(" or ");
+    const query = `(${idQueries}) prefer:oldest`; // THE MAGIC: automatically filters out all reprints!
     
-    try {
-      const url = `${SCRYFALL_API_BASE}/cards/collection`;
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { ...SCRYFALL_HEADERS, "Content-Type": "application/json" },
-        body: JSON.stringify({ identifiers }),
-      });
+    let nextPageUrl: string | null = `${SCRYFALL_API_BASE}/cards/search?q=${encodeURIComponent(query)}`;
 
-      if (!response.ok) {
-        let errorDetails = response.statusText;
-        try {
-            const errBody = await response.json();
-            errorDetails = errBody?.details || JSON.stringify(errBody);
-        } catch (e) { /* ignore */ }
-        throw new Error(`Scryfall API error fetching collection by oracle_id: ${response.status} - ${errorDetails}`);
-      }
-      
-      const result = await response.json();
-      const foundCards: ScryfallCard[] = result.data || [];
-      
-      // Group by oracle_id to find the one with the earliest release date
-      const cardsByOracle = new Map<string, ScryfallCard[]>();
-      for (const card of foundCards) {
-          if (!cardsByOracle.has(card.oracle_id)) {
-              cardsByOracle.set(card.oracle_id, []);
+    try {
+      while (nextPageUrl) {
+        await waitForRateLimit();
+        
+        const response = await fetch(nextPageUrl, { headers: SCRYFALL_HEADERS });
+        
+        if (!response.ok) {
+          break;
+        }
+
+        const result = await response.json();
+        const foundCards = (result.data || []) as ScryfallCard[];
+
+        // Because Scryfall used 'prefer:oldest', each card in foundCards is GUARANTEED 
+        // to be the absolute oldest, first printing of its oracle_id. No sorting required!
+        for (const card of foundCards) {
+          const imageUrl = card.image_uris?.normal || card.image_uris?.small;
+          if (imageUrl && card.oracle_id) {
+            imageUrlMap.set(card.oracle_id, imageUrl);
           }
-          cardsByOracle.get(card.oracle_id)!.push(card);
-      }
-      
-      for (const [oracleId, cards] of cardsByOracle.entries()) {
-          cards.sort((a, b) => new Date(a.released_at).getTime() - new Date(b.released_at).getTime());
-          const oldestCard = cards[0];
-          const imageUrl = oldestCard.image_uris?.normal || oldestCard.image_uris?.small;
-          if (imageUrl) {
-              imageUrlMap.set(oracleId, imageUrl);
-          }
+        }
+        
+        nextPageUrl = result.has_more ? result.next_page : null;
       }
     } catch (error) {
-      console.error(`Error in fetchOldestPrintings (Batch ${i / BATCH_SIZE}):`, error);
-      // We log the error but allow the loop to continue to the next batch!
+      console.error(`Error in fetchOldestPrintings (Batch starting at index ${i}):`, error);
     }
   }
 
   return imageUrlMap;
 }
+
 
 
 /**
