@@ -63,6 +63,7 @@ export default function RootLayout({
           <Providers>{children}</Providers>
         </SettingsProvider>
          <Toaster /> 
+                 <div id="report-portal-root" className="relative z-[99999]" />
       </body>
     </html>
   );
