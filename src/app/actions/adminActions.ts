@@ -4,7 +4,7 @@
 import { createClient as createSupabaseJsClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { fetchAllCards } from "@/lib/scryfall-client";
+import { fetchAllCards, fetchOldestPrintingsByName } from "@/lib/scryfall-client";
 import { GameState } from "@/app/types";
 import { createDeckVotePoll } from "@/app/actions/deckVoteActions";
 
@@ -489,4 +489,54 @@ export async function getAiProfiles(): Promise<AiProfile[]> {
         return [];
     }
     return data || [];
+}
+
+export async function purgeAndSyncOldestIds(): Promise<{ success: boolean; updated: number; error?: string }> {
+    try {
+        const supabase = createServiceRoleClient(); // Using your existing service client helper
+
+        console.log("[Purge & Sync] Fetching all cards from card_pools...");
+
+        // 1. Fetch all cards from the pool
+        const { data: cards, error: fetchErr } = await supabase
+            .from('card_pools')
+            .select('id, card_name');
+
+        if (fetchErr) throw fetchErr;
+        if (!cards || cards.length === 0) return { success: true, updated: 0 };
+
+        // 2. Extract unique names and query Scryfall for their true oldest printings
+        const uniqueNames = [...new Set(cards.map(c => c.card_name))];
+        console.log(`[Purge & Sync] Querying Scryfall for ${uniqueNames.length} unique card names...`);
+        
+        const oldestDataMap = await fetchOldestPrintingsByName(uniqueNames);
+
+        // 3. Forcibly update the database with the absolute oldest IDs
+        let updatedCount = 0;
+        console.log(`[Purge & Sync] Writing corrections to the database...`);
+
+        for (const card of cards) {
+            const trueOldestData = oldestDataMap.get(card.card_name.toLowerCase());
+            
+            if (trueOldestData) {
+                const { error: updateErr } = await supabase
+                    .from('card_pools')
+                    .update({
+                        card_id: trueOldestData.id,               // Overwrite with True Oldest Scryfall ID
+                        oracle_id: trueOldestData.oracle_id,       // Overwrite with True Original Oracle ID
+                        oldest_image_url: trueOldestData.image_url // Overwrite with True Oldest Art
+                    })
+                    .eq('id', card.id);
+                
+                if (!updateErr) updatedCount++;
+            }
+        }
+
+        console.log(`[Purge & Sync] Successfully purged and synced ${updatedCount} cards!`);
+        return { success: true, updated: updatedCount };
+
+    } catch (error) {
+        console.error("[Purge & Sync] Error:", error);
+        return { success: false, updated: 0, error: String(error) };
+    }
 }
