@@ -2,7 +2,6 @@
 // Server-side OAuth callback handler
 // Exchanges the auth code for a session and sets cookies properly
 import { createServerClient } from "@supabase/ssr";
-import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -34,9 +33,6 @@ export async function GET(request: NextRequest) {
   if (code) {
     const cookieStore = await cookies();
     
-    // Check if they arrived via a referral link!
-    const referralId = cookieStore.get("dynasty_referral_id")?.value;
-
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -60,31 +56,23 @@ export async function GET(request: NextRequest) {
 
     const { data: sessionData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
 
-    if (!exchangeError) {
+    if (!exchangeError && sessionData.user) {
       
-      // THE FIX 3: Inject the Referral ID into their metadata
-      if (referralId && sessionData.user) {
-        // We use the admin client to bypass RLS and forcefully attach the metadata
-        const adminSupabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.SUPABASE_SERVICE_KEY!
-        );
+      // THE FIX: Check if this user was created in the last 15 seconds!
+      // This is the most reliable way to know it's a first-time sign-up via OAuth
+      const createdAt = new Date(sessionData.user.created_at).getTime();
+      const now = new Date().getTime();
+      const isNewUser = (now - createdAt) < 15000; 
 
-        // This triggers the PostgreSQL handle_new_user trigger we updated!
-        await adminSupabase.auth.admin.updateUserById(sessionData.user.id, {
-          user_metadata: { dynasty_referral_id: referralId }
-        });
-
-        // Clear the cookie so they don't accidentally refer themselves later
-        cookieStore.set("dynasty_referral_id", "", { expires: new Date(0) });
+      if (isNewUser) {
+          // Send them to the client-side router to process any pending referral!
+          return NextResponse.redirect(`${origin}/auth/apply-referral`);
       }
 
       return NextResponse.redirect(origin);
     }
-
-    return NextResponse.redirect(
-      `${origin}/auth/auth-code-error?error=exchange_failed`
-    );
+    
+    return NextResponse.redirect(`${origin}/auth/auth-code-error?error=exchange_failed`);
   }
 
   return NextResponse.redirect(`${origin}/auth/login`);
