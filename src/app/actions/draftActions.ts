@@ -62,6 +62,16 @@ export interface DeckCard {
   is_commander?: boolean;
   category?: string;
 }
+
+interface JoinedDraftPickRow extends Omit<DraftPick, "id"> {
+  id: string;
+  card_pools: {
+    cubucks_cost: number | null;
+  } | {
+    cubucks_cost: number | null;
+  }[] | null;
+}
+
 export async function updateDeckDetails(
   deckId: string,
   updates: { deck_name?: string; description?: string; format?: string; is_public?: boolean }
@@ -259,7 +269,7 @@ export async function getTeamDraftPicks(
 ): Promise<{ picks: DraftPick[]; error?: string }> {
     const supabase = adminClient ?? createServiceClient();
   try {
-    // THE FIX: Join 'card_pools' to fetch the real, live cubucks_cost from the master card pool table!
+    // Join 'card_pools' to fetch the real, live cubucks_cost from the master card pool table
     let query = supabase
       .from("team_draft_picks")
       .select(`
@@ -281,12 +291,37 @@ export async function getTeamDraftPicks(
       return { picks: [], error: error.message };
     }
 
-    // Map the returned joined relation onto our flat DraftPick interface!
-    const mappedPicks: DraftPick[] = (data || []).map((pick: any) => {
+    // THE FIX: Explicitly typed mapped rows using our JoinedDraftPickRow interface!
+    const rawRows = (data || []) as unknown as JoinedDraftPickRow[];
+    
+    const mappedPicks: DraftPick[] = rawRows.map((pick) => {
         const poolData = Array.isArray(pick.card_pools) ? pick.card_pools[0] : pick.card_pools;
         return {
-            ...pick,
-            // Use the joined cost if available, otherwise fall back to the roster value
+            id: pick.id,
+            team_id: pick.team_id,
+            card_id: pick.card_id,
+            card_name: pick.card_name,
+            card_pool_id: pick.card_pool_id,
+            draft_session_id: pick.draft_session_id,
+            card_set: pick.card_set,
+            card_type: pick.card_type,
+            rarity: pick.rarity,
+            colors: pick.colors,
+            color_identity: pick.color_identity,
+            image_url: pick.image_url,
+            oldest_image_url: pick.oldest_image_url,
+            mana_cost: pick.mana_cost,
+            cmc: pick.cmc,
+            drafted_at: pick.drafted_at,
+            pick_number: pick.pick_number,
+            cubecobra_elo: pick.cubecobra_elo,
+            effective_elo: pick.effective_elo,
+            algorithm_details: pick.algorithm_details as Record<string, unknown> | undefined,
+            rating_updated_at: pick.rating_updated_at,
+            acquisition_method: pick.acquisition_method,
+            acquired_at: pick.acquired_at,
+            is_keeper: pick.is_keeper,
+            // Fall back to the roster value if the pool's cost is null
             cubucks_cost: poolData?.cubucks_cost ?? pick.cubucks_cost ?? 1
         };
     });
