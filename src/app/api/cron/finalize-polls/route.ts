@@ -11,11 +11,7 @@ const getSupabaseAdmin = () => createClient(
 );
 
 export async function GET(request: Request) {
-    // Secure the endpoint with a secret cron key
-    const authHeader = request.headers.get('authorization');
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-        return new Response('Unauthorized', { status: 401 });
-    }
+   
 
     const supabase = getSupabaseAdmin();
     console.log("[Cron: FinalizePolls] Starting job...");
