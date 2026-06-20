@@ -157,7 +157,7 @@ export async function fetchOldestPrintings(oracleIds: string[]): Promise<Map<str
       while (nextPageUrl) {
         await waitForRateLimit();
         
-        const response = await fetch(nextPageUrl, { headers: SCRYFALL_HEADERS });
+const response: Response = await fetch(nextPageUrl, { headers: SCRYFALL_HEADERS });
         
         if (!response.ok) {
           break;
