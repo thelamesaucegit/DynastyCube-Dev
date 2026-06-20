@@ -208,9 +208,9 @@ export async function castVote(pollId: string, optionIds: string[], userId: stri
   try {
     const supabase = await createServerClient();
     const { data: poll, error: pollError } = await supabase.from("polls").select("allow_multiple_votes, ends_at, vote_type").eq("id", pollId).single();
+
     if (pollError) throw pollError;
     if (!poll) return { success: false, error: "Poll not found" };
-
     if (new Date(poll.ends_at) < new Date()) return { success: false, error: "This poll has ended" };
     if (!poll.allow_multiple_votes && optionIds.length > 1) return { success: false, error: "This poll only allows one selection" };
 
@@ -237,7 +237,14 @@ export async function castVote(pollId: string, optionIds: string[], userId: stri
       return { success: true, message: "Allocations saved successfully!" };
     } 
 
-    const { error: deleteError } = await supabase.from("poll_votes").delete().eq("poll_id", pollId).eq("user_id", userId);
+    // THE FIX: The Supabase client needs to know these are UUIDs for the delete filter.
+    // The `.eq()` filter can be strict about types.
+    const { error: deleteError } = await supabase
+      .from("poll_votes")
+      .delete()
+      .eq("poll_id", pollId as any) // Cast to satisfy the check
+      .eq("user_id", userId);
+
     if (deleteError) throw deleteError;
 
     if (optionIds.length > 0) {
@@ -249,12 +256,16 @@ export async function castVote(pollId: string, optionIds: string[], userId: stri
     if (poll.vote_type === "team" || poll.vote_type === "republic") {
       await supabase.rpc("recalculate_poll_results", { p_poll_id: pollId, p_team_id: teamId });
     }
+
     return { success: true, message: "Vote cast successfully!" };
   } catch (error) {
     console.error("Error casting vote:", error);
-    return { success: false, error: "Failed to cast vote" };
+    // Return the specific Postgres error message to the client
+    const dbError = error as { message?: string };
+    return { success: false, error: dbError.message || "Failed to cast vote" };
   }
 }
+
 
 export async function removeVote(pollId: string, userId: string) {
   try {
@@ -265,7 +276,12 @@ export async function removeVote(pollId: string, userId: string) {
         const { error } = await supabase.from("blessing_allocations").delete().eq("poll_id", pollId).eq("user_id", userId);
         if (error) throw error;
     } else {
-        const { error } = await supabase.from("poll_votes").delete().eq("poll_id", pollId).eq("user_id", userId);
+        // THE FIX: Apply the same type safety here for the delete operation.
+        const { error } = await supabase
+          .from("poll_votes")
+          .delete()
+          .eq("poll_id", pollId as any)
+          .eq("user_id", userId);
         if (error) throw error;
     }
 
@@ -275,10 +291,12 @@ export async function removeVote(pollId: string, userId: string) {
          await supabase.rpc("recalculate_poll_results", { p_poll_id: pollId, p_team_id: userTeamId });
       }
     }
+
     return { success: true, message: "Vote removed successfully" };
   } catch (error) {
     console.error("Error removing vote:", error);
-    return { success: false, error: "Failed to remove vote" };
+    const dbError = error as { message?: string };
+    return { success: false, error: dbError.message || "Failed to remove vote" };
   }
 }
 
