@@ -418,19 +418,29 @@ export default function TeamPage() {
                 </div>
               )}
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h1 className="text-3xl font-bold tracking-tight mb-1">{team.name}</h1>
-                  <p className="text-lg text-muted-foreground italic">&quot;{team.motto}&quot;</p>
+                       <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-4 w-full">
+                {/* THE FIX: Added min-w-0 here to allow the text container to shrink, 
+                    and added 'truncate' to the text elements so they don't break the layout! */}
+                <div className="flex-1 min-w-0 pr-4">
+                  <h1 className="text-3xl font-bold tracking-tight mb-1 break-words" title={team.name}>
+                    {team.name}
+                  </h1>
+                  <p className="text-lg text-muted-foreground italic break-words" title={team.motto}>
+                    &quot;{team.motto}&quot;
+                  </p>
                 </div>
-                <Button asChild>
+                
+                {/* THE FIX: Ensured the button NEVER shrinks using shrink-0 */}
+                <Button asChild className="shrink-0">
                   <Link href={`/teams/${teamShortName}/trades`} className="shrink-0">
-                    <ArrowLeftRight className="size-4 mr-2" /> View Trades
+                    <ArrowLeftRight className="size-4 mr-2 hidden sm:inline-block" /> 
+                    <span>Trades</span>
                   </Link>
                 </Button>
               </div>
               <div className="flex gap-4 mt-4 text-sm text-muted-foreground">
+
                 <span><strong className="text-foreground">{draftPicks.length}</strong> cards</span>
                 <span className="text-muted-foreground/50">|</span>
                 <span><strong className="text-foreground">{decks.length}</strong> decks</span>
