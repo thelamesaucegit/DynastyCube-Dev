@@ -6,6 +6,9 @@ import Image from "next/image";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
+import { CorruptedImage } from '@/app/components/lore/CorruptedImage';
+import { TargetedGlitchedText } from '@/app/components/lore/TargetedGlitchedText';
+
 
 import { TrophyCase } from "@/app/components/team/TrophyCase";
 import { TeamEssenceDisplay } from "@/app/components/team/TeamEssenceDisplay";
@@ -631,18 +634,34 @@ export default function TeamPage() {
                         const isToggling = togglingKeeper === pick.id;
                         const isKeeper = pick.is_keeper;
                         const imageUrl = getCardImageUrl(pick, useOldestArt);
+                      const cardName = pick.card_name || '';
+const oracleText = pick.oracle_text || '';
+
+                      const isCorruptible = /\b(time|clock|hour|minute|era|age|aeon|eon|moment|turn)s?\b/gi.test(cardName + ' ' + oracleText);
+
 
                         return (
                           <div key={pick.id} className={`group relative bg-muted rounded-lg overflow-hidden border transition-all hover:shadow-md ${isKeeper && isUserTeamMember ? 'ring-2 ring-green-500 shadow-[0_0_15px_rgba(34,197,94,0.3)] border-green-500' : 'hover:border-primary/50'}`}>
+                            
+                            
+                            
                             {imageUrl && (
                               <div className="relative h-80 bg-zinc-950/40 border-b border-border/10">
-                                <Image src={imageUrl} alt={pick.card_name} fill className="object-contain" />
+                               
+                                
+<CorruptedImage
+                    src={imageUrl}
+                    alt={cardName}
+                    isCorruptible={isCorruptible} // Pass the flag
+                />                             
+                              
                               </div>
                             )}
                             <div className="p-2">
                               <div className="flex justify-between items-start">
                                 <div className="min-w-0 flex-1">
-                                  <h4 className="font-semibold text-sm truncate">{pick.card_name}</h4>
+                                  <h4 className="font-semibold text-sm truncate">
+                                    <TargetedGlitchedText>{pick.card_name}</TargetedGlitchedText>TargetedGlitchedText></h4>
                                   <p className="text-xs text-muted-foreground truncate">{pick.card_set}</p>
                                 </div>
                               </div>

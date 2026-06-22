@@ -5,6 +5,9 @@ import { Metadata } from "next";
 import Providers from "./components/Providers";
 import { SettingsProvider } from '@/contexts/SettingsContext'; 
 import { Toaster } from "@/app/components/ui/sonner"; 
+import { LoreEffectsProvider } from '@/app/components/lore/LoreEffectsProvider'; 
+
+
 
 export const metadata: Metadata = {
   title: "The Dynasty Cube",
@@ -60,7 +63,9 @@ export default function RootLayout({
       </head>
       <body>
         <SettingsProvider>
+           <LoreEffectsProvider>
           <Providers>{children}</Providers>
+           </LoreEffectsProvider>LoreEffectsProvider>
         </SettingsProvider>
          <Toaster /> 
                  <div id="report-portal-root" className="relative z-[99999]" />

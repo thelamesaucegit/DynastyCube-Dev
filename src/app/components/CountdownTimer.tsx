@@ -1,6 +1,8 @@
 // src/app/components/CountdownTimer.tsx
 "use client";
 
+import { TargetedGlitchedText } from '@/app/components/lore/TargetedGlitchedText';
+
 import React, { useState, useEffect } from "react";
 
 interface CountdownTimerProps {
@@ -104,7 +106,8 @@ export default function CountdownTimer({
   return (
     <div className="bg-gradient-to-r from-amber-500 to-orange-500 dark:from-amber-700 dark:to-orange-700 text-white rounded-xl p-6 mb-8 shadow-lg">
       <div className="flex flex-col items-center text-center">
-        <h2 className="text-xl md:text-2xl font-bold mb-4">{title}</h2>
+         <TargetedGlitchedText>
+           <h2 className="text-xl md:text-2xl font-bold mb-4">{title}</h2>
         <div className="flex gap-3 md:gap-4">
           <DigitBox value={timeRemaining.days} label="Days" />
           <div className="flex items-center text-2xl font-bold opacity-60 pb-5">:</div>
@@ -114,6 +117,7 @@ export default function CountdownTimer({
           <div className="flex items-center text-2xl font-bold opacity-60 pb-5">:</div>
           <DigitBox value={timeRemaining.seconds} label="Sec" />
         </div>
+         </TargetedGlitchedText>
       </div>
     </div>
   );
