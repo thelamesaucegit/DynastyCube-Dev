@@ -1,9 +1,11 @@
 // src/app/components/TimezoneSelector.tsx
+
 "use client";
 
 import React, { useState, useEffect } from "react";
 import { TIMEZONES, getBrowserTimezone, getTimezoneOffset } from "@/utils/timezoneUtils";
 import { getUserTimezone, updateUserTimezone } from "@/app/actions/userSettingsActions";
+import { TargetedGlitchedText } from '@/app/components/lore/TargetedGlitchedText';
 
 export const TimezoneSelector: React.FC = () => {
   const [currentTimezone, setCurrentTimezone] = useState<string>("UTC");
@@ -39,18 +41,12 @@ export const TimezoneSelector: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (selectedTimezone === currentTimezone) {
-      return; // No change
-    }
-
+    if (selectedTimezone === currentTimezone) return;
     setSaving(true);
     setError(null);
     setSuccess(false);
-
     try {
-      const { success: updateSuccess, error: updateError } =
-        await updateUserTimezone(selectedTimezone);
-
+      const { success: updateSuccess, error: updateError } = await updateUserTimezone(selectedTimezone);
       if (updateSuccess) {
         setCurrentTimezone(selectedTimezone);
         setSuccess(true);
@@ -76,12 +72,12 @@ export const TimezoneSelector: React.FC = () => {
     return (
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-md">
         <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">
-          Timezone Settings
+          <TargetedGlitchedText>Timezone Settings</TargetedGlitchedText>
         </h3>
         <div className="flex items-center gap-3">
           <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
           <span className="text-sm text-gray-600 dark:text-gray-400">
-            Loading timezone settings...
+            <TargetedGlitchedText>Loading timezone settings...</TargetedGlitchedText>
           </span>
         </div>
       </div>
@@ -91,35 +87,34 @@ export const TimezoneSelector: React.FC = () => {
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-md">
       <h3 className="text-xl font-semibold mb-2 text-gray-900 dark:text-gray-100">
-        🌍 Timezone Settings
+        <TargetedGlitchedText>🌍 Timezone Settings</TargetedGlitchedText>
       </h3>
       <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-        Set your timezone to see all times in your local time. This affects notifications,
-        messages, deadlines, and game schedules.
+        <TargetedGlitchedText>
+          Set your timezone to see all times in your local time. This affects notifications, messages, deadlines, and game schedules.
+        </TargetedGlitchedText>
       </p>
 
-      {/* Success Message */}
       {success && (
         <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-300 dark:border-green-700 rounded-lg text-green-800 dark:text-green-200 text-sm">
           ✓ Timezone updated successfully!
         </div>
       )}
-
-      {/* Error Message */}
       {error && (
         <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg text-red-800 dark:text-red-200 text-sm">
           ✗ {error}
         </div>
       )}
 
-      {/* Browser Timezone Detection */}
       {browserTimezone && browserTimezone !== selectedTimezone && (
         <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-300 dark:border-blue-700 rounded-lg">
           <div className="flex items-center justify-between">
             <div className="text-sm text-blue-800 dark:text-blue-200">
-              <strong>Detected timezone:</strong> {browserTimezone}
-              <br />
-              <span className="text-xs">({getTimezoneOffset(browserTimezone)})</span>
+              <TargetedGlitchedText>
+                <strong>Detected timezone:</strong> {browserTimezone}
+                <br />
+                <span className="text-xs">({getTimezoneOffset(browserTimezone)})</span>
+              </TargetedGlitchedText>
             </div>
             <button
               onClick={handleUseBrowserTimezone}
@@ -131,10 +126,9 @@ export const TimezoneSelector: React.FC = () => {
         </div>
       )}
 
-      {/* Timezone Selector */}
       <div className="space-y-3">
         <label className="block text-sm font-medium text-gray-900 dark:text-gray-100">
-          Select Your Timezone
+          <TargetedGlitchedText>Select Your Timezone</TargetedGlitchedText>
         </label>
         <select
           value={selectedTimezone}
@@ -147,26 +141,27 @@ export const TimezoneSelector: React.FC = () => {
             </option>
           ))}
         </select>
-
-        {/* Current Time Preview */}
         <div className="text-sm text-gray-600 dark:text-gray-400">
-          <strong>Current time in {selectedTimezone}:</strong>{" "}
-          {new Intl.DateTimeFormat("en-US", {
-            timeZone: selectedTimezone,
-            dateStyle: "medium",
-            timeStyle: "short",
-          }).format(new Date())}
+          <TargetedGlitchedText>
+            <strong>Current time in {selectedTimezone}:</strong>{" "}
+            {new Intl.DateTimeFormat("en-US", {
+              timeZone: selectedTimezone,
+              dateStyle: "medium",
+              timeStyle: "short",
+            }).format(new Date())}
+          </TargetedGlitchedText>
         </div>
       </div>
-
-      {/* Save Button */}
+      
       <div className="mt-4 flex items-center gap-3">
         <button
           onClick={handleSave}
           disabled={!hasChanges || saving}
           className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg font-medium transition-colors"
         >
-          {saving ? "Saving..." : "Save Timezone"}
+          <TargetedGlitchedText>
+            {saving ? "Saving..." : "Save Timezone"}
+          </TargetedGlitchedText>
         </button>
         {hasChanges && (
           <button
