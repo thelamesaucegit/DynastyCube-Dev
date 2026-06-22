@@ -155,10 +155,13 @@ export default function TeamPage() {
         getTeamHats(teamUUID) as Promise<TeamHatData[]>
       ];
 
-      const [picksResult, decksResult, rolesResult, membersResult, previewResult, hatsResult] = await Promise.all(dataPromises);
+     const [picksResult, decksResult, rolesResult, membersResult, previewResult, hatsResult] = await Promise.all(dataPromises);
 
+      // THE FIX: Cast foundTeam to the local 'Team' interface so TS knows it can accept 'members'
+      const baseTeam = foundTeam as unknown as Team;
+      
       const teamWithMembers: Team = {
-        ...foundTeam,
+        ...baseTeam,
         members: membersResult.members.map(m => ({
           id: m.member_id,
           user_id: m.user_id,
@@ -168,6 +171,7 @@ export default function TeamPage() {
           joined_at: m.joined_at,
         })),
       };
+
       setTeam(teamWithMembers);
       setDraftPicks(picksResult.picks);
       setDecks(decksResult.decks);
