@@ -109,11 +109,20 @@ export default function TeamPage() {
     if (!teamShortName) { return; }
     setLoading(true);
 
-    try {
-      const { team: foundTeam, error: teamError } = await getTeamByShortName(teamShortName);
+     try {
+      // THE FIX: Accept the redirectPath
+      const { team: foundTeam, error: teamError, redirectPath } = await getTeamByShortName(teamShortName);
+      
+      // THE FIX: If the team transformed, seamlessly bounce the user to the new URL!
+      if (redirectPath) {
+          window.location.replace(redirectPath);
+          return;
+      }
+
       if (teamError || !foundTeam) {
         throw new Error(teamError || "Team not found.");
       }
+
 
       const seasonResult = await getCurrentSeason();
       const currentPhase = seasonResult.season?.phase || null;
