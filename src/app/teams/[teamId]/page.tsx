@@ -661,7 +661,7 @@ const oracleText = pick.oracle_text || '';
                               <div className="flex justify-between items-start">
                                 <div className="min-w-0 flex-1">
                                   <h4 className="font-semibold text-sm truncate">
-                                    <TargetedGlitchedText>{pick.card_name}</TargetedGlitchedText>TargetedGlitchedText></h4>
+                                    <TargetedGlitchedText>{pick.card_name}</TargetedGlitchedText></h4>
                                   <p className="text-xs text-muted-foreground truncate">{pick.card_set}</p>
                                 </div>
                               </div>
