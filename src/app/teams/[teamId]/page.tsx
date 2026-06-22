@@ -180,7 +180,7 @@ export default function TeamPage() {
       setDraftPreview(previewResult);
       setTeamHats(hatsResult);
 
-      const isMember = foundTeam.members?.some((m) => m.user_id === user?.id) || rolesResult.roles.length > 0;
+      const isMember = teamWithMembers.members?.some((m) => m.user_id === user?.id) || rolesResult.roles.length > 0;
       let defaultTab: TabType = "picks";
 
       if (currentPhase === "preseason" || currentPhase === "draft") {
