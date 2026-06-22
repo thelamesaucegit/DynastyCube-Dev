@@ -163,7 +163,29 @@ export async function executeSeasonRollover(): Promise<{ success: boolean; error
         await trackTargetCard(supabase, "2. Before Cost Rollover RPC");
 
         // =====================================================================
-        // --- STEP 2: ROLLOVER COSTS & NATURAL RETIREMENT ---
+        
+      console.log("[SeasonRollover] Processing Brittle card retirements...");
+        
+        // 1. Find any drafted brittle cards costing > 5 cubucks
+        const { data: brittlePicks } = await supabase
+            .from('team_draft_picks')
+            .select('id, card_pool_id, card_name')
+            .contains('scars', ['brittle'])
+            .gt('cubucks_cost', 5);
+
+        if (brittlePicks && brittlePicks.length > 0) {
+            const brittleIds = brittlePicks.map(p => p.id);
+            const brittlePoolIds = brittlePicks.map(p => p.card_pool_id).filter(Boolean);
+
+            console.log(`[SeasonRollover] Retiring ${brittlePicks.length} fragile brittle cards:`, brittlePicks.map(p => p.card_name));
+            
+            // Delete from roster and move pool name to 'retired'
+            await supabase.from('team_draft_picks').delete().in('id', brittleIds);
+            await supabase.from('card_pools').update({ pool_name: 'retired' }).in('id', brittlePoolIds);
+            
+            await logSystemEvent("SeasonRollover", "info", `Retired ${brittlePicks.length} brittle cards because their value exceeded 5 Cubucks.`);
+        }
+      // --- STEP 2: ROLLOVER COSTS & NATURAL RETIREMENT ---
         console.log("[SeasonRollover] Running Cost Economy & Retirements...");
         const { error: costErr } = await supabase.rpc('rollover_season_costs', { p_new_season_id: newSeason.id, p_previous_season_id: oldSeason.id });
         if (costErr) throw new Error(`Cost Rollover RPC failed: ${costErr.message}`);
