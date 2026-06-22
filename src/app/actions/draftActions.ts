@@ -37,7 +37,7 @@ export interface DraftPick {
   acquisition_method?: 'draft' | 'wire' | 'free_agent' | 'trade' | 'skipped';
   acquired_at?: string;
   is_keeper?: boolean;
-    scars?: string[];
+scars?: string[] | null;
 }
 
 export interface Deck {
