@@ -157,16 +157,18 @@ export default function TeamPage() {
 
       const [picksResult, decksResult, rolesResult, membersResult, previewResult, hatsResult] = await Promise.all(dataPromises);
 
-      foundTeam.members = membersResult.members.map(m => ({
-        id: m.member_id,
-        user_id: m.user_id,
-        team_id: m.team_id,
-        user_email: m.user_email,
-        user_display_name: m.user_display_name || undefined,
-        joined_at: m.joined_at,
-      }));
-
-      setTeam(foundTeam);
+      const teamWithMembers: Team = {
+        ...foundTeam,
+        members: membersResult.members.map(m => ({
+          id: m.member_id,
+          user_id: m.user_id,
+          team_id: m.team_id,
+          user_email: m.user_email,
+          user_display_name: m.user_display_name || undefined,
+          joined_at: m.joined_at,
+        })),
+      };
+      setTeam(teamWithMembers);
       setDraftPicks(picksResult.picks);
       setDecks(decksResult.decks);
       setUserRoles(rolesResult.roles);
