@@ -119,26 +119,22 @@ export async function getUsersForDropdown(): Promise<{
 /**
  * Resolve a team short_name (URL slug) to the full team object including UUID.
  */
-export async function getTeamByShortName(
-  shortName: string
-): Promise<{ team: Team | null; error?: string }> {
+export async function getTeamByShortName(shortName: string): Promise<{ team?: any; error?: string; redirectPath?: string }> {
   const supabase = await createServerClient();
-  try {
-    const { data, error } = await supabase
-      .from("teams")
-      .select("*")
-      .eq("short_name", shortName)
-      .single();
-      
-    if (error) {
-      if (error.code === "PGRST116") return { team: null };
-      return { team: null, error: error.message };
-    }
-    return { team: data };
-  } catch (error) {
-    console.error("Unexpected error fetching team by short_name:", error);
-    return { team: null, error: "An unexpected error occurred" };
+  const { data: team, error } = await supabase.from('teams').select('*').eq('short_name', shortName).single();
+  
+  if (error || !team) {
+     // Check if this shortName belongs to a dormant identity!
+     const { data: identity } = await supabase.from('team_identities').select('team_id').eq('short_name', shortName).maybeSingle();
+     if (identity) {
+         const { data: actualTeam } = await supabase.from('teams').select('short_name').eq('id', identity.team_id).single();
+         if (actualTeam && actualTeam.short_name !== shortName) {
+             return { redirectPath: `/teams/${actualTeam.short_name}` };
+         }
+     }
+     return { error: "Team not found." };
   }
+  return { team };
 }
 
 /**
@@ -239,11 +235,33 @@ export async function executeTeamTransformation(
 ): Promise<{ success: boolean; error?: string }> {
     if (!teamId) return { success: false, error: "Team ID is required." };
 
-    const supabase = createServiceClient(); // Assuming you have this helper
+    // Assuming you have createServiceRoleClient available in this file. 
+    // If not, use createServerClient and ensure the cron job has admin auth context!
+    const supabase = await createServerClient(); 
+    
     try {
+        // 1. Fetch the new identity details
+        const { data: identity, error: idErr } = await supabase
+            .from('team_identities')
+            .select('*')
+            .eq('team_id', teamId)
+            .eq('identity_key', newIdentity)
+            .single();
+
+        if (idErr || !identity) throw new Error("Could not find team identity details.");
+
+        // 2. Overwrite the teams table with the new cosmetics!
         const { error } = await supabase
             .from('teams')
-            .update({ active_identity: newIdentity })
+            .update({ 
+                active_identity: newIdentity,
+                name: identity.name,
+                emoji: identity.emoji,
+                primary_color: identity.primary_color,
+                secondary_color: identity.secondary_color,
+                motto: identity.motto,
+                short_name: identity.short_name
+            })
             .eq('id', teamId);
 
         if (error) throw error;
@@ -253,6 +271,7 @@ export async function executeTeamTransformation(
         return { success: false, error: (e as Error).message };
     }
 }
+
 /**
  * Add a user to a team by user_id (returns member_id for role assignment)
  */
