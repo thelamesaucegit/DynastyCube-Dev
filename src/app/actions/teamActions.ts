@@ -119,7 +119,7 @@ export async function getUsersForDropdown(): Promise<{
 /**
  * Resolve a team short_name (URL slug) to the full team object including UUID.
  */
-export async function getTeamByShortName(shortName: string): Promise<{ team?: any; error?: string; redirectPath?: string }> {
+export async function getTeamByShortName(shortName: string): Promise<{ team?: TeamWithDetails; error?: string; redirectPath?: string }> {
   const supabase = await createServerClient();
   const { data: team, error } = await supabase.from('teams').select('*').eq('short_name', shortName).single();
   
