@@ -368,7 +368,7 @@ export async function removeDraftPick(pickId: string): Promise<{ success: boolea
   try {
     const { data: pick, error: pickError } = await supabase
       .from("team_draft_picks")
-      .select("id, team_id, card_id, card_pool_id, acquisition_method, acquired_at, draft_session_id")
+      .select("id, team_id, card_id, card_pool_id, acquisition_method, acquired_at, draft_session_id, scars") 
       .eq("id", pickId)
       .single();
 
@@ -378,6 +378,18 @@ export async function removeDraftPick(pickId: string): Promise<{ success: boolea
 
     const authCheck = await verifyTeamMembership(pick.team_id, supabase);
     if (!authCheck.authorized) return { success: false, error: authCheck.error };
+
+    // =========================================================================
+    // STRICT ETERNAL CUT BLOCKER
+    // =========================================================================
+    const scars = pick.scars || [];
+    if (scars.includes('eternal')) {
+        return { 
+          success: false, 
+          error: "This card possesses the Eternal scar. It is bound to your roster and cannot be cut!" 
+        };
+    }
+    // =========================================================================
 
     if (pick.acquisition_method === 'wire') {
       const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
