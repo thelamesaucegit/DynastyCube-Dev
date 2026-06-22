@@ -37,6 +37,7 @@ export interface DraftPick {
   acquisition_method?: 'draft' | 'wire' | 'free_agent' | 'trade' | 'skipped';
   acquired_at?: string;
   is_keeper?: boolean;
+    scars?: string[];
 }
 
 export interface Deck {
@@ -65,6 +66,7 @@ export interface DeckCard {
 
 interface JoinedDraftPickRow extends Omit<DraftPick, "id"> {
   id: string;
+  scars: string[] | null; 
   card_pools: {
     cubucks_cost: number | null;
   } | {
@@ -225,7 +227,7 @@ export async function addDraftPick(pick: DraftPick): Promise<{ success: boolean;
     const insertPayload = {
       team_id: pick.team_id,
       card_pool_id: pick.card_pool_id, 
-      draft_session_id: pick.draft_session_id || null, // Force undefined/empty to true null
+      draft_session_id: pick.draft_session_id || null, 
       card_id: pick.card_id,
       card_name: pick.card_name,
       card_set: pick.card_set,
@@ -242,6 +244,7 @@ export async function addDraftPick(pick: DraftPick): Promise<{ success: boolean;
       drafted_by: authCheck.userId,
       acquisition_method: pick.acquisition_method || 'draft',
       acquired_at: new Date().toISOString(), 
+        scars: pick.scars || [],
     };
     
     console.log("Insert Payload:", JSON.stringify(insertPayload, null, 2));
@@ -321,7 +324,7 @@ export async function getTeamDraftPicks(
             acquisition_method: pick.acquisition_method,
             acquired_at: pick.acquired_at,
             is_keeper: pick.is_keeper,
-            // Fall back to the roster value if the pool's cost is null
+scars: pick.scars || [],
             cubucks_cost: poolData?.cubucks_cost ?? pick.cubucks_cost ?? 1
         };
     });
@@ -350,7 +353,7 @@ export async function addDraftPickInternal(pick: DraftPick, _isAutoDraft?: boole
         team_id: pick.team_id, draft_session_id: pick.draft_session_id, card_pool_id: pick.card_pool_id, card_id: pick.card_id,
         card_name: pick.card_name, card_set: pick.card_set, card_type: pick.card_type, rarity: pick.rarity,
         colors: pick.colors || [], color_identity: pick.color_identity || [], image_url: pick.image_url, oldest_image_url: pick.oldest_image_url, mana_cost: pick.mana_cost, // <-- ADDED color_identity HERE
-        cmc: pick.cmc, pick_number: pick.pick_number, drafted_by: null,
+        cmc: pick.cmc, pick_number: pick.pick_number, drafted_by: null, scars: pick.scars || [],
       }).select().single();
     if (error) {
       console.error("Error adding auto-draft pick:", error);
