@@ -8,7 +8,7 @@ import { GlitchEffect } from './GlitchEffect';
 // 1. Define the keyword filter
 // \b ensures whole word matching (e.g., 'hour' not 'flour')
 // s? makes the plural 's' optional
-const KEYWORD_REGEX = /\b(time|timewalk|clock|hour|minute|era|age|aeon|eon|moment|phase)s?\b/gi;
+const KEYWORD_REGEX = /\b(time|clock|hour|minute|era|age|aeon|eon|moment|turn)s?\b/gi;
 
 export const TargetedGlitchedText: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { isEffectsActive } = useLoreEffects();
@@ -33,12 +33,17 @@ export const TargetedGlitchedText: React.FC<{ children: React.ReactNode }> = ({ 
             );
         }
 
-        if (React.isValidElement(node) && node.props.children) {
-            return React.cloneElement(
-                node, 
-                { ...node.props, key },
-                React.Children.map(node.props.children, processNode)
-            );
+        // THE FIX: Explicitly cast the element to a typed ReactElement to safely access `props.children`
+        if (React.isValidElement(node)) {
+            const element = node as React.ReactElement<{ children?: React.ReactNode }>;
+            
+            if (element.props.children) {
+                return React.cloneElement(
+                    element, 
+                    { ...element.props, key },
+                    React.Children.map(element.props.children, processNode)
+                );
+            }
         }
 
         return node;
