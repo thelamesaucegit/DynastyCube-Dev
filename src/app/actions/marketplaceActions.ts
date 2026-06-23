@@ -109,6 +109,52 @@ async function generateBoosterFromSet(setCode: string): Promise<Record<string, s
 // MARKETPLACE PURCHASES
 // ============================================================================
 
+// --- Action to move a card from The Drain to The Wire ---
+export async function reclaimFromDrain(cardPoolId: string): Promise<{ success: boolean; error?: string }> {
+    const supabase = await createServerClient();
+    try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { success: false, error: "Authentication required." };
+
+        // 1. Verify the card is actually in the drain
+        const { data: card, error: fetchError } = await supabase
+            .from('card_pools')
+            .select('id, pool_name')
+            .eq('id', cardPoolId)
+            .single();
+
+        if (fetchError || !card || card.pool_name !== 'drainlings') {
+            return { success: false, error: "Card is not in The Drain or does not exist." };
+        }
+        
+        // (This is a simplified check. You may need a more robust way to identify the active season's Drainlings roster)
+        const { data: drainPick } = await supabase.from('team_draft_picks').select('id').eq('card_pool_id', cardPoolId).maybeSingle();
+        if (drainPick) {
+             return { success: false, error: "This card is part of an active roster and cannot be reclaimed." };
+        }
+
+        // 2. Perform the update
+        const { error: updateError } = await supabase
+            .from('card_pools')
+            .update({ 
+                pool_name: 'wire',
+                on_wire_since: new Date().toISOString()
+            })
+            .eq('id', cardPoolId);
+
+        if (updateError) throw updateError;
+
+        // 3. TODO: Deduct Essence cost from the user's balance
+        // await supabase.rpc('decrement_essence', { p_user_id: user.id, p_amount: 100 });
+
+        return { success: true };
+    } catch (e) {
+        const error = e as Error;
+        console.error("Error in reclaimFromDrain:", error.message);
+        return { success: false, error: error.message };
+    }
+}
+
 export async function purchaseRandomBooster(): Promise<{ success: boolean; message?: string; error?: string }> {
   try {
     const supabase = await createServerClient();
