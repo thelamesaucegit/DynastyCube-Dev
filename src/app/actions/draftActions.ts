@@ -20,6 +20,7 @@ export interface DraftPick {
   card_set?: string;
   card_type?: string;
   rarity?: string;
+    oracle_text?: string;
   draft_session_id?: string;
   colors?: string[];
     color_identity?: string[] | null; 
