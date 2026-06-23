@@ -5,12 +5,14 @@ import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { getCardImageUrl } from "@/app/utils/cardUtils";
 import { useSettings } from "@/contexts/SettingsContext";
+import { CorruptedImage } from '@/app/components/lore/CorruptedImage';
 
 interface CardPreviewProps {
   card: {
     card_name: string;
     image_url?: string | null;
     oldest_image_url?: string | null;
+    oracle_text?: string | null;
   };
   children: React.ReactNode;
   className?: string;
@@ -38,6 +40,12 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
   }, []);
 
   const imageUrl = getCardImageUrl(card, useOldestArt);
+  const cardName = card.card_name || '';
+  const oracleText = card.oracle_text || '';
+
+  // THE FIX: Declared isCorruptible *after* cardName and oracleText are extracted so the variables resolve perfectly!
+  const isCorruptible = /\b(time|clock|hour|minute|era|age|aeon|eon|moment|turn)s?\b/gi.test(cardName + ' ' + oracleText);
+
   const scryfallUrl = `https://scryfall.com/search?as=grid&order=name&q=${encodeURIComponent('!"' + card.card_name + '"')}`;
 
   const handleMobileClick = (e: React.MouseEvent) => {
@@ -56,11 +64,17 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
         onClick={() => isMobile && setIsHovered(false)} // Tap anywhere to dismiss on mobile
       >
         <div className="bg-black/95 rounded-xl p-2 shadow-[0_0_50px_rgba(0,0,0,0.8)] border border-gray-600 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-100">
-          <img 
-            src={imageUrl} 
-            alt={card.card_name} 
-            className="w-[320px] h-[446px] rounded-lg block object-contain" 
-          />
+          
+          {/* THE FIX: Replaced standard <img /> with our <CorruptedImage /> wrapper. 
+              We wrap it in a relative container of exactly 320x446 to ensure correct aspect ratios. */}
+          <div className="relative w-[320px] h-[446px] rounded-lg overflow-hidden block">
+            <CorruptedImage 
+              src={imageUrl} 
+              alt={card.card_name} 
+              isCorruptible={isCorruptible}
+            />
+          </div>
+
           <div className="text-center text-white text-sm font-bold mt-2 pb-1 px-2 truncate border-t border-white/10 pt-2">
             {card.card_name}
           </div>
