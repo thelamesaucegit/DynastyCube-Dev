@@ -104,8 +104,8 @@ export async function placeWireBid(cardPoolId: string, bidAmount: number): Promi
         if (!teamMember) return { success: false, error: "You are not a member of any team." };
         const teamId = teamMember.team_id;
 
- // =========================================================================
-        // THE FIX: Pre-Season Exclusive Access Gatekeeper
+        // =========================================================================
+        //  Pre-Season Exclusive Access Gatekeeper
         // =========================================================================
         const PRE_SEASON_5_ID = '4b1d9936-bf5e-4ee5-bd56-741a7c12307e';
         const EXCLUSIVE_ACCESS_TEAMS = [
