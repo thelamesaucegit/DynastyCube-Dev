@@ -65,7 +65,7 @@ export default function RootLayout({
         <SettingsProvider>
            <LoreEffectsProvider>
           <Providers>{children}</Providers>
-           </LoreEffectsProvider>LoreEffectsProvider>
+           </LoreEffectsProvider>
         </SettingsProvider>
          <Toaster /> 
                  <div id="report-portal-root" className="relative z-[99999]" />
