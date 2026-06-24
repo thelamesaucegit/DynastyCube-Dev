@@ -5,6 +5,15 @@
 import { createServerClient } from "@/lib/supabase";
 import { logSystemEvent } from "@/lib/systemLogger";
 
+export interface ScarData {
+    id: string;
+    name: string;
+    description: string | null;
+    rarity: string | null;
+}
+
+
+
 // Typed supabase client strictly using ReturnType rather than any
 async function processEssenceTransaction(
   supabase: Awaited<ReturnType<typeof createServerClient>>,
@@ -102,6 +111,21 @@ async function generateBoosterFromSet(setCode: string): Promise<Record<string, s
             pool_name: 'chamber' 
         };
     });
+}
+
+export async function getScarsForPurchase(): Promise<{ scars: ScarData[] }> {
+    const supabase = await createServerClient();
+    const { data, error } = await supabase
+        .from('scars')
+        .select('id, name, description, rarity')
+        .eq('is_hidden', false)
+        .order('name');
+
+    if (error) {
+        console.error("Error fetching scars:", error);
+        return { scars: [] };
+    }
+    return { scars: data || [] };
 }
 
 // ============================================================================
