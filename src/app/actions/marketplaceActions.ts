@@ -500,15 +500,19 @@ export async function purchaseScar(
         if (!payment.success) return { success: false, error: payment.error };
 
         // --- Execute the RPC ---
-        const { data: rpcData, error: rpcError } = await supabase.rpc('apply_scar_to_card', {
+         const { data: rpcData, error: rpcError } = await supabase.rpc('apply_scar_to_card', {
             p_target_card_pool_id: targetCardId || null,
             p_target_scar_id: targetScarId || null
         }).single();
 
         if (rpcError) throw rpcError; // Let the catch block handle the refund
 
-        const { updated_card_name, applied_scar_name, applied_scar_rarity } = rpcData;
-
+        // THE FIX: Explicitly type the data returned from the RPC
+        const { updated_card_name, applied_scar_name, applied_scar_rarity } = rpcData as {
+            updated_card_name: string;
+            applied_scar_name: string;
+            applied_scar_rarity: string;
+        };
         const message = targetScarId
             ? `Successfully applied the '${applied_scar_name}' (${applied_scar_rarity}) scar to ${updated_card_name}!`
             : `The card '${updated_card_name}' has been afflicted with a new scar: '${applied_scar_name}' (${applied_scar_rarity})!`;
