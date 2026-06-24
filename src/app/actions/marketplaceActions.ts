@@ -437,3 +437,73 @@ export async function purchaseMarketManipulation(
         return { success: false, error: "An unexpected error occurred." };
     }
 }
+
+export async function purchaseScar(
+    options: { targetCardId?: string; targetScarId?: string }
+): Promise<{ success: boolean; message?: string; error?: string }> {
+    const { targetCardId, targetScarId } = options;
+    if (!targetCardId && !targetScarId) {
+        return { success: false, error: "You must select either a card to scar or a scar to apply." };
+    }
+
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Authentication required." };
+
+    let cost = 50; // Base cost for the action
+    let description = "";
+
+    try {
+        // If the user chose a specific scar, calculate the premium cost
+        if (targetScarId) {
+            const { data: scarData, error: scarError } = await supabase
+                .from('scars')
+                .select('name, rarity')
+                .eq('id', targetScarId)
+                .single();
+            
+            if (scarError || !scarData) return { success: false, error: "Selected scar not found." };
+            
+            description = `Purchased Scar: Apply ${scarData.name}`;
+            if (scarData.rarity === 'uncommon') cost += 250;
+            if (scarData.rarity === 'rare') cost += 500;
+        } else {
+            description = "Purchased Scar: Apply random scar to a card";
+        }
+
+        // --- Process Payment First ---
+        const payment = await processEssenceTransaction(supabase, user.id, cost, description);
+        if (!payment.success) return { success: false, error: payment.error };
+
+        // --- Execute the RPC ---
+        const { data: rpcData, error: rpcError } = await supabase.rpc('apply_scar_to_card', {
+            p_target_card_pool_id: targetCardId || null,
+            p_target_scar_id: targetScarId || null
+        }).single();
+
+        if (rpcError) throw rpcError; // Let the catch block handle the refund
+
+        const { updated_card_name, applied_scar_name, applied_scar_rarity } = rpcData;
+
+        const message = targetScarId
+            ? `Successfully applied the '${applied_scar_name}' (${applied_scar_rarity}) scar to ${updated_card_name}!`
+            : `The card '${updated_card_name}' has been afflicted with a new scar: '${applied_scar_name}' (${applied_scar_rarity})!`;
+            
+        await logSystemEvent("Marketplace", "info", `User ${user.id} ${description}. Result: ${message}`);
+
+        return { success: true, message };
+
+    } catch (e) {
+        const error = e as Error;
+        console.error("Error in purchaseScar:", error.message);
+
+        // --- Refund Logic on Failure ---
+        // This refetches the user to prevent race conditions and adds the cost back.
+        const { data: currentUser } = await supabase.from('users').select('essence_balance').eq('id', user.id).single();
+        if (currentUser) {
+            await supabase.from('users').update({ essence_balance: currentUser.essence_balance + cost }).eq('id', user.id);
+        }
+        
+        return { success: false, error: `An error occurred: ${error.message}. Your Essence has been refunded.` };
+    }
+}
