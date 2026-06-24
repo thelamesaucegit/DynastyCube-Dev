@@ -117,7 +117,7 @@ export async function getScarsForPurchase(): Promise<{ scars: ScarData[] }> {
     const supabase = await createServerClient();
     const { data, error } = await supabase
         .from('scars')
-        .select('scar_id, name, description, rarity')
+        .select('scar_id, name, description, rarity') // <-- FIX: Select scar_id
         .eq('is_hidden', false)
         .order('name');
 
@@ -125,15 +125,17 @@ export async function getScarsForPurchase(): Promise<{ scars: ScarData[] }> {
         console.error("Error fetching scars:", error);
         return { scars: [] };
     }
-   const mappedScars: ScarData[] = (data || []).map(scar => ({
-        id: scar.scar_id, 
+
+    // Map the database result to the UI-friendly interface
+    const mappedScars: ScarData[] = (data || []).map(scar => ({
+        id: scar.scar_id, // <-- FIX: Map scar_id to id
         name: scar.name,
         description: scar.description,
         rarity: scar.rarity
     }));
 
     return { scars: mappedScars };
-
+}
 // ============================================================================
 // MARKETPLACE PURCHASES
 // ============================================================================
