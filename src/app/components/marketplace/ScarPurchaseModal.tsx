@@ -89,14 +89,14 @@ export const ScarPurchaseModal: React.FC<ScarPurchaseModalProps> = ({ isOpen, on
   };
 
   const handleSelectScar = (scarId: string) => {
-    const scar = availableScars.find(s => s.id === scarId);
+    const scar = availableScars.find(s => s.scar_id === scarId);
     setSelectedScar(scar || null);
   };
   
   const handlePurchase = async () => {
     const options = {
         targetCardId: selectedCard?.id,
-        targetScarId: selectedScar?.id
+        targetScarId: selectedScar?.scar_id
     };
 
     if (!options.targetCardId && !options.targetScarId) {
