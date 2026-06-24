@@ -3,6 +3,8 @@
 
 import { ScarPurchaseModal } from "@/app/components/marketplace/ScarPurchaseModal";
 
+import { ItemPurchaseModal } from "@/app/components/marketplace/ItemPurchaseModal";
+
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -14,7 +16,7 @@ import {
   Store, Package, Map, BookOpen, Search, TrendingUp, Ghost, Tag, FastForward, Skull, ArrowUpCircle, Construction, Lock, Loader2, ArrowUpRight, ArrowDownRight, X
 } from "lucide-react";
 import { getUserEssenceBalance, type EssenceBalance } from "@/app/actions/essenceActions";
-import { purchaseRandomBooster, purchaseHomePlaneBooster, searchCardsForManipulation, purchaseMarketManipulation } from "@/app/actions/marketplaceActions";
+import { getDrainCards, getRetiredCards, reclaimFromDrain, reinvigorateFromRetirement, purchaseRandomBooster, purchaseHomePlaneBooster, searchCardsForManipulation, purchaseMarketManipulation } from "@/app/actions/marketplaceActions";
 import { toast } from "sonner";
 
 // Type-safe interface to replace "any"
@@ -53,13 +55,15 @@ const MARKETPLACE_ITEMS = [
     isActive: true,
     href: "/cypher" 
   },
-  {
+    {
     id: "retrieve_lost",
-    title: "Retrieve",
-    description: "Retrieve something Lost.",
+    title: "Retrieve Something Lost",
+    description: "Reclaim a card from The Drain and place it onto The Wire.",
     icon: <Search className="size-6 text-cyan-500" />,
     cost: 200,
-    isActive: false,
+    isActive: true, // ACTIVATE
+    fetchAction: getDrainCards,
+    purchaseAction: reclaimFromDrain,
   },
   {
     id: "market_manipulation",
@@ -70,13 +74,15 @@ const MARKETPLACE_ITEMS = [
     isActive: true, 
     action: "modal_manipulation"
   },
-  {
+ {
     id: "necromancy",
     title: "Reinvigorate",
-    description: "Call a card back from Retirement.",
+    description: "Call a card back from Retirement and place it onto The Wire with a cost of Ç1.",
     icon: <Ghost className="size-6 text-slate-500" />,
     cost: 250,
-    isActive: false,
+    isActive: true, 
+    fetchAction: getRetiredCards,
+    purchaseAction: reinvigorateFromRetirement,
   },
   {
     id: "rename",
@@ -121,7 +127,8 @@ export default function MarketplacePage() {
   const [manipulationModalOpen, setManipulationModalOpen] = useState(false);
   const [manipulationSearch, setManipulationSearch] = useState("");
   const [scarModalOpen, setScarModalOpen] = useState(false);
-
+const [itemModalOpen, setItemModalOpen] = useState(false);
+const [activeItem, setActiveItem] = useState<any>(null);
   // THE FIX: Explicitly typed array instead of any[]
   const [manipulationResults, setManipulationResults] = useState<ManipulationCard[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -152,8 +159,17 @@ export default function MarketplacePage() {
   }, [manipulationSearch]);
 
   const handlePurchase = async (itemId: string, cost: number, actionType?: string) => {
+     const item = MARKETPLACE_ITEMS.find(i => i.id === itemId);
+      if (!item) return;
+    
       if ((balance?.essence_balance || 0) < cost) {
           toast.error(`Insufficient Essence. You need ${cost} €.`);
+          return;
+      }
+
+    if (item.fetchAction && item.purchaseAction) {
+          setActiveItem(item);
+          setItemModalOpen(true);
           return;
       }
       if (actionType === "modal_manipulation") {
@@ -406,6 +422,16 @@ export default function MarketplacePage() {
         loadBalance(); // Refresh user's essence balance
     }}
   />
+
+      {/* NEW GENERIC ITEM MODAL */}
+  {activeItem && (
+    <ItemPurchaseModal
+        isOpen={itemModalOpen}
+        onClose={() => setItemModalOpen(false)}
+        onPurchaseComplete={loadBalance}
+        item={activeItem}
+    />
+  )}
     </div>
   );
 }
