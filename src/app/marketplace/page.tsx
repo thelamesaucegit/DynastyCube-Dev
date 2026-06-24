@@ -1,6 +1,8 @@
 // src/app/marketplace/page.tsx
 "use client";
 
+import { ScarPurchaseModal } from "@/app/components/marketplace/ScarPurchaseModal";
+
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -92,13 +94,13 @@ const MARKETPLACE_ITEMS = [
     cost: 1000,
     isActive: false,
   },
-  {
+ {
     id: "scarring",
-    title: "Scarring",
-    description: "Apply a random Scar to a specified card in The Draft Pool or The Chamber, or a specified Scar to a random card.",
+    title: "Scar",
+    description: "Apply a random Scar to a specified card, or a specified Scar to a random card. Cost varies by rarity.",
     icon: <Skull className="size-6 text-red-500" />,
-    cost: 500,
-    isActive: false,
+    cost: 50, // Base cost
+    isActive: true, // ACTIVATE THE ITEM
   },
   {
     id: "ascension",
@@ -118,6 +120,8 @@ export default function MarketplacePage() {
   // Modal State
   const [manipulationModalOpen, setManipulationModalOpen] = useState(false);
   const [manipulationSearch, setManipulationSearch] = useState("");
+  const [scarModalOpen, setScarModalOpen] = useState(false);
+
   // THE FIX: Explicitly typed array instead of any[]
   const [manipulationResults, setManipulationResults] = useState<ManipulationCard[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -152,9 +156,13 @@ export default function MarketplacePage() {
           toast.error(`Insufficient Essence. You need ${cost} €.`);
           return;
       }
-
       if (actionType === "modal_manipulation") {
           setManipulationModalOpen(true);
+          return;
+      }
+      // THE FIX: Add the new case for the scar modal
+      if (itemId === "scarring") {
+          setScarModalOpen(true);
           return;
       }
 
@@ -389,6 +397,15 @@ export default function MarketplacePage() {
             </div>
         </div>
       )}
+
+      {/* NEW SCAR MODAL */}
+  <ScarPurchaseModal 
+    isOpen={scarModalOpen}
+    onClose={() => setScarModalOpen(false)}
+    onPurchaseComplete={() => {
+        loadBalance(); // Refresh user's essence balance
+    }}
+  />
     </div>
   );
 }

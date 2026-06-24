@@ -212,6 +212,25 @@ export async function addDraftPick(pick: DraftPick): Promise<{ success: boolean;
     const authCheck = await verifyTeamMembership(pick.team_id, supabase);
     if (!authCheck.authorized) return { success: false, error: authCheck.error };
 
+    // =========================================================================
+    // Pre-Season Exclusive Access for FREE AGENTS
+    // =========================================================================
+    if (pick.acquisition_method === 'free_agent') {
+        const { data: activeSeason } = await supabase.from('seasons').select('id').eq('is_active', true).maybeSingle();
+        const seasonId = activeSeason?.id;
+
+        const PRE_SEASON_5_ID = '4b1d9936-bf5e-4ee5-bd56-741a7c12307e';
+        const EXCLUSIVE_ACCESS_TEAMS = [
+            '2bfc34c2-045b-4ac7-872b-05aeebd4c53b', // Changelings/Mimics
+            '624e3ecc-672d-4ee4-8a4a-7be8c61d39e9'  // Tarkir Dragons
+        ];
+
+        if (seasonId === PRE_SEASON_5_ID && !EXCLUSIVE_ACCESS_TEAMS.includes(pick.team_id)) {
+            return { success: false, error: "Access to Free Agency is temporarily restricted to expansion teams." };
+        }
+    }
+          // =========================================================================
+
     if (pick.card_pool_id) {
         console.log("Checking for existing pick with card_pool_id:", pick.card_pool_id);
         const { data: existingPick, error: checkError } = await supabase.from("team_draft_picks").select("id").eq("card_pool_id", pick.card_pool_id).single();
