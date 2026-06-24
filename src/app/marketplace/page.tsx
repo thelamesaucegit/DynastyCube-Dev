@@ -180,7 +180,7 @@ const [activeItem, setActiveItem] = useState<MarketplaceItem | null>(null);
           return;
       }
 
-    if (item.fetchAction && item.purchaseAction) {
+if (item.fetchAction !== undefined && item.purchaseAction !== undefined) {
           setActiveItem(item);
           setItemModalOpen(true);
           return;
