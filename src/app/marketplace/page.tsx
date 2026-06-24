@@ -28,6 +28,19 @@ interface ManipulationCard {
   image_url: string | null;
   pool_name: string;
 }
+interface MarketplaceItem {
+  id: string;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  cost?: number;
+  costText?: string;
+  isActive: boolean;
+  href?: string;
+  action?: string;
+  fetchAction?: () => Promise<{ cards: any[] }>;
+  purchaseAction?: (cardId: string) => Promise<{ success: boolean; message?: string; error?: string }>;
+}
 
 const MARKETPLACE_ITEMS = [
   {
@@ -128,7 +141,7 @@ export default function MarketplacePage() {
   const [manipulationSearch, setManipulationSearch] = useState("");
   const [scarModalOpen, setScarModalOpen] = useState(false);
 const [itemModalOpen, setItemModalOpen] = useState(false);
-const [activeItem, setActiveItem] = useState<any>(null);
+const [activeItem, setActiveItem] = useState<MarketplaceItem | null>(null);
   // THE FIX: Explicitly typed array instead of any[]
   const [manipulationResults, setManipulationResults] = useState<ManipulationCard[]>([]);
   const [isSearching, setIsSearching] = useState(false);
