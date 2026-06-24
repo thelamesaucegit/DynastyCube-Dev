@@ -16,7 +16,7 @@ import {
   Store, Package, Map, BookOpen, Search, TrendingUp, Ghost, Tag, FastForward, Skull, ArrowUpCircle, Construction, Lock, Loader2, ArrowUpRight, ArrowDownRight, X
 } from "lucide-react";
 import { getUserEssenceBalance, type EssenceBalance } from "@/app/actions/essenceActions";
-import { getDrainCards, getRetiredCards, reclaimFromDrain, reinvigorateFromRetirement, purchaseRandomBooster, purchaseHomePlaneBooster, searchCardsForManipulation, purchaseMarketManipulation } from "@/app/actions/marketplaceActions";
+import { getDrainCards, getRetiredCards, reclaimFromDrain, reinvigorateFromRetirement, purchaseRandomBooster, purchaseHomePlaneBooster, searchCardsForManipulation, purchaseMarketManipulation, type PurchaseableCard  } from "@/app/actions/marketplaceActions";
 import { toast } from "sonner";
 
 // Type-safe interface to replace "any"
@@ -38,7 +38,7 @@ interface MarketplaceItem {
   isActive: boolean;
   href?: string;
   action?: string;
-  fetchAction?: () => Promise<{ cards: any[] }>;
+  fetchAction?: () => Promise<{ cards: PurchaseableCard[] }>; // THE FIX: No more 'any
   purchaseAction?: (cardId: string) => Promise<{ success: boolean; message?: string; error?: string }>;
 }
 
