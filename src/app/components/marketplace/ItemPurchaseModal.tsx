@@ -1,4 +1,3 @@
-// /src/app/components/marketplace/ItemPurchaseModal.tsx
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -17,9 +16,9 @@ interface ItemPurchaseModalProps {
     id: string;
     title: string;
     description: string;
-    cost?: number;
-    fetchAction: () => Promise<{ cards: PurchaseableCard[] }>;
-    purchaseAction: (cardId: string) => Promise<{ success: boolean; message?: string; error?: string }>;
+    cost?: number; // Is optional
+    fetchAction?: () => Promise<{ cards: PurchaseableCard[] }>; // Is optional
+    purchaseAction?: (cardId: string) => Promise<{ success: boolean; message?: string; error?: string }>; // Is optional
   };
 }
 
@@ -32,17 +31,16 @@ export const ItemPurchaseModal: React.FC<ItemPurchaseModalProps> = ({ isOpen, on
   const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && item.fetchAction) { // Safety check
       const loadData = async () => {
         setLoading(true);
-        const { cards: fetchedCards } = await item.fetchAction();
+        const { cards: fetchedCards } = await item.fetchAction!(); // Use non-null assertion
         setCards(fetchedCards);
         setFilteredCards(fetchedCards);
         setLoading(false);
       };
       loadData();
     } else {
-      // Reset state on close
       setCards([]);
       setFilteredCards([]);
       setSelectedCard(null);
@@ -56,7 +54,7 @@ export const ItemPurchaseModal: React.FC<ItemPurchaseModalProps> = ({ isOpen, on
   }, [searchTerm, cards]);
 
   const handlePurchase = async () => {
-    if (!selectedCard) return;
+    if (!selectedCard || !item.purchaseAction) return; // Safety check
     setProcessing(true);
     const res = await item.purchaseAction(selectedCard.id);
     if (res.success) {
@@ -106,7 +104,7 @@ export const ItemPurchaseModal: React.FC<ItemPurchaseModalProps> = ({ isOpen, on
         <div className="p-6 border-t bg-muted/30 flex justify-between items-center">
           <div className="flex flex-col">
             <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Cost</span>
-<span className="text-2xl font-bold text-emerald-500">{item.cost || 0} €</span>
+            <span className="text-2xl font-bold text-emerald-500">{item.cost || 0} €</span>
           </div>
           <Button size="lg" className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold" disabled={processing || !selectedCard} onClick={handlePurchase}>
             {processing ? <Loader2 className="size-5 animate-spin"/> : "Purchase"}
