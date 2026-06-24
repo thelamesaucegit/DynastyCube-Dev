@@ -79,7 +79,7 @@ export const ScarPurchaseModal: React.FC<ScarPurchaseModalProps> = ({ isOpen, on
   }, [selectedScar, mode]);
 
   const calculateCost = () => {
-    const baseCost = 50;
+    const baseCost = 500;
     let premium = 0;
     if (mode === 'scar' && selectedScar) {
       if (selectedScar.rarity === 'uncommon') premium = 250;

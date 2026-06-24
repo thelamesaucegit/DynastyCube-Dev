@@ -99,7 +99,7 @@ const MARKETPLACE_ITEMS = [
     title: "Scar",
     description: "Apply a random Scar to a specified card, or a specified Scar to a random card. Cost varies by rarity.",
     icon: <Skull className="size-6 text-red-500" />,
-    cost: 50, // Base cost
+    cost: 500, // Base cost
     isActive: true, // ACTIVATE THE ITEM
   },
   {
