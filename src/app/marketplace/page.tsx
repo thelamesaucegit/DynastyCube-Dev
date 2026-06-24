@@ -159,8 +159,17 @@ const [activeItem, setActiveItem] = useState<any>(null);
   }, [manipulationSearch]);
 
   const handlePurchase = async (itemId: string, cost: number, actionType?: string) => {
+     const item = MARKETPLACE_ITEMS.find(i => i.id === itemId);
+      if (!item) return;
+    
       if ((balance?.essence_balance || 0) < cost) {
           toast.error(`Insufficient Essence. You need ${cost} €.`);
+          return;
+      }
+
+    if (item.fetchAction && item.purchaseAction) {
+          setActiveItem(item);
+          setItemModalOpen(true);
           return;
       }
       if (actionType === "modal_manipulation") {
@@ -413,6 +422,16 @@ const [activeItem, setActiveItem] = useState<any>(null);
         loadBalance(); // Refresh user's essence balance
     }}
   />
+
+      {/* NEW GENERIC ITEM MODAL */}
+  {activeItem && (
+    <ItemPurchaseModal
+        isOpen={itemModalOpen}
+        onClose={() => setItemModalOpen(false)}
+        onPurchaseComplete={loadBalance}
+        item={activeItem}
+    />
+  )}
     </div>
   );
 }
