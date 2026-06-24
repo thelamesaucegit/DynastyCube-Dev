@@ -239,7 +239,7 @@ export default function MarketplacePage() {
         <div>
           <h3 className="font-bold text-amber-700 dark:text-amber-400">The stalls are currently opening.</h3>
           <p className="text-sm text-amber-600/80 dark:text-amber-400/80 mt-1">
-            The League is in flux. Several items below have been spotted through the storefront windows, but their prices remain obscured. Gather your Essence while you wait.
+            The League is in flux. Several items below have been spotted through the storefront windows, other shelves show only the listed price.
           </p>
         </div>
       </div>
