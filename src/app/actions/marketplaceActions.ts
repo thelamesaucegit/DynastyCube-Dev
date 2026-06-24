@@ -12,6 +12,12 @@ export interface ScarData {
     rarity: string | null;
 }
 
+export interface PurchaseableCard {
+    id: string;
+    name: string;
+    set: string | null;
+    imageUrl: string | null;
+}
 
 
 // Typed supabase client strictly using ReturnType rather than any
@@ -136,6 +142,50 @@ export async function getScarsForPurchase(): Promise<{ scars: ScarData[] }> {
 
     return { scars: mappedScars };
 }
+
+export async function getDrainCards(): Promise<{ cards: PurchaseableCard[] }> {
+    const supabase = await createServerClient();
+    try {
+        const { data: cardsInDrain, error: fetchError } = await supabase
+            .from('card_pools')
+            .select('id, card_name, card_set, oldest_image_url')
+            .eq('pool_name', 'drainlings');
+        if (fetchError) throw fetchError;
+
+        const DRAINLINGS_TEAM_ID = '90177632-f6ab-4501-b235-3590a7e46472';
+        const { data: activeSubmission } = await supabase
+            .from('deck_submissions')
+            .select('deck_list')
+            .eq('team_id', DRAINLINGS_TEAM_ID)
+            .eq('is_current', true)
+            .maybeSingle();
+        
+        const activeDeckList = activeSubmission?.deck_list || "";
+        const eligibleCards = (cardsInDrain || []).filter(card => !activeDeckList.includes(card.card_name));
+
+        return { cards: eligibleCards.map(c => ({ id: c.id, name: c.card_name, set: c.card_set, imageUrl: c.oldest_image_url })) };
+    } catch (e) {
+        console.error("Error fetching drain cards:", e);
+        return { cards: [] };
+    }
+}
+
+export async function getRetiredCards(): Promise<{ cards: PurchaseableCard[] }> {
+    const supabase = await createServerClient();
+    try {
+        const { data, error } = await supabase
+            .from('retired_cards')
+            .select('id, card_name, card_set, oldest_image_url')
+            .order('retired_at', { ascending: false });
+
+        if (error) throw error;
+        return { cards: (data || []).map(c => ({ id: c.id, name: c.card_name, set: c.card_set, imageUrl: c.oldest_image_url })) };
+    } catch (e) {
+        console.error("Error fetching retired cards:", e);
+        return { cards: [] };
+    }
+}
+
 // ============================================================================
 // MARKETPLACE PURCHASES
 // ============================================================================
