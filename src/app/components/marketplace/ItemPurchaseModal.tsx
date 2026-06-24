@@ -17,7 +17,7 @@ interface ItemPurchaseModalProps {
     id: string;
     title: string;
     description: string;
-    cost: number;
+    cost?: number;
     fetchAction: () => Promise<{ cards: PurchaseableCard[] }>;
     purchaseAction: (cardId: string) => Promise<{ success: boolean; message?: string; error?: string }>;
   };
@@ -106,7 +106,7 @@ export const ItemPurchaseModal: React.FC<ItemPurchaseModalProps> = ({ isOpen, on
         <div className="p-6 border-t bg-muted/30 flex justify-between items-center">
           <div className="flex flex-col">
             <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Cost</span>
-            <span className="text-2xl font-bold text-emerald-500">{item.cost} €</span>
+<span className="text-2xl font-bold text-emerald-500">{item.cost || 0} €</span>
           </div>
           <Button size="lg" className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold" disabled={processing || !selectedCard} onClick={handlePurchase}>
             {processing ? <Loader2 className="size-5 animate-spin"/> : "Purchase"}
