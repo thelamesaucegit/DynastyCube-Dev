@@ -167,7 +167,7 @@ export async function reinvigorateFromRetirement(retiredCardId: string): Promise
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Authentication required." };
 
-    const COST = 150;
+    const COST = 250;
 
     try {
         // --- Process Payment ---
