@@ -541,7 +541,7 @@ export async function purchaseScar(
             const { data: scarData, error: scarError } = await supabase
                 .from('scars')
                 .select('name, rarity')
-                .eq('id', targetScarId)
+                .eq('scar_id', targetScarId)
                 .single();
             
             if (scarError || !scarData) return { success: false, error: "Selected scar not found." };
