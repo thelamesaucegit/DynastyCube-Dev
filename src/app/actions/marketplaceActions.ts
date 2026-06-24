@@ -532,7 +532,7 @@ export async function purchaseScar(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Authentication required." };
 
-    let cost = 50; // Base cost for the action
+    let cost = 500; // Base cost for the action
     let description = "";
 
     try {
