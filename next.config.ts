@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
     },
   },
   images: {
+    unoptimized: true, // <-- THE FIX: Disables server-side image optimization
     remotePatterns: [
       {
         protocol: "https",
