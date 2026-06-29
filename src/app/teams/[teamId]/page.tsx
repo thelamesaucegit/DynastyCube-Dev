@@ -8,7 +8,7 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { CorruptedImage } from '@/app/components/lore/CorruptedImage';
 import { TargetedGlitchedText } from '@/app/components/lore/TargetedGlitchedText';
-
+import { toast } from "sonner";
 
 import { TrophyCase } from "@/app/components/team/TrophyCase";
 import { TeamEssenceDisplay } from "@/app/components/team/TeamEssenceDisplay";
