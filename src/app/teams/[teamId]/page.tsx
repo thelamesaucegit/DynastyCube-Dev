@@ -488,13 +488,14 @@ export default function TeamPage() {
                 As long as the cosmos remain neutral, any team member may initiate a 12-hour vote to transform the team&apos;s identity.
               </p>
             </div>
-            <Button 
+           <Button 
               onClick={async () => {
                 if (!user?.id) return;
                 const activeIdentity = team.short_name === 'changelings' ? 'changelings' : 'mimics';
                 const result = await createIdentitySwapPoll(team.id, user.id, activeIdentity);
 
- if (result.isExisting) {
+                // THE FIX: Check for the new isExisting flag
+                if (result.isExisting) {
                     toast.info(result.error); // Show the "already in progress" message
                     setActiveTab('votes');   // Redirect user to the votes tab
                 } else if (result.success) {
@@ -505,11 +506,7 @@ export default function TeamPage() {
                 }
               }} 
                 
-                alert(result.message || result.error);
-                if (result.success) {
-                  window.location.reload();
-                }
-              }} 
+               
               className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-[0_0_15px_rgba(16,185,129,0.4)] hover:shadow-[0_0_22px_rgba(16,185,129,0.65)] transition-all duration-200 border border-emerald-400/30"
             >
               Initiate Transformation Vote
