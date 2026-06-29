@@ -7,12 +7,26 @@ import { getCardImageUrl } from "@/app/utils/cardUtils";
 import { useSettings } from "@/contexts/SettingsContext";
 import { CorruptedImage } from '@/app/components/lore/CorruptedImage';
 
+// Dictionary to map database short_names to beautiful display names
+const SCAR_DICTIONARY: Record<string, string> = {
+  superdupe: "SuperDuplication",
+  blessed: "Blessed",
+  duplication: "Duplication",
+  resort: "Resort Destination",
+  eternal: "Eternal",
+  shiny: "Shiny",
+  brittle: "Brittle",
+  dingy: "Dingy",
+  unstable: "Unstable",
+};
+
 interface CardPreviewProps {
   card: {
     card_name: string;
     image_url?: string | null;
     oldest_image_url?: string | null;
     oracle_text?: string | null;
+    scars?: string[] | null; // <-- ADDED: The component now expects scars
   };
   children: React.ReactNode;
   className?: string;
@@ -32,7 +46,6 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
 
   useEffect(() => {
     setMounted(true);
-    // Simple mobile detection based on screen width
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
     window.addEventListener('resize', checkMobile);
@@ -42,31 +55,28 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
   const imageUrl = getCardImageUrl(card, useOldestArt);
   const cardName = card.card_name || '';
   const oracleText = card.oracle_text || '';
+  const scars = card.scars || [];
+  const hasScars = scars.length > 0;
 
-  // THE FIX: Declared isCorruptible *after* cardName and oracleText are extracted so the variables resolve perfectly!
   const isCorruptible = /\b(time|clock|hour|minute|era|age|aeon|eon|moment|turn)s?\b/gi.test(cardName + ' ' + oracleText);
 
   const scryfallUrl = `https://scryfall.com/search?as=grid&order=name&q=${encodeURIComponent('!"' + card.card_name + '"')}`;
 
   const handleMobileClick = (e: React.MouseEvent) => {
     if (isMobile) {
-      e.preventDefault(); // Stop navigation
-      setIsHovered(!isHovered); // Toggle the zoom-in preview instead
+      e.preventDefault(); 
+      setIsHovered(!isHovered); 
     }
   };
 
   const portalContent =
     isHovered && imageUrl && mounted ? createPortal(
       <div 
-        // FIX: Use pointer-events-auto on mobile so the onClick actually fires!
-        // Added a subtle bg-black/40 on mobile to indicate the background is clickable to dismiss.
         className={`fixed inset-0 flex items-center justify-center z-[99999] ${isMobile ? "pointer-events-auto bg-black/40 backdrop-blur-sm" : "pointer-events-none"}`} 
-        onClick={() => isMobile && setIsHovered(false)} // Tap anywhere to dismiss on mobile
+        onClick={() => isMobile && setIsHovered(false)} 
       >
         <div className="bg-black/95 rounded-xl p-2 shadow-[0_0_50px_rgba(0,0,0,0.8)] border border-gray-600 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-100">
           
-          {/* THE FIX: Replaced standard <img /> with our <CorruptedImage /> wrapper. 
-              We wrap it in a relative container of exactly 320x446 to ensure correct aspect ratios. */}
           <div className="relative w-[320px] h-[446px] rounded-lg overflow-hidden block">
             <CorruptedImage 
               src={imageUrl} 
@@ -75,9 +85,21 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
             />
           </div>
 
-          <div className="text-center text-white text-sm font-bold mt-2 pb-1 px-2 truncate border-t border-white/10 pt-2">
+          <div className={`text-center text-white text-sm font-bold mt-2 px-2 truncate border-t border-white/10 pt-2 ${hasScars ? 'pb-1' : 'pb-2'}`}>
             {card.card_name}
           </div>
+
+          {/* THE FIX: Inject red scar badges under the card name on hover */}
+          {hasScars && (
+            <div className="flex flex-wrap justify-center gap-1.5 pb-2 px-2 mt-1">
+              {scars.map(scar => (
+                <span key={scar} className="bg-red-950/80 text-red-200 border border-red-700/50 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded shadow-sm">
+                  {SCAR_DICTIONARY[scar] || scar}
+                </span>
+              ))}
+            </div>
+          )}
+
         </div>
       </div>,
       document.body
@@ -95,6 +117,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
         onClick={handleMobileClick}
         style={{
           display: "inline-block",
+          position: "relative", // Ensures absolute children anchor to this wrapper
           textDecoration: "none",
           color: "inherit",
           cursor: isMobile ? "pointer" : "pointer",
@@ -102,6 +125,13 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
         }}
       >
         {children}
+
+        {/* THE FIX: Skull Indicator on the base grid view */}
+        {hasScars && (
+          <div className="absolute bottom-2 right-2 bg-black/80 rounded-md px-1.5 py-1 text-[10px] leading-none shadow-md z-10 pointer-events-none backdrop-blur-sm border border-white/10">
+            💀
+          </div>
+        )}
       </a>
       {portalContent}
     </>
