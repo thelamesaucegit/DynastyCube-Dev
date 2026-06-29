@@ -270,7 +270,7 @@ export default function ChamberPoolsPage() {
                       const imageUrl = getCardImageUrl(card, useOldestArt);
                       return (
                           <div key={card.id} className="relative group rounded-lg overflow-hidden border-2 border-border hover:border-primary hover:shadow-xl hover:-translate-y-1 transition-all duration-200">
-                              {imageUrl ? (<Image src={imageUrl} alt={card.card_name} width={745} height={1040} sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw" className="w-full h-auto" />) : (<div className="w-full aspect-[5/7] bg-muted flex items-center justify-center"><span className="text-muted-foreground text-xs text-center px-2">{card.card_name}</span></div>)}
+                              {imageUrl ? (<Image src={imageUrl} alt={card.card_name} width={745} height={1040} sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw" className="w-full h-auto" unoptimized />) : (<div className="w-full aspect-[5/7] bg-muted flex items-center justify-center"><span className="text-muted-foreground text-xs text-center px-2">{card.card_name}</span></div>)}
                               
                               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-3">
                                   <div className="text-white">

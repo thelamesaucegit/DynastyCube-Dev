@@ -35,7 +35,7 @@ export const CorruptedImage: React.FC<CorruptedImageProps> = ({ src, alt, isCorr
             onMouseLeave={() => canBeCorrupted && setIsGlitching(false)}
         >
             {/* Original Card Image */}
-            <Image src={src} alt={alt} layout="fill" objectFit="contain" />
+            <Image src={src} alt={alt} layout="fill" objectFit="contain" unoptimized/>
 
             {/* Corruption Overlay */}
             {canBeCorrupted && (
