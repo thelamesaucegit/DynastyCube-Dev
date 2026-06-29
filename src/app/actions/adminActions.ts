@@ -234,16 +234,23 @@ export async function backfillOracleData(tableName: string = 'card_pools'): Prom
   let failedCount = 0;
 
   try {
-    // --- THE MAGIC FIX: Check for missing oracle_text too! ---
+    // --- THE MAGIC FIX: Check for missing oracle_text AND image_url too! ---
     const { data: cardsMissingData, error: fetchError1 } = await supabase
         .from(tableName)
         .select('id, card_id')
-        .or('oracle_id.is.null,oracle_text.is.null');
+        .or('oracle_id.is.null,oracle_text.is.null,image_url.is.null'); // <-- Added image_url.is.null
 
     if (fetchError1) throw new Error(`Failed to fetch cards: ${fetchError1.message}`);
 
-    interface ScryfallFace { oracle_text?: string; }
-    interface ScryfallData { oracle_text?: string; card_faces?: ScryfallFace[]; }
+    interface ScryfallFace { 
+        oracle_text?: string; 
+        image_uris?: { normal?: string; small?: string; };
+    }
+    interface ScryfallData { 
+        oracle_text?: string; 
+        image_uris?: { normal?: string; small?: string; };
+        card_faces?: ScryfallFace[]; 
+    }
 
     const extractOracleText = (rawCard: unknown) => {
         const card = rawCard as ScryfallData;
@@ -252,6 +259,16 @@ export async function backfillOracleData(tableName: string = 'card_pools'): Prom
             return card.card_faces.map((face: ScryfallFace) => face.oracle_text).filter(Boolean).join('\n//\n');
         }
         return null;
+    };
+
+    // --- NEW HELPER: DFC Image Extraction ---
+    const extractImageUrl = (rawCard: unknown) => {
+        const card = rawCard as ScryfallData;
+        if (card.image_uris?.normal) return card.image_uris.normal;
+        if (card.card_faces && card.card_faces[0]?.image_uris?.normal) {
+            return card.card_faces[0].image_uris.normal;
+        }
+        return card.image_uris?.small || card.card_faces?.[0]?.image_uris?.small || null;
     };
 
     for (const card of cardsMissingData || []) {
@@ -265,7 +282,8 @@ export async function backfillOracleData(tableName: string = 'card_pools'): Prom
         if (scryfallData.oracle_id) {
           const { error: updateError } = await supabase.from(tableName).update({ 
               oracle_id: scryfallData.oracle_id,
-              oracle_text: extractOracleText(scryfallData) 
+              oracle_text: extractOracleText(scryfallData),
+              image_url: extractImageUrl(scryfallData) // <-- Added image_url extraction here
           }).eq('id', card.id);
           
           if (updateError) throw new Error(`DB update error for card ${card.id}: ${updateError.message}`);
@@ -285,6 +303,7 @@ export async function backfillOracleData(tableName: string = 'card_pools'): Prom
     if (fetchError2) throw new Error(`Failed to fetch distinct oracle_ids from ${tableName}: ${fetchError2.message}`);
     
     const uniqueOracleIds = [...new Set((distinctOracleIds || []).map(o => o.oracle_id))];
+
     for (const oracleId of uniqueOracleIds) {
          try {
             await new Promise(r => setTimeout(r, 100));
@@ -292,7 +311,10 @@ export async function backfillOracleData(tableName: string = 'card_pools'): Prom
             if (!response.ok) throw new Error(`Scryfall search error for oracle_id ${oracleId}: ${response.statusText}`);
             
             const scryfallData = await response.json();
-            const oldestImage = scryfallData?.data?.[0]?.image_uris?.normal;
+            
+            // THE FIX: Use the new DFC helper so oldest images for DFCs also resolve correctly!
+            const oldestCardData = scryfallData?.data?.[0];
+            const oldestImage = oldestCardData ? extractImageUrl(oldestCardData) : null;
             
             if (oldestImage) {
                 const { data: updatedData, error: updateError } = await supabase.from(tableName).update({ oldest_image_url: oldestImage }).eq('oracle_id', oracleId).select('id');
