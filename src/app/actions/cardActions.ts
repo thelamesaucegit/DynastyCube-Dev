@@ -288,23 +288,41 @@ export async function bulkImportAndSync(
         const cardsToInsert: Array<Omit<CardData, "id" | "created_at" | "rating_updated_at">> = [];
         
                     // --- HELPER TO EXTRACT ORACLE TEXT ---
-        interface ScryfallFace { oracle_text?: string; }
-        interface ScryfallData { oracle_text?: string; card_faces?: ScryfallFace[]; }
+        interface ScryfallFace { 
+            oracle_text?: string;
+            image_uris?: { normal?: string; small?: string; };
+        }
+        interface ScryfallData {
+            oracle_text?: string;
+            image_uris?: { normal?: string; small?: string; };
+            card_faces?: ScryfallFace[];
+        }
 
         const extractOracleText = (rawCard: unknown) => {
             const card = rawCard as ScryfallData;
             if (card.oracle_text) return card.oracle_text;
             if (card.card_faces) {
-                return card.card_faces.map((face: ScryfallFace) => face.oracle_text).filter(Boolean).join('\n//\n');
+                return card.card_faces.map((face) => face.oracle_text).filter(Boolean).join('\n//\n');
             }
             return null;
         };
-
+        
+        // --- NEW HELPER FOR DFC IMAGES ---
+        const extractImageUrl = (rawCard: unknown) => {
+            const card = rawCard as ScryfallData;
+            if (card.image_uris?.normal) return card.image_uris.normal;
+            if (card.card_faces && card.card_faces[0]?.image_uris?.normal) {
+                return card.card_faces[0].image_uris.normal;
+            }
+            return card.image_uris?.small || card.card_faces?.[0]?.image_uris?.small;
+        };
 
         for (const request of requestedCards) {
             const cardData = scryfallCardMap.get(request.name.toLowerCase());
             if (cardData) {
                 const finalCost = request.cost !== null ? request.cost : calculateCubucksCost(cardData);
+                const imageUrl = extractImageUrl(cardData);
+                
                 cardsToInsert.push({
                     card_id: cardData.id,
                     card_name: cardData.name,
@@ -313,10 +331,10 @@ export async function bulkImportAndSync(
                     rarity: cardData.rarity,
                     colors: cardData.colors || [],
                     color_identity: cardData.color_identity || [],
-                    image_url: cardData.image_uris?.normal || cardData.image_uris?.small,
-                    oldest_image_url: oldestImageMap.get(cardData.oracle_id) || cardData.image_uris?.normal,
+                    image_url: imageUrl, 
+                    oldest_image_url: oldestImageMap.get(cardData.oracle_id) || imageUrl, 
                     oracle_id: cardData.oracle_id,
-                    oracle_text: extractOracleText(cardData), // <-- DYNAMICALLY GRABBED
+                    oracle_text: extractOracleText(cardData),
                     hidden: cardData.type_line.toLowerCase().includes('basic land'),
                     mana_cost: cardData.mana_cost,
                     cmc: cardData.cmc || 0,
