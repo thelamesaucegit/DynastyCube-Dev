@@ -368,7 +368,7 @@ export default function TeamPage() {
 
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8">
-      {/* THE FIX: Dynamic Aurora Stylesheet Injection */}
+      {/* Dynamic Aurora Stylesheet Injection */}
       <style jsx global>{`
         @keyframes aurora-flow {
           0% { background-position: 0% 50%; }
@@ -493,6 +493,18 @@ export default function TeamPage() {
                 if (!user?.id) return;
                 const activeIdentity = team.short_name === 'changelings' ? 'changelings' : 'mimics';
                 const result = await createIdentitySwapPoll(team.id, user.id, activeIdentity);
+
+ if (result.isExisting) {
+                    toast.info(result.error); // Show the "already in progress" message
+                    setActiveTab('votes');   // Redirect user to the votes tab
+                } else if (result.success) {
+                    toast.success(result.message);
+                    window.location.reload(); // Or just switch to votes tab
+                } else {
+                    toast.error(result.error);
+                }
+              }} 
+                
                 alert(result.message || result.error);
                 if (result.success) {
                   window.location.reload();

@@ -598,17 +598,17 @@ export async function createTeamPoll(
 // SPECIAL SYSTEM VOTES
 // =================================================================================================
 
-export async function createIdentitySwapPoll(teamId: string, userId: string, currentIdentity: string) {
+export async function createIdentitySwapPoll(
+  teamId: string,
+  userId: string,
+  currentIdentity: 'changelings' | 'mimics'
+): Promise<{ success: boolean; message?: string; error?: string; isExisting: boolean }> { // <-- Add isExisting to return type
   try {
     const supabase = await createServerClient();
-
     const { data: season } = await supabase.from('seasons').select('day_night_status, phase').eq('is_active', true).single();
-    if (season?.day_night_status !== 'neutral' || season?.phase === 'draft') return { success: false, error: "The cosmos are aligned against you. Shapeshifting is currently disabled." };
-
-    const endsAt = new Date();
-    endsAt.setHours(endsAt.getHours() + 12);
-    const title = currentIdentity === 'changelings' ? "Initiate The Great Aurora?" : "Let The Great Aurora Recede?";
-    const desc = currentIdentity === 'changelings' ? "Should we embrace the darkness and transform into the Shadowmoor Mimics? This poll ends in 12 hours." : "Should we return to the light and transform back into the Lorwyn Changelings? This poll ends in 12 hours.";
+    if (season?.day_night_status !== 'neutral' || season?.phase === 'draft') {
+      return { success: false, error: "The cosmos are aligned against you. Shapeshifting is currently disabled.", isExisting: false };
+    }
 
     const { data: existingPoll } = await supabase
       .from('polls')
@@ -618,8 +618,20 @@ export async function createIdentitySwapPoll(teamId: string, userId: string, cur
       .in('title', ["Initiate The Great Aurora?", "Let The Great Aurora Recede?"])
       .maybeSingle();
       
-    if (existingPoll) return { success: false, error: "A transformation vote is already in progress!" };
+    if (existingPoll) {
+      // THE FIX: Return the isExisting flag so the UI can redirect
+      return { 
+        success: false, 
+        error: "A transformation vote is already in progress!", 
+        isExisting: true 
+      };
+    }
 
+    const endsAt = new Date();
+    endsAt.setHours(endsAt.getHours() + 12);
+    const title = currentIdentity === 'changelings' ? "Initiate The Great Aurora?" : "Let The Great Aurora Recede?";
+    const desc = currentIdentity === 'changelings' ? "Should we embrace the darkness and transform into the Shadowmoor Mimics? This poll ends in 12 hours." : "Should we return to the light and transform back into the Lorwyn Changelings? This poll ends in 12 hours.";
+    
     const { createClient } = await import("@supabase/supabase-js");
     const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 
@@ -633,7 +645,7 @@ export async function createIdentitySwapPoll(teamId: string, userId: string, cur
         created_by: userId, 
         is_active: true, 
         team_id: teamId,
-        trigger_event: 'lorwyn_shadowmoor_swap' // <-- Uses the actual string!
+        trigger_event: 'lorwyn_shadowmoor_swap'
     }).select().single();
 
     if (pollError) throw pollError;
@@ -644,10 +656,11 @@ export async function createIdentitySwapPoll(teamId: string, userId: string, cur
     ];
     await supabaseAdmin.from("poll_options").insert(pollOptions);
     
-    return { success: true, message: "Transformation poll initiated!" };
+    return { success: true, message: "Transformation poll initiated!", isExisting: false };
   } catch (error) {
     console.error("Error creating identity swap poll:", error);
-    return { success: false, error: "Failed to initiate transformation." };
+    const dbError = error as { message?: string };
+    return { success: false, error: dbError.message || "Failed to initiate transformation.", isExisting: false };
   }
 }
 

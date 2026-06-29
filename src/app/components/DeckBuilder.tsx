@@ -2,6 +2,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from 'next/link';
+import { ExternalLinkIcon } from 'lucide-react';
 import Image from "next/image";
 import {
   DndContext,
@@ -52,43 +54,39 @@ function DraggableCard({ pick }: { pick: DraftPick }) {
   });
 
   const style = transform
-    ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-        opacity: isDragging ? 0.5 : 1,
-      }
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, opacity: isDragging ? 0.5 : 1 }
     : undefined;
 
+  const scryfallUrl = `https://scryfall.com/search?as=grid&order=name&q=${encodeURIComponent('!"' + pick.card_name + '"')}`;
+
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...listeners}
-      {...attributes}
-      className={`w-full text-left p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:shadow-md transition-all group cursor-grab active:cursor-grabbing ${
-        isDragging ? 'ring-2 ring-blue-400' : ''
-      }`}
-    >
-      <div className="flex items-center gap-2">
-        {imageUrl && (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={imageUrl}
-            alt={pick.card_name}
-            className="w-12 h-16 object-cover rounded"
-          />
-        )}
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
-            {pick.card_name}
-          </p>
-          <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
-            {pick.card_type}
-          </p>
+    <div className={`w-full text-left p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:shadow-md transition-all group relative ${isDragging ? 'ring-2 ring-blue-400' : ''}`}>
+        <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="flex items-center gap-2 cursor-grab active:cursor-grabbing">
+            {imageUrl && (
+                <CardPreview card={{ card_name: pick.card_name, image_url: pick.image_url, oldest_image_url: pick.oldest_image_url }}>
+                    {/* The image itself now triggers the hover preview */}
+                    <div className="w-12 h-16 shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={imageUrl} alt={pick.card_name} className="w-full h-full object-cover rounded" />
+                    </div>
+                </CardPreview>
+            )}
+            <div className="flex-1 min-w-0">
+                <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
+                    {pick.card_name}
+                </p>
+                <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
+                    {pick.card_type}
+                </p>
+            </div>
+            <span className="text-blue-600 dark:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity">
+            ⇄
+            </span>
         </div>
-        <span className="text-blue-600 dark:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity">
-          ⇄
-        </span>
-      </div>
+        {/*  Add a separate, explicit link to Scryfall */}
+        <Link href={scryfallUrl} target="_blank" rel="noopener noreferrer" className="absolute top-2 right-2 p-1 rounded-full bg-background/50 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+            <ExternalLinkIcon className="size-3 text-muted-foreground" />
+        </Link>
     </div>
   );
 }
