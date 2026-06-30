@@ -17,6 +17,50 @@ export interface CombatGroup { attackerId: string; blockers: string[]; }
 export interface CombatState { groups: CombatGroup[]; attackers: string[]; }
 export interface ClientPlayer { playerId: string; name: string; life: number; }
 
+
+export interface CockatriceGameEvent {
+    name: string; // The type of event, e.g., "Event_MoveCard", "Event_DrawCards"
+    // We will expand this payload as we build out the specific event decoders
+    [key: string]: unknown; 
+}
+
+export interface CockatriceEventContainer {
+    gameId?: number;
+    secondsElapsed?: number;
+    eventList: CockatriceGameEvent[];
+}
+
+export interface CockatriceReplay {
+    replayId: number;
+    eventList: Uint8Array[]; // The raw bytes we need to decode
+}
+
+// 2. Define the extended Protobuf schema
+const root = new protobuf.Root();
+
+// Base GameReplay structure
+root.define("cockatrice")
+    .add(new protobuf.Type("GameReplay")
+        .add(new protobuf.Field("replayId", 1, "int32"))
+        .add(new protobuf.Field("eventList", 2, "bytes", "repeated"))
+    )
+    // The container inside each eventList byte array
+    .add(new protobuf.Type("GameEventContainer")
+        .add(new protobuf.Field("gameId", 1, "int32"))
+        .add(new protobuf.Field("secondsElapsed", 2, "int32"))
+        .add(new protobuf.Field("eventList", 3, "GameEvent", "repeated"))
+    )
+    // The generic GameEvent wrapper
+    .add(new protobuf.Type("GameEvent")
+        .add(new protobuf.Field("name", 1, "string"))
+        // Event data is usually packed as bytes or specific fields depending on the Cockatrice version.
+        // For standard implementations, they use extensions or a byte payload. 
+        // We will define the inner payload field here in Step 2.
+    );
+
+const GameReplayMessage = root.lookupType("cockatrice.GameReplay");
+const GameEventContainerMessage = root.lookupType("cockatrice.GameEventContainer");
+
 export interface ClientCard {
   entityId: string;
   name: string;
