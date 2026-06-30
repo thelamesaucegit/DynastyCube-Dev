@@ -270,7 +270,7 @@ const extractUniqueCardNames = (obj: unknown, namesSet = new Set<string>()): str
           </div>
 
           {/* MATCH STATUS INDICATOR */}
-          {team1Id && team2Id && (
+          {player1TeamId && player2TeamId && (
               <div className="bg-muted/30 p-3 rounded-md border text-sm flex items-center gap-2">
                   {isSearchingMatch ? (
                       <><Loader2 className="size-4 animate-spin text-muted-foreground" /> Searching schedule...</>
