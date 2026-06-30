@@ -14,6 +14,7 @@ import { useSettings } from "@/contexts/SettingsContext";
 import { getCardImageUrl } from "@/app/utils/cardUtils";
 import { PoolFilterBar } from "@/app/components/pools/PoolFilterBar";
 import { Badge } from "@/app/components/ui/badge";
+import { CardPreview } from "@/app/components/CardPreview"; 
 
 const CARDS_PER_PAGE = 20;
 
@@ -368,34 +369,39 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
               const isDrafting = drafting === card.id;
               const notEnoughCubucks = cubucksBalance < (card.cubucks_cost || 1);
               const imageUrl = getCardImageUrl(card, useOldestArt);
+
               return (
-                <div key={card.id} className={`group relative bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden border-2 transition-all ${isThisInstanceDrafted ? "border-green-500 opacity-60" : "border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:shadow-lg"}`}>
-                  
-                  {/* THE FIX: Changed 'h-64 relative' and 'object-cover' to 'h-80 relative bg-zinc-950/40' and 'object-contain' */}
-                  {imageUrl && (
-                    <div className="relative h-80 bg-zinc-950/40 border-b border-border/10">
-                      <Image 
-                        src={imageUrl} 
-                        alt={card.card_name} 
-                        fill 
-                        className="object-contain" 
-                      />
+                <CardPreview key={card.id} card={card}>
+                  <div className={`group relative bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden border-2 transition-all ${isThisInstanceDrafted ? "border-green-500 opacity-60" : "border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:shadow-lg"}`}>
+                    
+                    {/*  Changed 'h-64 relative' and 'object-cover' to 'h-80 relative bg-zinc-950/40' and 'object-contain' */}
+                    {imageUrl && (
+                      <div className="relative h-80 bg-zinc-950/40 border-b border-border/10">
+                        <Image 
+                          src={imageUrl} 
+                          alt={card.card_name} 
+                          fill 
+                          className="object-contain" 
+                        />
+                      </div>
+                    )}
+                    
+                    <div className="p-2 bg-card">
+                      <h4 className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{card.card_name}</h4>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 truncate">{card.card_set}</p>
+                      {card.cubecobra_elo != null && (<p className="text-xs text-purple-600 dark:text-purple-400 font-medium mt-0.5">ELO: {card.cubecobra_elo.toLocaleString()}</p>)}
                     </div>
-                  )}
-                  
-                  <div className="p-2 bg-card">
-                    <h4 className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{card.card_name}</h4>
-                    <p className="text-xs text-gray-600 dark:text-gray-400 truncate">{card.card_set}</p>
-                    {card.cubecobra_elo != null && (<p className="text-xs text-purple-600 dark:text-purple-400 font-medium mt-0.5">ELO: {card.cubecobra_elo.toLocaleString()}</p>)}
+                    
+                    <div className="absolute top-2 left-2 bg-yellow-500 text-gray-900 text-xs font-bold px-2 py-1 rounded shadow-lg flex items-center gap-1"><span className="font-bold">Ç</span><span>{card.cubucks_cost || 1}</span></div>
+                    
+                    {!isThisInstanceDrafted && isUserTeamMember && (
+                      <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDraftCard(card); }} disabled={!isFreeAgencyEnabled || isDrafting || notEnoughCubucks} title={!isFreeAgencyEnabled ? "Free agency is only available during the 'season' phase." : notEnoughCubucks ? "Not enough Çubucks to acquire." : `Acquire ${card.card_name}`} className={`absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed z-10`}>
+                        <span className={`px-4 py-2 rounded-lg font-semibold shadow-lg text-white ${notEnoughCubucks ? "bg-red-600" : "bg-blue-600 hover:bg-blue-700"} ${!isFreeAgencyEnabled ? "!bg-gray-600" : ""}`}>{isDrafting ? "Acquiring..." : notEnoughCubucks ? "Not Enough Çubucks" : !isFreeAgencyEnabled ? "FA Closed" : `Acquire FA for ${card.cubucks_cost || 1} Ç`}</span>
+                      </button>
+                    )}
+                    {isThisInstanceDrafted && (<div className="absolute top-2 right-2 bg-green-600 text-white text-xs font-bold px-2 py-1 rounded shadow-lg">✓ DRAFTED</div>)}
                   </div>
-                  <div className="absolute top-2 left-2 bg-yellow-500 text-gray-900 text-xs font-bold px-2 py-1 rounded shadow-lg flex items-center gap-1"><span className="font-bold">Ç</span><span>{card.cubucks_cost || 1}</span></div>
-                  {!isThisInstanceDrafted && isUserTeamMember && (
-                    <button onClick={() => handleDraftCard(card)} disabled={!isFreeAgencyEnabled || isDrafting || notEnoughCubucks} title={!isFreeAgencyEnabled ? "Free agency is only available during the 'season' phase." : notEnoughCubucks ? "Not enough Çubucks to acquire." : `Acquire ${card.card_name}`} className={`absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed`}>
-                      <span className={`px-4 py-2 rounded-lg font-semibold shadow-lg text-white ${notEnoughCubucks ? "bg-red-600" : "bg-blue-600 hover:bg-blue-700"} ${!isFreeAgencyEnabled ? "!bg-gray-600" : ""}`}>{isDrafting ? "Acquiring..." : notEnoughCubucks ? "Not Enough Çubucks" : !isFreeAgencyEnabled ? "FA Closed" : `Acquire FA for ${card.cubucks_cost || 1} Ç`}</span>
-                    </button>
-                  )}
-                  {isThisInstanceDrafted && (<div className="absolute top-2 right-2 bg-green-600 text-white text-xs font-bold px-2 py-1 rounded shadow-lg">✓ DRAFTED</div>)}
-                </div>
+                </CardPreview>
               );
             })}
           </div>

@@ -1,5 +1,4 @@
 // src/app/components/WireCardComponent.tsx
-
 "use client";
 
 import React, { useState } from "react";
@@ -10,6 +9,7 @@ import { getCardImageUrl } from "@/app/utils/cardUtils";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { Loader2 } from "lucide-react";
+import { CardPreview } from "@/app/components/CardPreview"; // <-- IMPORT CardPreview
 
 interface WireCardProps {
   card: WireCard;
@@ -19,7 +19,6 @@ interface WireCardProps {
 export const WireCardComponent: React.FC<WireCardProps> = ({ card, onBidSuccess }) => {
   const { useOldestArt } = useSettings();
   const imageUrl = getCardImageUrl(card, useOldestArt);
-
   const [bidAmount, setBidAmount] = useState<string>(card.currentUserTeamBid?.toString() || "");
   const [isBidding, setIsBidding] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,36 +30,34 @@ export const WireCardComponent: React.FC<WireCardProps> = ({ card, onBidSuccess 
       setError("Bid must be a number greater than or equal to 1.");
       return;
     }
-
     setIsBidding(true);
     setError(null);
     setSuccess(null);
-
     const result = await placeWireBid(card.id!, numericBid);
-
     if (result.success) {
       setSuccess(`Bid of ${numericBid} placed!`);
       onBidSuccess(); // Notify parent to refresh data
     } else {
       setError(result.error || "An unknown error occurred.");
     }
-
     setIsBidding(false);
     setTimeout(() => { setSuccess(null); setError(null); }, 4000);
   };
 
   return (
     <div className="border rounded-lg overflow-hidden group relative flex flex-col">
-      {/* Card Image */}
-      <div className="relative aspect-[5/7]">
-        {imageUrl ? (
-          <Image src={imageUrl} alt={card.card_name} fill className="object-cover" />
-        ) : (
-          <div className="bg-muted flex items-center justify-center h-full">
-            <span className="text-xs text-muted-foreground p-2">{card.card_name}</span>
-          </div>
-        )}
-      </div>
+      {/* THE FIX: Wrap the thumbnail block with CardPreview to inherit hover preview + grid indicator */}
+      <CardPreview card={card}>
+        <div className="relative aspect-[5/7] w-full bg-zinc-950/40">
+          {imageUrl ? (
+            <Image src={imageUrl} alt={card.card_name} fill className="object-contain" unoptimized />
+          ) : (
+            <div className="bg-muted flex items-center justify-center h-full">
+              <span className="text-xs text-muted-foreground p-2">{card.card_name}</span>
+            </div>
+          )}
+        </div>
+      </CardPreview>
 
       {/* Card Info */}
       <div className="p-3 flex-grow flex flex-col bg-card">
