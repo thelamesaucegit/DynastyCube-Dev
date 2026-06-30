@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import * as protobuf from "protobufjs";
 import { fetchReplayMetadata, getReplayUploaderData, findMatchIdForTeams, type DbCardMeta, type UploaderTeam } from "@/app/actions/replayActions";
 import type { ClientCard, ClientPlayer, ClientZone,SpectatorStateUpdate } from "@/types/replay-types";
-
+import type { ClientGameState, TargetInfo } from "@/types/gameState;
 // ============================================================================
 // COCKATRICE PROTOBUF SCHEMA
 // ============================================================================
@@ -64,24 +64,7 @@ interface ParsedContainer { event_list?: ParsedGameEvent[]; }
 interface ParsedReplay { event_list?: ParsedContainer[]; }
 
 
-export interface ClientGameState {
-  cards: Record<string, ClientCard>;
-  zones: ClientZone[];
-  players: ClientPlayer[];
-  currentPhase: string;
-  currentStep: string;
-  activePlayerId: string | null;
-  priorityPlayerId: string | null;
-  turnNumber: number;
-  isGameOver: boolean;
-  winnerId: string | null;
-  combat: CombatState | null;
-  gameLog: Array<Record<string, unknown>>;
-}
 
-
-
-export interface TargetInfo { entityId: string; type: string; }
 
 
 // ============================================================================
