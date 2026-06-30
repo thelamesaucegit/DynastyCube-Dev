@@ -61,17 +61,17 @@ root.define("cockatrice")
 // ============================================================================
 // COCKATRICE PROTOBUF SCHEMA
 // ============================================================================
+// We simulate the extensions by embedding them directly as optional fields 
+// to make Protobuf.js parsing much easier and strictly typed.
 const COCKATRICE_SCHEMA = `
   syntax = "proto2";
   package cockatrice;
 
-  // From serverinfo_card.proto
   message ServerInfo_Card {
       optional sint32 id = 1 [default = -1];
       optional string name = 2;
   }
 
-  // From serverinfo_playerproperties.proto (simplified for our needs)
   message ServerInfo_PlayerProperties {
       optional string player_name = 1;
       optional string deck_storage_path = 3;
@@ -79,32 +79,25 @@ const COCKATRICE_SCHEMA = `
       repeated ServerInfo_Card sideboard = 5;
   }
   
-  // From game_event.proto
-  message GameEvent {
-      optional sint32 player_id = 1 [default = -1];
-      extensions 100 to max;
-  }
-
-  // From event_join.proto
   message Event_Join {
-      extend GameEvent {
-          optional Event_Join ext = 1000;
-      }
       optional ServerInfo_PlayerProperties player_properties = 1;
   }
+
+  message GameEvent {
+      optional sint32 player_id = 1 [default = -1];
+      // We map the extension directly for easier JS consumption
+      optional Event_Join ext_join = 1000; 
+  }
   
-  // From game_event_container.proto
   message GameEventContainer {
       optional sint32 game_id = 1;
       optional int32 seconds_elapsed = 2;
       repeated GameEvent event_list = 3;
   }
 
-  // From game_replay.proto
   message GameReplay {
       optional uint64 replay_id = 1;
-      // We don't need serverinfo_game for parsing card names
-      repeated GameEventContainer event_list = 3;
+      repeated bytes event_list = 3;
       optional uint32 duration_seconds = 4;
   }
 `;
@@ -113,35 +106,15 @@ const COCKATRICE_SCHEMA = `
 const parsedSchema = protobuf.parse(COCKATRICE_SCHEMA);
 const GameReplayMessage = parsedSchema.root.lookupType("cockatrice.GameReplay");
 const GameEventContainerMessage = parsedSchema.root.lookupType("cockatrice.GameEventContainer");
-const Event_JoinMessage = parsedSchema.root.lookupType("cockatrice.Event_Join");
+
+// Strictly-typed interfaces for the parsed data
+interface ParsedCard { id?: number; name?: string; }
+interface ParsedJoinEvent { player_properties?: { main_deck?: ParsedCard[], sideboard?: ParsedCard[] } }
+interface ParsedGameEvent { ext_join?: ParsedJoinEvent; }
+interface ParsedContainer { event_list?: ParsedGameEvent[]; }
 
 
-// ============================================================================
-// DICTIONARY BUILDER
-// ============================================================================
 
-// Type-safe recursive search to build the ID -> Name map
-const extractCardDictionary = (obj: unknown, dict = new Map<number, string>()): Map<number, string> => {
-    if (!obj || typeof obj !== 'object') return dict;
-
-    if (Array.isArray(obj)) {
-        obj.forEach(item => extractCardDictionary(item, dict));
-    } else {
-        const record = obj as Record<string, unknown>;
-        
-        // If we find an object with a numeric ID and a string name, it's a card/token definition!
-        if (typeof record.id === 'number' && typeof record.name === 'string') {
-            if (record.id > 0 && record.name.trim().length > 0) {
-                dict.set(record.id, record.name);
-            }
-        }
-        
-        // Recursively check all children
-        Object.values(record).forEach(val => extractCardDictionary(val, dict));
-    }
-    
-    return dict;
-};
 
 export interface ClientCard {
   entityId: string;
@@ -240,7 +213,7 @@ export default function CockatriceUploader() {
 
 
 
-  const processCorFile = async (file: File) => {
+   const processCorFile = async (file: File) => {
     if (!player1TeamId || !player2TeamId) {
         toast.error("Please select both teams before uploading.");
         return;
@@ -249,7 +222,6 @@ export default function CockatriceUploader() {
         toast.error("The two competing teams cannot be the same.");
         return;
     }
-
     if (!file.name.endsWith('.cor')) {
       toast.error("Invalid file type. Please upload a .cor file.");
       return;
@@ -262,7 +234,7 @@ export default function CockatriceUploader() {
 
       // 1. Decode the top-level GameReplay message
       const decodedReplay = GameReplayMessage.decode(uint8Array);
-      const replayObject = GameReplayMessage.toObject(decodedReplay) as { event_list: any[] };
+      const replayObject = GameReplayMessage.toObject(decodedReplay, { bytes: Array }) as { event_list?: number[][] };
 
       if (!replayObject.event_list || replayObject.event_list.length === 0) {
         throw new Error("Replay file is empty or contains no events.");
@@ -270,45 +242,44 @@ export default function CockatriceUploader() {
 
       const cardDictionary = new Map<number, string>();
 
-      // 2. Iterate through each GameEventContainer in the replay
-      for (const eventContainer of replayObject.event_list) {
-        if (!eventContainer.event_list) continue;
-        
-        // 3. Iterate through each GameEvent within the container
-        for (const gameEvent of eventContainer.event_list) {
-            // Check for the specific 'Event_Join' extension
-            const joinEvent = gameEvent['\[cockatrice.Event_Join.ext\]'];
-            if (joinEvent && joinEvent.player_properties) {
-                const properties = joinEvent.player_properties;
-                
-                // 4. Extract card names from both main deck and sideboard
-                if (properties.main_deck) {
-                    properties.main_deck.forEach((card: { id: number; name: string }) => {
-                        if (card.id != null && card.name) {
-                            cardDictionary.set(card.id, card.name);
-                        }
-                    });
-                }
-                if (properties.sideboard) {
-                    properties.sideboard.forEach((card: { id: number; name: string }) => {
-                        if (card.id != null && card.name) {
-                            cardDictionary.set(card.id, card.name);
-                        }
-                    });
-                }
-            }
-        }
+      // 2. Double-Decode: Iterate through each byte array and decode it into a GameEventContainer
+      for (const containerBytes of replayObject.event_list) {
+          const containerBuffer = new Uint8Array(containerBytes);
+          const decodedContainer = GameEventContainerMessage.decode(containerBuffer);
+          const eventContainer = GameEventContainerMessage.toObject(decodedContainer) as ParsedContainer;
+          
+          if (!eventContainer.event_list) continue;
+          
+          // 3. Iterate through the actual GameEvents
+          for (const gameEvent of eventContainer.event_list) {
+              if (gameEvent.ext_join?.player_properties) {
+                  const properties = gameEvent.ext_join.player_properties;
+                  
+                  // 4. Extract card names to build the dictionary
+                  if (properties.main_deck) {
+                      properties.main_deck.forEach((card) => {
+                          if (card.id != null && card.name) cardDictionary.set(card.id, card.name);
+                      });
+                  }
+                  if (properties.sideboard) {
+                      properties.sideboard.forEach((card) => {
+                          if (card.id != null && card.name) cardDictionary.set(card.id, card.name);
+                      });
+                  }
+              }
+          }
       }
 
       console.log(`[Uploader] 📚 Dictionary built! Found ${cardDictionary.size} unique cards/tokens.`);
-      console.log(Object.fromEntries(cardDictionary)); // Log for verification
-
+      
       if (cardDictionary.size === 0) {
           throw new Error("Failed to extract card IDs from the replay. The file may be corrupted or an unsupported version.");
       }
 
-      // We will pause here again for verification
+      // Success!
       toast.success(`Successfully mapped ${cardDictionary.size} cards from the decklists! Check the console.`);
+
+      // (We will add the fetchReplayMetadata and buildArgentumStates calls back here in Step 2)
 
     } catch (error) {
       console.error("Error decoding .cor file:", error);
@@ -318,6 +289,7 @@ export default function CockatriceUploader() {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
+    
   // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
  const buildArgentumStates = (cockatriceData: any, cardDbMap: Map<string, DbCardMeta>): SpectatorStateUpdate[] => {
       const states: SpectatorStateUpdate[] = [];
