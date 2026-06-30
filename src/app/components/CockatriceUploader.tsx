@@ -63,6 +63,58 @@ interface ParsedGameEvent { ext_join?: ParsedJoinEvent; }
 interface ParsedContainer { event_list?: ParsedGameEvent[]; }
 interface ParsedReplay { event_list?: ParsedContainer[]; }
 
+export interface ClientCard {
+  entityId: string;
+  name: string;
+  imageUri?: string;
+  cardTypes: string[];
+  isTapped: boolean;
+  isAttacking: boolean;
+  isBlocking: boolean;
+  power?: number | null;
+  toughness?: number | null;
+  damage: number;
+  attachedTo?: string | null;
+  targets: TargetInfo[];
+}
+
+export interface ClientZone {
+  zoneId: ZoneId;
+  cardIds: string[];
+  size: number;
+  isVisible: boolean;
+}
+
+export interface ClientGameState {
+  cards: Record<string, ClientCard>;
+  zones: ClientZone[];
+  players: ClientPlayer[];
+  currentPhase: string;
+  currentStep: string;
+  activePlayerId: string | null;
+  priorityPlayerId: string | null;
+  turnNumber: number;
+  isGameOver: boolean;
+  winnerId: string | null;
+  combat: CombatState | null;
+  gameLog: Array<Record<string, unknown>>;
+}
+
+export interface SpectatorStateUpdate {
+  gameSessionId: string;
+  gameState: ClientGameState;
+  player1Id: string;
+  player2Id: string;
+  player1Name: string;
+  player2Name: string;
+  currentPhase: string;
+  activePlayerId: string | null;
+  priorityPlayerId: string | null;
+  isReplay: boolean;
+  combat: CombatState | null;
+}
+
+
 // ============================================================================
 // COMPONENT LOGIC
 // ============================================================================
