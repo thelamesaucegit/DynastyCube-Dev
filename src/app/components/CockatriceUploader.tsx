@@ -6,7 +6,7 @@ import { Upload, FileCode2, Loader2, CheckCircle2, AlertCircle } from "lucide-re
 import { toast } from "sonner";
 import * as protobuf from "protobufjs";
 import { fetchReplayMetadata, getReplayUploaderData, findMatchIdForTeams, type DbCardMeta, type UploaderTeam } from "@/app/actions/replayActions";
-import type { SpectatorStateUpdate } from "@/app/types"; // Assuming this is defined in your types
+import type { SpectatorStateUpdate } from "@/app/types/replay-types"; // Assuming this is defined in your types
 
 // ============================================================================
 // COCKATRICE PROTOBUF SCHEMA
