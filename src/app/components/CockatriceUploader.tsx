@@ -27,10 +27,6 @@ const COCKATRICE_SCHEMA = `
       repeated ServerInfo_Card sideboard = 5;
   }
   
-  message Event_Join {
-      optional ServerInfo_PlayerProperties player_properties = 1;
-  }
-
   message ServerInfo_Zone {
       optional string name = 1;
       optional string type = 2;
@@ -38,24 +34,45 @@ const COCKATRICE_SCHEMA = `
       repeated ServerInfo_Card card_list = 4;
   }
 
-  // A generic wrapper to catch cards no matter what event they appear in!
-  message CatchAllCardEvent {
-      optional ServerInfo_Zone zone_info = 1;
-      repeated ServerInfo_Card cards = 2;
-      optional ServerInfo_Card card = 3;
-  }
-
   message GameEvent {
       optional sint32 player_id = 1 [default = -1];
-      optional Event_Join ext_join = 1000; 
-      
-      // Tell protobufjs to parse these other events so they aren't deleted!
-      optional CatchAllCardEvent ext_dump_zone = 2018;
-      optional CatchAllCardEvent ext_draw_cards = 2005;
-      optional CatchAllCardEvent ext_move_card = 2009;
-      optional CatchAllCardEvent ext_create_token = 2013;
+      extensions 100 to max;
   }
   
+  // THE FIX: Define extensions exactly as Cockatrice does!
+  message Event_Join {
+      extend GameEvent { optional Event_Join ext = 1000; }
+      optional ServerInfo_PlayerProperties player_properties = 1;
+  }
+
+  message Event_GameStateChanged {
+      extend GameEvent { optional Event_GameStateChanged ext = 1005; }
+      repeated ServerInfo_PlayerProperties player_list = 1;
+  }
+
+  message Event_DumpZone {
+      extend GameEvent { optional Event_DumpZone ext = 2018; }
+      optional ServerInfo_PlayerProperties player_properties = 1;
+      optional ServerInfo_Zone zone_info = 2;
+  }
+
+  message Event_DrawCards {
+      extend GameEvent { optional Event_DrawCards ext = 2005; }
+      optional sint32 number = 1;
+      repeated ServerInfo_Card cards = 2;
+  }
+  
+  message Event_CreateToken {
+      extend GameEvent { optional Event_CreateToken ext = 2013; }
+      optional string zone_name = 1;
+      optional string card_name = 2;
+      optional string color = 3;
+      optional string pt = 4;
+      optional string annotation = 5;
+      optional bool destroy_on_zone_change = 6;
+      optional sint32 target_card_id = 7;
+  }
+
   message GameEventContainer {
       optional sint32 game_id = 1;
       optional int32 seconds_elapsed = 2;
@@ -64,7 +81,7 @@ const COCKATRICE_SCHEMA = `
 
   message GameReplay {
       optional uint64 replay_id = 1;
-      repeated GameEventContainer event_list = 3; 
+      repeated GameEventContainer event_list = 3;
       optional uint32 duration_seconds = 4;
   }
 `;
@@ -93,23 +110,12 @@ const extractCardDictionary = (obj: unknown, dict = new Map<number, string>()): 
             }
         }
         
-        // Check all nested children (like zones inside events)
+        // Check all nested children (extensions, zones, decklists, etc.)
         Object.values(record).forEach(val => extractCardDictionary(val, dict));
     }
     
     return dict;
 };
-
-// Strictly-typed interfaces for the parsed data
-interface ParsedCard { id?: number; name?: string; }
-interface ParsedJoinEvent { player_properties?: { main_deck?: ParsedCard[], sideboard?: ParsedCard[] } }
-interface ParsedGameEvent { ext_join?: ParsedJoinEvent; }
-interface ParsedContainer { event_list?: ParsedGameEvent[]; }
-interface ParsedReplay { event_list?: ParsedContainer[]; }
-
-export interface TargetInfo { entityId: string; type: string; }
-
-
 
 
 // ============================================================================
