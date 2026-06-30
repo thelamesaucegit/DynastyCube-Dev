@@ -77,12 +77,13 @@ export default function CockatriceUploader() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form State
-  const [teams, setTeams] = useState<UploaderTeam[]>([]);
-  const [activeWeekId, setActiveWeekId] = useState<string | null>(null);
-  const [team1Id, setTeam1Id] = useState<string>("");
-  const [team2Id, setTeam2Id] = useState<string>("");
+ const [teams, setTeams] = useState<UploaderTeam[]>([]);
+  const [player1TeamId, setPlayer1TeamId] = useState<string>("");
+  const [player2TeamId, setPlayer2TeamId] = useState<string>("");
   const [matchId, setMatchId] = useState<string | null>(null);
   const [isSearchingMatch, setIsSearchingMatch] = useState(false);
+  const [activeWeekId, setActiveWeekId] = useState<string | null>(null);
+
 
   useEffect(() => {
       const loadContext = async () => {
@@ -90,7 +91,8 @@ export default function CockatriceUploader() {
           if (res.success) {
               setTeams(res.teams);
               setActiveWeekId(res.activeWeekId);
-              if (res.userTeamId) setTeam1Id(res.userTeamId);
+                          if (res.userTeamId) setPlayer1TeamId(res.userTeamId);
+
           }
       };
       loadContext();
@@ -98,9 +100,9 @@ export default function CockatriceUploader() {
 
   useEffect(() => {
       const findMatch = async () => {
-          if (team1Id && team2Id && activeWeekId) {
+          if (player1TeamId && player2TeamId && activeWeekId) {
               setIsSearchingMatch(true);
-              const res = await findMatchIdForTeams(team1Id, team2Id, activeWeekId);
+              const res = await findMatchIdForTeams(player1TeamId, player2TeamId, activeWeekId);
               setMatchId(res.matchId);
               setIsSearchingMatch(false);
           } else {
@@ -108,7 +110,7 @@ export default function CockatriceUploader() {
           }
       };
       findMatch();
-  }, [team1Id, team2Id, activeWeekId]);
+  }, [player1TeamId, player2TeamId, activeWeekId]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const extractUniqueCardNames = (obj: any, namesSet = new Set<string>()): string[] => {
@@ -124,8 +126,12 @@ export default function CockatriceUploader() {
   };
 
   const processCorFile = async (file: File) => {
-    if (!team1Id || !team2Id) {
-        toast.error("Please select both teams before uploading.");
+    if (!player1TeamId || !player2TeamId) {
+        toast.error("Please select both competing teams before uploading.");
+        return;
+    }
+    if (player1TeamId === player2TeamId) {
+        toast.error("The two competing teams cannot be the same.");
         return;
     }
     if (!file.name.endsWith('.cor')) {
@@ -160,8 +166,8 @@ export default function CockatriceUploader() {
       const argentumReplay = buildArgentumStates(replayObject, cardDbMap);
 
       if (argentumReplay.length > 0) {
-         const t1 = teams.find(t => t.id === team1Id);
-         const t2 = teams.find(t => t.id === team2Id);
+     const team1 = teams.find(t => t.id === player1TeamId);
+         const team2 = teams.find(t => t.id === player2TeamId)
 
          const response = await fetch('/api/pvp-replays', {
              method: 'POST',
@@ -170,14 +176,14 @@ export default function CockatriceUploader() {
                  argentum_game_states: argentumReplay,
                  original_filename: file.name,
                  match_id: matchId,
-                 team1_id: team1Id,
-                 team2_id: team2Id,
-                 team1_name: t1?.name,
-                 team1_color: t1?.primary_color,
-                 team1_seccolor: t1?.secondary_color,
-                 team2_name: t2?.name,
-                 team2_color: t2?.primary_color,
-                 team2_seccolor: t2?.secondary_color
+                 team1_id: team1?.id,
+                 team2_id: team2?.id,
+                 team1_name: team1?.name,
+                 team1_color: team1?.primary_color,
+                 team1_seccolor: team1?.secondary_color,
+                 team2_name: team2?.name,
+                 team2_color: team2?.primary_color,
+                 team2_seccolor: team2?.secondary_color,
              })
          });
 
@@ -233,26 +239,27 @@ export default function CockatriceUploader() {
       </CardHeader>
       
       <CardContent>
-        {/* DROPDOWNS FOR TEAM SELECTION */}
+        
+        {/* --- NEW TEAM SELECTOR UI --- */}
         <div className="space-y-4 mb-6">
           <div className="grid grid-cols-2 gap-4">
               <div>
-                  <label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Team 1</label>
+                  <label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Player 1 (You)</label>
                   <select 
                       className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-                      value={team1Id}
-                      onChange={(e) => setTeam1Id(e.target.value)}
+                      value={player1TeamId}
+                      onChange={(e) => setPlayer1TeamId(e.target.value)}
                   >
                       <option value="" disabled>Select Team...</option>
                       {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
               </div>
               <div>
-                  <label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Team 2</label>
+                  <label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Player 2 (Opponent)</label>
                   <select 
                       className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-                      value={team2Id}
-                      onChange={(e) => setTeam2Id(e.target.value)}
+                      value={player2TeamId}
+                      onChange={(e) => setPlayer2TeamId(e.target.value)}
                   >
                       <option value="" disabled>Select Team...</option>
                       {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
