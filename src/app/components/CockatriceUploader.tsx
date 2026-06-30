@@ -260,40 +260,55 @@ export default function CockatriceUploader() {
       const arrayBuffer = await file.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
 
-      // 1. Decode Outer Replay
+      // 1. Decode the top-level GameReplay message
       const decodedReplay = GameReplayMessage.decode(uint8Array);
-      const replayObject = GameReplayMessage.toObject(decodedReplay, { longs: Number, enums: String, bytes: Array }) as Record<string, unknown>;
+      const replayObject = GameReplayMessage.toObject(decodedReplay) as { event_list: any[] };
+
+      if (!replayObject.event_list || replayObject.event_list.length === 0) {
+        throw new Error("Replay file is empty or contains no events.");
+      }
 
       const cardDictionary = new Map<number, string>();
-      const rawEventList = replayObject.event_list as number[][];
 
-      // 2. Decode Inner Event Containers
-      if (rawEventList && Array.isArray(rawEventList)) {
-          console.log(`[Uploader] Decoding ${rawEventList.length} event containers...`);
-          
-          rawEventList.forEach((eventBytes) => {
-              try {
-                  const containerBuffer = new Uint8Array(eventBytes);
-                  const decodedContainer = GameEventContainerMessage.decode(containerBuffer);
-                  const containerObj = GameEventContainerMessage.toObject(decodedContainer, { longs: Number, enums: String, bytes: Array });
-                  
-                  // 3. Extract the Dictionary
-                  extractCardDictionary(containerObj, cardDictionary);
-              } catch (e) {
-                  console.warn("[Uploader] Failed to decode an inner event container, skipping...", e);
-              }
-          });
+      // 2. Iterate through each GameEventContainer in the replay
+      for (const eventContainer of replayObject.event_list) {
+        if (!eventContainer.event_list) continue;
+        
+        // 3. Iterate through each GameEvent within the container
+        for (const gameEvent of eventContainer.event_list) {
+            // Check for the specific 'Event_Join' extension
+            const joinEvent = gameEvent['\[cockatrice.Event_Join.ext\]'];
+            if (joinEvent && joinEvent.player_properties) {
+                const properties = joinEvent.player_properties;
+                
+                // 4. Extract card names from both main deck and sideboard
+                if (properties.main_deck) {
+                    properties.main_deck.forEach((card: { id: number; name: string }) => {
+                        if (card.id != null && card.name) {
+                            cardDictionary.set(card.id, card.name);
+                        }
+                    });
+                }
+                if (properties.sideboard) {
+                    properties.sideboard.forEach((card: { id: number; name: string }) => {
+                        if (card.id != null && card.name) {
+                            cardDictionary.set(card.id, card.name);
+                        }
+                    });
+                }
+            }
+        }
       }
 
       console.log(`[Uploader] 📚 Dictionary built! Found ${cardDictionary.size} unique cards/tokens.`);
-      console.log(Object.fromEntries(cardDictionary)); // Log the dictionary for us to verify
+      console.log(Object.fromEntries(cardDictionary)); // Log for verification
 
       if (cardDictionary.size === 0) {
-          throw new Error("Failed to extract card IDs from the replay. The file may be corrupted or unsupported.");
+          throw new Error("Failed to extract card IDs from the replay. The file may be corrupted or an unsupported version.");
       }
 
-      // We will pause the rest of the logic (fetching metadata, etc.) until we verify this works!
-      toast.success(`Successfully mapped ${cardDictionary.size} cards! Check the console.`);
+      // We will pause here again for verification
+      toast.success(`Successfully mapped ${cardDictionary.size} cards from the decklists! Check the console.`);
 
     } catch (error) {
       console.error("Error decoding .cor file:", error);
@@ -303,7 +318,6 @@ export default function CockatriceUploader() {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
-
   // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
  const buildArgentumStates = (cockatriceData: any, cardDbMap: Map<string, DbCardMeta>): SpectatorStateUpdate[] => {
       const states: SpectatorStateUpdate[] = [];
