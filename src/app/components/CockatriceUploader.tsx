@@ -6,7 +6,7 @@ import { Upload, FileCode2, Loader2, CheckCircle2, AlertCircle } from "lucide-re
 import { toast } from "sonner";
 import * as protobuf from "protobufjs";
 import { fetchReplayMetadata, getReplayUploaderData, findMatchIdForTeams, type DbCardMeta, type UploaderTeam } from "@/app/actions/replayActions";
-import type { SpectatorStateUpdate } from "@/types/replay-types"; // Assuming this is defined in your types
+import type { ClientCard, ClientPlayer, ClientZone,SpectatorStateUpdate } from "@/types/replay-types";
 
 // ============================================================================
 // COCKATRICE PROTOBUF SCHEMA
@@ -63,27 +63,6 @@ interface ParsedGameEvent { ext_join?: ParsedJoinEvent; }
 interface ParsedContainer { event_list?: ParsedGameEvent[]; }
 interface ParsedReplay { event_list?: ParsedContainer[]; }
 
-export interface ClientCard {
-  entityId: string;
-  name: string;
-  imageUri?: string;
-  cardTypes: string[];
-  isTapped: boolean;
-  isAttacking: boolean;
-  isBlocking: boolean;
-  power?: number | null;
-  toughness?: number | null;
-  damage: number;
-  attachedTo?: string | null;
-  targets: TargetInfo[];
-}
-
-export interface ClientZone {
-  zoneId: ZoneId;
-  cardIds: string[];
-  size: number;
-  isVisible: boolean;
-}
 
 export interface ClientGameState {
   cards: Record<string, ClientCard>;
