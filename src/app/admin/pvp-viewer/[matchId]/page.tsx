@@ -109,46 +109,67 @@ export default function PvpReplayPage(props: PageProps) {
     const [isLoading, setIsLoading] = useState(true);
     
     useEffect(() => {
-        if (!replayId) return;
+    if (!replayId) {
+        console.log("[PVP Viewer Page] No replayId found, aborting fetch.");
+        return;
+    }
 
-        async function fetchData() {
-            setIsLoading(true);
-            try {
-                // 1. Fetch from the new table
-                const { gameStates: rawGameStates } = await getPvpMatchReplayData(replayId);
-                if (!rawGameStates || rawGameStates.length === 0) throw new Error("No game states found in this PvP replay.");
-
-                // 2. Reconstruct (If the array is purely full snapshots, this seamlessly just maps them!)
-                const finalGameStates = reconstructGameStates(rawGameStates as ReplayStateItem[]);
-                const validStates = finalGameStates.filter(s => s?.gameState != null);
-                if (validStates.length === 0) throw new Error("No valid states after reconstruction.");
-                
-                // 3. Compile card list
-                const allCardNames = new Set<string>();
-                validStates.forEach(state => {
-                    const gameState = state.gameState as Partial<ClientGameState>;
-                    if (gameState.cards) {
-                        for (const card of Object.values(gameState.cards)) {
-                            if (card?.name) allCardNames.add(card.name);
-                        }
-                    }
-                });
-                
-                // 4. Fetch rich metadata for the renderer
-                const cardDataMapFromAction = await getCardDataForReplay(Array.from(allCardNames));
-                if (!cardDataMapFromAction) throw new Error("Card data fetch failed.");
-                
-                const cardDataMap = Object.fromEntries(cardDataMapFromAction);
-                setData({ gameStates: validStates, cardDataMap });
-            } catch (error) {
-                console.error("Error during fetch pipeline:", error);
-                setData(null);
-            } finally {
-                setIsLoading(false);
+    async function fetchData() {
+        console.log(`[PVP Viewer Page] 1. Starting fetch pipeline for replayId: ${replayId}`);
+        setIsLoading(true);
+        try {
+            // Step 1: Fetch raw game states
+            console.log("[PVP Viewer Page] 2. Calling getPvpMatchReplayData...");
+            const { gameStates: rawGameStates } = await getPvpMatchReplayData(replayId);
+            if (!rawGameStates || rawGameStates.length === 0) {
+                throw new Error("No game states found in this PvP replay after fetch.");
             }
+            console.log(`[PVP Viewer Page] 3. Received ${rawGameStates.length} raw game states.`);
+
+            // Step 2: Reconstruct states
+            console.log("[PVP Viewer Page] 4. Reconstructing game states...");
+            const finalGameStates = reconstructGameStates(rawGameStates as ReplayStateItem[]);
+            const validStates = finalGameStates.filter(s => s?.gameState != null);
+            if (validStates.length === 0) {
+                throw new Error("No valid states after reconstruction.");
+            }
+            console.log(`[PVP Viewer Page] 5. Reconstructed to ${validStates.length} valid states.`);
+
+            // Step 3: Compile unique card names
+            console.log("[PVP Viewer Page] 6. Compiling unique card names...");
+            const allCardNames = new Set<string>();
+            validStates.forEach(state => {
+                const gameState = state.gameState as Partial<ClientGameState>;
+                if (gameState.cards) {
+                    for (const card of Object.values(gameState.cards)) {
+                        if (card?.name) allCardNames.add(card.name);
+                    }
+                }
+            });
+            console.log(`[PVP Viewer Page] 7. Found ${allCardNames.size} unique card names.`);
+
+            // Step 4: Fetch card metadata
+            console.log("[PVP Viewer Page] 8. Fetching card metadata from getCardDataForReplay...");
+            const cardDataMapFromAction = await getCardDataForReplay(Array.from(allCardNames));
+            if (!cardDataMapFromAction) {
+                throw new Error("Card data fetch from action returned null or undefined.");
+            }
+            
+            const cardDataMap = Object.fromEntries(cardDataMapFromAction);
+            console.log(`[PVP Viewer Page] 9. Successfully created card data map with ${Object.keys(cardDataMap).length} entries.`);
+            
+            setData({ gameStates: validStates, cardDataMap });
+            console.log("[PVP Viewer Page] 10. Final data set successfully!");
+
+        } catch (error) {
+            console.error("[PVP Viewer Page] ❌ Error during fetch pipeline:", error);
+            setData(null);
+        } finally {
+            setIsLoading(false);
         }
-        fetchData();
-    }, [replayId, router]);
+    }
+    fetchData();
+}, [replayId, router]);
     
     const [currentIndex, setCurrentIndex] = useState(0);
     const currentSnapshot = useMemo(() => data?.gameStates?.[currentIndex], [data, currentIndex]);
