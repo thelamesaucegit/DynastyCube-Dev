@@ -114,6 +114,8 @@ export interface SpectatorStateUpdate {
   combat: CombatState | null;
 }
 
+export interface TargetInfo { entityId: string; type: string; }
+
 
 // ============================================================================
 // COMPONENT LOGIC
