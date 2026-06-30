@@ -11,8 +11,8 @@ import type { SpectatorStateUpdate } from "@/types/replay-types"; // Assuming th
 // ============================================================================
 // COCKATRICE PROTOBUF SCHEMA
 // ============================================================================
-// We simulate the extensions by embedding them directly as optional fields 
-// to make Protobuf.js parsing much easier and strictly typed.
+// This schema combines all the .proto files into a single definition that
+// protobufjs can use to decode the entire .cor file in one pass.
 const COCKATRICE_SCHEMA = `
   syntax = "proto2";
   package cockatrice;
@@ -24,7 +24,6 @@ const COCKATRICE_SCHEMA = `
 
   message ServerInfo_PlayerProperties {
       optional string player_name = 1;
-      optional string deck_storage_path = 3;
       repeated ServerInfo_Card main_deck = 4;
       repeated ServerInfo_Card sideboard = 5;
   }
@@ -35,8 +34,8 @@ const COCKATRICE_SCHEMA = `
 
   message GameEvent {
       optional sint32 player_id = 1 [default = -1];
-      // We map the extension directly for easier JS consumption
-      optional Event_Join ext_join = 1000; 
+      extensions 100 to max;
+      optional Event_Join ext_join = 1000;
   }
   
   message GameEventContainer {
@@ -47,21 +46,22 @@ const COCKATRICE_SCHEMA = `
 
   message GameReplay {
       optional uint64 replay_id = 1;
-      repeated bytes event_list = 3;
+      // THE FIX: This is a list of messages, not bytes.
+      repeated GameEventContainer event_list = 3; 
       optional uint32 duration_seconds = 4;
   }
 `;
 
 // Parse the schema once globally
-const parsedSchema = protobuf.parse(COCKATRICE_SCHEMA);
-const GameReplayMessage = parsedSchema.root.lookupType("cockatrice.GameReplay");
-const GameEventContainerMessage = parsedSchema.root.lookupType("cockatrice.GameEventContainer");
+const parsedSchema = protobuf.parse(COCKATRICE_SCHEMA).root;
+const GameReplayMessage = parsedSchema.lookupType("cockatrice.GameReplay");
 
 // Strictly-typed interfaces for the parsed data
 interface ParsedCard { id?: number; name?: string; }
 interface ParsedJoinEvent { player_properties?: { main_deck?: ParsedCard[], sideboard?: ParsedCard[] } }
 interface ParsedGameEvent { ext_join?: ParsedJoinEvent; }
 interface ParsedContainer { event_list?: ParsedGameEvent[]; }
+interface ParsedReplay { event_list?: ParsedContainer[]; }
 
 // ============================================================================
 // COMPONENT LOGIC
