@@ -17,6 +17,102 @@ export interface CombatGroup { attackerId: string; blockers: string[]; }
 export interface CombatState { groups: CombatGroup[]; attackers: string[]; }
 export interface ClientPlayer { playerId: string; name: string; life: number; }
 
+
+export interface CockatriceGameEvent {
+    name: string; // The type of event, e.g., "Event_MoveCard", "Event_DrawCards"
+    // We will expand this payload as we build out the specific event decoders
+    [key: string]: unknown; 
+}
+
+export interface CockatriceEventContainer {
+    gameId?: number;
+    secondsElapsed?: number;
+    eventList: CockatriceGameEvent[];
+}
+
+export interface CockatriceReplay {
+    replayId: number;
+    eventList: Uint8Array[]; // The raw bytes we need to decode
+}
+
+// 2. Define the extended Protobuf schema
+const root = new protobuf.Root();
+
+// Base GameReplay structure
+root.define("cockatrice")
+    .add(new protobuf.Type("GameReplay")
+        .add(new protobuf.Field("replayId", 1, "int32"))
+        .add(new protobuf.Field("eventList", 2, "bytes", "repeated"))
+    )
+    // The container inside each eventList byte array
+    .add(new protobuf.Type("GameEventContainer")
+        .add(new protobuf.Field("gameId", 1, "int32"))
+        .add(new protobuf.Field("secondsElapsed", 2, "int32"))
+        .add(new protobuf.Field("eventList", 3, "GameEvent", "repeated"))
+    )
+    // The generic GameEvent wrapper
+    .add(new protobuf.Type("GameEvent")
+        .add(new protobuf.Field("name", 1, "string"))
+        // Event data is usually packed as bytes or specific fields depending on the Cockatrice version.
+        // For standard implementations, they use extensions or a byte payload. 
+        // We will define the inner payload field here in Step 2.
+    );
+const COCKATRICE_SCHEMA = `
+  syntax = "proto2";
+  package cockatrice;
+
+  message GameReplay {
+      optional int32 replay_id = 1;
+      repeated bytes event_list = 2;
+  }
+
+  message GameEventContainer {
+      optional int32 game_id = 1;
+      optional int32 seconds_elapsed = 2;
+      // Depending on the version, these might be nested messages or bytes. 
+      // We read them loosely so we can recursively extract data.
+      repeated GameEvent event_list = 3; 
+  }
+
+  message GameEvent {
+      optional int32 game_id = 1;
+      optional int32 player_id = 2;
+      // Unknown fields (extensions) will be parsed loosely by protobufjs
+  }
+`;
+
+// Parse the schema once globally
+const parsedSchema = protobuf.parse(COCKATRICE_SCHEMA);
+const GameReplayMessage = parsedSchema.root.lookupType("cockatrice.GameReplay");
+const GameEventContainerMessage = parsedSchema.root.lookupType("cockatrice.GameEventContainer");
+
+// ============================================================================
+// DICTIONARY BUILDER
+// ============================================================================
+
+// Type-safe recursive search to build the ID -> Name map
+const extractCardDictionary = (obj: unknown, dict = new Map<number, string>()): Map<number, string> => {
+    if (!obj || typeof obj !== 'object') return dict;
+
+    if (Array.isArray(obj)) {
+        obj.forEach(item => extractCardDictionary(item, dict));
+    } else {
+        const record = obj as Record<string, unknown>;
+        
+        // If we find an object with a numeric ID and a string name, it's a card/token definition!
+        if (typeof record.id === 'number' && typeof record.name === 'string') {
+            if (record.id > 0 && record.name.trim().length > 0) {
+                dict.set(record.id, record.name);
+            }
+        }
+        
+        // Recursively check all children
+        Object.values(record).forEach(val => extractCardDictionary(val, dict));
+    }
+    
+    return dict;
+};
+
 export interface ClientCard {
   entityId: string;
   name: string;
@@ -112,89 +208,62 @@ export default function CockatriceUploader() {
       findMatch();
   }, [player1TeamId, player2TeamId, activeWeekId]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const extractUniqueCardNames = (obj: unknown, namesSet = new Set<string>()): string[] => {
-    if (!obj) return Array.from(namesSet);
-    
-    if (Array.isArray(obj)) {
-        obj.forEach(item => extractUniqueCardNames(item, namesSet));
-    } else if (typeof obj === 'object') {
-        const record = obj as Record<string, unknown>;
-        if (record.cardName && typeof record.cardName === 'string') namesSet.add(record.cardName);
-        if (record.name && typeof record.name === 'string') namesSet.add(record.name);
-        Object.values(record).forEach(val => extractUniqueCardNames(val, namesSet));
-    }
-    return Array.from(namesSet);
-  };
+
 
   const processCorFile = async (file: File) => {
     if (!player1TeamId || !player2TeamId) {
-        toast.error("Please select both competing teams before uploading.");
+        toast.error("Please select both teams before uploading.");
         return;
     }
     if (player1TeamId === player2TeamId) {
         toast.error("The two competing teams cannot be the same.");
         return;
     }
+
     if (!file.name.endsWith('.cor')) {
       toast.error("Invalid file type. Please upload a .cor file.");
       return;
     }
 
     setIsProcessing(true);
-
     try {
       const arrayBuffer = await file.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
 
-      const root = new protobuf.Root();
-      root.define("cockatrice")
-          .add(new protobuf.Type("GameReplay")
-              .add(new protobuf.Field("replayId", 1, "int32"))
-              .add(new protobuf.Field("eventList", 2, "bytes", "repeated"))
-          );
-      const GameReplayMessage = root.lookupType("cockatrice.GameReplay");
-      const decodedMessage = GameReplayMessage.decode(uint8Array);
-      const replayObject = GameReplayMessage.toObject(decodedMessage, { longs: String, enums: String, bytes: Array });
+      // 1. Decode Outer Replay
+      const decodedReplay = GameReplayMessage.decode(uint8Array);
+      const replayObject = GameReplayMessage.toObject(decodedReplay, { longs: Number, enums: String, bytes: Array }) as Record<string, unknown>;
 
-      const uniqueNames = extractUniqueCardNames(replayObject);
-      const { success, cards } = await fetchReplayMetadata(uniqueNames);
-      if (!success) throw new Error("Failed to fetch card metadata from the database.");
+      const cardDictionary = new Map<number, string>();
+      const rawEventList = replayObject.event_list as number[][];
 
-      const cardDbMap = new Map<string, DbCardMeta>();
-      cards?.forEach(c => cardDbMap.set(c.card_name.toLowerCase(), c));
-
-      // 3. Transform to Argentum State Machine
-      const argentumReplay = buildArgentumStates(replayObject, cardDbMap);
-
-      if (argentumReplay.length > 0) {
-     const team1 = teams.find(t => t.id === player1TeamId);
-         const team2 = teams.find(t => t.id === player2TeamId)
-
-         const response = await fetch('/api/pvp-replays', {
-             method: 'POST',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({
-                 argentum_game_states: argentumReplay,
-                 original_filename: file.name,
-                 match_id: matchId,
-                 team1_id: team1?.id,
-                 team2_id: team2?.id,
-                 team1_name: team1?.name,
-                 team1_color: team1?.primary_color,
-                 team1_seccolor: team1?.secondary_color,
-                 team2_name: team2?.name,
-                 team2_color: team2?.primary_color,
-                 team2_seccolor: team2?.secondary_color,
-             })
-         });
-
-         const result = await response.json();
-         if (!response.ok || !result.success) throw new Error(result.error || "Failed to save the replay.");
-         toast.success(`Successfully saved PvP replay to the database!`);
-      } else {
-         toast.warning("Replay was parsed, but no valid game states were generated.");
+      // 2. Decode Inner Event Containers
+      if (rawEventList && Array.isArray(rawEventList)) {
+          console.log(`[Uploader] Decoding ${rawEventList.length} event containers...`);
+          
+          rawEventList.forEach((eventBytes) => {
+              try {
+                  const containerBuffer = new Uint8Array(eventBytes);
+                  const decodedContainer = GameEventContainerMessage.decode(containerBuffer);
+                  const containerObj = GameEventContainerMessage.toObject(decodedContainer, { longs: Number, enums: String, bytes: Array });
+                  
+                  // 3. Extract the Dictionary
+                  extractCardDictionary(containerObj, cardDictionary);
+              } catch (e) {
+                  console.warn("[Uploader] Failed to decode an inner event container, skipping...", e);
+              }
+          });
       }
+
+      console.log(`[Uploader] 📚 Dictionary built! Found ${cardDictionary.size} unique cards/tokens.`);
+      console.log(Object.fromEntries(cardDictionary)); // Log the dictionary for us to verify
+
+      if (cardDictionary.size === 0) {
+          throw new Error("Failed to extract card IDs from the replay. The file may be corrupted or unsupported.");
+      }
+
+      // We will pause the rest of the logic (fetching metadata, etc.) until we verify this works!
+      toast.success(`Successfully mapped ${cardDictionary.size} cards! Check the console.`);
 
     } catch (error) {
       console.error("Error decoding .cor file:", error);
@@ -206,28 +275,87 @@ const extractUniqueCardNames = (obj: unknown, namesSet = new Set<string>()): str
   };
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
-  const buildArgentumStates = (cockatriceData: unknown, cardDbMap: Map<string, DbCardMeta>): SpectatorStateUpdate[] => {
+ const buildArgentumStates = (cockatriceData: any, cardDbMap: Map<string, DbCardMeta>): SpectatorStateUpdate[] => {
       const states: SpectatorStateUpdate[] = [];
-      const currentState: SpectatorStateUpdate = {
+      let currentState: SpectatorStateUpdate = {
           gameSessionId: "imported-cor-match",
-          player1Id: "p1", player2Id: "p2",
-          player1Name: "Player 1", player2Name: "Player 2",
+          player1Id: "p1",
+          player2Id: "p2",
+          player1Name: "Player 1", // This will be replaced by the API
+          player2Name: "Player 2", // This will be replaced by the API
           currentPhase: "MULLIGAN",
-          activePlayerId: null, priorityPlayerId: null,
+          activePlayerId: null,
+          priorityPlayerId: null,
           isReplay: true,
           combat: null,
           gameState: {
-              cards: {}, zones: [], players: [],
-              currentPhase: "MULLIGAN", currentStep: "OPENING_HAND",
-              activePlayerId: null, priorityPlayerId: null,
-              turnNumber: 0, isGameOver: false, winnerId: null, combat: null, gameLog: []
+              cards: {},
+              zones: [],
+              players: [
+                  { playerId: 'p1', name: 'Player 1', life: 20 },
+                  { playerId: 'p2', name: 'Player 2', life: 20 }
+              ],
+              currentPhase: "MULLIGAN",
+              currentStep: "OPENING_HAND",
+              activePlayerId: null,
+              priorityPlayerId: null,
+              turnNumber: 0,
+              isGameOver: false,
+              winnerId: null,
+              combat: null,
+              gameLog: []
           }
       };
+
+      // Push the initial empty state
+      states.push(JSON.parse(JSON.stringify(currentState)));
+
+      if (!cockatriceData?.eventList) {
+          return states;
+      }
       
-      states.push(JSON.parse(JSON.stringify(currentState))); 
+      // THIS IS WHERE YOU NEED TO IMPLEMENT THE CORE LOGIC
+      // Loop through each event in the Cockatrice replay
+      for (const eventBytes of cockatriceData.eventList) {
+          // You will need to decode each event from its byte format
+          // This typically involves another protobuf definition for individual events
+          // like "MoveCardEvent", "TapCardEvent", "ChangePhaseEvent", etc.
+          
+          // ---- PSEUDO-CODE for what needs to happen inside the loop ----
+          
+          // 1. Decode the eventBytes to get the event type and data
+          // const decodedEvent = YourEventDecoder(eventBytes);
+
+          // 2. Create a deep copy of the last known state to modify
+          // currentState = JSON.parse(JSON.stringify(states[states.length - 1]));
+          
+          // 3. Use a switch statement to handle each event type
+          // switch (decodedEvent.type) {
+          //    case 'GameStartEvent':
+          //        // Populate initial player life, library zones, etc.
+          //        break;
+          //    case 'MoveCardEvent':
+          //        // Find the card in currentState.gameState.cards
+          //        // Update its zone, or add it if it's new
+          //        // This is where you would use the cardDbMap to enrich with image URLs
+          //        break;
+          //    case 'TapCardEvent':
+          //        // Update the isTapped property of the card
+          //        break;
+          //    case 'ChangePhaseEvent':
+          //        // Update the currentPhase and currentStep
+          //        break;
+          //    // ... etc. for all other cockatrice events
+          // }
+
+          // 4. Push the new, updated state to the states array
+          // states.push(currentState);
+      }
+
+      // For now, we return the initial state to confirm the pipeline works
+      // Once the loop is implemented, you will return all generated states.
       return states;
   };
-
   return (
     <Card className="w-full max-w-md mx-auto shadow-md border-border/50">
       <CardHeader>
