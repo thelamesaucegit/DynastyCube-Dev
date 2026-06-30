@@ -1,8 +1,6 @@
 // src/app/api/pvp-replays/route.ts
-
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { v4 as uuidv4 } from 'uuid'; 
 
 // Helper for Admin Client to bypass any RLS on inserts
 function getSupabaseAdmin() {
@@ -17,45 +15,80 @@ export async function GET() {
     return NextResponse.json({ error: "Method Not Allowed. Use POST to upload replays." }, { status: 405 });
 }
 
+
+interface IncomingPlayer {
+    name: string;
+    [key: string]: unknown;
+}
+
+interface IncomingGameState {
+    players?: IncomingPlayer[];
+    [key: string]: unknown;
+}
+
+interface IncomingStateUpdate {
+    player1Name?: string;
+    player2Name?: string;
+    gameState?: IncomingGameState;
+    [key: string]: unknown;
+}
+
 export async function POST(request: Request): Promise<NextResponse> {
     try {
         const body = await request.json();
         
         const { 
-            argentum_game_states,
+             argentum_game_states,
             original_filename,
             match_id,
-            team1_id,
-            team2_id,
-            winner_team_id,
-            team1_name, team1_color, team1_seccolor,
-            team2_name, team2_color, team2_seccolor,
+            team1_id, team1_name,
+            team2_id, team2_name,
+            team1_color, team1_seccolor,
+            team2_color, team2_seccolor,
             uploader_id
         } = body;
 
+
+      
         if (!argentum_game_states || !original_filename) {
             return NextResponse.json({ error: "Missing game states or filename." }, { status: 400 });
         }
 
+
+       const rawStates = argentum_game_states as IncomingStateUpdate[];
+        const enrichedGameStates = rawStates.map((state) => {
+            if (state.player1Name === 'Player 1' && team1_name) {
+                state.player1Name = team1_name;
+            }
+            if (state.player2Name === 'Player 2' && team2_name) {
+                state.player2Name = team2_name;
+            }
+            if (state.gameState?.players) {
+                state.gameState.players.forEach((player) => {
+                    if (player.name === 'Player 1' && team1_name) {
+                        player.name = team1_name;
+                    }
+                    if (player.name === 'Player 2' && team2_name) {
+                        player.name = team2_name;
+                    }
+                });
+            }
+            return state;
+        });
+
         console.log(`[PvP Replay API] 📥 Receiving replay: ${original_filename}`);
 
         const supabase = getSupabaseAdmin();
-        const newReplayId = uuidv4();
-
-        // THE FIX: Respect the FKEY constraint. 
-        // If there is no official match_id, we MUST pass explicit null.
-        const validMatchId = match_id || null;
 
         // 1. Prepare the payload strictly typed
         const payload: Record<string, unknown> = {
-            id: newReplayId,
-            argentum_game_states,
+            argentum_game_states: enrichedGameStates,
             original_filename,
             uploaded_by: uploader_id || null,
-            match_id: validMatchId, // <--- THE FIX
-            team1_id: team1_id || null,
+            match_id: match_id || null,
+           team1_id: team1_id || null,
             team2_id: team2_id || null,
-            winner_team_id: winner_team_id || null,
+            winner_team_id: body.winner_team_id || null,
             team1_name: team1_name || null,
             team1_color: team1_color || null,
             team1_seccolor: team1_seccolor || null,
@@ -65,18 +98,22 @@ export async function POST(request: Request): Promise<NextResponse> {
         };
 
         // 2. Insert into pvp_replays
-        const { error: insertError } = await supabase
+        // Casting as unknown as never to bypass strict schema inference limits for JSONB arrays
+        const { data: replayData, error: insertError } = await supabase
             .from('pvp_replays')
-            .insert(payload); 
+            .insert(payload as unknown as never)
+            .select('id')
+            .single();
 
-        if (insertError) {
+        if (insertError || !replayData) {
             console.error("[PvP Replay API] ❌ Insert Error:", insertError);
             throw new Error(insertError?.message || "Failed to insert replay.");
         }
 
-        console.log(`[PvP Replay API] ✅ Successfully saved PvP Replay ID: ${newReplayId}`);
+        const typedData = replayData as unknown as { id: string };
+        console.log(`[PvP Replay API] ✅ Successfully saved PvP Replay ID: ${typedData.id}`);
 
-        return NextResponse.json({ success: true, replayId: newReplayId });
+        return NextResponse.json({ success: true, replayId: typedData.id });
 
     } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
