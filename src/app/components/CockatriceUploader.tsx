@@ -138,7 +138,6 @@ export default function CockatriceUploader() {
 
       // THE FIX: Use keepCase: true so it doesn't rename event_list to eventList
       const replayObject = GameReplayMessage.toObject(decodedReplay, { 
-          keepCase: true,
           enums: String,
           longs: Number,
           bytes: Array
