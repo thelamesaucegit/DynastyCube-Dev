@@ -14,6 +14,7 @@ import { useSettings } from "@/contexts/SettingsContext";
 import { getCardImageUrl } from "@/app/utils/cardUtils";
 import { PoolFilterBar } from "@/app/components/pools/PoolFilterBar";
 import { Badge } from "@/app/components/ui/badge";
+import { CardPreview } from "@/app/components/CardPreview"; 
 
 const CARDS_PER_PAGE = 20;
 
@@ -367,11 +368,13 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
               const isThisInstanceDrafted = draftedCards.some(p => p.card_pool_id === card.id);
               const isDrafting = drafting === card.id;
               const notEnoughCubucks = cubucksBalance < (card.cubucks_cost || 1);
-              const imageUrl = getCardImageUrl(card, useOldestArt);
+             
+            
+            const imageUrl = getCardImageUrl(card, useOldestArt);
               return (
                 <div key={card.id} className={`group relative bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden border-2 transition-all ${isThisInstanceDrafted ? "border-green-500 opacity-60" : "border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:shadow-lg"}`}>
                   
-                  {/* THE FIX: Changed 'h-64 relative' and 'object-cover' to 'h-80 relative bg-zinc-950/40' and 'object-contain' */}
+                  {/*  Changed 'h-64 relative' and 'object-cover' to 'h-80 relative bg-zinc-950/40' and 'object-contain' */}
                   {imageUrl && (
                     <div className="relative h-80 bg-zinc-950/40 border-b border-border/10">
                       <Image 
