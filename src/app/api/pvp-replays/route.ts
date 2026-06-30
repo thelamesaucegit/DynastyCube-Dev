@@ -2,6 +2,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+import { v4 as uuidv4 } from 'uuid';
+
 // Helper for Admin Client to bypass any RLS on inserts
 function getSupabaseAdmin() {
   return createClient(
@@ -40,39 +42,40 @@ export async function POST(request: Request): Promise<NextResponse> {
         const supabase = getSupabaseAdmin();
 
         // 1. Prepare the payload strictly typed
+        const newReplayId = uuidv4();
+        const final_match_id = match_id || `unlinked-${newReplayId.substring(0, 8)}`;
+
+        // 1. Prepare the payload
         const payload: Record<string, unknown> = {
+            id: newReplayId, // Explicitly set the ID
             argentum_game_states,
             original_filename,
-            uploaded_by: uploader_id || null,
-            match_id: match_id || null,
-            team1_id: team1_id || null,
-            team2_id: team2_id || null,
-            winner_team_id: winner_team_id || null,
-            team1_name: team1_name || null,
-            team1_color: team1_color || null,
-            team1_seccolor: team1_seccolor || null,
-            team2_name: team2_name || null,
-            team2_color: team2_color || null,
-            team2_seccolor: team2_seccolor || null,
+            uploaded_by: body.uploader_id || null,
+            match_id: final_match_id, // Use the generated or provided match_id
+            team1_id: body.team1_id || null,
+            team2_id: body.team2_id || null,
+            winner_team_id: body.winner_team_id || null,
+            team1_name: body.team1_name || null,
+            team1_color: body.team1_color || null,
+            team1_seccolor: body.team1_seccolor || null,
+            team2_name: body.team2_name || null,
+            team2_color: body.team2_color || null,
+            team2_seccolor: body.team2_seccolor || null,
         };
 
         // 2. Insert into pvp_replays
-        // Casting as unknown as never to bypass strict schema inference limits for JSONB arrays
-        const { data: replayData, error: insertError } = await supabase
+        const { error: insertError } = await supabase
             .from('pvp_replays')
-            .insert(payload as unknown as never)
-            .select('id')
-            .single();
+            .insert(payload); // No need to .select() when we control the ID
 
-        if (insertError || !replayData) {
+        if (insertError) {
             console.error("[PvP Replay API] ❌ Insert Error:", insertError);
             throw new Error(insertError?.message || "Failed to insert replay.");
         }
 
-        const typedData = replayData as unknown as { id: string };
-        console.log(`[PvP Replay API] ✅ Successfully saved PvP Replay ID: ${typedData.id}`);
+        console.log(`[PvP Replay API] ✅ Successfully saved PvP Replay ID: ${newReplayId}`);
 
-        return NextResponse.json({ success: true, replayId: typedData.id });
+        return NextResponse.json({ success: true, replayId: newReplayId });
 
     } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
