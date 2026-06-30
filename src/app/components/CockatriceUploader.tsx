@@ -206,28 +206,87 @@ const extractUniqueCardNames = (obj: unknown, namesSet = new Set<string>()): str
   };
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
-  const buildArgentumStates = (cockatriceData: unknown, cardDbMap: Map<string, DbCardMeta>): SpectatorStateUpdate[] => {
+ const buildArgentumStates = (cockatriceData: any, cardDbMap: Map<string, DbCardMeta>): SpectatorStateUpdate[] => {
       const states: SpectatorStateUpdate[] = [];
-      const currentState: SpectatorStateUpdate = {
+      let currentState: SpectatorStateUpdate = {
           gameSessionId: "imported-cor-match",
-          player1Id: "p1", player2Id: "p2",
-          player1Name: "Player 1", player2Name: "Player 2",
+          player1Id: "p1",
+          player2Id: "p2",
+          player1Name: "Player 1", // This will be replaced by the API
+          player2Name: "Player 2", // This will be replaced by the API
           currentPhase: "MULLIGAN",
-          activePlayerId: null, priorityPlayerId: null,
+          activePlayerId: null,
+          priorityPlayerId: null,
           isReplay: true,
           combat: null,
           gameState: {
-              cards: {}, zones: [], players: [],
-              currentPhase: "MULLIGAN", currentStep: "OPENING_HAND",
-              activePlayerId: null, priorityPlayerId: null,
-              turnNumber: 0, isGameOver: false, winnerId: null, combat: null, gameLog: []
+              cards: {},
+              zones: [],
+              players: [
+                  { playerId: 'p1', name: 'Player 1', life: 20 },
+                  { playerId: 'p2', name: 'Player 2', life: 20 }
+              ],
+              currentPhase: "MULLIGAN",
+              currentStep: "OPENING_HAND",
+              activePlayerId: null,
+              priorityPlayerId: null,
+              turnNumber: 0,
+              isGameOver: false,
+              winnerId: null,
+              combat: null,
+              gameLog: []
           }
       };
+
+      // Push the initial empty state
+      states.push(JSON.parse(JSON.stringify(currentState)));
+
+      if (!cockatriceData?.eventList) {
+          return states;
+      }
       
-      states.push(JSON.parse(JSON.stringify(currentState))); 
+      // THIS IS WHERE YOU NEED TO IMPLEMENT THE CORE LOGIC
+      // Loop through each event in the Cockatrice replay
+      for (const eventBytes of cockatriceData.eventList) {
+          // You will need to decode each event from its byte format
+          // This typically involves another protobuf definition for individual events
+          // like "MoveCardEvent", "TapCardEvent", "ChangePhaseEvent", etc.
+          
+          // ---- PSEUDO-CODE for what needs to happen inside the loop ----
+          
+          // 1. Decode the eventBytes to get the event type and data
+          // const decodedEvent = YourEventDecoder(eventBytes);
+
+          // 2. Create a deep copy of the last known state to modify
+          // currentState = JSON.parse(JSON.stringify(states[states.length - 1]));
+          
+          // 3. Use a switch statement to handle each event type
+          // switch (decodedEvent.type) {
+          //    case 'GameStartEvent':
+          //        // Populate initial player life, library zones, etc.
+          //        break;
+          //    case 'MoveCardEvent':
+          //        // Find the card in currentState.gameState.cards
+          //        // Update its zone, or add it if it's new
+          //        // This is where you would use the cardDbMap to enrich with image URLs
+          //        break;
+          //    case 'TapCardEvent':
+          //        // Update the isTapped property of the card
+          //        break;
+          //    case 'ChangePhaseEvent':
+          //        // Update the currentPhase and currentStep
+          //        break;
+          //    // ... etc. for all other cockatrice events
+          // }
+
+          // 4. Push the new, updated state to the states array
+          // states.push(currentState);
+      }
+
+      // For now, we return the initial state to confirm the pipeline works
+      // Once the loop is implemented, you will return all generated states.
       return states;
   };
-
   return (
     <Card className="w-full max-w-md mx-auto shadow-md border-border/50">
       <CardHeader>
