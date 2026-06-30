@@ -1,8 +1,6 @@
 // src/app/api/pvp-replays/route.ts
-
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { v4 as uuidv4 } from 'uuid'; 
 
 // Helper for Admin Client to bypass any RLS on inserts
 function getSupabaseAdmin() {
@@ -40,19 +38,13 @@ export async function POST(request: Request): Promise<NextResponse> {
         console.log(`[PvP Replay API] 📥 Receiving replay: ${original_filename}`);
 
         const supabase = getSupabaseAdmin();
-        const newReplayId = uuidv4();
-
-        // THE FIX: Respect the FKEY constraint. 
-        // If there is no official match_id, we MUST pass explicit null.
-        const validMatchId = match_id || null;
 
         // 1. Prepare the payload strictly typed
         const payload: Record<string, unknown> = {
-            id: newReplayId,
             argentum_game_states,
             original_filename,
             uploaded_by: uploader_id || null,
-            match_id: validMatchId, // <--- THE FIX
+            match_id: match_id || null,
             team1_id: team1_id || null,
             team2_id: team2_id || null,
             winner_team_id: winner_team_id || null,
@@ -65,18 +57,22 @@ export async function POST(request: Request): Promise<NextResponse> {
         };
 
         // 2. Insert into pvp_replays
-        const { error: insertError } = await supabase
+        // Casting as unknown as never to bypass strict schema inference limits for JSONB arrays
+        const { data: replayData, error: insertError } = await supabase
             .from('pvp_replays')
-            .insert(payload); 
+            .insert(payload as unknown as never)
+            .select('id')
+            .single();
 
-        if (insertError) {
+        if (insertError || !replayData) {
             console.error("[PvP Replay API] ❌ Insert Error:", insertError);
             throw new Error(insertError?.message || "Failed to insert replay.");
         }
 
-        console.log(`[PvP Replay API] ✅ Successfully saved PvP Replay ID: ${newReplayId}`);
+        const typedData = replayData as unknown as { id: string };
+        console.log(`[PvP Replay API] ✅ Successfully saved PvP Replay ID: ${typedData.id}`);
 
-        return NextResponse.json({ success: true, replayId: newReplayId });
+        return NextResponse.json({ success: true, replayId: typedData.id });
 
     } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
