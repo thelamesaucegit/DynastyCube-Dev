@@ -100,19 +100,7 @@ export interface ClientGameState {
   gameLog: Array<Record<string, unknown>>;
 }
 
-export interface SpectatorStateUpdate {
-  gameSessionId: string;
-  gameState: ClientGameState;
-  player1Id: string;
-  player2Id: string;
-  player1Name: string;
-  player2Name: string;
-  currentPhase: string;
-  activePlayerId: string | null;
-  priorityPlayerId: string | null;
-  isReplay: boolean;
-  combat: CombatState | null;
-}
+
 
 export interface TargetInfo { entityId: string; type: string; }
 
