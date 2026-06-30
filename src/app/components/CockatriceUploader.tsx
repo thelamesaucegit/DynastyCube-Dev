@@ -178,9 +178,9 @@ export default function CockatriceUploader() {
       const arrayBuffer = await file.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
 
-      // 1. Decode the top-level GameReplay message
+      // 1. Decode the entire nested GameReplay object in one pass
       const decodedReplay = GameReplayMessage.decode(uint8Array);
-      const replayObject = GameReplayMessage.toObject(decodedReplay, { bytes: Array }) as { event_list?: number[][] };
+      const replayObject = GameReplayMessage.toObject(decodedReplay) as ParsedReplay;
 
       if (!replayObject.event_list || replayObject.event_list.length === 0) {
         throw new Error("Replay file is empty or contains no events.");
@@ -188,32 +188,28 @@ export default function CockatriceUploader() {
 
       const cardDictionary = new Map<number, string>();
 
-      // 2. Double-Decode: Iterate through each byte array and decode it into a GameEventContainer
-      for (const containerBytes of replayObject.event_list) {
-          const containerBuffer = new Uint8Array(containerBytes);
-          const decodedContainer = GameEventContainerMessage.decode(containerBuffer);
-          const eventContainer = GameEventContainerMessage.toObject(decodedContainer) as ParsedContainer;
-          
-          if (!eventContainer.event_list) continue;
-          
-          // 3. Iterate through the actual GameEvents
-          for (const gameEvent of eventContainer.event_list) {
-              if (gameEvent.ext_join?.player_properties) {
-                  const properties = gameEvent.ext_join.player_properties;
-                  
-                  // 4. Extract card names to build the dictionary
-                  if (properties.main_deck) {
-                      properties.main_deck.forEach((card) => {
-                          if (card.id != null && card.name) cardDictionary.set(card.id, card.name);
-                      });
-                  }
-                  if (properties.sideboard) {
-                      properties.sideboard.forEach((card) => {
-                          if (card.id != null && card.name) cardDictionary.set(card.id, card.name);
-                      });
-                  }
-              }
-          }
+      // 2. Iterate through the now fully-decoded structure
+      for (const eventContainer of replayObject.event_list) {
+        if (!eventContainer.event_list) continue;
+        
+        for (const gameEvent of eventContainer.event_list) {
+            // Find the Event_Join message that contains the decklists
+            if (gameEvent.ext_join?.player_properties) {
+                const properties = gameEvent.ext_join.player_properties;
+                
+                // 3. Extract card names to build the dictionary
+                if (properties.main_deck) {
+                    properties.main_deck.forEach((card) => {
+                        if (card.id != null && card.name) cardDictionary.set(card.id, card.name);
+                    });
+                }
+                if (properties.sideboard) {
+                    properties.sideboard.forEach((card) => {
+                        if (card.id != null && card.name) cardDictionary.set(card.id, card.name);
+                    });
+                }
+            }
+        }
       }
 
       console.log(`[Uploader] 📚 Dictionary built! Found ${cardDictionary.size} unique cards/tokens.`);
@@ -222,9 +218,9 @@ export default function CockatriceUploader() {
           throw new Error("Failed to extract card IDs from the replay. The file may be corrupted or an unsupported version.");
       }
 
-      toast.success(`Successfully mapped ${cardDictionary.size} cards from the decklists! Check the console.`);
+      toast.success(`Successfully mapped ${cardDictionary.size} cards from the decklists! We can now proceed to the next step.`);
 
-      // The rest of the logic can be added back here once dictionary creation is confirmed.
+      // The rest of the logic (buildArgentumStates, fetch, etc.) will go here in the next step.
 
     } catch (error) {
       console.error("Error decoding .cor file:", error);
@@ -234,7 +230,7 @@ export default function CockatriceUploader() {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
-
+  
   return (
     <Card className="w-full max-w-md mx-auto shadow-md border-border/50">
         <CardHeader>
