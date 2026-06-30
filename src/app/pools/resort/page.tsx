@@ -10,6 +10,7 @@ import { Loader2, AlertCircle, Info, Layers } from "lucide-react";
 import { ResortNominationCard } from "@/app/components/ResortNominationCard";
 import { PoolFilterBar } from "@/app/components/pools/PoolFilterBar";
 import { Card, CardContent } from "@/app/components/ui/card";
+import { CardPreview } from "@/app/components/CardPreview";
 
 interface Team {
   id: string;
@@ -280,7 +281,10 @@ export default function ResortPage() {
           )}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {paginatedCards.map((card) => (
+                        <CardPreview key={card.id} card={card}>
               <ResortNominationCard key={card.id} card={card} teamId={team?.id} isPostseason={isPostseason} />
+                                        </CardPreview>
+
             ))}
           </div>
           {totalPages > 1 && (
