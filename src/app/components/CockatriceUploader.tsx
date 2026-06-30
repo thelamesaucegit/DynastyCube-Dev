@@ -277,7 +277,7 @@ export default function CockatriceUploader() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
  const buildArgentumStates = (cockatriceData: any, cardDbMap: Map<string, DbCardMeta>): SpectatorStateUpdate[] => {
       const states: SpectatorStateUpdate[] = [];
-      let currentState: SpectatorStateUpdate = {
+      const currentState: SpectatorStateUpdate = {
           gameSessionId: "imported-cor-match",
           player1Id: "p1",
           player2Id: "p2",
