@@ -113,14 +113,16 @@ export default function CockatriceUploader() {
   }, [player1TeamId, player2TeamId, activeWeekId]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const extractUniqueCardNames = (obj: any, namesSet = new Set<string>()): string[] => {
+const extractUniqueCardNames = (obj: unknown, namesSet = new Set<string>()): string[] => {
     if (!obj) return Array.from(namesSet);
-    if (typeof obj === 'object') {
-        if (obj.cardName && typeof obj.cardName === 'string') namesSet.add(obj.cardName);
-        if (obj.name && typeof obj.name === 'string') namesSet.add(obj.name);
-        Object.values(obj).forEach(val => extractUniqueCardNames(val, namesSet));
-    } else if (Array.isArray(obj)) {
+    
+    if (Array.isArray(obj)) {
         obj.forEach(item => extractUniqueCardNames(item, namesSet));
+    } else if (typeof obj === 'object') {
+        const record = obj as Record<string, unknown>;
+        if (record.cardName && typeof record.cardName === 'string') namesSet.add(record.cardName);
+        if (record.name && typeof record.name === 'string') namesSet.add(record.name);
+        Object.values(record).forEach(val => extractUniqueCardNames(val, namesSet));
     }
     return Array.from(namesSet);
   };
@@ -204,7 +206,7 @@ export default function CockatriceUploader() {
   };
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
-  const buildArgentumStates = (cockatriceData: any, cardDbMap: Map<string, DbCardMeta>): SpectatorStateUpdate[] => {
+  const buildArgentumStates = (cockatriceData: unknown, cardDbMap: Map<string, DbCardMeta>): SpectatorStateUpdate[] => {
       const states: SpectatorStateUpdate[] = [];
       const currentState: SpectatorStateUpdate = {
           gameSessionId: "imported-cor-match",
