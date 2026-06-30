@@ -57,27 +57,55 @@ root.define("cockatrice")
         // For standard implementations, they use extensions or a byte payload. 
         // We will define the inner payload field here in Step 2.
     );
+
+// ============================================================================
+// COCKATRICE PROTOBUF SCHEMA
+// ============================================================================
 const COCKATRICE_SCHEMA = `
   syntax = "proto2";
   package cockatrice;
 
-  message GameReplay {
-      optional int32 replay_id = 1;
-      repeated bytes event_list = 2;
+  // From serverinfo_card.proto
+  message ServerInfo_Card {
+      optional sint32 id = 1 [default = -1];
+      optional string name = 2;
   }
 
-  message GameEventContainer {
-      optional int32 game_id = 1;
-      optional int32 seconds_elapsed = 2;
-      // Depending on the version, these might be nested messages or bytes. 
-      // We read them loosely so we can recursively extract data.
-      repeated GameEvent event_list = 3; 
+  // From serverinfo_playerproperties.proto (simplified for our needs)
+  message ServerInfo_PlayerProperties {
+      optional string player_name = 1;
+      optional string deck_storage_path = 3;
+      repeated ServerInfo_Card main_deck = 4;
+      repeated ServerInfo_Card sideboard = 5;
   }
-
+  
+  // From game_event.proto
   message GameEvent {
-      optional int32 game_id = 1;
-      optional int32 player_id = 2;
-      // Unknown fields (extensions) will be parsed loosely by protobufjs
+      optional sint32 player_id = 1 [default = -1];
+      extensions 100 to max;
+  }
+
+  // From event_join.proto
+  message Event_Join {
+      extend GameEvent {
+          optional Event_Join ext = 1000;
+      }
+      optional ServerInfo_PlayerProperties player_properties = 1;
+  }
+  
+  // From game_event_container.proto
+  message GameEventContainer {
+      optional sint32 game_id = 1;
+      optional int32 seconds_elapsed = 2;
+      repeated GameEvent event_list = 3;
+  }
+
+  // From game_replay.proto
+  message GameReplay {
+      optional uint64 replay_id = 1;
+      // We don't need serverinfo_game for parsing card names
+      repeated GameEventContainer event_list = 3;
+      optional uint32 duration_seconds = 4;
   }
 `;
 
@@ -85,6 +113,8 @@ const COCKATRICE_SCHEMA = `
 const parsedSchema = protobuf.parse(COCKATRICE_SCHEMA);
 const GameReplayMessage = parsedSchema.root.lookupType("cockatrice.GameReplay");
 const GameEventContainerMessage = parsedSchema.root.lookupType("cockatrice.GameEventContainer");
+const Event_JoinMessage = parsedSchema.root.lookupType("cockatrice.Event_Join");
+
 
 // ============================================================================
 // DICTIONARY BUILDER
