@@ -2,6 +2,7 @@
 
 "use client";
 
+import { CardPreview } from "@/app/components/CardPreview";
 import React, { useState } from "react";
 import Image from "next/image";
 import { type WireCard, placeWireBid } from "@/app/actions/wireActions";
