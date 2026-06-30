@@ -11,8 +11,8 @@ import type { SpectatorStateUpdate } from "@/types/replay-types"; // Assuming th
 // ============================================================================
 // COCKATRICE PROTOBUF SCHEMA
 // ============================================================================
-// We simulate the extensions by embedding them directly as optional fields 
-// to make Protobuf.js parsing much easier and strictly typed.
+// This schema combines all the .proto files into a single definition that
+// protobufjs can use to decode the entire .cor file in one pass.
 const COCKATRICE_SCHEMA = `
   syntax = "proto2";
   package cockatrice;
@@ -24,7 +24,6 @@ const COCKATRICE_SCHEMA = `
 
   message ServerInfo_PlayerProperties {
       optional string player_name = 1;
-      optional string deck_storage_path = 3;
       repeated ServerInfo_Card main_deck = 4;
       repeated ServerInfo_Card sideboard = 5;
   }
@@ -35,8 +34,8 @@ const COCKATRICE_SCHEMA = `
 
   message GameEvent {
       optional sint32 player_id = 1 [default = -1];
-      // We map the extension directly for easier JS consumption
-      optional Event_Join ext_join = 1000; 
+      extensions 100 to max;
+      optional Event_Join ext_join = 1000;
   }
   
   message GameEventContainer {
@@ -47,21 +46,76 @@ const COCKATRICE_SCHEMA = `
 
   message GameReplay {
       optional uint64 replay_id = 1;
-      repeated bytes event_list = 3;
+      // THE FIX: This is a list of messages, not bytes.
+      repeated GameEventContainer event_list = 3; 
       optional uint32 duration_seconds = 4;
   }
 `;
 
 // Parse the schema once globally
-const parsedSchema = protobuf.parse(COCKATRICE_SCHEMA);
-const GameReplayMessage = parsedSchema.root.lookupType("cockatrice.GameReplay");
-const GameEventContainerMessage = parsedSchema.root.lookupType("cockatrice.GameEventContainer");
+const parsedSchema = protobuf.parse(COCKATRICE_SCHEMA).root;
+const GameReplayMessage = parsedSchema.lookupType("cockatrice.GameReplay");
 
 // Strictly-typed interfaces for the parsed data
 interface ParsedCard { id?: number; name?: string; }
 interface ParsedJoinEvent { player_properties?: { main_deck?: ParsedCard[], sideboard?: ParsedCard[] } }
 interface ParsedGameEvent { ext_join?: ParsedJoinEvent; }
 interface ParsedContainer { event_list?: ParsedGameEvent[]; }
+interface ParsedReplay { event_list?: ParsedContainer[]; }
+
+export interface ClientCard {
+  entityId: string;
+  name: string;
+  imageUri?: string;
+  cardTypes: string[];
+  isTapped: boolean;
+  isAttacking: boolean;
+  isBlocking: boolean;
+  power?: number | null;
+  toughness?: number | null;
+  damage: number;
+  attachedTo?: string | null;
+  targets: TargetInfo[];
+}
+
+export interface ClientZone {
+  zoneId: ZoneId;
+  cardIds: string[];
+  size: number;
+  isVisible: boolean;
+}
+
+export interface ClientGameState {
+  cards: Record<string, ClientCard>;
+  zones: ClientZone[];
+  players: ClientPlayer[];
+  currentPhase: string;
+  currentStep: string;
+  activePlayerId: string | null;
+  priorityPlayerId: string | null;
+  turnNumber: number;
+  isGameOver: boolean;
+  winnerId: string | null;
+  combat: CombatState | null;
+  gameLog: Array<Record<string, unknown>>;
+}
+
+export interface SpectatorStateUpdate {
+  gameSessionId: string;
+  gameState: ClientGameState;
+  player1Id: string;
+  player2Id: string;
+  player1Name: string;
+  player2Name: string;
+  currentPhase: string;
+  activePlayerId: string | null;
+  priorityPlayerId: string | null;
+  isReplay: boolean;
+  combat: CombatState | null;
+}
+
+export interface TargetInfo { entityId: string; type: string; }
+
 
 // ============================================================================
 // COMPONENT LOGIC
@@ -124,9 +178,9 @@ export default function CockatriceUploader() {
       const arrayBuffer = await file.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
 
-      // 1. Decode the top-level GameReplay message
+      // 1. Decode the entire nested GameReplay object in one pass
       const decodedReplay = GameReplayMessage.decode(uint8Array);
-      const replayObject = GameReplayMessage.toObject(decodedReplay, { bytes: Array }) as { event_list?: number[][] };
+      const replayObject = GameReplayMessage.toObject(decodedReplay) as ParsedReplay;
 
       if (!replayObject.event_list || replayObject.event_list.length === 0) {
         throw new Error("Replay file is empty or contains no events.");
@@ -134,32 +188,28 @@ export default function CockatriceUploader() {
 
       const cardDictionary = new Map<number, string>();
 
-      // 2. Double-Decode: Iterate through each byte array and decode it into a GameEventContainer
-      for (const containerBytes of replayObject.event_list) {
-          const containerBuffer = new Uint8Array(containerBytes);
-          const decodedContainer = GameEventContainerMessage.decode(containerBuffer);
-          const eventContainer = GameEventContainerMessage.toObject(decodedContainer) as ParsedContainer;
-          
-          if (!eventContainer.event_list) continue;
-          
-          // 3. Iterate through the actual GameEvents
-          for (const gameEvent of eventContainer.event_list) {
-              if (gameEvent.ext_join?.player_properties) {
-                  const properties = gameEvent.ext_join.player_properties;
-                  
-                  // 4. Extract card names to build the dictionary
-                  if (properties.main_deck) {
-                      properties.main_deck.forEach((card) => {
-                          if (card.id != null && card.name) cardDictionary.set(card.id, card.name);
-                      });
-                  }
-                  if (properties.sideboard) {
-                      properties.sideboard.forEach((card) => {
-                          if (card.id != null && card.name) cardDictionary.set(card.id, card.name);
-                      });
-                  }
-              }
-          }
+      // 2. Iterate through the now fully-decoded structure
+      for (const eventContainer of replayObject.event_list) {
+        if (!eventContainer.event_list) continue;
+        
+        for (const gameEvent of eventContainer.event_list) {
+            // Find the Event_Join message that contains the decklists
+            if (gameEvent.ext_join?.player_properties) {
+                const properties = gameEvent.ext_join.player_properties;
+                
+                // 3. Extract card names to build the dictionary
+                if (properties.main_deck) {
+                    properties.main_deck.forEach((card) => {
+                        if (card.id != null && card.name) cardDictionary.set(card.id, card.name);
+                    });
+                }
+                if (properties.sideboard) {
+                    properties.sideboard.forEach((card) => {
+                        if (card.id != null && card.name) cardDictionary.set(card.id, card.name);
+                    });
+                }
+            }
+        }
       }
 
       console.log(`[Uploader] 📚 Dictionary built! Found ${cardDictionary.size} unique cards/tokens.`);
@@ -168,9 +218,9 @@ export default function CockatriceUploader() {
           throw new Error("Failed to extract card IDs from the replay. The file may be corrupted or an unsupported version.");
       }
 
-      toast.success(`Successfully mapped ${cardDictionary.size} cards from the decklists! Check the console.`);
+      toast.success(`Successfully mapped ${cardDictionary.size} cards from the decklists! We can now proceed to the next step.`);
 
-      // The rest of the logic can be added back here once dictionary creation is confirmed.
+      // The rest of the logic (buildArgentumStates, fetch, etc.) will go here in the next step.
 
     } catch (error) {
       console.error("Error decoding .cor file:", error);
@@ -180,7 +230,7 @@ export default function CockatriceUploader() {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
-
+  
   return (
     <Card className="w-full max-w-md mx-auto shadow-md border-border/50">
         <CardHeader>
