@@ -18,7 +18,8 @@ export async function getPvpReplays(): Promise<{ success: boolean; replays: PvpR
     try {
         const supabase = await createServerClient();
         
-        // Use an outer join or direct fetch to get the user who uploaded it
+        // THE FIX: Remove the crashing !pvp_replays_uploaded_by_fkey join
+        // Just select the uploaded_by UUID directly.
         const { data, error } = await supabase
             .from('pvp_replays')
             .select(`
@@ -29,13 +30,27 @@ export async function getPvpReplays(): Promise<{ success: boolean; replays: PvpR
                 team2_name,
                 team1_color,
                 team2_color,
-                uploaded_by:users!pvp_replays_uploaded_by_fkey(display_name)
+                uploaded_by
             `)
             .order('created_at', { ascending: false });
 
         if (error) throw error;
 
-        // Map the relation explicitly to avoid TS complaining about joined array types
+        // Step 2: Manually fetch the display names from public.users to avoid FK errors
+        const uploaderIds = [...new Set((data || []).map(r => r.uploaded_by).filter(Boolean))];
+        const usersMap = new Map<string, string>();
+        
+        if (uploaderIds.length > 0) {
+            const { data: usersData } = await supabase
+                .from('users')
+                .select('id, display_name')
+                .in('id', uploaderIds);
+                
+            if (usersData) {
+                usersData.forEach(u => usersMap.set(u.id, u.display_name));
+            }
+        }
+
         const mappedData = (data || []).map(row => ({
             id: row.id,
             created_at: row.created_at,
@@ -44,11 +59,14 @@ export async function getPvpReplays(): Promise<{ success: boolean; replays: PvpR
             team2_name: row.team2_name,
             team1_color: row.team1_color,
             team2_color: row.team2_color,
-            uploaded_by_user: Array.isArray(row.uploaded_by) ? row.uploaded_by[0] : row.uploaded_by
+            uploaded_by_user: row.uploaded_by && usersMap.has(row.uploaded_by) 
+                ? { display_name: usersMap.get(row.uploaded_by) } 
+                : null
         }));
 
         return { success: true, replays: mappedData as PvpReplayMeta[] };
     } catch (e) {
+        console.error("Failed to load PvP replays:", e);
         return { success: false, replays: [], error: String(e) };
     }
 }
