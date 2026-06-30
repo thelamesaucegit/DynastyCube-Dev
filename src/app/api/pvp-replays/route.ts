@@ -1,8 +1,8 @@
 // src/app/api/pvp-replays/route.ts
+
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from 'uuid'; 
 
 // Helper for Admin Client to bypass any RLS on inserts
 function getSupabaseAdmin() {
@@ -40,33 +40,34 @@ export async function POST(request: Request): Promise<NextResponse> {
         console.log(`[PvP Replay API] 📥 Receiving replay: ${original_filename}`);
 
         const supabase = getSupabaseAdmin();
+        const newReplayId = uuidv4();
+
+        // THE FIX: Respect the FKEY constraint. 
+        // If there is no official match_id, we MUST pass explicit null.
+        const validMatchId = match_id || null;
 
         // 1. Prepare the payload strictly typed
-        const newReplayId = uuidv4();
-        const final_match_id = match_id || `unlinked-${newReplayId.substring(0, 8)}`;
-
-        // 1. Prepare the payload
         const payload: Record<string, unknown> = {
-            id: newReplayId, // Explicitly set the ID
+            id: newReplayId,
             argentum_game_states,
             original_filename,
-            uploaded_by: body.uploader_id || null,
-            match_id: final_match_id, // Use the generated or provided match_id
-            team1_id: body.team1_id || null,
-            team2_id: body.team2_id || null,
-            winner_team_id: body.winner_team_id || null,
-            team1_name: body.team1_name || null,
-            team1_color: body.team1_color || null,
-            team1_seccolor: body.team1_seccolor || null,
-            team2_name: body.team2_name || null,
-            team2_color: body.team2_color || null,
-            team2_seccolor: body.team2_seccolor || null,
+            uploaded_by: uploader_id || null,
+            match_id: validMatchId, // <--- THE FIX
+            team1_id: team1_id || null,
+            team2_id: team2_id || null,
+            winner_team_id: winner_team_id || null,
+            team1_name: team1_name || null,
+            team1_color: team1_color || null,
+            team1_seccolor: team1_seccolor || null,
+            team2_name: team2_name || null,
+            team2_color: team2_color || null,
+            team2_seccolor: team2_seccolor || null,
         };
 
         // 2. Insert into pvp_replays
         const { error: insertError } = await supabase
             .from('pvp_replays')
-            .insert(payload); // No need to .select() when we control the ID
+            .insert(payload); 
 
         if (insertError) {
             console.error("[PvP Replay API] ❌ Insert Error:", insertError);
