@@ -9,6 +9,16 @@ import * as protobuf from "protobufjs";
 import { getReplayUploaderData, findMatchIdForTeams, type UploaderTeam } from "@/app/actions/replayActions";
 import { SpectatorStateUpdate} from "@/types";
 
+import { 
+  fetchReplayMetadata, 
+  getReplayUploaderData, 
+  findMatchIdForTeams, 
+  type DbCardMeta, 
+  type UploaderTeam 
+} from "@/app/actions/replayActions";
+
+import type { SpectatorStateUpdate } from "@/types"; // Use your project's types path here
+
 // ============================================================================
 // COCKATRICE PROTOBUF SCHEMA (EXACT MATCH)
 // ============================================================================
