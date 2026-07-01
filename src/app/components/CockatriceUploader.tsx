@@ -7,10 +7,9 @@ import { Upload, FileCode2, Loader2, CheckCircle2, AlertCircle } from "lucide-re
 import { toast } from "sonner";
 import * as protobuf from "protobufjs";
 import { getReplayUploaderData, findMatchIdForTeams, type UploaderTeam } from "@/app/actions/replayActions";
-import type { SpectatorStateUpdate } from "@/types";
 
 // ============================================================================
-// COCKATRICE PROTOBUF SCHEMA (FINAL & CORRECT)
+// COCKATRICE PROTOBUF SCHEMA (EXACT MATCH)
 // ============================================================================
 const COCKATRICE_SCHEMA = `
   syntax = "proto2";
@@ -32,29 +31,59 @@ const COCKATRICE_SCHEMA = `
 
   message ServerInfo_Zone {
       optional string name = 1;
+      optional sint32 type = 2;
+      optional bool with_coords = 3;
+      optional sint32 card_count = 4;
       repeated ServerInfo_Card card_list = 5;
   }
 
   message ServerInfo_Player {
       optional ServerInfo_PlayerProperties properties = 1;
-      repeated ServerInfo_Zone zone_list = 2;
+      optional string deck_list = 2;
+      repeated ServerInfo_Zone zone_list = 3;
   }
 
   message Event_GameStateChanged {
       repeated ServerInfo_Player player_list = 1;
   }
 
+  message Event_DrawCards {
+      optional sint32 number = 1;
+      repeated ServerInfo_Card cards = 2;
+  }
+
+  message Event_MoveCard {
+      optional sint32 card_id = 1 [default = -1];
+      optional string card_name = 2;
+      optional sint32 new_card_id = 10 [default = -1];
+  }
+
+  message Event_CreateToken {
+      optional string zone_name = 1;
+      optional sint32 card_id = 2;
+      optional string card_name = 3;
+  }
+
   message GameEvent {
       optional sint32 player_id = 1 [default = -1];
+      
+      // Extensions explicitly mapped
       optional Event_GameStateChanged ext_game_state_changed = 1005;
+      optional Event_MoveCard ext_move_card = 2009;
+      optional Event_DrawCards ext_draw_cards = 2005;
+      optional Event_CreateToken ext_create_token = 2013;
   }
   
   message GameEventContainer {
+      optional uint32 game_id = 1;
       repeated GameEvent event_list = 2;
+      optional uint32 seconds_elapsed = 4;
   }
 
   message GameReplay {
+      optional uint64 replay_id = 1;
       repeated GameEventContainer event_list = 3;
+      optional uint32 duration_seconds = 4;
   }
 `;
 
@@ -66,17 +95,24 @@ const GameReplayMessage = parsedSchema.lookupType("cockatrice.GameReplay");
 // ============================================================================
 const extractCardDictionary = (obj: unknown, dict = new Map<number, string>()): Map<number, string> => {
     if (!obj || typeof obj !== 'object') return dict;
+
     if (Array.isArray(obj)) {
         obj.forEach(item => extractCardDictionary(item, dict));
     } else {
         const record = obj as Record<string, unknown>;
-        if (typeof record.id === 'number' && typeof record.name === 'string') {
-            if (record.id > 0 && record.name.trim().length > 0) {
-                dict.set(record.id, record.name);
+        
+        const idVal = record.id ?? record.card_id ?? record.cardId ?? record.new_card_id ?? record.newCardId;
+        const nameVal = record.name ?? record.card_name ?? record.cardName;
+        
+        if (typeof idVal === 'number' && typeof nameVal === 'string') {
+            if (idVal > 0 && nameVal.trim().length > 0) {
+                dict.set(idVal, nameVal);
             }
         }
+        
         Object.values(record).forEach(val => extractCardDictionary(val, dict));
     }
+    
     return dict;
 };
 
@@ -131,20 +167,50 @@ export default function CockatriceUploader() {
       const arrayBuffer = await file.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
 
+      console.log("[Diagnostic] Decoding raw protobuf bytes...");
       const decodedReplay = GameReplayMessage.decode(uint8Array);
-      const replayObject = GameReplayMessage.toObject(decodedReplay, { defaults: true }) as Record<string, unknown>;
+      
+      const replayObject = GameReplayMessage.toObject(decodedReplay, { 
+          enums: String,
+          longs: Number,
+          bytes: Array,
+          defaults: true 
+      }) as Record<string, unknown>;
 
-      const cardDictionary = extractCardDictionary(replayObject);
+      const rawEventList = (replayObject.eventList || replayObject.event_list) as Array<Record<string, unknown>>;
 
-      if (cardDictionary.size === 0) {
-        throw new Error("Failed to extract card IDs. The replay may be corrupted or in an unsupported format.");
+      if (!rawEventList || !Array.isArray(rawEventList) || rawEventList.length === 0) {
+        throw new Error("Replay file is empty or contains no events.");
       }
 
-      toast.success(`Successfully mapped ${cardDictionary.size} cards from the replay!`);
+      console.log(`[Diagnostic] Sweeping ${rawEventList.length} containers for interesting data...`);
       
-      // We can now proceed with the rest of the logic.
-      // This part would be built out in the next step.
-      console.log("[Uploader] Dictionary:", Object.fromEntries(cardDictionary));
+      const interestingEvents: Array<Record<string, unknown>> = [];
+      
+      for (const container of rawEventList) {
+          const events = (container.eventList || container.event_list || []) as Array<Record<string, unknown>>;
+          for (const ev of events) {
+              if (Object.keys(ev).some(k => k !== 'playerId' && k !== 'player_id')) {
+                  interestingEvents.push(ev);
+              }
+          }
+      }
+
+      console.log("================ DIAGNOSTIC DUMP ================");
+      console.log("Found", interestingEvents.length, "populated events.");
+      console.log("First 2 populated events:");
+      console.log(JSON.stringify(interestingEvents.slice(0, 2), null, 2));
+      console.log("=================================================");
+
+      const cardDict = extractCardDictionary(replayObject);
+      console.log(`[Diagnostic] Dictionary extractor ran and found ${cardDict.size} cards.`);
+      
+      if (cardDict.size > 0) {
+        console.log("[Uploader] DICTIONARY DUMP:", Object.fromEntries(cardDict));
+        toast.success(`Diagnostic dump complete! Found ${cardDict.size} cards.`);
+      } else {
+        toast.error("Diagnostic dump complete! Still 0 cards. Check console.");
+      }
 
     } catch (error) {
       console.error("Error decoding .cor file:", error);
@@ -208,7 +274,7 @@ export default function CockatriceUploader() {
                 {isProcessing ? (
                     <div className="flex flex-col items-center gap-3 text-emerald-600 dark:text-emerald-400">
                         <Loader2 className="size-10 animate-spin" />
-                        <p className="font-bold tracking-widest uppercase text-sm">Decoding Replay...</p>
+                        <p className="font-bold tracking-widest uppercase text-sm">Decoding & Enriching...</p>
                     </div>
                 ) : (
                     <>
