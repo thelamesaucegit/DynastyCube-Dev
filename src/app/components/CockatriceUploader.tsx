@@ -177,13 +177,14 @@ export default function CockatriceUploader() {
       team2Name: string
   ): SpectatorStateUpdate[] => {
       const states: SpectatorStateUpdate[] = [];
-      
+            const asEntityId = (id: string): EntityId => id as EntityId;
+
       // 1. Initialize the Base State
       const currentState: SpectatorStateUpdate = {
           gameSessionId: "imported-cor-match",
-          player1Id: "p1",
-          player2Id: "p2",
-          player1Name: team1Name, // Immediately use the selected Team Names!
+             player1Id: asEntityId("p1"),
+          player2Id: asEntityId("p2"),
+          player1Name: team1Name, 
           player2Name: team2Name, 
           currentPhase: "MULLIGAN",
           activePlayerId: null,
@@ -194,8 +195,9 @@ export default function CockatriceUploader() {
               cards: {},
               zones: [],
               players: [
-                  { playerId: 'p1', name: team1Name, life: 20 },
-                  { playerId: 'p2', name: team2Name, life: 20 }
+                  { playerId: asEntityId('p1'), name: team1Name, life: 20 },
+                  { playerId: asEntityId('p2'), name: team2Name, life: 20 }
+           
               ],
               currentPhase: "MULLIGAN",
               currentStep: "OPENING_HAND",
