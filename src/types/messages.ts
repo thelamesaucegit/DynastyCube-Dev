@@ -1,3 +1,5 @@
+//src/types/messages.ts
+
 import { ErrorCode, GameOverReason } from './enums'
 import { EntityId } from './entities'
 import { GameAction } from './actions'
