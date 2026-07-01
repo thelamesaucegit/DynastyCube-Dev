@@ -18,7 +18,7 @@ import {
 import type { SpectatorStateUpdate, ClientPlayer, ClientCard, ClientZone, EntityId, Phase, Step } from "@/types"; // Use your project's types path here
 
 // ============================================================================
-// COCKATRICE PROTOBUF SCHEMA (EXACT MATCH)
+// COCKATRICE PROTOBUF SCHEMA (EXPANDED)
 // ============================================================================
 const COCKATRICE_SCHEMA = `
   syntax = "proto2";
@@ -28,326 +28,244 @@ const COCKATRICE_SCHEMA = `
       optional sint32 id = 1 [default = -1];
       optional string name = 2;
   }
-
   message ServerInfo_User {
       optional string name = 1;
   }
-
   message ServerInfo_PlayerProperties {
       optional sint32 player_id = 1;
       optional ServerInfo_User user_info = 2;
   }
-
   message ServerInfo_Zone {
       optional string name = 1;
-      optional sint32 type = 2;
-      optional bool with_coords = 3;
-      optional sint32 card_count = 4;
       repeated ServerInfo_Card card_list = 5;
   }
-
   message ServerInfo_Player {
       optional ServerInfo_PlayerProperties properties = 1;
-      optional string deck_list = 2;
       repeated ServerInfo_Zone zone_list = 3;
   }
-
+  
+  // -- Event Payloads --
   message Event_GameStateChanged {
       repeated ServerInfo_Player player_list = 1;
   }
-
   message Event_DrawCards {
-      optional sint32 number = 1;
       repeated ServerInfo_Card cards = 2;
   }
-
   message Event_MoveCard {
-      optional sint32 card_id = 1 [default = -1];
-      optional string card_name = 2;
-      optional sint32 new_card_id = 10 [default = -1];
+      optional sint32 card_id = 1;
+      optional sint32 new_card_id = 10;
+      optional sint32 target_player_id = 6;
+      optional string target_zone = 7;
   }
-
   message Event_CreateToken {
-      optional string zone_name = 1;
       optional sint32 card_id = 2;
       optional string card_name = 3;
   }
+  message Event_SetCardAttr {
+    optional string zone = 1;
+    optional sint32 card_id = 2;
+    optional string card_attr = 3;
+    optional string attr_value = 4;
+  }
+  message Event_SetCounter {
+      optional sint32 counter_id = 1;
+      optional sint32 value = 3;
+  }
+  message Event_SetActivePhase {
+      optional sint32 phase = 1;
+  }
 
+  // -- Event Wrapper --
   message GameEvent {
       optional sint32 player_id = 1 [default = -1];
-      
-      // Extensions explicitly mapped
       optional Event_GameStateChanged ext_game_state_changed = 1005;
       optional Event_MoveCard ext_move_card = 2009;
       optional Event_DrawCards ext_draw_cards = 2005;
       optional Event_CreateToken ext_create_token = 2013;
+      optional Event_SetCardAttr ext_set_card_attr = 2014;
+      optional Event_SetCounter ext_set_counter = 2003;
+      optional Event_SetActivePhase ext_set_active_phase = 2017;
   }
   
+  // -- Top Level Containers --
   message GameEventContainer {
-      optional uint32 game_id = 1;
       repeated GameEvent event_list = 2;
-      optional uint32 seconds_elapsed = 4;
   }
-
   message GameReplay {
-      optional uint64 replay_id = 1;
       repeated GameEventContainer event_list = 3;
-      optional uint32 duration_seconds = 4;
   }
 `;
 
 const parsedSchema = protobuf.parse(COCKATRICE_SCHEMA).root;
 const GameReplayMessage = parsedSchema.lookupType("cockatrice.GameReplay");
 
-// ============================================================================
-// DICTIONARY BUILDER
-// ============================================================================
 const extractCardDictionary = (obj: unknown, dict = new Map<number, string>()): Map<number, string> => {
     if (!obj || typeof obj !== 'object') return dict;
-
     if (Array.isArray(obj)) {
         obj.forEach(item => extractCardDictionary(item, dict));
     } else {
         const record = obj as Record<string, unknown>;
-        
-        const idVal = record.id ?? record.card_id ?? record.cardId ?? record.new_card_id ?? record.newCardId;
-        const nameVal = record.name ?? record.card_name ?? record.cardName;
-        
-        if (typeof idVal === 'number' && typeof nameVal === 'string') {
-            if (idVal > 0 && nameVal.trim().length > 0) {
-                dict.set(idVal, nameVal);
-            }
+        const idVal = record.id ?? record.card_id;
+        const nameVal = record.name ?? record.card_name;
+        if (typeof idVal === 'number' && typeof nameVal === 'string' && idVal > 0 && nameVal.trim().length > 0) {
+            dict.set(idVal, nameVal);
         }
-        
         Object.values(record).forEach(val => extractCardDictionary(val, dict));
     }
-    
     return dict;
+};
+
+const PHASE_MAP: Record<number, Phase> = {
+    0: 'UNTAP', 1: 'UPKEEP', 2: 'DRAW', 3: 'MAIN1', 4: 'COMBAT_BEGIN',
+    5: 'COMBAT_DECLARE_ATTACKERS', 6: 'COMBAT_DECLARE_BLOCKERS', 7: 'COMBAT_DAMAGE',
+    8: 'COMBAT_END', 9: 'MAIN2', 10: 'END', 11: 'CLEANUP',
 };
 
 // ============================================================================
 // COMPONENT LOGIC
 // ============================================================================
 export default function CockatriceUploader() {
-  const [isDragging, setIsDragging] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  const [teams, setTeams] = useState<UploaderTeam[]>([]);
-  const [player1TeamId, setPlayer1TeamId] = useState<string>("");
-  const [player2TeamId, setPlayer2TeamId] = useState<string>("");
-  const [matchId, setMatchId] = useState<string | null>(null);
-  const [isSearchingMatch, setIsSearchingMatch] = useState(false);
-  const [activeWeekId, setActiveWeekId] = useState<string | null>(null);
+    // ... (keep all state and useEffect hooks the same)
 
-  useEffect(() => {
-      const loadContext = async () => {
-          const res = await getReplayUploaderData();
-          if (res.success) {
-              setTeams(res.teams);
-              setActiveWeekId(res.activeWeekId);
-              if (res.userTeamId) setPlayer1TeamId(res.userTeamId);
-          }
-      };
-      loadContext();
-  }, []);
+    const buildArgentumStates = (
+        replayObject: Record<string, unknown>, 
+        cardDict: Map<number, string>, 
+        cardDbMap: Map<string, DbCardMeta>,
+        team1Name: string, team2Name: string
+    ): SpectatorStateUpdate[] => {
+        const states: SpectatorStateUpdate[] = [];
+        const asEntityId = (id: string): EntityId => id as EntityId;
+        
+        let activeCards: Record<string, ClientCard> = {};
+        const activeZones: Array<{ zoneId: { ownerId: EntityId; zoneType: string }; cardIds: EntityId[]; size: number; isVisible: boolean; }> = [];
+        const activePlayers: ClientPlayer[] = [];
 
-  useEffect(() => {
-      const findMatch = async () => {
-          if (player1TeamId && player2TeamId && activeWeekId) {
-              setIsSearchingMatch(true);
-              const res = await findMatchIdForTeams(player1TeamId, player2TeamId, activeWeekId);
-              setMatchId(res.matchId);
-              setIsSearchingMatch(false);
-          } else {
-              setMatchId(null);
-          }
-      };
-      findMatch();
-  }, [player1TeamId, player2TeamId, activeWeekId]);
+        const getSnapshotState = (currentPhase: Phase, currentStep: Step, turn: number): SpectatorStateUpdate => ({
+            gameSessionId: "imported-cor-match", player1Id: asEntityId("p1"), player2Id: asEntityId("p2"),
+            player1Name: team1Name, player2Name: team2Name, currentPhase, activePlayerId: asEntityId("p1"),
+            priorityPlayerId: null, isReplay: true, combat: null,
+            gameState: {
+                viewingPlayerId: asEntityId("p1"),
+                cards: JSON.parse(JSON.stringify(activeCards)),
+                zones: JSON.parse(JSON.stringify(activeZones)) as unknown as ClientZone[],
+                players: JSON.parse(JSON.stringify(activePlayers)) as unknown as ClientPlayer[],
+                currentPhase, currentStep, turnNumber: turn,
+                activePlayerId: asEntityId("p1"), priorityPlayerId: asEntityId("p1"),
+                isGameOver: false, winnerId: null, combat: null, gameLog: []
+            }
+        });
 
-   // ============================================================================
-  // ARGENTUM STATE BUILDER
-  // ============================================================================
-  const buildArgentumStates = (
-      replayObject: Record<string, unknown>, 
-      cardDict: Map<number, string>, 
-      cardDbMap: Map<string, DbCardMeta>,
-      team1Name: string,
-      team2Name: string
-  ): SpectatorStateUpdate[] => {
-      const states: SpectatorStateUpdate[] = [];
-      const asEntityId = (id: string): EntityId => id as EntityId;
-      
-      // THE FIX: Maintain local MUTABLE tracking structures to avoid TypeScript readonly errors
-      const activeCards: Record<string, ClientCard> = {};
-      const activeZones: Array<{
-          zoneId: { ownerId: EntityId; zoneType: string };
-          cardIds: EntityId[];
-          size: number;
-          isVisible: boolean;
-      }> = [];
+        const rawEventList = (replayObject.event_list || replayObject.eventList) as Array<Record<string, unknown>>;
+        if (!rawEventList) return [];
 
-      // Helper function to assemble a fresh, Readonly snapshot
-      const getSnapshotState = (): SpectatorStateUpdate => ({
-          gameSessionId: "imported-cor-match",
-          player1Id: asEntityId("p1"),
-          player2Id: asEntityId("p2"),
-          player1Name: team1Name, 
-          player2Name: team2Name, 
-          currentPhase: "MULLIGAN" as Phase,
-          activePlayerId: asEntityId("p1"),
-          priorityPlayerId: null,
-          isReplay: true,
-          combat: null,
-          gameState: {
-              viewingPlayerId: asEntityId("p1"),
-              // Deep copy the local mutable tracking state into the readonly structure
-              cards: JSON.parse(JSON.stringify(activeCards)) as Record<EntityId, ClientCard>,
-              zones: JSON.parse(JSON.stringify(activeZones)) as unknown as ClientZone[],
-              players: [
-                  { playerId: asEntityId('p1'), name: team1Name, life: 20, poisonCounters: 0, handSize: 0, librarySize: 0, graveyardSize: 0, exileSize: 0, landsPlayedThisTurn: 0, hasLost: false },
-                  { playerId: asEntityId('p2'), name: team2Name, life: 20, poisonCounters: 0, handSize: 0, librarySize: 0, graveyardSize: 0, exileSize: 0, landsPlayedThisTurn: 0, hasLost: false }
-              ],
-              currentPhase: "MULLIGAN" as Phase,
-              currentStep: "OPENING_HAND" as Step,
-              activePlayerId: asEntityId("p1"),
-              priorityPlayerId: asEntityId("p1"),
-              turnNumber: 0,
-              isGameOver: false,
-              winnerId: null,
-              combat: null,
-              gameLog: []
-          }
-      });
+        const cockatricePlayerMap = new Map<number, string>();
+        let currentTurn = 0;
+        let currentPhase: Phase = 'UNTAP';
 
-      const rawEventList = (replayObject.eventList || replayObject.event_list) as Array<Record<string, unknown>>;
-      if (!rawEventList) return [getSnapshotState()];
+        for (const container of rawEventList) {
+            const events = (container.event_list || container.eventList || []) as Array<Record<string, unknown>>;
+            let stateChangedInContainer = false;
 
-      const cockatricePlayerMap = new Map<number, string>();
+            for (const ev of events) {
+                const playerId = (ev.player_id ?? ev.playerId) as number;
+                
+                // GameStateChanged: Initialize players and zones
+                if (ev.ext_game_state_changed && activePlayers.length === 0) {
+                    const stateChange = ev.ext_game_state_changed as Record<string, unknown>;
+                    const playerList = (stateChange.player_list || stateChange.playerList) as Array<Record<string, unknown>>;
+                    
+                    if (playerList) {
+                        let pIndex = 1;
+                        playerList.forEach(p => {
+                            const props = p.properties as Record<string, unknown>;
+                            const pId = (props?.player_id ?? props?.playerId) as number;
+                            if (props && typeof pId === 'number' && pIndex <= 2) {
+                                const mappedId = `p${pIndex}`;
+                                cockatricePlayerMap.set(pId, mappedId);
+                                activePlayers.push({ playerId: asEntityId(mappedId), name: pIndex === 1 ? team1Name : team2Name, life: 20, poisonCounters: 0, handSize: 0, librarySize: 0, graveyardSize: 0, exileSize: 0, landsPlayedThisTurn: 0, hasLost: false });
+                                ["deck", "hand", "table", "grave", "rfg", "sb"].forEach(zType => {
+                                    activeZones.push({ zoneId: { ownerId: asEntityId(mappedId), zoneType: zType === "table" ? "BATTLEFIELD" : zType.toUpperCase() }, cardIds: [], size: 0, isVisible: zType !== "deck" });
+                                });
+                                pIndex++;
+                            }
+                        });
+                    }
+                    stateChangedInContainer = true;
+                }
 
-      // 2. Event Processing Loop
-      for (const container of rawEventList) {
-          const events = (container.eventList || container.event_list || []) as Array<Record<string, unknown>>;
-          let stateChangedInContainer = false;
+                // SetActivePhase: Update turn and phase
+                if (ev.ext_set_active_phase) {
+                    const phaseChange = ev.ext_set_active_phase as { phase?: number };
+                    const newPhase = phaseChange.phase;
+                    if (typeof newPhase === 'number') {
+                        if (newPhase === 0) currentTurn++;
+                        currentPhase = PHASE_MAP[newPhase] || currentPhase;
+                        stateChangedInContainer = true;
+                    }
+                }
 
-          for (const ev of events) {
-              // Map GameStateChanged (identifies players and initial zones)
-              if (ev.extGameStateChanged || ev.ext_game_state_changed) {
-                  const stateChange = (ev.extGameStateChanged || ev.ext_game_state_changed) as Record<string, unknown>;
-                  const playerList = (stateChange.playerList || stateChange.player_list) as Array<Record<string, unknown>>;
-                  
-                  if (playerList && cockatricePlayerMap.size === 0) {
-                      let pIndex = 1;
-                      playerList.forEach(p => {
-                          const props = p.properties as Record<string, unknown>;
-                          if (props && typeof props.playerId === 'number' && pIndex <= 2) {
-                              cockatricePlayerMap.set(props.playerId, `p${pIndex}`);
-                              const mappedId = `p${pIndex}`;
-                              
-                              // Safely mutate local tracking array (NOT the readonly state)
-                              ["deck", "hand", "table", "grave", "rfg", "sb"].forEach(zType => {
-                                  activeZones.push({
-                                      zoneId: { ownerId: asEntityId(mappedId), zoneType: zType === "table" ? "BATTLEFIELD" : zType.toUpperCase() },
-                                      cardIds: [],
-                                      size: 0,
-                                      isVisible: zType !== "deck"
-                                  });
-                              });
-                              pIndex++;
-                          }
-                      });
-                  }
-                  stateChangedInContainer = true;
-              }
+                // SetCounter: Update life totals
+                if (ev.ext_set_counter) {
+                    const counterChange = ev.ext_set_counter as { counter_id?: number, value?: number };
+                    const playerToUpdate = activePlayers.find(p => p.playerId === cockatricePlayerMap.get(counterChange.counter_id ?? -1));
+                    if (playerToUpdate && typeof counterChange.value === 'number') {
+                        playerToUpdate.life = counterChange.value;
+                        stateChangedInContainer = true;
+                    }
+                }
 
-              // Map MoveCard (Cards moving between zones)
-             
-             if (ev.extMoveCard || ev.ext_move_card) {
-                  const move = (ev.extMoveCard || ev.ext_move_card) as Record<string, unknown>;
-                  
-                  // THE FIX: Wrap the ?? statements in parentheses so the entire result is cast
-                  const cardId = (move.cardId ?? move.card_id) as number;
-                  const newCardId = (move.newCardId ?? move.new_card_id) as number;
-                  const targetZone = (move.targetZone ?? move.target_zone) as string;
-                  const targetPlayer = (move.targetPlayerId ?? move.target_player_id) as number;
-               
-                  const mappedOwner = cockatricePlayerMap.get(targetPlayer);
-                  const activeCardId = newCardId > 0 ? newCardId : cardId;
-                  
-                  if (mappedOwner && activeCardId > 0 && targetZone) {
-                      const cardName = cardDict.get(activeCardId) || cardDict.get(cardId) || "Unknown Card";
-                      const dbMeta = cardDbMap.get(cardName.toLowerCase());
-                      const strCardId = activeCardId.toString();
+                // SetCardAttr: Handle tapping/untapping
+                if (ev.ext_set_card_attr) {
+                    const attrChange = ev.ext_set_card_attr as { card_id?: number, card_attr?: string, attr_value?: string };
+                    if (attrChange.card_attr === 'tapped' && attrChange.card_id) {
+                        const card = activeCards[attrChange.card_id.toString()];
+                        if (card) {
+                            card.isTapped = attrChange.attr_value === '1';
+                            stateChangedInContainer = true;
+                        }
+                    }
+                }
+                
+                // MoveCard: The core of the replay viewer
+                if (ev.ext_move_card) {
+                    const move = ev.ext_move_card as Record<string, unknown>;
+                    const cardId = (move.card_id ?? move.cardId) as number;
+                    const newCardId = (move.new_card_id ?? move.newCardId) as number;
+                    const targetPlayer = (move.target_player_id ?? move.targetPlayerId) as number;
+                    const targetZone = (move.target_zone ?? move.targetZone) as string;
+                    
+                    const mappedOwner = cockatricePlayerMap.get(targetPlayer);
+                    const activeCardId = newCardId > 0 ? newCardId : cardId;
+                    
+                    if (mappedOwner && activeCardId > 0 && targetZone) {
+                        const cardName = cardDict.get(activeCardId) || "Unknown Card";
+                        const dbMeta = cardDbMap.get(cardName.toLowerCase());
+                        const strCardId = asEntityId(activeCardId.toString());
 
-                      // Safely instantiate missing ClientCard required fields into the mutable map
-                      if (!activeCards[strCardId]) {
-                          activeCards[strCardId] = {
-                              id: asEntityId(strCardId),
-                              name: cardName,
-                              imageUri: dbMeta?.image_url || undefined,
-                              cardTypes: dbMeta?.card_type?.split(" ") || [],
-                              manaCost: "",
-                              manaValue: 0,
-                              typeLine: dbMeta?.card_type || "",
-                              subtypes: [],
-                              colors: [],
-                              oracleText: "",
-                              power: null,
-                              toughness: null,
-                              basePower: null,
-                              baseToughness: null,
-                              damage: null,
-                              keywords: [],
-                              counters: {},
-                              isTapped: false,
-                              hasSummoningSickness: false,
-                              isTransformed: false,
-                              isAttacking: false,
-                              isBlocking: false,
-                              attackingTarget: null,
-                              blockingTarget: null,
-                              controllerId: asEntityId(mappedOwner),
-                              ownerId: asEntityId(mappedOwner),
-                              isToken: false,
-                              zone: null,
-                              attachedTo: null,
-                              attachments: [],
-                              isFaceDown: false,
-                              targets: []
-                          } as unknown as ClientCard;
-                      }
+                        if (!activeCards[strCardId as string]) {
+                            activeCards[strCardId as string] = { id: strCardId, name: cardName, imageUri: dbMeta?.image_url, cardTypes: dbMeta?.card_type?.split(" ") || [], manaCost: "", manaValue: 0, typeLine: dbMeta?.card_type || "", subtypes: [], colors: [], oracleText: "", power: null, toughness: null, basePower: null, baseToughness: null, damage: null, keywords: [], counters: {}, isTapped: false, hasSummoningSickness: false, isTransformed: false, isAttacking: false, isBlocking: false, attackingTarget: null, blockingTarget: null, controllerId: asEntityId(mappedOwner), ownerId: asEntityId(mappedOwner), isToken: false, zone: null, attachedTo: null, attachments: [], isFaceDown: false, targets: [] } as unknown as ClientCard;
+                        }
 
-                      const targetZoneType = targetZone === "table" ? "BATTLEFIELD" : targetZone.toUpperCase();
-                      const zone = activeZones.find(z => z.zoneId.ownerId === mappedOwner && z.zoneId.zoneType === targetZoneType);
-                      
-                      if (zone && !zone.cardIds.includes(asEntityId(strCardId))) {
-                          // Clean remove from other zones
-                          activeZones.forEach(z => {
-                              z.cardIds = z.cardIds.filter(id => id !== strCardId);
-                              z.size = z.cardIds.length;
-                          });
-                          // Push to new zone
-                          zone.cardIds.push(asEntityId(strCardId));
-                          zone.size = zone.cardIds.length;
-                      }
-                      stateChangedInContainer = true;
-                  }
-              }
-          }
+                        const targetZoneType = targetZone === "table" ? "BATTLEFIELD" : targetZone.toUpperCase();
+                        const zone = activeZones.find(z => z.zoneId.ownerId === mappedOwner && z.zoneId.zoneType === targetZoneType);
+                        
+                        if (zone && !zone.cardIds.includes(strCardId)) {
+                            activeZones.forEach(z => { z.cardIds = z.cardIds.filter(id => id !== strCardId); z.size = z.cardIds.length; });
+                            zone.cardIds.push(strCardId);
+                            zone.size = zone.cardIds.length;
+                        }
+                        stateChangedInContainer = true;
+                    }
+                }
+            }
 
-          // 3. Take a readonly snapshot after processing the container
-          if (stateChangedInContainer) {
-              states.push(getSnapshotState());
-          }
-      }
+            if (stateChangedInContainer) {
+                states.push(getSnapshotState(currentPhase, 'MAIN', currentTurn));
+            }
+        }
 
-      if (states.length === 0) {
-          states.push(getSnapshotState());
-      }
-
-      return states;
-  };
+        return states;
+    };
 
 
 
