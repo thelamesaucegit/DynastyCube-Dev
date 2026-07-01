@@ -125,7 +125,42 @@ const PHASE_MAP: Record<number, Phase> = {
 // COMPONENT LOGIC
 // ============================================================================
 export default function CockatriceUploader() {
-    // ... (keep all state and useEffect hooks the same)
+  const [isDragging, setIsDragging] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [teams, setTeams] = useState<UploaderTeam[]>([]);
+  const [player1TeamId, setPlayer1TeamId] = useState<string>("");
+  const [player2TeamId, setPlayer2TeamId] = useState<string>("");
+  const [matchId, setMatchId] = useState<string | null>(null);
+  const [isSearchingMatch, setIsSearchingMatch] = useState(false);
+  const [activeWeekId, setActiveWeekId] = useState<string | null>(null);
+
+  useEffect(() => {
+      const loadContext = async () => {
+          const res = await getReplayUploaderData();
+          if (res.success) {
+              setTeams(res.teams);
+              setActiveWeekId(res.activeWeekId);
+              if (res.userTeamId) setPlayer1TeamId(res.userTeamId);
+          }
+      };
+      loadContext();
+  }, []);
+
+  useEffect(() => {
+      const findMatch = async () => {
+          if (player1TeamId && player2TeamId && activeWeekId) {
+              setIsSearchingMatch(true);
+              const res = await findMatchIdForTeams(player1TeamId, player2TeamId, activeWeekId);
+              setMatchId(res.matchId);
+              setIsSearchingMatch(false);
+          } else {
+              setMatchId(null);
+          }
+      };
+      findMatch();
+  }, [player1TeamId, player2TeamId, activeWeekId]);
 
    // ============================================================================
   // ARGENTUM STATE BUILDER
