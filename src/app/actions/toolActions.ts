@@ -1,9 +1,18 @@
 // src/app/actions/toolActions.ts
 "use server";
 
-// We use require because 'lzma' doesn't have official TypeScript definitions
-// Make sure you ran: npm install lzma
-const lzma = require("lzma");
+// THE FIX: Use standard ES import instead of require()
+import lzmaModule from "lzma";
+
+// Cast to handle lack of typings safely without violating linter rules
+interface LzmaDecompressor {
+  decompress: (
+    byteList: Buffer,
+    callback: (result: number[] | string | null, error: Error | null) => void
+  ) => void;
+}
+
+const lzma = lzmaModule as unknown as LzmaDecompressor;
 
 /**
  * Decompresses an LZMA-compressed base64 string.
