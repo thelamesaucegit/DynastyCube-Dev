@@ -15,7 +15,7 @@ import {
   type UploaderTeam 
 } from "@/app/actions/replayActions";
 
-import type { SpectatorStateUpdate } from "@/types"; // Use your project's types path here
+import type { SpectatorStateUpdate, ClientPlayer, ClientCard, ClientZone, EntityId, Phase, Step } from "@/types"; // Use your project's types path here
 
 // ============================================================================
 // COCKATRICE PROTOBUF SCHEMA (EXACT MATCH)
@@ -177,71 +177,78 @@ export default function CockatriceUploader() {
       team2Name: string
   ): SpectatorStateUpdate[] => {
       const states: SpectatorStateUpdate[] = [];
+      const asEntityId = (id: string): EntityId => id as EntityId;
       
-      // 1. Initialize the Base State
-      const currentState: SpectatorStateUpdate = {
+      // THE FIX: Maintain local MUTABLE tracking structures to avoid TypeScript readonly errors
+      const activeCards: Record<string, ClientCard> = {};
+      const activeZones: Array<{
+          zoneId: { ownerId: EntityId; zoneType: string };
+          cardIds: EntityId[];
+          size: number;
+          isVisible: boolean;
+      }> = [];
+
+      // Helper function to assemble a fresh, Readonly snapshot
+      const getSnapshotState = (): SpectatorStateUpdate => ({
           gameSessionId: "imported-cor-match",
-          player1Id: "p1",
-          player2Id: "p2",
-          player1Name: team1Name, // Immediately use the selected Team Names!
+          player1Id: asEntityId("p1"),
+          player2Id: asEntityId("p2"),
+          player1Name: team1Name, 
           player2Name: team2Name, 
-          currentPhase: "MULLIGAN",
-          activePlayerId: null,
+          currentPhase: "MULLIGAN" as Phase,
+          activePlayerId: asEntityId("p1"),
           priorityPlayerId: null,
           isReplay: true,
           combat: null,
           gameState: {
-              cards: {},
-              zones: [],
+              viewingPlayerId: asEntityId("p1"),
+              // Deep copy the local mutable tracking state into the readonly structure
+              cards: JSON.parse(JSON.stringify(activeCards)) as Record<EntityId, ClientCard>,
+              zones: JSON.parse(JSON.stringify(activeZones)) as unknown as ClientZone[],
               players: [
-                  { playerId: 'p1', name: team1Name, life: 20 },
-                  { playerId: 'p2', name: team2Name, life: 20 }
+                  { playerId: asEntityId('p1'), name: team1Name, life: 20, poisonCounters: 0, handSize: 0, librarySize: 0, graveyardSize: 0, exileSize: 0, landsPlayedThisTurn: 0, hasLost: false },
+                  { playerId: asEntityId('p2'), name: team2Name, life: 20, poisonCounters: 0, handSize: 0, librarySize: 0, graveyardSize: 0, exileSize: 0, landsPlayedThisTurn: 0, hasLost: false }
               ],
-              currentPhase: "MULLIGAN",
-              currentStep: "OPENING_HAND",
-              activePlayerId: null,
-              priorityPlayerId: null,
+              currentPhase: "MULLIGAN" as Phase,
+              currentStep: "OPENING_HAND" as Step,
+              activePlayerId: asEntityId("p1"),
+              priorityPlayerId: asEntityId("p1"),
               turnNumber: 0,
               isGameOver: false,
               winnerId: null,
               combat: null,
               gameLog: []
           }
-      };
+      });
 
       const rawEventList = (replayObject.eventList || replayObject.event_list) as Array<Record<string, unknown>>;
-      if (!rawEventList) return [currentState];
+      if (!rawEventList) return [getSnapshotState()];
 
-      // We need to map Cockatrice's internal Player IDs (e.g. 0 and 1) to our "p1" and "p2"
       const cockatricePlayerMap = new Map<number, string>();
 
       // 2. Event Processing Loop
       for (const container of rawEventList) {
           const events = (container.eventList || container.event_list || []) as Array<Record<string, unknown>>;
-          
           let stateChangedInContainer = false;
 
           for (const ev of events) {
-              const playerId = ev.playerId ?? ev.player_id as number;
-              
               // Map GameStateChanged (identifies players and initial zones)
               if (ev.extGameStateChanged || ev.ext_game_state_changed) {
                   const stateChange = (ev.extGameStateChanged || ev.ext_game_state_changed) as Record<string, unknown>;
                   const playerList = (stateChange.playerList || stateChange.player_list) as Array<Record<string, unknown>>;
                   
                   if (playerList && cockatricePlayerMap.size === 0) {
-                      // Grab the first two non-spectator players to be p1 and p2
                       let pIndex = 1;
                       playerList.forEach(p => {
                           const props = p.properties as Record<string, unknown>;
                           if (props && typeof props.playerId === 'number' && pIndex <= 2) {
                               cockatricePlayerMap.set(props.playerId, `p${pIndex}`);
-                              
-                              // Initialize their basic zones
                               const mappedId = `p${pIndex}`;
+                              
+                              // Safely mutate local tracking array (NOT the readonly state)
                               ["deck", "hand", "table", "grave", "rfg", "sb"].forEach(zType => {
-                                  currentState.gameState.zones.push({
-                                      zoneId: { ownerId: mappedId, zoneType: zType === "table" ? "BATTLEFIELD" : zType.toUpperCase() },
+                                  activeZones.push({
+                                      zoneId: { ownerId: asEntityId(mappedId), zoneType: zType === "table" ? "BATTLEFIELD" : zType.toUpperCase() },
                                       cardIds: [],
                                       size: 0,
                                       isVisible: zType !== "deck"
@@ -255,13 +262,16 @@ export default function CockatriceUploader() {
               }
 
               // Map MoveCard (Cards moving between zones)
-              if (ev.extMoveCard || ev.ext_move_card) {
+             
+             if (ev.extMoveCard || ev.ext_move_card) {
                   const move = (ev.extMoveCard || ev.ext_move_card) as Record<string, unknown>;
-                  const cardId = move.cardId ?? move.card_id as number;
-                  const newCardId = move.newCardId ?? move.new_card_id as number;
-                  const targetZone = move.targetZone ?? move.target_zone as string;
-                  const targetPlayer = move.targetPlayerId ?? move.target_player_id as number;
                   
+                  // THE FIX: Wrap the ?? statements in parentheses so the entire result is cast
+                  const cardId = (move.cardId ?? move.card_id) as number;
+                  const newCardId = (move.newCardId ?? move.new_card_id) as number;
+                  const targetZone = (move.targetZone ?? move.target_zone) as string;
+                  const targetPlayer = (move.targetPlayerId ?? move.target_player_id) as number;
+               
                   const mappedOwner = cockatricePlayerMap.get(targetPlayer);
                   const activeCardId = newCardId > 0 ? newCardId : cardId;
                   
@@ -270,33 +280,55 @@ export default function CockatriceUploader() {
                       const dbMeta = cardDbMap.get(cardName.toLowerCase());
                       const strCardId = activeCardId.toString();
 
-                      // Ensure the card exists in our state
-                      if (!currentState.gameState.cards[strCardId]) {
-                          currentState.gameState.cards[strCardId] = {
-                              entityId: strCardId,
+                      // Safely instantiate missing ClientCard required fields into the mutable map
+                      if (!activeCards[strCardId]) {
+                          activeCards[strCardId] = {
+                              id: asEntityId(strCardId),
                               name: cardName,
                               imageUri: dbMeta?.image_url || undefined,
                               cardTypes: dbMeta?.card_type?.split(" ") || [],
+                              manaCost: "",
+                              manaValue: 0,
+                              typeLine: dbMeta?.card_type || "",
+                              subtypes: [],
+                              colors: [],
+                              oracleText: "",
+                              power: null,
+                              toughness: null,
+                              basePower: null,
+                              baseToughness: null,
+                              damage: null,
+                              keywords: [],
+                              counters: {},
                               isTapped: false,
+                              hasSummoningSickness: false,
+                              isTransformed: false,
                               isAttacking: false,
                               isBlocking: false,
-                              damage: 0,
+                              attackingTarget: null,
+                              blockingTarget: null,
+                              controllerId: asEntityId(mappedOwner),
+                              ownerId: asEntityId(mappedOwner),
+                              isToken: false,
+                              zone: null,
+                              attachedTo: null,
+                              attachments: [],
+                              isFaceDown: false,
                               targets: []
-                          };
+                          } as unknown as ClientCard;
                       }
 
-                      // Update Zone tracking
                       const targetZoneType = targetZone === "table" ? "BATTLEFIELD" : targetZone.toUpperCase();
-                      const zone = currentState.gameState.zones.find(z => z.zoneId.ownerId === mappedOwner && z.zoneId.zoneType === targetZoneType);
+                      const zone = activeZones.find(z => z.zoneId.ownerId === mappedOwner && z.zoneId.zoneType === targetZoneType);
                       
-                      if (zone && !zone.cardIds.includes(strCardId)) {
-                          // Remove from old zones
-                          currentState.gameState.zones.forEach(z => {
+                      if (zone && !zone.cardIds.includes(asEntityId(strCardId))) {
+                          // Clean remove from other zones
+                          activeZones.forEach(z => {
                               z.cardIds = z.cardIds.filter(id => id !== strCardId);
                               z.size = z.cardIds.length;
                           });
-                          // Add to new zone
-                          zone.cardIds.push(strCardId);
+                          // Push to new zone
+                          zone.cardIds.push(asEntityId(strCardId));
                           zone.size = zone.cardIds.length;
                       }
                       stateChangedInContainer = true;
@@ -304,19 +336,19 @@ export default function CockatriceUploader() {
               }
           }
 
-          // 3. Snapshot the state after processing the container
+          // 3. Take a readonly snapshot after processing the container
           if (stateChangedInContainer) {
-              states.push(JSON.parse(JSON.stringify(currentState)));
+              states.push(getSnapshotState());
           }
       }
 
-      // If no movements were tracked, ensure at least the base state is returned
       if (states.length === 0) {
-          states.push(JSON.parse(JSON.stringify(currentState)));
+          states.push(getSnapshotState());
       }
 
       return states;
   };
+
 
 
  // ============================================================================
