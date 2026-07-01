@@ -1,58 +1,34 @@
 // src/app/actions/toolActions.ts
 "use server";
 
-// THE FIX: Use standard ES import instead of require()
-import * as lzmaModule from "lzma";
-
-// Cast to handle lack of typings safely without violating linter rules
-interface LzmaDecompressor {
-  decompress: (
-    byteList: Buffer,
-    callback: (result: number[] | string | null, error: Error | null) => void
-  ) => void;
-}
-
-const lzma = lzmaModule as unknown as LzmaDecompressor;
+import { decompress } from "lzma1";
 
 /**
- * Decompresses an LZMA-compressed base64 string.
+ * Decompresses an LZMA-compressed base64 string using the 'lzma1' library.
  * Returns the decompressed data as a base64 string.
  */
 export async function decompress_lzma_replay(base64Data: string): Promise<string | null> {
     try {
-        console.log("[Tool Actions] Starting LZMA decompression...");
+        console.log("[Tool Actions] Starting LZMA decompression with 'lzma1'...");
         
-        // Convert the base64 string from the client into a Node.js Buffer
+        // 1. Convert the base64 string from the client into a Node.js Buffer.
+        //    A Buffer is a Uint8Array, which is what the library expects.
         const compressedBuffer = Buffer.from(base64Data, "base64");
         
-        return new Promise((resolve) => {
-            // The lzma library uses a callback structure for decompression
-            lzma.decompress(compressedBuffer, (result: number[] | string | null, error: Error | null) => {
-                if (error) {
-                    console.error("[Tool Actions] ❌ LZMA Decompression Error:", error);
-                    // If decompression fails (e.g., the file wasn't actually compressed),
-                    // fallback to returning the original data just in case.
-                    resolve(base64Data);
-                } else if (result) {
-                    console.log("[Tool Actions] ✅ Decompression successful!");
-                    
-                    // Convert the decompressed array/string back into a Buffer, then to base64
-                    let decompressedBuffer: Buffer;
-                    if (typeof result === "string") {
-                        decompressedBuffer = Buffer.from(result, "utf8");
-                    } else {
-                        decompressedBuffer = Buffer.from(result);
-                    }
-                    
-                    resolve(decompressedBuffer.toString("base64"));
-                } else {
-                    console.error("[Tool Actions] ❌ Decompression returned null result.");
-                    resolve(null);
-                }
-            });
-        });
+        // 2. Decompress the buffer synchronously.
+        const decompressedUint8Array = decompress(compressedBuffer);
+        
+        // 3. Convert the resulting Uint8Array back into a Buffer and then to a base64 string.
+        const resultBase64 = Buffer.from(decompressedUint8Array).toString("base64");
+
+        console.log("[Tool Actions] ✅ Decompression successful!");
+        
+        return resultBase64;
+
     } catch (error) {
         console.error("[Tool Actions] ❌ Unexpected error during decompression:", error);
+        // If the file wasn't compressed, lzma1 might throw an error. 
+        // We can add a fallback if needed, but for now, we'll let the error surface.
         return null;
     }
 }
