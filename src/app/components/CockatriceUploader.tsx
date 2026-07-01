@@ -1,5 +1,3 @@
-//src/app/components/CockatriceUploader.tsx
-
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
@@ -8,12 +6,13 @@ import { Upload, FileCode2, Loader2, CheckCircle2, AlertCircle } from "lucide-re
 import { toast } from "sonner";
 import * as protobuf from "protobufjs";
 import { fetchReplayMetadata, getReplayUploaderData, findMatchIdForTeams, type DbCardMeta, type UploaderTeam } from "@/app/actions/replayActions";
-import { decompress_lzma_replay } from "@/app/actions/toolActions"; // Assuming the tool is available here
 import type { SpectatorStateUpdate } from "@/app/types";
 
 // ============================================================================
-// COCKATRICE PROTOBUF SCHEMA
+// COCKATRICE PROTOBUF SCHEMA (THE FLAT HACK)
 // ============================================================================
+// By defining the extensions as hardcoded optional fields using their tag IDs,
+// protobufjs will parse them effortlessly without needing complex extension logic.
 const COCKATRICE_SCHEMA = `
   syntax = "proto2";
   package cockatrice;
@@ -29,14 +28,33 @@ const COCKATRICE_SCHEMA = `
       repeated ServerInfo_Card sideboard = 5;
   }
   
+  message ServerInfo_Zone {
+      optional string name = 1;
+      optional string type = 2;
+      repeated ServerInfo_Card card_list = 4;
+  }
+
   message Event_Join {
       optional ServerInfo_PlayerProperties player_properties = 1;
   }
 
+  message Event_DumpZone {
+      optional ServerInfo_PlayerProperties player_properties = 1;
+      optional ServerInfo_Zone zone_info = 2;
+  }
+
+  message Event_DrawCards {
+      optional sint32 number = 1;
+      repeated ServerInfo_Card cards = 2;
+  }
+
   message GameEvent {
       optional sint32 player_id = 1 [default = -1];
-      extensions 100 to max;
+      
+      // THE FIX: Hardcode the extensions as optional fields!
       optional Event_Join ext_join = 1000;
+      optional Event_DumpZone ext_dump_zone = 2018;
+      optional Event_DrawCards ext_draw_cards = 2005;
   }
   
   message GameEventContainer {
@@ -55,12 +73,30 @@ const COCKATRICE_SCHEMA = `
 const parsedSchema = protobuf.parse(COCKATRICE_SCHEMA).root;
 const GameReplayMessage = parsedSchema.lookupType("cockatrice.GameReplay");
 
-interface ParsedCard { id?: number; name?: string; }
-interface ParsedJoinEvent { player_properties?: { main_deck?: ParsedCard[], sideboard?: ParsedCard[] } }
-interface ParsedGameEvent { ext_join?: ParsedJoinEvent; }
-interface ParsedContainer { event_list?: ParsedGameEvent[]; }
-interface ParsedReplay { event_list?: ParsedContainer[]; }
+// ============================================================================
+// DICTIONARY BUILDER
+// ============================================================================
 
+// Type-safe recursive search to sweep the ENTIRE replay for card definitions
+const extractCardDictionary = (obj: unknown, dict = new Map<number, string>()): Map<number, string> => {
+    if (!obj || typeof obj !== 'object') return dict;
+
+    if (Array.isArray(obj)) {
+        obj.forEach(item => extractCardDictionary(item, dict));
+    } else {
+        const record = obj as Record<string, unknown>;
+        
+        if (typeof record.id === 'number' && typeof record.name === 'string') {
+            if (record.id > 0 && record.name.trim().length > 0) {
+                dict.set(record.id, record.name);
+            }
+        }
+        
+        Object.values(record).forEach(val => extractCardDictionary(val, dict));
+    }
+    
+    return dict;
+};
 
 // ============================================================================
 // COMPONENT LOGIC
@@ -103,92 +139,53 @@ export default function CockatriceUploader() {
       };
       findMatch();
   }, [player1TeamId, player2TeamId, activeWeekId]);
-  
- const processCorFile = async (file: File) => {
-    if (!player1TeamId || !player2TeamId) {
-        toast.error("Please select both teams before uploading.");
-        return;
-    }
-    if (player1TeamId === player2TeamId) {
-        toast.error("The two competing teams cannot be the same.");
-        return;
-    }
-    if (!file.name.endsWith('.cor')) {
-      toast.error("Invalid file type. Please upload a .cor file.");
-      return;
-    }
+
+  const processCorFile = async (file: File) => {
+    if (!player1TeamId || !player2TeamId) { toast.error("Please select both teams."); return; }
+    if (player1TeamId === player2TeamId) { toast.error("Teams must be different."); return; }
+    if (!file.name.endsWith('.cor')) { toast.error("Invalid file type."); return; }
 
     setIsProcessing(true);
-   try {
+    try {
       const arrayBuffer = await file.arrayBuffer();
-      
-      // 1. Convert to Base64 to send to Python
-      const base64String = btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(arrayBuffer))));
-      
-      console.log("[Uploader] 1. File encoded. Calling Python decompressor...");
-      
-      // 2. Decompress via Python tool
-      const decompressedBase64 = await decompress_lzma_replay(base64String);
-      
-      if (!decompressedBase64) {
-        throw new Error("Decompression failed. The file may be corrupted.");
-      }
-      
-      console.log("[Uploader] 2. Decompression successful. Decoding protobuf...");
+      const uint8Array = new Uint8Array(arrayBuffer);
 
-      // 3. Decode the returned (decompressed) base64 string back to bytes
-      const decodedString = atob(decompressedBase64);
-      const uint8Array = new Uint8Array(decodedString.length);
-      for (let i = 0; i < decodedString.length; i++) {
-          uint8Array[i] = decodedString.charCodeAt(i);
-      }
-
-      // 4. Decode the raw protobuf bytes
+      console.log("[Uploader] Decoding raw protobuf bytes...");
       const decodedReplay = GameReplayMessage.decode(uint8Array);
-      const replayObject = GameReplayMessage.toObject(decodedReplay) as ParsedReplay;
       
-      if (!replayObject.event_list || replayObject.event_list.length === 0) {
-        throw new Error("Replay file is empty or contains no events after decompression.");
+      const replayObject = GameReplayMessage.toObject(decodedReplay, { 
+          enums: String,
+          longs: Number,
+          bytes: Array
+      }) as Record<string, unknown>;
+
+      const rawEventList = replayObject.eventList || replayObject.event_list;
+
+      if (!rawEventList || !Array.isArray(rawEventList) || rawEventList.length === 0) {
+        throw new Error("Replay file is empty or contains no events.");
       }
 
-      const cardDictionary = new Map<number, string>();
+      console.log(`[Uploader] Deep-sweeping ${rawEventList.length} parsed containers...`);
+      const cardDictionary = extractCardDictionary(replayObject);
 
-      for (const eventContainer of replayObject.event_list) {
-        if (!eventContainer.event_list) continue;
-        for (const gameEvent of eventContainer.event_list) {
-            if (gameEvent.ext_join?.player_properties) {
-                const properties = gameEvent.ext_join.player_properties;
-                if (properties.main_deck) {
-                    properties.main_deck.forEach(card => {
-                        if (card.id != null && card.name) cardDictionary.set(card.id, card.name);
-                    });
-                }
-                if (properties.sideboard) {
-                    properties.sideboard.forEach(card => {
-                        if (card.id != null && card.name) cardDictionary.set(card.id, card.name);
-                    });
-                }
-            }
-        }
-      }
-
+      console.log(`[Uploader] 📚 Dictionary built! Found ${cardDictionary.size} unique cards/tokens.`);
+      console.log("[Uploader] DICTIONARY DUMP:", Object.fromEntries(cardDictionary));
+      
       if (cardDictionary.size === 0) {
-        throw new Error("Failed to extract card IDs. The replay file is valid, but no decklists were found inside.");
+          throw new Error("Failed to extract card IDs. The replay may be corrupted.");
       }
 
-      toast.success(`Success! Found ${cardDictionary.size} cards.`);
-      // The rest of the logic (buildArgentumStates, API call) will be added back here
-      // once this step is confirmed to be working.
+      toast.success(`Successfully mapped ${cardDictionary.size} cards! Check the console.`);
 
     } catch (error) {
-      console.error("Error in processCorFile:", error);
-      toast.error(error instanceof Error ? error.message : "An unknown error occurred.");
+      console.error("Error decoding .cor file:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to parse the Cockatrice Replay.");
     } finally {
       setIsProcessing(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
-  
+
   return (
     <Card className="w-full max-w-md mx-auto shadow-md border-border/50">
         <CardHeader>
