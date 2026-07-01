@@ -141,42 +141,50 @@ export default function CockatriceUploader() {
       findMatch();
   }, [player1TeamId, player2TeamId, activeWeekId]);
 
-  const processCorFile = async (file: File) => {
-    if (!player1TeamId || !player2TeamId) { toast.error("Please select both teams."); return; }
-    if (player1TeamId === player2TeamId) { toast.error("Teams must be different."); return; }
-    if (!file.name.endsWith('.cor')) { toast.error("Invalid file type."); return; }
-
+   const processCorFile = async (file: File) => {
     setIsProcessing(true);
     try {
       const arrayBuffer = await file.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
 
-      console.log("[Uploader] Decoding raw protobuf bytes...");
+      console.log("[Diagnostic] Decoding raw protobuf bytes...");
       const decodedReplay = GameReplayMessage.decode(uint8Array);
       
       const replayObject = GameReplayMessage.toObject(decodedReplay, { 
           enums: String,
-          longs: Number,
-          bytes: Array
+          longs: Number, // Forces ints to be numbers
+          bytes: Array,
+          defaults: true // Forces protobuf to include empty arrays/objects so we can see the shape!
       }) as Record<string, unknown>;
 
-      const rawEventList = replayObject.eventList || replayObject.event_list;
+      const rawEventList = (replayObject.eventList || replayObject.event_list) as any[];
 
       if (!rawEventList || !Array.isArray(rawEventList) || rawEventList.length === 0) {
         throw new Error("Replay file is empty or contains no events.");
       }
 
-      console.log(`[Uploader] Deep-sweeping ${rawEventList.length} parsed containers...`);
-      const cardDictionary = extractCardDictionary(replayObject);
-
-      console.log(`[Uploader] 📚 Dictionary built! Found ${cardDictionary.size} unique cards/tokens.`);
-      console.log("[Uploader] DICTIONARY DUMP:", Object.fromEntries(cardDictionary));
+      console.log(`[Diagnostic] Sweeping ${rawEventList.length} containers for interesting data...`);
       
-      if (cardDictionary.size === 0) {
-          throw new Error("Failed to extract card IDs. The replay may be corrupted.");
+      const interestingEvents: any[] = [];
+      
+      // Dig out the first few events that aren't just empty shells
+      for (const container of rawEventList) {
+          const events = container.eventList || container.event_list || [];
+          for (const ev of events) {
+              // If the event has any keys other than just the player_id, we want to see it!
+              if (Object.keys(ev).some(k => k !== 'playerId' && k !== 'player_id')) {
+                  interestingEvents.push(ev);
+              }
+          }
       }
 
-      toast.success(`Successfully mapped ${cardDictionary.size} cards! Check the console.`);
+      console.log("================ DIAGNOSTIC DUMP ================");
+      console.log("Found", interestingEvents.length, "populated events.");
+      console.log("First 3 populated events:");
+      console.log(JSON.stringify(interestingEvents.slice(0, 3), null, 2));
+      console.log("=================================================");
+
+      toast.error("Diagnostic dump complete! Please copy the output from your browser console.");
 
     } catch (error) {
       console.error("Error decoding .cor file:", error);
