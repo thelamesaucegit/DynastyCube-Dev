@@ -182,12 +182,12 @@ export default function CockatriceUploader() {
       // 1. Initialize the Base State
       const currentState: SpectatorStateUpdate = {
           gameSessionId: "imported-cor-match",
-             player1Id: asEntityId("p1"),
+          player1Id: asEntityId("p1"),
           player2Id: asEntityId("p2"),
           player1Name: team1Name, 
           player2Name: team2Name, 
           currentPhase: "MULLIGAN" as Phase,
-          activePlayerId: null,
+          activePlayerId: asEntityId("p1"), 
           priorityPlayerId: null,
           isReplay: true,
           combat: null,
@@ -197,11 +197,10 @@ export default function CockatriceUploader() {
               players: [
                   { playerId: asEntityId('p1'), name: team1Name, life: 20 },
                   { playerId: asEntityId('p2'), name: team2Name, life: 20 }
-           
               ],
               currentPhase: "MULLIGAN" as Phase,
               currentStep: "OPENING_HAND" as Step,
-              activePlayerId: null,
+              activePlayerId: asEntityId("p1"), 
               priorityPlayerId: null,
               turnNumber: 0,
               isGameOver: false,
