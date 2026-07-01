@@ -136,7 +136,7 @@ export default function CockatriceUploader() {
         const states: SpectatorStateUpdate[] = [];
         const asEntityId = (id: string): EntityId => id as EntityId;
         
-        let activeCards: Record<string, ClientCard> = {};
+        const activeCards: Record<string, ClientCard> = {};
         const activeZones: Array<{ zoneId: { ownerId: EntityId; zoneType: string }; cardIds: EntityId[]; size: number; isVisible: boolean; }> = [];
         const activePlayers: ClientPlayer[] = [];
 
