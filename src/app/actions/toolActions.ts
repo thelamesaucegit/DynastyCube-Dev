@@ -2,7 +2,7 @@
 "use server";
 
 // THE FIX: Use standard ES import instead of require()
-import lzmaModule from "lzma";
+import * as lzmaModule from "lzma";
 
 // Cast to handle lack of typings safely without violating linter rules
 interface LzmaDecompressor {
