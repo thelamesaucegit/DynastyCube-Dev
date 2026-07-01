@@ -262,13 +262,16 @@ export default function CockatriceUploader() {
               }
 
               // Map MoveCard (Cards moving between zones)
-              if (ev.extMoveCard || ev.ext_move_card) {
+             
+             if (ev.extMoveCard || ev.ext_move_card) {
                   const move = (ev.extMoveCard || ev.ext_move_card) as Record<string, unknown>;
-                  const cardId = move.cardId ?? move.card_id as number;
-                  const newCardId = move.newCardId ?? move.new_card_id as number;
-                  const targetZone = move.targetZone ?? move.target_zone as string;
-                  const targetPlayer = move.targetPlayerId ?? move.target_player_id as number;
                   
+                  // THE FIX: Wrap the ?? statements in parentheses so the entire result is cast
+                  const cardId = (move.cardId ?? move.card_id) as number;
+                  const newCardId = (move.newCardId ?? move.new_card_id) as number;
+                  const targetZone = (move.targetZone ?? move.target_zone) as string;
+                  const targetPlayer = (move.targetPlayerId ?? move.target_player_id) as number;
+               
                   const mappedOwner = cockatricePlayerMap.get(targetPlayer);
                   const activeCardId = newCardId > 0 ? newCardId : cardId;
                   
