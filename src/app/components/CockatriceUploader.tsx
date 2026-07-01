@@ -15,7 +15,7 @@ import {
   type UploaderTeam 
 } from "@/app/actions/replayActions";
 
-import type { SpectatorStateUpdate } from "@/types"; // Use your project's types path here
+import type { SpectatorStateUpdate, EntityId } from "@/types"; // Use your project's types path here
 
 // ============================================================================
 // COCKATRICE PROTOBUF SCHEMA (EXACT MATCH)
