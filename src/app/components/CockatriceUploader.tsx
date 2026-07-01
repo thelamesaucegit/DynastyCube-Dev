@@ -6,14 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/app
 import { Upload, FileCode2, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import * as protobuf from "protobufjs";
-import { fetchReplayMetadata, getReplayUploaderData, findMatchIdForTeams, type DbCardMeta, type UploaderTeam } from "@/app/actions/replayActions";
+import { getReplayUploaderData, findMatchIdForTeams, type UploaderTeam } from "@/app/actions/replayActions";
 import type { SpectatorStateUpdate } from "@/types";
 
 // ============================================================================
-// COCKATRICE PROTOBUF SCHEMA (THE FLAT HACK)
+// COCKATRICE PROTOBUF SCHEMA (FINAL & CORRECT)
 // ============================================================================
-// By defining the extensions as hardcoded optional fields using their tag IDs,
-// protobufjs will parse them effortlessly without needing complex extension logic.
 const COCKATRICE_SCHEMA = `
   syntax = "proto2";
   package cockatrice;
@@ -23,51 +21,40 @@ const COCKATRICE_SCHEMA = `
       optional string name = 2;
   }
 
-  message ServerInfo_PlayerProperties {
-      optional string player_name = 1;
-      repeated ServerInfo_Card main_deck = 4;
-      repeated ServerInfo_Card sideboard = 5;
+  message ServerInfo_User {
+      optional string name = 1;
   }
-  
+
+  message ServerInfo_PlayerProperties {
+      optional sint32 player_id = 1;
+      optional ServerInfo_User user_info = 2;
+  }
+
   message ServerInfo_Zone {
       optional string name = 1;
-      optional string type = 2;
-      repeated ServerInfo_Card card_list = 4;
+      repeated ServerInfo_Card card_list = 5;
   }
 
-  message Event_Join {
-      optional ServerInfo_PlayerProperties player_properties = 1;
+  message ServerInfo_Player {
+      optional ServerInfo_PlayerProperties properties = 1;
+      repeated ServerInfo_Zone zone_list = 2;
   }
 
-  message Event_DumpZone {
-      optional ServerInfo_PlayerProperties player_properties = 1;
-      optional ServerInfo_Zone zone_info = 2;
-  }
-
-  message Event_DrawCards {
-      optional sint32 number = 1;
-      repeated ServerInfo_Card cards = 2;
+  message Event_GameStateChanged {
+      repeated ServerInfo_Player player_list = 1;
   }
 
   message GameEvent {
       optional sint32 player_id = 1 [default = -1];
-      
-      // THE FIX: Hardcode the extensions as optional fields!
-      optional Event_Join ext_join = 1000;
-      optional Event_DumpZone ext_dump_zone = 2018;
-      optional Event_DrawCards ext_draw_cards = 2005;
+      optional Event_GameStateChanged ext_game_state_changed = 1005;
   }
   
   message GameEventContainer {
-      optional sint32 game_id = 1;
-      optional int32 seconds_elapsed = 2;
-      repeated GameEvent event_list = 3;
+      repeated GameEvent event_list = 2;
   }
 
   message GameReplay {
-      optional uint64 replay_id = 1;
       repeated GameEventContainer event_list = 3;
-      optional uint32 duration_seconds = 4;
   }
 `;
 
@@ -77,32 +64,25 @@ const GameReplayMessage = parsedSchema.lookupType("cockatrice.GameReplay");
 // ============================================================================
 // DICTIONARY BUILDER
 // ============================================================================
-
-// Type-safe recursive search to sweep the ENTIRE replay for card definitions
 const extractCardDictionary = (obj: unknown, dict = new Map<number, string>()): Map<number, string> => {
     if (!obj || typeof obj !== 'object') return dict;
-
     if (Array.isArray(obj)) {
         obj.forEach(item => extractCardDictionary(item, dict));
     } else {
         const record = obj as Record<string, unknown>;
-        
         if (typeof record.id === 'number' && typeof record.name === 'string') {
             if (record.id > 0 && record.name.trim().length > 0) {
                 dict.set(record.id, record.name);
             }
         }
-        
         Object.values(record).forEach(val => extractCardDictionary(val, dict));
     }
-    
     return dict;
 };
 
 // ============================================================================
 // COMPONENT LOGIC
 // ============================================================================
-
 export default function CockatriceUploader() {
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -141,54 +121,30 @@ export default function CockatriceUploader() {
       findMatch();
   }, [player1TeamId, player2TeamId, activeWeekId]);
 
-   const processCorFile = async (file: File) => {
+  const processCorFile = async (file: File) => {
+    if (!player1TeamId || !player2TeamId) { toast.error("Please select both teams."); return; }
+    if (player1TeamId === player2TeamId) { toast.error("Teams must be different."); return; }
+    if (!file.name.endsWith('.cor')) { toast.error("Invalid file type."); return; }
+
     setIsProcessing(true);
     try {
       const arrayBuffer = await file.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
 
-      console.log("[Diagnostic] Decoding raw protobuf bytes...");
       const decodedReplay = GameReplayMessage.decode(uint8Array);
-      
-      const replayObject = GameReplayMessage.toObject(decodedReplay, { 
-          enums: String,
-          longs: Number,
-          bytes: Array,
-          defaults: true 
-      }) as Record<string, unknown>;
+      const replayObject = GameReplayMessage.toObject(decodedReplay, { defaults: true }) as Record<string, unknown>;
 
-      // THE FIX: Strictly typing the array
-      const rawEventList = (replayObject.eventList || replayObject.event_list) as Array<Record<string, unknown>>;
+      const cardDictionary = extractCardDictionary(replayObject);
 
-      if (!rawEventList || !Array.isArray(rawEventList) || rawEventList.length === 0) {
-        throw new Error("Replay file is empty or contains no events.");
+      if (cardDictionary.size === 0) {
+        throw new Error("Failed to extract card IDs. The replay may be corrupted or in an unsupported format.");
       }
 
-      console.log(`[Diagnostic] Sweeping ${rawEventList.length} containers for interesting data...`);
+      toast.success(`Successfully mapped ${cardDictionary.size} cards from the replay!`);
       
-      // THE FIX: Strictly typing the extracted events array
-      const interestingEvents: Array<Record<string, unknown>> = [];
-      
-      for (const container of rawEventList) {
-          const events = (container.eventList || container.event_list || []) as Array<Record<string, unknown>>;
-          for (const ev of events) {
-              if (Object.keys(ev).some(k => k !== 'playerId' && k !== 'player_id')) {
-                  interestingEvents.push(ev);
-              }
-          }
-      }
-
-      console.log("================ DIAGNOSTIC DUMP ================");
-      console.log("Found", interestingEvents.length, "populated events.");
-      console.log("First 3 populated events:");
-      console.log(JSON.stringify(interestingEvents.slice(0, 3), null, 2));
-      console.log("=================================================");
-
-      // Ensuring we use the function so it doesn't trigger a linter warning
-      const cardDict = extractCardDictionary(replayObject);
-      console.log(`[Diagnostic] Dictionary extractor ran and found ${cardDict.size} cards just in case.`);
-
-      toast.error("Diagnostic dump complete! Please copy the output from your browser console.");
+      // We can now proceed with the rest of the logic.
+      // This part would be built out in the next step.
+      console.log("[Uploader] Dictionary:", Object.fromEntries(cardDictionary));
 
     } catch (error) {
       console.error("Error decoding .cor file:", error);
@@ -198,7 +154,6 @@ export default function CockatriceUploader() {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
-
 
   return (
     <Card className="w-full max-w-md mx-auto shadow-md border-border/50">
@@ -253,7 +208,7 @@ export default function CockatriceUploader() {
                 {isProcessing ? (
                     <div className="flex flex-col items-center gap-3 text-emerald-600 dark:text-emerald-400">
                         <Loader2 className="size-10 animate-spin" />
-                        <p className="font-bold tracking-widest uppercase text-sm">Decoding & Enriching...</p>
+                        <p className="font-bold tracking-widest uppercase text-sm">Decoding Replay...</p>
                     </div>
                 ) : (
                     <>
