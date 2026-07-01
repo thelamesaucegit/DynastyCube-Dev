@@ -15,7 +15,7 @@ import {
   type UploaderTeam 
 } from "@/app/actions/replayActions";
 
-import type { SpectatorStateUpdate, EntityId } from "@/types"; // Use your project's types path here
+import type { SpectatorStateUpdate, EntityId, Phase, Step } from "@/types"; // Use your project's types path here
 
 // ============================================================================
 // COCKATRICE PROTOBUF SCHEMA (EXACT MATCH)
@@ -186,7 +186,7 @@ export default function CockatriceUploader() {
           player2Id: asEntityId("p2"),
           player1Name: team1Name, 
           player2Name: team2Name, 
-          currentPhase: "MULLIGAN",
+          currentPhase: "MULLIGAN" as Phase,
           activePlayerId: null,
           priorityPlayerId: null,
           isReplay: true,
@@ -199,8 +199,8 @@ export default function CockatriceUploader() {
                   { playerId: asEntityId('p2'), name: team2Name, life: 20 }
            
               ],
-              currentPhase: "MULLIGAN",
-              currentStep: "OPENING_HAND",
+              currentPhase: "MULLIGAN" as Phase,
+              currentStep: "OPENING_HAND" as Step,
               activePlayerId: null,
               priorityPlayerId: null,
               turnNumber: 0,
