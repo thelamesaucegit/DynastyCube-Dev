@@ -187,21 +187,44 @@ export default function CockatriceUploader() {
           player1Name: team1Name, 
           player2Name: team2Name, 
           currentPhase: "MULLIGAN" as Phase,
-          activePlayerId: asEntityId("p1"), 
+          activePlayerId: asEntityId("p1"),
           priorityPlayerId: null,
           isReplay: true,
           combat: null,
           gameState: {
+              viewingPlayerId: asEntityId("p1"), // REQUIRED: Spectators usually view from p1's perspective
               cards: {},
               zones: [],
               players: [
-                  { playerId: asEntityId('p1'), name: team1Name, life: 20 },
-                  { playerId: asEntityId('p2'), name: team2Name, life: 20 }
+                  { 
+                      playerId: asEntityId('p1'), 
+                      name: team1Name, 
+                      life: 20,
+                      poisonCounters: 0,
+                      handSize: 0,
+                      librarySize: 0,
+                      graveyardSize: 0,
+                      exileSize: 0,
+                      landsPlayedThisTurn: 0,
+                      hasLost: false
+                  },
+                  { 
+                      playerId: asEntityId('p2'), 
+                      name: team2Name, 
+                      life: 20,
+                      poisonCounters: 0,
+                      handSize: 0,
+                      librarySize: 0,
+                      graveyardSize: 0,
+                      exileSize: 0,
+                      landsPlayedThisTurn: 0,
+                      hasLost: false
+                  }
               ],
               currentPhase: "MULLIGAN" as Phase,
               currentStep: "OPENING_HAND" as Step,
-              activePlayerId: asEntityId("p1"), 
-              priorityPlayerId: null,
+              activePlayerId: asEntityId("p1"),
+              priorityPlayerId: asEntityId("p1"), // Adjusted to prevent null priority errors if your UI expects it
               turnNumber: 0,
               isGameOver: false,
               winnerId: null,
