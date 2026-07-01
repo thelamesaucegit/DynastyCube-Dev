@@ -6,8 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/app
 import { Upload, FileCode2, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import * as protobuf from "protobufjs";
-import { getReplayUploaderData, findMatchIdForTeams, type UploaderTeam } from "@/app/actions/replayActions";
-import { SpectatorStateUpdate} from "@/types";
 
 import { 
   fetchReplayMetadata, 
