@@ -7,6 +7,7 @@ import { Upload, FileCode2, Loader2, CheckCircle2, AlertCircle } from "lucide-re
 import { toast } from "sonner";
 import * as protobuf from "protobufjs";
 import { getReplayUploaderData, findMatchIdForTeams, type UploaderTeam } from "@/app/actions/replayActions";
+import { SpectatorStateUpdate} from "@/types";
 
 // ============================================================================
 // COCKATRICE PROTOBUF SCHEMA (EXACT MATCH)
@@ -157,6 +158,162 @@ export default function CockatriceUploader() {
       findMatch();
   }, [player1TeamId, player2TeamId, activeWeekId]);
 
+   // ============================================================================
+  // ARGENTUM STATE BUILDER
+  // ============================================================================
+  const buildArgentumStates = (
+      replayObject: Record<string, unknown>, 
+      cardDict: Map<number, string>, 
+      cardDbMap: Map<string, DbCardMeta>,
+      team1Name: string,
+      team2Name: string
+  ): SpectatorStateUpdate[] => {
+      const states: SpectatorStateUpdate[] = [];
+      
+      // 1. Initialize the Base State
+      const currentState: SpectatorStateUpdate = {
+          gameSessionId: "imported-cor-match",
+          player1Id: "p1",
+          player2Id: "p2",
+          player1Name: team1Name, // Immediately use the selected Team Names!
+          player2Name: team2Name, 
+          currentPhase: "MULLIGAN",
+          activePlayerId: null,
+          priorityPlayerId: null,
+          isReplay: true,
+          combat: null,
+          gameState: {
+              cards: {},
+              zones: [],
+              players: [
+                  { playerId: 'p1', name: team1Name, life: 20 },
+                  { playerId: 'p2', name: team2Name, life: 20 }
+              ],
+              currentPhase: "MULLIGAN",
+              currentStep: "OPENING_HAND",
+              activePlayerId: null,
+              priorityPlayerId: null,
+              turnNumber: 0,
+              isGameOver: false,
+              winnerId: null,
+              combat: null,
+              gameLog: []
+          }
+      };
+
+      const rawEventList = (replayObject.eventList || replayObject.event_list) as Array<Record<string, unknown>>;
+      if (!rawEventList) return [currentState];
+
+      // We need to map Cockatrice's internal Player IDs (e.g. 0 and 1) to our "p1" and "p2"
+      const cockatricePlayerMap = new Map<number, string>();
+
+      // 2. Event Processing Loop
+      for (const container of rawEventList) {
+          const events = (container.eventList || container.event_list || []) as Array<Record<string, unknown>>;
+          
+          let stateChangedInContainer = false;
+
+          for (const ev of events) {
+              const playerId = ev.playerId ?? ev.player_id as number;
+              
+              // Map GameStateChanged (identifies players and initial zones)
+              if (ev.extGameStateChanged || ev.ext_game_state_changed) {
+                  const stateChange = (ev.extGameStateChanged || ev.ext_game_state_changed) as Record<string, unknown>;
+                  const playerList = (stateChange.playerList || stateChange.player_list) as Array<Record<string, unknown>>;
+                  
+                  if (playerList && cockatricePlayerMap.size === 0) {
+                      // Grab the first two non-spectator players to be p1 and p2
+                      let pIndex = 1;
+                      playerList.forEach(p => {
+                          const props = p.properties as Record<string, unknown>;
+                          if (props && typeof props.playerId === 'number' && pIndex <= 2) {
+                              cockatricePlayerMap.set(props.playerId, `p${pIndex}`);
+                              
+                              // Initialize their basic zones
+                              const mappedId = `p${pIndex}`;
+                              ["deck", "hand", "table", "grave", "rfg", "sb"].forEach(zType => {
+                                  currentState.gameState.zones.push({
+                                      zoneId: { ownerId: mappedId, zoneType: zType === "table" ? "BATTLEFIELD" : zType.toUpperCase() },
+                                      cardIds: [],
+                                      size: 0,
+                                      isVisible: zType !== "deck"
+                                  });
+                              });
+                              pIndex++;
+                          }
+                      });
+                  }
+                  stateChangedInContainer = true;
+              }
+
+              // Map MoveCard (Cards moving between zones)
+              if (ev.extMoveCard || ev.ext_move_card) {
+                  const move = (ev.extMoveCard || ev.ext_move_card) as Record<string, unknown>;
+                  const cardId = move.cardId ?? move.card_id as number;
+                  const newCardId = move.newCardId ?? move.new_card_id as number;
+                  const targetZone = move.targetZone ?? move.target_zone as string;
+                  const targetPlayer = move.targetPlayerId ?? move.target_player_id as number;
+                  
+                  const mappedOwner = cockatricePlayerMap.get(targetPlayer);
+                  const activeCardId = newCardId > 0 ? newCardId : cardId;
+                  
+                  if (mappedOwner && activeCardId > 0 && targetZone) {
+                      const cardName = cardDict.get(activeCardId) || cardDict.get(cardId) || "Unknown Card";
+                      const dbMeta = cardDbMap.get(cardName.toLowerCase());
+                      const strCardId = activeCardId.toString();
+
+                      // Ensure the card exists in our state
+                      if (!currentState.gameState.cards[strCardId]) {
+                          currentState.gameState.cards[strCardId] = {
+                              entityId: strCardId,
+                              name: cardName,
+                              imageUri: dbMeta?.image_url || undefined,
+                              cardTypes: dbMeta?.card_type?.split(" ") || [],
+                              isTapped: false,
+                              isAttacking: false,
+                              isBlocking: false,
+                              damage: 0,
+                              targets: []
+                          };
+                      }
+
+                      // Update Zone tracking
+                      const targetZoneType = targetZone === "table" ? "BATTLEFIELD" : targetZone.toUpperCase();
+                      const zone = currentState.gameState.zones.find(z => z.zoneId.ownerId === mappedOwner && z.zoneId.zoneType === targetZoneType);
+                      
+                      if (zone && !zone.cardIds.includes(strCardId)) {
+                          // Remove from old zones
+                          currentState.gameState.zones.forEach(z => {
+                              z.cardIds = z.cardIds.filter(id => id !== strCardId);
+                              z.size = z.cardIds.length;
+                          });
+                          // Add to new zone
+                          zone.cardIds.push(strCardId);
+                          zone.size = zone.cardIds.length;
+                      }
+                      stateChangedInContainer = true;
+                  }
+              }
+          }
+
+          // 3. Snapshot the state after processing the container
+          if (stateChangedInContainer) {
+              states.push(JSON.parse(JSON.stringify(currentState)));
+          }
+      }
+
+      // If no movements were tracked, ensure at least the base state is returned
+      if (states.length === 0) {
+          states.push(JSON.parse(JSON.stringify(currentState)));
+      }
+
+      return states;
+  };
+
+
+ // ============================================================================
+  // UPLOADER PROCESS
+  // ============================================================================
   const processCorFile = async (file: File) => {
     if (!player1TeamId || !player2TeamId) { toast.error("Please select both teams."); return; }
     if (player1TeamId === player2TeamId) { toast.error("Teams must be different."); return; }
@@ -167,50 +324,61 @@ export default function CockatriceUploader() {
       const arrayBuffer = await file.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
 
-      console.log("[Diagnostic] Decoding raw protobuf bytes...");
+      console.log("[Uploader] Decoding raw protobuf bytes...");
       const decodedReplay = GameReplayMessage.decode(uint8Array);
       
       const replayObject = GameReplayMessage.toObject(decodedReplay, { 
-          enums: String,
-          longs: Number,
-          bytes: Array,
-          defaults: true 
+          enums: String, longs: Number, bytes: Array, defaults: true 
       }) as Record<string, unknown>;
 
-      const rawEventList = (replayObject.eventList || replayObject.event_list) as Array<Record<string, unknown>>;
-
-      if (!rawEventList || !Array.isArray(rawEventList) || rawEventList.length === 0) {
-        throw new Error("Replay file is empty or contains no events.");
+      // 1. Extract Cards
+      const cardDictionary = extractCardDictionary(replayObject);
+      if (cardDictionary.size === 0) {
+        throw new Error("Failed to extract card IDs. The replay may be corrupted.");
       }
 
-      console.log(`[Diagnostic] Sweeping ${rawEventList.length} containers for interesting data...`);
+      // 2. Fetch Card Image Metadata from Database
+      const uniqueNames = Array.from(new Set(cardDictionary.values()));
+      console.log(`[Uploader] Fetching rich metadata for ${uniqueNames.length} unique cards...`);
+      const { success, cards } = await fetchReplayMetadata(uniqueNames);
       
-      const interestingEvents: Array<Record<string, unknown>> = [];
+      if (!success) throw new Error("Failed to fetch card metadata from the database.");
       
-      for (const container of rawEventList) {
-          const events = (container.eventList || container.event_list || []) as Array<Record<string, unknown>>;
-          for (const ev of events) {
-              if (Object.keys(ev).some(k => k !== 'playerId' && k !== 'player_id')) {
-                  interestingEvents.push(ev);
-              }
-          }
-      }
+      const cardDbMap = new Map<string, DbCardMeta>();
+      cards?.forEach(c => cardDbMap.set(c.card_name.toLowerCase(), c));
 
-      console.log("================ DIAGNOSTIC DUMP ================");
-      console.log("Found", interestingEvents.length, "populated events.");
-      console.log("First 2 populated events:");
-      console.log(JSON.stringify(interestingEvents.slice(0, 2), null, 2));
-      console.log("=================================================");
-
-      const cardDict = extractCardDictionary(replayObject);
-      console.log(`[Diagnostic] Dictionary extractor ran and found ${cardDict.size} cards.`);
+      // 3. Translate to Argentum State
+      const team1 = teams.find(t => t.id === player1TeamId);
+      const team2 = teams.find(t => t.id === player2TeamId);
       
-      if (cardDict.size > 0) {
-        console.log("[Uploader] DICTIONARY DUMP:", Object.fromEntries(cardDict));
-        toast.success(`Diagnostic dump complete! Found ${cardDict.size} cards.`);
-      } else {
-        toast.error("Diagnostic dump complete! Still 0 cards. Check console.");
-      }
+      console.log("[Uploader] Compiling Argentum State Machine snapshots...");
+      const argentumReplay = buildArgentumStates(
+          replayObject, 
+          cardDictionary, 
+          cardDbMap, 
+          team1?.name || "Team 1", 
+          team2?.name || "Team 2"
+      );
+
+      // 4. Send to API
+      console.log(`[Uploader] Saving ${argentumReplay.length} frames to database...`);
+      const response = await fetch('/api/pvp-replays', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+              argentum_game_states: argentumReplay,
+              original_filename: file.name,
+              match_id: matchId,
+              team1_id: team1?.id, team2_id: team2?.id,
+              team1_name: team1?.name, team1_color: team1?.primary_color, team1_seccolor: team1?.secondary_color,
+              team2_name: team2?.name, team2_color: team2?.primary_color, team2_seccolor: team2?.secondary_color
+          })
+      });
+
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || "Failed to save the replay.");
+
+      toast.success(`Successfully mapped ${cardDictionary.size} cards and saved ${argentumReplay.length} frames!`);
 
     } catch (error) {
       console.error("Error decoding .cor file:", error);
