@@ -7,7 +7,7 @@ import { Upload, FileCode2, Loader2, CheckCircle2, AlertCircle } from "lucide-re
 import { toast } from "sonner";
 import * as protobuf from "protobufjs";
 import { fetchReplayMetadata, getReplayUploaderData, findMatchIdForTeams, type DbCardMeta, type UploaderTeam } from "@/app/actions/replayActions";
-import type { SpectatorStateUpdate } from "@/app/types";
+import type { SpectatorStateUpdate } from "@/types";
 
 // ============================================================================
 // COCKATRICE PROTOBUF SCHEMA (THE FLAT HACK)
