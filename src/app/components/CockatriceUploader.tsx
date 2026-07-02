@@ -67,6 +67,10 @@ const COCKATRICE_SCHEMA = `
       optional sint32 card_id = 2;
       optional string card_name = 3;
   }
+  message Event_DumpZone {
+      optional ServerInfo_PlayerProperties player_properties = 1;
+      optional ServerInfo_Zone zone_info = 2;
+  }
   message Event_SetCardAttr {
       optional string zone = 1;
       optional sint32 card_id = 2;
@@ -92,6 +96,7 @@ const COCKATRICE_SCHEMA = `
       optional Event_SetCardAttr ext_set_card_attr = 2014;
       optional Event_SetCounter ext_set_counter = 2003;
       optional Event_SetActivePhase ext_set_active_phase = 2017;
+      optional Event_DumpZone ext_dump_zone = 2018;
   }
   
   // -- Top Level Containers --
@@ -114,33 +119,16 @@ const GameReplayMessage = parsedSchema.lookupType("cockatrice.GameReplay");
 // MTG ENUM MAPPERS
 // ============================================================================
 const PHASE_MAP: Record<number, Phase> = {
-    0: Phase.BEGINNING,
-    1: Phase.BEGINNING,
-    2: Phase.BEGINNING,
-    3: Phase.PRECOMBAT_MAIN,
-    4: Phase.COMBAT,
-    5: Phase.COMBAT,
-    6: Phase.COMBAT,
-    7: Phase.COMBAT,
-    8: Phase.COMBAT,
-    9: Phase.POSTCOMBAT_MAIN,
-    10: Phase.ENDING,
-    11: Phase.ENDING,
+    0: Phase.BEGINNING, 1: Phase.BEGINNING, 2: Phase.BEGINNING, 3: Phase.PRECOMBAT_MAIN,
+    4: Phase.COMBAT, 5: Phase.COMBAT, 6: Phase.COMBAT, 7: Phase.COMBAT, 8: Phase.COMBAT,
+    9: Phase.POSTCOMBAT_MAIN, 10: Phase.ENDING, 11: Phase.ENDING,
 };
 
 const STEP_MAP: Record<number, Step> = {
-    0: Step.UNTAP,
-    1: Step.UPKEEP,
-    2: Step.DRAW,
-    3: Step.PRECOMBAT_MAIN,
-    4: Step.BEGIN_COMBAT,
-    5: Step.DECLARE_ATTACKERS,
-    6: Step.DECLARE_BLOCKERS,
-    7: Step.COMBAT_DAMAGE,
-    8: Step.END_COMBAT,
-    9: Step.POSTCOMBAT_MAIN,
-    10: Step.END,
-    11: Step.CLEANUP,
+    0: Step.UNTAP, 1: Step.UPKEEP, 2: Step.DRAW, 3: Step.PRECOMBAT_MAIN,
+    4: Step.BEGIN_COMBAT, 5: Step.DECLARE_ATTACKERS, 6: Step.DECLARE_BLOCKERS,
+    7: Step.COMBAT_DAMAGE, 8: Step.END_COMBAT, 9: Step.POSTCOMBAT_MAIN,
+    10: Step.END, 11: Step.CLEANUP,
 };
 
 // ============================================================================
@@ -204,10 +192,9 @@ export default function CockatriceUploader() {
       findMatch();
   }, [player1TeamId, player2TeamId, activeWeekId]);
 
- // ============================================================================
+  // ============================================================================
   // ARGENTUM STATE BUILDER
   // ============================================================================
-  // Helper to locally strip readonly modifiers for our mutable tracking structures
   type Mutable<T> = { -readonly [P in keyof T]: T[P] };
 
   const buildArgentumStates = (
@@ -220,7 +207,6 @@ export default function CockatriceUploader() {
       const states: SpectatorStateUpdate[] = [];
       const asEntityId = (id: string): EntityId => id as EntityId;
       
-      // THE FIX: Use Mutable<T> to safely bypass readonly during local tracking
       const activeCards: Record<string, Mutable<ClientCard>> = {};
       const activeZones: Array<{
           zoneId: { ownerId: EntityId; zoneType: string };
@@ -251,7 +237,6 @@ export default function CockatriceUploader() {
           combat: null,
           gameState: {
               viewingPlayerId: asEntityId("p1"),
-              // Cast back to the strict readonly types for the snapshot
               cards: JSON.parse(JSON.stringify(activeCards)) as Record<EntityId, ClientCard>,
               zones: JSON.parse(JSON.stringify(activeZones)) as unknown as ClientZone[],
               players: JSON.parse(JSON.stringify(activePlayers)) as unknown as ClientPlayer[],
@@ -272,6 +257,15 @@ export default function CockatriceUploader() {
 
       const cockatricePlayerMap = new Map<number, string>();
 
+      // === DIAGNOSTIC COUNTERS ===
+      let moveCardCount = 0;
+      let dumpZoneCount = 0;
+      let drawCardsCount = 0;
+      let createTokenCount = 0;
+      let firstFewDumpZones: unknown[] = [];
+
+      console.log("[Diagnostic] --- STARTING EVENT LOOP ---");
+
       for (const container of rawEventList) {
           const events = (container.eventList || container.event_list || []) as Array<Record<string, unknown>>;
           let stateChangedInContainer = false;
@@ -279,7 +273,15 @@ export default function CockatriceUploader() {
           for (const ev of events) {
               const playerId = (ev.playerId ?? ev.player_id) as number;
               
-              // 1. GameStateChanged (Initialize players and zones)
+              // Diagnostic gathering
+              if (ev.extDumpZone || ev.ext_dump_zone) {
+                  dumpZoneCount++;
+                  if (firstFewDumpZones.length < 3) firstFewDumpZones.push(ev.extDumpZone || ev.ext_dump_zone);
+              }
+              if (ev.extDrawCards || ev.ext_draw_cards) drawCardsCount++;
+              if (ev.extCreateToken || ev.ext_create_token) createTokenCount++;
+
+              // 1. GameStateChanged
               if (ev.extGameStateChanged || ev.ext_game_state_changed) {
                   const stateChange = (ev.extGameStateChanged || ev.ext_game_state_changed) as Record<string, unknown>;
                   const playerList = (stateChange.playerList || stateChange.player_list) as Array<Record<string, unknown>>;
@@ -306,7 +308,7 @@ export default function CockatriceUploader() {
                   stateChangedInContainer = true;
               }
 
-              // 2. SetActivePhase (Update Turn, Phase, and Step)
+              // 2. SetActivePhase
               if (ev.extSetActivePhase || ev.ext_set_active_phase) {
                   const phaseChange = (ev.extSetActivePhase || ev.ext_set_active_phase) as Record<string, unknown>;
                   const newPhase = phaseChange.phase as number;
@@ -321,31 +323,32 @@ export default function CockatriceUploader() {
                   }
               }
 
-              // 3. SetCounter (Update Life Totals)
+              // 3. SetCounter
               if (ev.extSetCounter || ev.ext_set_counter) {
                   const counterChange = (ev.extSetCounter || ev.ext_set_counter) as Record<string, unknown>;
                   const pId = cockatricePlayerMap.get(counterChange.counter_id as number ?? -1);
                   const playerToUpdate = activePlayers.find(p => p.playerId === pId);
                   if (playerToUpdate && typeof counterChange.value === 'number') {
-                      playerToUpdate.life = counterChange.value; // Mutable update now succeeds!
+                      playerToUpdate.life = counterChange.value; 
                       stateChangedInContainer = true;
                   }
               }
 
-              // 4. SetCardAttr (Handle tapping/untapping)
+              // 4. SetCardAttr
               if (ev.extSetCardAttr || ev.ext_set_card_attr) {
                   const attrChange = (ev.extSetCardAttr || ev.ext_set_card_attr) as Record<string, unknown>;
                   if (attrChange.card_attr === 'tapped' && attrChange.card_id) {
                       const card = activeCards[(attrChange.card_id as number).toString()];
                       if (card) {
-                          card.isTapped = attrChange.attr_value === '1'; // Mutable update now succeeds!
+                          card.isTapped = attrChange.attr_value === '1'; 
                           stateChangedInContainer = true;
                       }
                   }
               }
 
-              // 5. MoveCard (Cards moving between zones)
+              // 5. MoveCard
               if (ev.extMoveCard || ev.ext_move_card) {
+                  moveCardCount++;
                   const move = (ev.extMoveCard || ev.ext_move_card) as Record<string, unknown>;
                   const cardId = (move.cardId ?? move.card_id) as number;
                   const newCardId = (move.newCardId ?? move.new_card_id) as number;
@@ -355,6 +358,14 @@ export default function CockatriceUploader() {
                   const mappedOwner = cockatricePlayerMap.get(targetPlayer);
                   const activeCardId = newCardId > 0 ? newCardId : cardId;
                   
+                  if (!mappedOwner) {
+                      console.warn(`[Diagnostic] MoveCard ignored: TargetPlayer ${targetPlayer} not in cockatricePlayerMap!`, move);
+                  } else if (activeCardId <= 0) {
+                      console.warn(`[Diagnostic] MoveCard ignored: activeCardId is <= 0!`, move);
+                  } else if (!targetZone) {
+                      console.warn(`[Diagnostic] MoveCard ignored: missing targetZone!`, move);
+                  }
+
                   if (mappedOwner && activeCardId > 0 && targetZone) {
                       const cardName = cardDict.get(activeCardId) || cardDict.get(cardId) || "Unknown Card";
                       const dbMeta = cardDbMap.get(cardName.toLowerCase());
@@ -376,12 +387,20 @@ export default function CockatriceUploader() {
                       const targetZoneType = targetZone === "table" ? "BATTLEFIELD" : targetZone.toUpperCase();
                       const zone = activeZones.find(z => z.zoneId.ownerId === mappedOwner && z.zoneId.zoneType === targetZoneType);
                       
-                      if (zone && !zone.cardIds.includes(strCardId)) {
-                          activeZones.forEach(z => { z.cardIds = z.cardIds.filter(id => id !== strCardId); z.size = z.cardIds.length; });
-                          zone.cardIds.push(strCardId);
-                          zone.size = zone.cardIds.length;
+                      if (zone) {
+                          if (!zone.cardIds.includes(strCardId)) {
+                              // Clean up old zones
+                              activeZones.forEach(z => { 
+                                  z.cardIds = z.cardIds.filter(id => id !== strCardId); 
+                                  z.size = z.cardIds.length; 
+                              });
+                              zone.cardIds.push(strCardId);
+                              zone.size = zone.cardIds.length;
+                          }
+                          stateChangedInContainer = true;
+                      } else {
+                          console.warn(`[Diagnostic] MoveCard failed to place in zone: Could not find zone mapping for Owner: ${mappedOwner}, ZoneType: ${targetZoneType}`);
                       }
-                      stateChangedInContainer = true;
                   }
               }
           }
@@ -390,6 +409,10 @@ export default function CockatriceUploader() {
               states.push(getSnapshotState());
           }
       }
+
+      console.log(`[Diagnostic] Event Totals - MoveCard: ${moveCardCount}, DumpZone: ${dumpZoneCount}, DrawCards: ${drawCardsCount}, CreateToken: ${createTokenCount}`);
+      console.log(`[Diagnostic] Final activeCards count: ${Object.keys(activeCards).length}`);
+      console.log(`[Diagnostic] DumpZone Samples:`, JSON.stringify(firstFewDumpZones, null, 2));
 
       if (states.length === 0) {
           states.push(getSnapshotState());
@@ -410,7 +433,9 @@ export default function CockatriceUploader() {
       const arrayBuffer = await file.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
 
+      console.log("[Diagnostic] Decoding raw protobuf bytes...");
       const decodedReplay = GameReplayMessage.decode(uint8Array);
+      
       const replayObject = GameReplayMessage.toObject(decodedReplay, { 
           enums: String, longs: Number, bytes: Array, defaults: true 
       }) as Record<string, unknown>;
@@ -420,7 +445,10 @@ export default function CockatriceUploader() {
         throw new Error("Failed to extract card IDs. The replay may be corrupted.");
       }
 
+      console.log(`[Diagnostic] Dictionary Mapping:`, Object.fromEntries(cardDictionary));
+
       const uniqueNames = Array.from(new Set(cardDictionary.values()));
+      console.log(`[Diagnostic] Fetching rich metadata for ${uniqueNames.length} unique cards...`);
       const { success, cards } = await fetchReplayMetadata(uniqueNames);
       if (!success) throw new Error("Failed to fetch card metadata from the database.");
       
@@ -434,6 +462,8 @@ export default function CockatriceUploader() {
           replayObject, cardDictionary, cardDbMap, 
           team1?.name || "Team 1", team2?.name || "Team 2"
       );
+
+      console.log(`[Diagnostic] Finished assembling ${argentumReplay.length} snapshots. Preparing to upload.`);
 
       const response = await fetch('/api/pvp-replays', {
           method: 'POST',
