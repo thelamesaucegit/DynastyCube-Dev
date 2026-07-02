@@ -204,9 +204,12 @@ export default function CockatriceUploader() {
       findMatch();
   }, [player1TeamId, player2TeamId, activeWeekId]);
 
-  // ============================================================================
+ // ============================================================================
   // ARGENTUM STATE BUILDER
   // ============================================================================
+  // Helper to locally strip readonly modifiers for our mutable tracking structures
+  type Mutable<T> = { -readonly [P in keyof T]: T[P] };
+
   const buildArgentumStates = (
       replayObject: Record<string, unknown>, 
       cardDict: Map<number, string>, 
@@ -217,14 +220,15 @@ export default function CockatriceUploader() {
       const states: SpectatorStateUpdate[] = [];
       const asEntityId = (id: string): EntityId => id as EntityId;
       
-      const activeCards: Record<string, ClientCard> = {};
+      // THE FIX: Use Mutable<T> to safely bypass readonly during local tracking
+      const activeCards: Record<string, Mutable<ClientCard>> = {};
       const activeZones: Array<{
           zoneId: { ownerId: EntityId; zoneType: string };
           cardIds: EntityId[];
           size: number;
           isVisible: boolean;
       }> = [];
-      const activePlayers: ClientPlayer[] = [
+      const activePlayers: Mutable<ClientPlayer>[] = [
           { playerId: asEntityId('p1'), name: team1Name, life: 20, poisonCounters: 0, handSize: 0, librarySize: 0, graveyardSize: 0, exileSize: 0, landsPlayedThisTurn: 0, hasLost: false },
           { playerId: asEntityId('p2'), name: team2Name, life: 20, poisonCounters: 0, handSize: 0, librarySize: 0, graveyardSize: 0, exileSize: 0, landsPlayedThisTurn: 0, hasLost: false }
       ];
@@ -247,6 +251,7 @@ export default function CockatriceUploader() {
           combat: null,
           gameState: {
               viewingPlayerId: asEntityId("p1"),
+              // Cast back to the strict readonly types for the snapshot
               cards: JSON.parse(JSON.stringify(activeCards)) as Record<EntityId, ClientCard>,
               zones: JSON.parse(JSON.stringify(activeZones)) as unknown as ClientZone[],
               players: JSON.parse(JSON.stringify(activePlayers)) as unknown as ClientPlayer[],
@@ -306,10 +311,10 @@ export default function CockatriceUploader() {
                   const phaseChange = (ev.extSetActivePhase || ev.ext_set_active_phase) as Record<string, unknown>;
                   const newPhase = phaseChange.phase as number;
                   if (typeof newPhase === 'number') {
-                      if (newPhase === 0) currentTurn++; // Cockatrice 0 is Untap step, meaning a new turn
+                      if (newPhase === 0) currentTurn++; 
                       currentPhase = PHASE_MAP[newPhase] || currentPhase;
                       currentStep = STEP_MAP[newPhase] || currentStep;
-                      // Update active player to the one who changed the phase
+                      
                       const mappedOwner = cockatricePlayerMap.get(playerId);
                       if (mappedOwner) activePlayerId = asEntityId(mappedOwner);
                       stateChangedInContainer = true;
@@ -322,7 +327,7 @@ export default function CockatriceUploader() {
                   const pId = cockatricePlayerMap.get(counterChange.counter_id as number ?? -1);
                   const playerToUpdate = activePlayers.find(p => p.playerId === pId);
                   if (playerToUpdate && typeof counterChange.value === 'number') {
-                      playerToUpdate.life = counterChange.value;
+                      playerToUpdate.life = counterChange.value; // Mutable update now succeeds!
                       stateChangedInContainer = true;
                   }
               }
@@ -333,7 +338,7 @@ export default function CockatriceUploader() {
                   if (attrChange.card_attr === 'tapped' && attrChange.card_id) {
                       const card = activeCards[(attrChange.card_id as number).toString()];
                       if (card) {
-                          card.isTapped = attrChange.attr_value === '1';
+                          card.isTapped = attrChange.attr_value === '1'; // Mutable update now succeeds!
                           stateChangedInContainer = true;
                       }
                   }
@@ -365,7 +370,7 @@ export default function CockatriceUploader() {
                               isTransformed: false, isAttacking: false, isBlocking: false, attackingTarget: null,
                               blockingTarget: null, controllerId: asEntityId(mappedOwner), ownerId: asEntityId(mappedOwner),
                               isToken: false, zone: null, attachedTo: null, attachments: [], isFaceDown: false, targets: []
-                          } as unknown as ClientCard;
+                          } as unknown as Mutable<ClientCard>;
                       }
 
                       const targetZoneType = targetZone === "table" ? "BATTLEFIELD" : targetZone.toUpperCase();
@@ -381,7 +386,6 @@ export default function CockatriceUploader() {
               }
           }
 
-          // Snapshot the state after processing the container
           if (stateChangedInContainer) {
               states.push(getSnapshotState());
           }
