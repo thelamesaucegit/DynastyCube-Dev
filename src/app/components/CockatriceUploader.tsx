@@ -1,4 +1,5 @@
 //src/app/components/CockatriceUploader.tsx
+
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
