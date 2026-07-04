@@ -55,15 +55,19 @@ interface CardManagementProps {
   onUpdate?: () => void;
 }
 
-const poolConfigs: { label: string; table: PoolTableName }[] = [
-    { label: "Main Card Pool", table: "card_pools" },
-    { label: "The Chamber", table: "the_chamber" },
-    { label: "The Resort Pool", table: "resort_pool" },
-    { label: "Season 2 Test Pool", table: "card_pools_next" },
+// THE FIX: Locally extend the pool table name to include retired_cards
+type ExtendedPoolTable = PoolTableName | "retired_cards";
+
+const poolConfigs: { label: string; table: ExtendedPoolTable }[] = [
+    { label: "Main Card Pool", table: "card_pools" as PoolTableName },
+    { label: "The Chamber", table: "the_chamber" as PoolTableName },
+    { label: "The Resort Pool", table: "resort_pool" as PoolTableName },
+    { label: "Season 2 Test Pool", table: "card_pools_next" as PoolTableName },
+    { label: "Retired Cards", table: "retired_cards" }, // <-- ADDED THE RETIRED POOL
 ];
 
 export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
-  const [activePool, setActivePool] = useState<PoolTableName>("card_pools");
+  const [activePool, setActivePool] = useState<ExtendedPoolTable>("card_pools" as PoolTableName);
   const [cards, setCards] = useState<CardData[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -72,12 +76,12 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-
   const [bulkText, setBulkText] = useState("");
   const [bulkCost, setBulkCost] = useState("1");
   const [bulkImporting, setBulkImporting] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
   const [promoting, setPromoting] = useState(false);
+
   // NEW STATE: Deep Purge toggle
   const [enableDeepPurge, setEnableDeepPurge] = useState(false);
 
@@ -100,7 +104,8 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
     setLoading(true);
     setError(null);
     try {
-      const poolResult = await getCardPool(activePool);
+      // Cast safely to PoolTableName
+      const poolResult = await getCardPool(activePool as PoolTableName);
       if (poolResult.error) {
         setError(poolResult.error);
         setCards([]);
@@ -130,6 +135,7 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
       const response = await fetch(
         `https://api.scryfall.com/cards/search?q=${encodeURIComponent(searchQuery)}&unique=cards`
       );
+
       if (response.ok) {
         const data = await response.json();
         const formattedResults: MTGCard[] = data.data.slice(0, 10).map((card: unknown) => {
@@ -169,7 +175,10 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
       rarity: card.rarity, colors: card.colors, image_url: card.imageUrl,
       mana_cost: card.manaCost, cmc: card.cmc,
     };
-    const result = await addCardToPool(cardData, activePool);
+    
+    // Cast safely to PoolTableName
+    const result = await addCardToPool(cardData, activePool as PoolTableName);
+    
     if (result.success) {
       toast.success(`Added ${card.name} to pool!`);
       await loadCards();
@@ -183,10 +192,14 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
   const handleRemoveCard = async (cardId: string) => {
     const card = cards.find((c) => c.id === cardId);
     if (!card) return;
+
     const poolLabel = poolConfigs.find(p => p.table === activePool)?.label || 'pool';
     if (!confirm(`Remove ${card.card_name} from the ${poolLabel}?`)) return;
+
     setActionLoading(true);
-    const result = await removeCardFromPool(cardId, activePool);
+    // Cast safely to PoolTableName
+    const result = await removeCardFromPool(cardId, activePool as PoolTableName);
+    
     if (result.success) {
       toast.success(`Removed ${card.card_name}!`);
       await loadCards();
@@ -224,6 +237,7 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
     setClearing(true);
     try {
       let result: { success: boolean; error?: string; removedCount?: number; updatedCount?: number };
+      
       if (clearFilter === 'drafted') {
         result = await undraftAllCards();
         if (result.success) toast.success(`Successfully undrafted ${result.updatedCount || 0} card(s).`);
@@ -231,9 +245,11 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
         result = await removeFilteredCards('undrafted', 'draft');
         if (result.success) toast.success(`Removed ${result.removedCount || 0} undrafted card(s).`);
       } else { 
-        result = await clearCardPool(activePool);
+        // Cast safely to PoolTableName
+        result = await clearCardPool(activePool as PoolTableName);
         if (result.success) toast.success(`Removed ${result.removedCount || 0} card(s) from the pool.`);
       }
+
       if (result.success) {
         await loadCards();
         onUpdate?.();
@@ -255,19 +271,25 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
       toast.error("Please enter at least one card name.");
       return;
     }
+
     const cost = parseInt(bulkCost);
     if (isNaN(cost) || cost < 0) {
       toast.error("Please enter a valid default Cubucks cost (0 or higher).");
       return;
     }
+
     if (!confirm(`This will import ${lines.length} card(s) and then trigger a CubeCobra ELO sync. Duplicates are allowed. Continue?`)) {
       return;
     }
+
     setBulkImporting(true);
     setBulkResult(null);
     setError(null);
+
     try {
-      const result = await bulkImportAndSync(lines, cost, activePool);
+      // Cast safely to PoolTableName
+      const result = await bulkImportAndSync(lines, cost, activePool as PoolTableName);
+      
       if (result.success) {
         setBulkResult({
           added: result.added,
@@ -301,6 +323,7 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
           
           setBackfilling(true);
           toast.loading("Running Deep Purge & Reimport...", { id: 'deep-purge' });
+
           try {
               const result = await purgeAndSyncOldestIds();
               if (result.success) {
@@ -320,7 +343,8 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
           
           setBackfilling(true);
           try {
-              const result = await backfillImportedCards(activePool);
+              // Cast safely to PoolTableName
+              const result = await backfillImportedCards(activePool as PoolTableName);
               if (result.success) {
                   toast.success(`Successfully backfilled ${result.updated} card(s) from Scryfall!`);
                   await loadCards(); 
@@ -337,6 +361,7 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
 
   const handlePromoteSeason = async () => {
     if (!confirm("WARNING: This will DESTROY all current cards and draft picks in the active pool, replacing them with the card_pools_next table. Are you absolutely sure?")) return;
+
     setPromoting(true);
     try {
       const result = await promoteSeasonData();
@@ -374,7 +399,7 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
 
       <div className="mb-6">
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Select Pool to Manage</label>
-        <Select value={activePool} onValueChange={(value) => setActivePool(value as PoolTableName)}>
+        <Select value={activePool} onValueChange={(value) => setActivePool(value as ExtendedPoolTable)}>
           <SelectTrigger className="w-[280px]">
             <SelectValue placeholder="Select a pool" />
           </SelectTrigger>
@@ -400,6 +425,7 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
 
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 mb-6">
         <h3 className="font-semibold text-lg text-gray-900 dark:text-gray-100 mb-4">🔍 Search & Add Cards</h3>
+        
         <div className="flex gap-2 mb-4">
           <input type="text" placeholder="Search for cards..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSearchCard()} className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
           <button onClick={handleSearchCard} disabled={searchLoading || !searchQuery.trim()} className="admin-btn admin-btn-primary">{searchLoading ? "Searching..." : "Search"}</button>
@@ -471,7 +497,7 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
           rows={8}
           className="w-full p-3 border rounded-lg font-mono text-sm mb-3 bg-white dark:bg-gray-800"
         />
-
+        
         <div className="flex flex-wrap gap-4 items-end">
           <div>
             <label className="block text-sm font-medium mb-1">Default Cubucks Cost</label>
@@ -509,6 +535,7 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
       <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg p-6 mb-6">
         <h3 className="font-semibold text-lg mb-2">Pool Actions</h3>
         <p className="text-sm text-muted-foreground mb-4">Permanently remove cards from the selected pool.</p>
+        
         <div className="flex flex-wrap gap-3">
           {activePool === 'card_pools' ? (
             <>
