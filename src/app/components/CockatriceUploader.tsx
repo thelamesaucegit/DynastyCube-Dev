@@ -262,7 +262,7 @@ export default function CockatriceUploader() {
       let dumpZoneCount = 0;
       let drawCardsCount = 0;
       let createTokenCount = 0;
-      let firstFewDumpZones: unknown[] = [];
+      const firstFewDumpZones: unknown[] = [];
 
       console.log("[Diagnostic] --- STARTING EVENT LOOP ---");
 
