@@ -13,7 +13,7 @@ function createServiceClient() {
     return createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 }
 
-export type PoolTableName = "card_pools" | "the_chamber" | "resort_pool" | "card_pools_next"; 
+export type PoolTableName = "card_pools" | "the_chamber" | "resort_pool" | "card_pools_next" | "retired_cards" ; 
 
 async function createClient() {
   const cookieStore = await cookies();
