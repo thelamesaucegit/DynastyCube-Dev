@@ -113,7 +113,7 @@ export function DayNightGrid({ seasonId, teamId, userId, isPostseason }: DayNigh
                     <CardTitle className="text-xl font-bold">Draft Night Blackout Hours</CardTitle>
                 </div>
                 <CardDescription>
-                    Select up to 10 hours you want blacked out as "Night Time". Your team's 10-hour consensus will be submitted to the league. Night timers last 4x as long.
+                    Select up to 10 hours you want blacked out as &quot;Night Time&quot;. Your team&apos;s 10-hour consensus will be submitted to the league. Night timers last 4x as long.
                 </CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
