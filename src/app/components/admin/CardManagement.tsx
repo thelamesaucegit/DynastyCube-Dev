@@ -1,6 +1,8 @@
 // src/app/components/admin/CardManagement.tsx
 "use client";
 
+import { processSeason4CSV } from "@/app/actions/season4ImportActions";
+
 import React, { useState, useEffect } from "react";
 import {
   getCardPool,
@@ -379,6 +381,10 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
     }
   };
 
+
+  
+  
+
   if (loading) {
     return (
       <div className="admin-section">
@@ -396,6 +402,7 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
         <h2 className="admin-section-title">🃏 Card Pool Management</h2>
         <p className="admin-section-description">Manage cards in the draft pool, The Chamber, or The Resort Pool.</p>
       </div>
+      <Season4Import />
 
       <div className="mb-6">
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Select Pool to Manage</label>
@@ -605,4 +612,58 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
       </div>
     </div>
   );
+// ============================================================================
+// ONE-TIME SEASON 4 IMPORT COMPONENT
+// ============================================================================
+const Season4Import: React.FC = () => {
+    const [csvText, setCsvText] = useState("");
+    const [isImporting, setIsImporting] = useState(false);
+
+    const runImport = async () => {
+        if (!csvText.trim()) {
+            toast.error("Please paste the CSV content into the text area.");
+            return;
+        }
+        if (!confirm("Are you sure you want to run the Season 4 historical import? This will delete any existing picks for that session and replace them.")) {
+            return;
+        }
+
+        setIsImporting(true);
+        toast.loading("Processing Season 4 CSV...", { id: 's4-import' });
+        
+        try {
+            const res = await processSeason4CSV(csvText);
+            if (res.success) {
+                toast.success(res.message, { id: 's4-import' });
+                setCsvText(""); // Clear on success
+            } else {
+                toast.error(`Import Failed: ${res.message}`, { id: 's4-import', duration: 10000 });
+            }
+        } catch (e: unknown) {
+            const error = e instanceof Error ? e.message : "An unknown error occurred.";
+            toast.error(`A critical error occurred: ${error}`, { id: 's4-import', duration: 10000 });
+        } finally {
+            setIsImporting(false);
+        }
+    };
+
+    return (
+        <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-300 dark:border-gray-700 rounded-lg p-6 mb-6">
+            <h3 className="font-semibold text-lg text-gray-900 dark:text-gray-100 mb-2">Legacy Draft Import (Season 4)</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+                For one-time use. Paste the raw CSV content for the Season 4 draft to import it into the historical record.
+            </p>
+            <textarea
+              value={csvText}
+              onChange={(e) => setCsvText(e.target.value)}
+              placeholder="Paste the full Season 4 Draft CSV content here..."
+              rows={10}
+              className="w-full p-3 border rounded-lg font-mono text-sm mb-3 bg-white dark:bg-gray-800"
+            />
+            <button onClick={runImport} disabled={!csvText.trim() || isImporting} className="admin-btn bg-teal-600 hover:bg-teal-700 text-white">
+                {isImporting ? "Importing Season 4 Data..." : "Run Season 4 Import"}
+            </button>
+        </div>
+    );
+};
 };

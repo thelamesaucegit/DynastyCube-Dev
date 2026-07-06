@@ -24,6 +24,7 @@ export interface DraftPick {
   team_name: string;
   team_id: string;
   color_identity: string[] | null; 
+  pick_source?: string | null;
 }
 
 // Now returns an object so the frontend knows which component to load!
@@ -58,7 +59,7 @@ async function getInitialDraftPicks(sessionId: string): Promise<{ picks: DraftPi
       .from('historical_draft_picks') 
       .select(`
         id, pick_number, card_name, card_set, rarity, image_url, oldest_image_url, 
-        drafted_at, team_id, color_identity
+        drafted_at, team_id, color_identity, pick_source
       `)
       .eq('draft_session_id', sessionId)
       .order('pick_number', { ascending: false });
@@ -120,6 +121,7 @@ async function getInitialDraftPicks(sessionId: string): Promise<{ picks: DraftPi
       team_id: pick.team_id || '',
       team_name: teamMap.get(pick.team_id) || 'Unknown Team',
       color_identity: colorId, 
+      pick_source: pick.pick_source || null,
     };
   });
 
