@@ -19,6 +19,9 @@ type ViewMode = 'list' | 'team';
 
 const DraftCard: FC<{ pick: DraftPick; size: 'large' | 'small' }> = ({ pick, size }) => {
   const { useOldestArt } = useSettings();
+
+    const isKeeper = pick.pick_source === 'keeper';
+
   
   // FIX: Explicitly structure the object to satisfy the expected interface without using 'any'
   const cardDataForImage = { 
@@ -37,7 +40,12 @@ const DraftCard: FC<{ pick: DraftPick; size: 'large' | 'small' }> = ({ pick, siz
           <ColorIdentityGlow colors={pick.color_identity}>
             <div className="bg-gray-800 rounded-lg shadow-lg p-2">
               <div className="flex justify-between items-center mb-2 text-xs">
-                <span className="font-bold text-white bg-blue-600 px-2 py-1 rounded">#{pick.pick_number}</span>
+                
+                <span className={`font-bold text-white px-2 py-1 rounded ${isKeeper ? 'bg-amber-600' : 'bg-blue-600'}`}>
+                  {isKeeper ? 'KEEPER' : `#${pick.pick_number}`}
+                </span>
+
+                
                 <span className="font-semibold text-gray-300 truncate">{pick.team_name}</span>
               </div>
               <Image 
@@ -65,7 +73,9 @@ const DraftCard: FC<{ pick: DraftPick; size: 'large' | 'small' }> = ({ pick, siz
                   <p className="text-[11px] xl:text-xs text-center text-gray-200 font-semibold leading-tight line-clamp-2 w-full break-words whitespace-normal" title={pick.card_name}>
                       {pick.card_name}
                   </p>
-                  <p className="text-[9px] xl:text-[10px] text-center text-gray-400 mt-0.5 shrink-0">P: {pick.pick_number}</p>
+<p className={`text-[9px] xl:text-[10px] text-center mt-0.5 shrink-0 ${isKeeper ? 'text-amber-500 font-bold tracking-widest' : 'text-gray-400'}`}>
+                      {isKeeper ? 'KEEPER' : `P: ${pick.pick_number}`}
+                  </p>
               </div>
           </ColorIdentityGlow>
         </div>
