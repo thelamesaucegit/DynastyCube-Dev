@@ -727,3 +727,30 @@ export async function resolveCutVotePoll(pollId: string, teamId: string) {
     return { success: false, error: "Resolution failed." };
   }
 }
+
+export async function getVotingContext(userId?: string) {
+  try {
+    const supabase = await createServerClient();
+    const { data: season, error: seasonError } = await supabase
+        .from("seasons")
+        .select("id, phase")
+        .eq("is_active", true)
+        .maybeSingle();
+        
+    let userTeamId = null;
+    if (userId) {
+      const { data: teamData } = await supabase.rpc("get_user_team_for_voting", { p_user_id: userId });
+      userTeamId = teamData || null;
+    }
+    
+    return {
+      success: true,
+      seasonId: season?.id || null,
+      isPostseason: season?.phase === "postseason",
+      userTeamId
+    };
+  } catch (error) {
+    console.error("Error fetching voting context:", error);
+    return { success: false, seasonId: null, isPostseason: false, userTeamId: null };
+  }
+}
