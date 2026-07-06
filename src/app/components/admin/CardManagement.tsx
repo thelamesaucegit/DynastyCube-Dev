@@ -1,6 +1,8 @@
 // src/app/components/admin/CardManagement.tsx
 "use client";
 
+import { processSeason4CSV } from "@/app/actions/season4ImportActions";
+
 import React, { useState, useEffect } from "react";
 import {
   getCardPool,
