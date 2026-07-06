@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { getTeamPolls, deleteTeamPoll } from "@/app/actions/voteActions";
+import { getTeamPolls, deleteTeamPoll, getVotingContext } from "@/app/actions/voteActions";
 import type { PollWithOptions } from "@/app/actions/voteActions";
 import { TeamPollCard } from "./TeamPollCard";
 import { CreateTeamPollDialog } from "./CreateTeamPollDialog";
@@ -15,6 +15,8 @@ import {
   Loader2,
   AlertCircle,
 } from "lucide-react";
+import { DayNightGrid } from "@/app/components/vote/DayNightGrid"; 
+
 
 interface TeamVotingProps {
   teamId: string;
@@ -27,22 +29,31 @@ export function TeamVoting({ teamId, userRoles }: TeamVotingProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+const [seasonContext, setSeasonContext] = useState<{ seasonId: string | null, isPostseason: boolean }>({ seasonId: null, isPostseason: false });
 
+  
   const isCaptain = userRoles.includes("captain");
   const userId = user?.id || "";
 
   const loadPolls = useCallback(async () => {
     if (!userId) return;
-
     setLoading(true);
     setError(null);
-
-    const result = await getTeamPolls(teamId, userId);
+    
+    // THE FIX: Fetch concurrently
+    const [result, contextResult] = await Promise.all([
+        getTeamPolls(teamId, userId),
+        getVotingContext()
+    ]);
 
     if (result.success) {
       setPolls(result.polls);
     } else {
       setError(result.error || "Failed to load polls");
+    }
+    
+    if (contextResult.success) {
+        setSeasonContext(contextResult);
     }
 
     setLoading(false);
@@ -112,6 +123,14 @@ export function TeamVoting({ teamId, userRoles }: TeamVotingProps) {
             Create Poll
           </Button>
         </div>
+      )}
+       {seasonContext.isPostseason && seasonContext.seasonId && (
+          <DayNightGrid 
+              seasonId={seasonContext.seasonId} 
+              teamId={teamId} 
+              userId={userId} 
+              isPostseason={seasonContext.isPostseason} 
+          />
       )}
 
       {/* Error banner (non-blocking) */}

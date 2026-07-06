@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getActivePolls, type PollWithOptions } from "@/app/actions/voteActions";
+import { getActivePolls, getVotingContext, type PollWithOptions  } from "@/app/actions/voteActions";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
 import { Badge } from "@/app/components/ui/badge";
@@ -12,6 +12,8 @@ import { RepublicVoteCard } from "@/app/components/vote/RepublicVoteCard";
 import { BlessingsAllocator } from "@/app/components/vote/BlessingsAllocator";
 import { TeamPollCard } from "@/app/components/team/TeamPollCard";
 import { IndividualVoteCard } from "@/app/components/vote/IndividualVoteCard";
+import { DayNightGrid } from "@/app/components/vote/DayNightGrid"; 
+
 
 
 export default function VotePage() {
@@ -27,12 +29,22 @@ export default function VotePage() {
     }
   }, [user, authLoading]);
 
+ const [votingContext, setVotingContext] = useState<{ seasonId: string | null, isPostseason: boolean, userTeamId: string | null }>({ seasonId: null, isPostseason: false, userTeamId: null });
+
   const loadPolls = async () => {
     setLoading(true);
     try {
-      const result = await getActivePolls(user?.id);
-      if (result.success && result.polls) {
-        setPolls(result.polls as PollWithOptions[]);
+      // THE FIX: Fetch context and polls concurrently
+      const [pollResult, contextResult] = await Promise.all([
+          getActivePolls(user?.id),
+          getVotingContext(user?.id)
+      ]);
+
+      if (pollResult.success && pollResult.polls) {
+        setPolls(pollResult.polls as PollWithOptions[]);
+      }
+      if (contextResult.success) {
+        setVotingContext(contextResult as any); // Type cast safely since we know the shape
       }
     } catch (error) {
       console.error("Error loading polls:", error);
@@ -155,6 +167,14 @@ const defaultTab = republicPolls.length > 0 ? "republic" :
           </TabsContent>
 
           <TabsContent value="team" className="space-y-6">
+            {votingContext.isPostseason && votingContext.seasonId && votingContext.userTeamId && user && (
+                <DayNightGrid 
+                    seasonId={votingContext.seasonId} 
+                    teamId={votingContext.userTeamId} 
+                    userId={user.id} 
+                    isPostseason={votingContext.isPostseason} 
+                />
+            )}
             {teamPolls.length === 0 ? (
               <Card>
                 <CardContent className="py-12 text-center text-muted-foreground">
