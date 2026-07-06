@@ -3,9 +3,35 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { fetchAllCards, fetchOldestPrintings, ScryfallCard } from "@/lib/scryfall-client";
+import { fetchAllCards, fetchOldestPrintings, type ScryfallCard } from "@/lib/scryfall-client";
 
-// This function can remain the same
+// Strict Types
+export interface ParsedCSVReplayPick {
+  teamId: string;
+  cardName: string;
+  pickNumber: number;
+  pickSource: 'draft' | 'keeper';
+}
+
+interface DBHistoricalDraftInsert {
+  draft_session_id: string;
+  team_id: string;
+  card_id: string;
+  card_name: string;
+  card_set: string | null;
+  card_type: string | null;
+  rarity: string | null;
+  colors: readonly string[];
+  color_identity: readonly string[];
+  image_url: string | null;
+  oldest_image_url: string | null;
+  mana_cost: string | null;
+  cmc: number;
+  pick_number: number;
+  pick_source: string;
+  drafted_at: string;
+}
+
 async function createClient() {
   const cookieStore = await cookies();
   return createServerClient(
@@ -15,7 +41,9 @@ async function createClient() {
       cookies: {
         getAll() { return cookieStore.getAll(); },
         setAll(cookiesToSet) {
-          try { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)); } catch { }
+          try { 
+            cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)); 
+          } catch { /* Ignore */ }
         },
       },
     }
@@ -55,7 +83,7 @@ export async function processSeason4CSV(csvText: string): Promise<{ success: boo
         await supabase.from('draft_order').insert(draftOrderInserts);
 
         // 3. Parse CSV Grid, preserving ALL picks including duplicates
-        const parsedPicks: Array<{ teamId: string; cardName: string; pickNumber: number; pickSource: 'draft' | 'keeper' }> = [];
+        const parsedPicks: ParsedCSVReplayPick[] = [];
         let keeperCounter = 193; // Keepers start after the main draft
 
         // Rounds 1-32 (Snake Math)
@@ -69,10 +97,18 @@ export async function processSeason4CSV(csvText: string): Promise<{ success: boo
                 if (!rawName || !rawName.trim()) continue;
 
                 const cardName = rawName.trim().replace(/\d+$/, '');
-                const teamIndex = isEvenRound ? (7 - c) : (c - 2);
-                const pickNumber = ((r - 1) * 6) + (isEvenRound ? (c - 1) : (c - 2)) + 1;
                 
-                parsedPicks.push({ teamId: orderedTeamIds[teamIndex], cardName, pickNumber, pickSource: 'draft' });
+                // Snake Math
+                const teamIndex = isEvenRound ? (7 - c) : (c - 2);
+                const pickIndexInRound = isEvenRound ? (c - 2) : (7 - c);
+                const pickNumber = ((r - 1) * 6) + (isEvenRound ? pickIndexInRound + 1 : 6 - pickIndexInRound);
+
+                parsedPicks.push({ 
+                    teamId: orderedTeamIds[teamIndex], 
+                    cardName, 
+                    pickNumber, 
+                    pickSource: 'draft' 
+                });
             }
         }
 
@@ -85,7 +121,12 @@ export async function processSeason4CSV(csvText: string): Promise<{ success: boo
                 if (!rawName || !rawName.trim() || rawName.trim().toUpperCase() === 'KEEPERS') continue;
 
                 const cardName = rawName.trim().replace(/\d+$/, '');
-                parsedPicks.push({ teamId: orderedTeamIds[c - 2], cardName, pickNumber: keeperCounter++, pickSource: 'keeper' });
+                parsedPicks.push({ 
+                    teamId: orderedTeamIds[c - 2], 
+                    cardName, 
+                    pickNumber: keeperCounter++, 
+                    pickSource: 'keeper' 
+                });
             }
         }
 
@@ -107,7 +148,7 @@ export async function processSeason4CSV(csvText: string): Promise<{ success: boo
 
         // 5. Construct & Insert
         const baseTime = new Date('2023-08-01T12:00:00-05:00').getTime();
-        const finalInserts = parsedPicks.map(pick => {
+        const finalInserts: DBHistoricalDraftInsert[] = parsedPicks.map(pick => {
             const scryData = scryfallCardMap.get(pick.cardName.toLowerCase());
             const draftedAt = new Date(baseTime + (pick.pickNumber * 60000)).toISOString();
             
@@ -136,7 +177,8 @@ export async function processSeason4CSV(csvText: string): Promise<{ success: boo
         if (insertError) throw insertError;
 
         return { success: true, message: `Successfully parsed and inserted ${finalInserts.length} picks for Season 4!` };
-    } catch (err: any) {
-        return { success: false, message: err.message || "An unknown error occurred." };
+    } catch (err: unknown) {
+        const errorMsg = err instanceof Error ? err.message : "An unknown error occurred.";
+        return { success: false, message: errorMsg };
     }
 }
