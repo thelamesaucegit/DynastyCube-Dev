@@ -280,13 +280,11 @@ export async function bulkImportAndSync(
         notFound.forEach(name => failedImports.push({ name, reason: "Not found on Scryfall" }));
         if(fetchErrors.length > 0) console.error("Scryfall fetch errors:", fetchErrors);
 
-        const scryfallCardMap = new Map<string, ScryfallCard>();
+         const scryfallCardMap = new Map<string, ScryfallCard>();
         scryfallResults.forEach(card => scryfallCardMap.set(card.name.toLowerCase(), card));
-        const oracleIds = scryfallResults.map(c => c.oracle_id).filter(Boolean);
-        const oldestImageMap = await fetchOldestPrintings(oracleIds);
 
         const cardsToInsert: Array<Omit<CardData, "id" | "created_at" | "rating_updated_at">> = [];
-        
+
                     // --- HELPER TO EXTRACT ORACLE TEXT ---
         interface ScryfallFace { 
             oracle_text?: string;
@@ -332,7 +330,7 @@ export async function bulkImportAndSync(
                     colors: cardData.colors || [],
                     color_identity: cardData.color_identity || [],
                     image_url: imageUrl, 
-                    oldest_image_url: oldestImageMap.get(cardData.oracle_id) || imageUrl, 
+                    oldest_image_url:  imageUrl, 
                     oracle_id: cardData.oracle_id,
                     oracle_text: extractOracleText(cardData),
                     hidden: cardData.type_line.toLowerCase().includes('basic land'),
