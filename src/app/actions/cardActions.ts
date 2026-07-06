@@ -495,7 +495,7 @@ export async function backfillImportedCards(tableName: PoolTableName = "card_poo
                         oracle_id: scryData.oracle_id,
                         oracle_text: extractOracleText(scryData), 
                         image_url: scryData.image_uris?.normal || scryData.image_uris?.small,
-                        oldest_image_url:  extractImageUrl(scryData),
+                        oldest_image_url:  scryData.image_uris?.normal || scryData.image_uris?.small,
                         color_identity: scryData.color_identity || [],
                         cmc: scryData.cmc || 0,
                         hidden: scryData.type_line.toLowerCase().includes('basic land')
