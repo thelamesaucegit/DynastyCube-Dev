@@ -38,28 +38,25 @@ async function waitForRateLimit(): Promise<void> {
  * Scryfall Card Object (simplified)
  */
 export interface ScryfallCard {
-  id: string; // UUID
+  id: string;
   oracle_id: string;
   name: string;
   set: string;
   set_name: string;
   rarity: string;
   type_line: string;
-  
-  // --- ADDED ORACLE TEXT FIELDS ---
+  reprint?: boolean;
   oracle_text?: string;
   card_faces?: Array<{
     name?: string;
     oracle_text?: string;
   }>;
-  // --------------------------------
-
   colors?: string[];
   color_identity?: string[];
   mana_cost?: string;
   cmc: number;
   released_at: string;
-  edhrec_rank?: number; // Lower is more popular
+  edhrec_rank?: number; 
   legalities: {
     standard?: 'legal' | 'not_legal' | 'banned';
     pioneer?: 'legal' | 'not_legal' | 'banned';
@@ -131,101 +128,44 @@ export async function searchAllCards(
 }
 
 
-export async function fetchOldestPrintings(oracleIds: string[]): Promise<Map<string, string>> {
+export async function fetchOldestPrintings(oracleIds: string[]): Promise<Map<string, ScryfallCard>> {
   const validIds = [...new Set(oracleIds.filter(id => id && typeof id === 'string' && id.trim().length > 0))];
-  
-  if (validIds.length === 0) {
-    return new Map();
-  }
+  const result = new Map<string, ScryfallCard>();
+  if (validIds.length === 0) return result;
 
-  const imageUrlMap = new Map<string, string>();
-  
-  // We can safely batch up to 20 Oracle IDs at a time because the query output is now guaranteed 
-  // to be exactly 1 card per Oracle ID!
   const BATCH_SIZE = 20;
   
   for (let i = 0; i < validIds.length; i += BATCH_SIZE) {
     const batch = validIds.slice(i, i + BATCH_SIZE);
     
-    // Construct the query: (oracle_id:id1 or oracle_id:id2) prefer:oldest
     const idQueries = batch.map(id => `oracle_id:${id}`).join(" or ");
-    const query = `(${idQueries}) prefer:oldest`; // THE MAGIC: automatically filters out all reprints!
+    // THE FIX: "not:reprint" guarantees Scryfall returns the exact first printing!
+    const query = `(${idQueries}) not:reprint`;
     
     let nextPageUrl: string | null = `${SCRYFALL_API_BASE}/cards/search?q=${encodeURIComponent(query)}`;
-
     try {
       while (nextPageUrl) {
         await waitForRateLimit();
+        const response: Response = await fetch(nextPageUrl, { headers: SCRYFALL_HEADERS });
+        if (!response.ok) break;
         
-const response: Response = await fetch(nextPageUrl, { headers: SCRYFALL_HEADERS });
+        const resJson = await response.json();
+        const foundCards = (resJson.data || []) as ScryfallCard[];
         
-        if (!response.ok) {
-          break;
-        }
-
-        const result = await response.json();
-        const foundCards = (result.data || []) as ScryfallCard[];
-
-        // Because Scryfall used 'prefer:oldest', each card in foundCards is GUARANTEED 
-        // to be the absolute oldest, first printing of its oracle_id. No sorting required!
         for (const card of foundCards) {
-          const imageUrl = card.image_uris?.normal || card.image_uris?.small;
-          if (imageUrl && card.oracle_id) {
-            imageUrlMap.set(card.oracle_id, imageUrl);
+          if (card.oracle_id && !result.has(card.oracle_id)) {
+            result.set(card.oracle_id, card);
           }
         }
-        
-        nextPageUrl = result.has_more ? result.next_page : null;
+        nextPageUrl = resJson.has_more ? resJson.next_page : null;
       }
     } catch (error) {
-      console.error(`Error in fetchOldestPrintings (Batch starting at index ${i}):`, error);
+      console.error(`Error in fetchOldestPrintings:`, error);
     }
   }
-
-  return imageUrlMap;
+  return result;
 }
 
-
-
-/**
- * Scryfall Card Object (simplified)
- */
-export interface ScryfallCard {
-  id: string; // UUID
-  oracle_id: string;
-  name: string;
-  set: string;
-  set_name: string;
-  rarity: string;
-  type_line: string;
-  colors?: string[];
-  color_identity?: string[];
-  mana_cost?: string;
-  cmc: number;
-  oracle_text?: string;
-  card_faces?: Array<{
-    name?: string;
-    oracle_text?: string;
-  }>;
-  released_at: string;
-  edhrec_rank?: number; // Lower is more popular
-    legalities: {
-    standard?: 'legal' | 'not_legal' | 'banned';
-    pioneer?: 'legal' | 'not_legal' | 'banned';
-    modern?: 'legal' | 'not_legal' | 'banned';
-    legacy?: 'legal' | 'not_legal' | 'banned' | 'restricted';
-    vintage?: 'legal' | 'not_legal' | 'banned' | 'restricted';
-    pauper?: 'legal' | 'not_legal' | 'banned';
-  };
-  image_uris?: {
-    small: string;
-    normal: string;
-    large: string;
-    png: string;
-    art_crop: string;
-    border_crop: string;
-  };
-}
 
 /**
  * Search for a card by exact name
@@ -277,8 +217,6 @@ export async function fetchCardCollection(
       headers: { ...SCRYFALL_HEADERS, "Content-Type": "application/json" },
       body: JSON.stringify({ 
           identifiers, 
-          // THE FIX: Tell Scryfall to return the absolute oldest printing for the primary data!
-          prefer: "oldest" 
       }),
     });
 

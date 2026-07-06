@@ -274,14 +274,25 @@ export async function bulkImportAndSync(
         }
 
         const uniqueNamesToFetch = [...new Set(requestedCards.map(req => req.name))];
-        const { cards: scryfallResults, notFound, errors: fetchErrors } = await fetchAllCards(uniqueNamesToFetch);
+       const { cards: scryfallResults, notFound, errors: fetchErrors } = await fetchAllCards(uniqueNamesToFetch);
         
         const failedImports: { name: string; reason: string }[] = [];
         notFound.forEach(name => failedImports.push({ name, reason: "Not found on Scryfall" }));
         if(fetchErrors.length > 0) console.error("Scryfall fetch errors:", fetchErrors);
 
-         const scryfallCardMap = new Map<string, ScryfallCard>();
-        scryfallResults.forEach(card => scryfallCardMap.set(card.name.toLowerCase(), card));
+        // THE FIX: Check the reprint boolean!
+        const reprintOracleIds = scryfallResults.filter(c => c.reprint).map(c => c.oracle_id).filter(Boolean) as string[];
+        const originalPrintingsMap = await fetchOldestPrintings(reprintOracleIds);
+
+        const scryfallCardMap = new Map<string, ScryfallCard>();
+        scryfallResults.forEach(card => {
+            // If it's a reprint, and we fetched the original, swap the entire card object out!
+            if (card.reprint && card.oracle_id && originalPrintingsMap.has(card.oracle_id)) {
+                scryfallCardMap.set(card.name.toLowerCase(), originalPrintingsMap.get(card.oracle_id)!);
+            } else {
+                scryfallCardMap.set(card.name.toLowerCase(), card);
+            }
+        });
 
         const cardsToInsert: Array<Omit<CardData, "id" | "created_at" | "rating_updated_at">> = [];
 
@@ -449,11 +460,18 @@ export async function backfillImportedCards(tableName: PoolTableName = "card_poo
         const uniqueNames = [...new Set(cardsToFix.map(c => c.card_name))];
         const { cards: scryfallResults } = await fetchAllCards(uniqueNames);
         
-        const scryfallCardMap = new Map<string, ScryfallCard>();
-        scryfallResults.forEach(card => scryfallCardMap.set(card.name.toLowerCase(), card));
+        // THE FIX: Do the exact same boolean check and swap here
+        const reprintOracleIds = scryfallResults.filter(c => c.reprint).map(c => c.oracle_id).filter(Boolean) as string[];
+        const originalPrintingsMap = await fetchOldestPrintings(reprintOracleIds);
 
-        const oracleIds = scryfallResults.map(c => c.oracle_id).filter(Boolean);
-        const oldestImageMap = await fetchOldestPrintings(oracleIds as string[]);
+        const scryfallCardMap = new Map<string, ScryfallCard>();
+        scryfallResults.forEach(card => {
+            if (card.reprint && card.oracle_id && originalPrintingsMap.has(card.oracle_id)) {
+                scryfallCardMap.set(card.name.toLowerCase(), originalPrintingsMap.get(card.oracle_id)!);
+            } else {
+                scryfallCardMap.set(card.name.toLowerCase(), card);
+            }
+        });
 
         let updatedCount = 0;
         
@@ -477,7 +495,7 @@ export async function backfillImportedCards(tableName: PoolTableName = "card_poo
                         oracle_id: scryData.oracle_id,
                         oracle_text: extractOracleText(scryData), 
                         image_url: scryData.image_uris?.normal || scryData.image_uris?.small,
-                        oldest_image_url: oldestImageMap.get(scryData.oracle_id || "") || scryData.image_uris?.normal,
+                        oldest_image_url:  extractImageUrl(scryData),
                         color_identity: scryData.color_identity || [],
                         cmc: scryData.cmc || 0,
                         hidden: scryData.type_line.toLowerCase().includes('basic land')
