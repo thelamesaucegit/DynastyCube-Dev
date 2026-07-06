@@ -34,6 +34,7 @@ export const DraftSessionManagement: React.FC = () => {
   const [startTime, setStartTime] = useState("");
   const [endDate, setEndDate] = useState("");
   const [endTime, setEndTime] = useState("");
+   const [enforceDayNight, setEnforceDayNight] = useState(true);
   const [editingHours, setEditingHours] = useState(false);
   const [editHoursValue, setEditHoursValue] = useState("");
   const [testModeLoading, setTestModeLoading] = useState(false);
@@ -113,6 +114,7 @@ export const DraftSessionManagement: React.FC = () => {
         hoursPerPick: parseFloat(hoursPerPick) || 24,
         startTime: startISO,
         endTime: endISO,
+        enforceDayNightDrafting: enforceDayNight,
       });
       if (result.success) {
         setMessage({ type: "success", text: "Draft session created successfully!" });
@@ -472,6 +474,16 @@ export const DraftSessionManagement: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Hours Per Pick</label>
                   <input type="number" step="0.5" value={hoursPerPick} onChange={(e) => setHoursPerPick(e.target.value)} min="0.01" max="168" className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" />
                 </div>
+                <div className="flex items-center space-x-2 pt-6">
+      <Switch 
+          id="day-night-toggle" 
+          checked={enforceDayNight} 
+          onCheckedChange={setEnforceDayNight}
+      />
+      <Label htmlFor="day-night-toggle" className="font-medium text-gray-700 dark:text-gray-300">
+          Enforce Day/Night Draft Rules
+      </Label>
+  </div>
               </div>
               <div className="flex gap-2">
                 <button onClick={handleCreate} disabled={actionLoading || draftOrder.length === 0} className="admin-btn admin-btn-primary">{actionLoading ? "Creating..." : "Schedule Draft"}</button>
