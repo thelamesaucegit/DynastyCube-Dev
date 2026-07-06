@@ -1,11 +1,11 @@
-///src/app/actions/season4ImportActions.ts
-
+// /src/app/actions/season4ImportActions.ts
 "use server";
 
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { fetchAllCards, fetchOldestPrintings, ScryfallCard } from "@/lib/scryfall-client";
 
+// This function can remain the same
 async function createClient() {
   const cookieStore = await cookies();
   return createServerClient(
@@ -25,17 +25,17 @@ async function createClient() {
 const SESSION_ID = 'e419655d-e308-4648-8f90-2da7ee119847';
 const SEASON_ID = '4b1d9936-bf5e-4ee5-bd56-741a7c12307e';
 
-export async function processSeason4CSV(csvText: string) {
+export async function processSeason4CSV(csvText: string): Promise<{ success: boolean; message: string; }> {
     const supabase = await createClient();
     try {
         const lines = csvText.split('\n').map(l => l.split(','));
         const teamNames = lines[2].slice(2, 8).map(n => n.trim());
 
-        // 1. Resolve Teams
+        // 1. Resolve Team IDs
         const { data: teamsData, error: teamsError } = await supabase.from('teams').select('id, name');
         if (teamsError) throw new Error("Could not fetch teams from database.");
         
-        const teamMap = new Map();
+        const teamMap = new Map<string, string>();
         teamsData.forEach(t => teamMap.set(t.name.toLowerCase().trim(), t.id));
 
         const orderedTeamIds = teamNames.map(name => {
@@ -44,19 +44,19 @@ export async function processSeason4CSV(csvText: string) {
             return id;
         });
 
-        // 2. Clear existing Draft Order & generate new ones
+        // 2. Clear & Generate Draft Order
         await supabase.from('draft_order').delete().eq('season_id', SEASON_ID);
         const draftOrderInserts = orderedTeamIds.map((teamId, index) => ({
             season_id: SEASON_ID,
             team_id: teamId,
             pick_position: index + 1,
-            lottery_number: index + 1
+            lottery_number: index + 1 
         }));
         await supabase.from('draft_order').insert(draftOrderInserts);
 
-        // 3. Parse CSV Grid
-        const parsedPicks: any[] = [];
-        let keeperCounter = 193; // Normal draft ends at 192
+        // 3. Parse CSV Grid, preserving ALL picks including duplicates
+        const parsedPicks: Array<{ teamId: string; cardName: string; pickNumber: number; pickSource: 'draft' | 'keeper' }> = [];
+        let keeperCounter = 193; // Keepers start after the main draft
 
         // Rounds 1-32 (Snake Math)
         for (let r = 1; r <= 32; r++) {
@@ -65,15 +65,14 @@ export async function processSeason4CSV(csvText: string) {
             const isEvenRound = r % 2 === 0;
 
             for (let c = 2; c <= 7; c++) {
-                let rawName = line[c];
+                const rawName = line[c];
                 if (!rawName || !rawName.trim()) continue;
 
-                // Remove the 1/2 suffixes from names like Frost Bite2
                 const cardName = rawName.trim().replace(/\d+$/, '');
-                // SNaking Math: Left-to-Right on Odds, Right-to-Left on Evens
-                const pickNumber = isEvenRound ? ((r - 1) * 6 + (8 - c)) : ((r - 1) * 6 + (c - 1));
-
-                parsedPicks.push({ teamId: orderedTeamIds[c - 2], cardName, pickNumber, pickSource: 'draft' });
+                const teamIndex = isEvenRound ? (7 - c) : (c - 2);
+                const pickNumber = ((r - 1) * 6) + (isEvenRound ? (c - 1) : (c - 2)) + 1;
+                
+                parsedPicks.push({ teamId: orderedTeamIds[teamIndex], cardName, pickNumber, pickSource: 'draft' });
             }
         }
 
@@ -82,15 +81,15 @@ export async function processSeason4CSV(csvText: string) {
             const line = lines[k];
             if (!line) continue;
             for (let c = 2; c <= 7; c++) {
-                let rawName = line[c];
-                if (!rawName || !rawName.trim() || rawName.trim() === 'KEEPERS') continue;
+                const rawName = line[c];
+                if (!rawName || !rawName.trim() || rawName.trim().toUpperCase() === 'KEEPERS') continue;
 
                 const cardName = rawName.trim().replace(/\d+$/, '');
                 parsedPicks.push({ teamId: orderedTeamIds[c - 2], cardName, pickNumber: keeperCounter++, pickSource: 'keeper' });
             }
         }
 
-        // 4. Fetch Scryfall Data (with our new Reprint Swapper!)
+        // 4. Fetch Scryfall Data using only the unique names
         const uniqueNames = [...new Set(parsedPicks.map(p => p.cardName))];
         const { cards: scryfallResults } = await fetchAllCards(uniqueNames);
         
@@ -107,10 +106,10 @@ export async function processSeason4CSV(csvText: string) {
         });
 
         // 5. Construct & Insert
-        const baseTime = new Date('2026-06-22T19:00:00-05:00').getTime();
+        const baseTime = new Date('2023-08-01T12:00:00-05:00').getTime();
         const finalInserts = parsedPicks.map(pick => {
             const scryData = scryfallCardMap.get(pick.cardName.toLowerCase());
-            const draftedAt = new Date(baseTime + (pick.pickNumber * 60000)).toISOString(); // Space picks 1 min apart
+            const draftedAt = new Date(baseTime + (pick.pickNumber * 60000)).toISOString();
             
             return {
                 draft_session_id: SESSION_ID,
@@ -132,12 +131,11 @@ export async function processSeason4CSV(csvText: string) {
             };
         });
 
-        // Clear old picks and insert the new mapped batch!
         await supabase.from('historical_draft_picks').delete().eq('draft_session_id', SESSION_ID);
         const { error: insertError } = await supabase.from('historical_draft_picks').insert(finalInserts);
         if (insertError) throw insertError;
 
-        return { success: true, message: `Successfully parsed and inserted ${finalInserts.length} picks (including Keepers) using snaking logic!` };
+        return { success: true, message: `Successfully parsed and inserted ${finalInserts.length} picks for Season 4!` };
     } catch (err: any) {
         return { success: false, message: err.message || "An unknown error occurred." };
     }
