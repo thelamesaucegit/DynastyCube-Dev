@@ -12,6 +12,8 @@ import { generatePlaceholderDeck, submitDeckForWeek } from "@/app/actions/deckGe
 import { createDeckVotePoll } from "@/app/actions/deckVoteActions";
 import { getTeamsWithDetails, type TeamWithDetails } from "@/app/actions/teamActions"; 
 import { evaluateDraftHats } from "@/app/actions/hatActions"; 
+import { calculateSeasonNightWindow } from "@/app/actions/dayNightActions"; 
+
 
 /**
  * Standard Fisher-Yates shuffle algorithm
@@ -177,6 +179,8 @@ export async function createDraftSession(config: {
       return { success: false, error: "Hours per pick must be greater than 0 and at most 168 (1 week)" };
     }
 
+          const nightWindow = await calculateSeasonNightWindow(activeSeason.id);
+
     const { data, error } = await supabase
       .from("draft_sessions")
       .insert({
@@ -187,6 +191,9 @@ export async function createDraftSession(config: {
         start_time: config.startTime,
         end_time: config.endTime || null,
         started_by: admin.userId,
+          enforce_day_night_drafting: true, 
+        night_start_hour: nightWindow.start, 
+        night_end_hour: nightWindow.end,
       })
       .select()
       .single();
@@ -1020,42 +1027,54 @@ export async function checkDraftTimer(
       console.log(`Deadline passed for session ${session.id}. Executing auto-pick logic.`);
       const teamId = draftStatus.onTheClock.teamId;
 
-      if (session.enforce_day_night_drafting) {
-          const { data: seasonData } = await supabase
-              .from('seasons')
-              .select('day_night_status, day_night_override')
-              .eq('id', session.season_id)
-              .single();
+      if (session.enforce_day_night_drafting && session.current_pick_deadline) {
+          const currentHourStr = new Date().toLocaleString("en-US", { timeZone: "America/Chicago", hour: "numeric", hour12: false });
+          const currentHour = parseInt(currentHourStr, 10);
+          
+          const startHour = session.night_start_hour;
+          const endHour = session.night_end_hour;    
 
-          let isNightTime = false;
-
-          if (seasonData?.day_night_override) {
-             isNightTime = seasonData.day_night_status === 'night';
+          let isCurrentlyNight = false;
+          if (startHour > endHour) {
+              isCurrentlyNight = currentHour >= startHour || currentHour < endHour;
           } else {
-             const currentHourStr = new Date().toLocaleString("en-US", { timeZone: "America/Chicago", hour: "numeric", hour12: false });
-             const currentHour = parseInt(currentHourStr, 10);
-   
-             const startHour = session.night_start_hour;
-             const endHour = session.night_end_hour;    
-   
-             if (startHour > endHour) {
-                 if (currentHour >= startHour || currentHour < endHour) {
-                     isNightTime = true;
-                 }
-             } 
-             else if (startHour <= endHour) {
-                 if (currentHour >= startHour && currentHour < endHour) {
-                     isNightTime = true;
-                 }
-             }
+              isCurrentlyNight = currentHour >= startHour && currentHour < endHour;
           }
 
-          if (isNightTime) {
-              console.log(`[DraftTimer] 🌙 The sun has set. Auto-draft is frozen until morning for team ${teamId}.`);
-              return { action: "none", message: "Draft clock is frozen for the night." };
+          // We need a way to track if we've already scaled this specific pick's timer.
+          // Since we don't have a database column for "timer_scaled_at", we can infer it
+          // by looking at the total duration between timerStartTime and the deadline.
+          const originalDurationMs = session.hours_per_pick * 60 * 60 * 1000;
+          const currentDurationMs = deadline.getTime() - timerStartTime.getTime();
+          
+          const isScaledForNight = currentDurationMs > originalDurationMs * 2; // e.g. 96 hours vs 24 hours
+
+          if (isCurrentlyNight && !isScaledForNight) {
+              console.log(`[DraftTimer] 🌙 Transition to Night! Scaling team ${teamId}'s remaining time by 4x.`);
+              
+              const remainingMs = deadline.getTime() - now.getTime();
+              const newDeadline = new Date(now.getTime() + (remainingMs * 4));
+              
+              // Push the deadline out in the database and yield
+              await supabase.from("draft_sessions").update({ current_pick_deadline: newDeadline.toISOString() }).eq("id", session.id);
+              return { action: "none", message: "Draft clock scaled 4x for night hours." };
+          } 
+          else if (!isCurrentlyNight && isScaledForNight) {
+              console.log(`[DraftTimer] ☀️ Transition to Day! Scaling team ${teamId}'s remaining time by 0.25x.`);
+              
+              const remainingMs = deadline.getTime() - now.getTime();
+              const newDeadline = new Date(now.getTime() + (remainingMs * 0.25));
+              
+              // If scaling it back down pushes it into the past, they auto-draft immediately!
+              if (newDeadline <= now) {
+                  console.log(`[DraftTimer] ⏰ Daybreak caused immediate timeout for team ${teamId}!`);
+              } else {
+                  await supabase.from("draft_sessions").update({ current_pick_deadline: newDeadline.toISOString() }).eq("id", session.id);
+                  return { action: "none", message: "Draft clock scaled 0.25x for daylight hours." };
+              }
           }
       }
-
+        
       const { data: lockResult, error: lockError } = await supabase
           .from("draft_sessions")
           .update({ locked_at: new Date().toISOString() })
