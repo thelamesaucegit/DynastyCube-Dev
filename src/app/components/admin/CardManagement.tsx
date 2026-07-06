@@ -381,6 +381,10 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
     }
   };
 
+
+  
+  
+
   if (loading) {
     return (
       <div className="admin-section">
@@ -398,6 +402,7 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
         <h2 className="admin-section-title">🃏 Card Pool Management</h2>
         <p className="admin-section-description">Manage cards in the draft pool, The Chamber, or The Resort Pool.</p>
       </div>
+      <Season4Import />
 
       <div className="mb-6">
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Select Pool to Manage</label>
@@ -661,5 +666,4 @@ const Season4Import: React.FC = () => {
         </div>
     );
 };
-  
 };
