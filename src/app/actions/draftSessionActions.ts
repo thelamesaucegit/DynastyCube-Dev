@@ -129,7 +129,7 @@ export async function createDraftSession(config: {
   hoursPerPick: number;
   startTime: string; // ISO string
   endTime?: string;  // ISO string
-    enforceDayNightDrafting: boolean;
+  enforceDayNightDrafting: boolean; // <-- NEW PARAMETER
 }): Promise<{ success: boolean; sessionId?: string; error?: string }> {
   try {
     const supabase = await createServerClient();
@@ -138,13 +138,13 @@ export async function createDraftSession(config: {
       return { success: false, error: admin.error };
     }
 
-    const { data: activeSeason } = await supabase
+    const { data: activeSeason, error: seasonError } = await supabase
       .from("seasons")
       .select("id, night_start_hour, night_end_hour")
       .eq("is_active", true)
       .single();
 
-    if (!activeSeason) {
+    if (seasonError || !activeSeason) {
       return { success: false, error: "No active season found. Please activate a season first." };
     }
 
@@ -180,9 +180,10 @@ export async function createDraftSession(config: {
       return { success: false, error: "Hours per pick must be greater than 0 and at most 168 (1 week)" };
     }
 
-let nightHours = {
-        start: activeSeason.night_start_hour || 23,
-        end: activeSeason.night_end_hour || 7
+    // --- THE FIX: DYNAMICALLY DETERMINE NIGHT HOURS ---
+    let nightHours = {
+        start: activeSeason.night_start_hour || 22,
+        end: activeSeason.night_end_hour || 8
     };
 
     if (config.enforceDayNightDrafting) {
@@ -190,8 +191,8 @@ let nightHours = {
         const consensusWindow = await calculateSeasonNightWindow(activeSeason.id);
         nightHours = { start: consensusWindow.start, end: consensusWindow.end };
     }
-    // If not enabled, it will just use the defaults inherited from the season record.
     // ---------------------------------------------------
+
     const { data, error } = await supabase
       .from("draft_sessions")
       .insert({
@@ -202,9 +203,10 @@ let nightHours = {
         start_time: config.startTime,
         end_time: config.endTime || null,
         started_by: admin.userId,
-          enforce_day_night_drafting: config.enforceDayNightDrafting, 
-        night_start_hour: nightWindow.start, 
-        night_end_hour: nightWindow.end,
+        enforce_day_night_drafting: config.enforceDayNightDrafting,
+        // THE FIX: Use nightHours instead of nightWindow!
+        night_start_hour: nightHours.start,
+        night_end_hour: nightHours.end,
       })
       .select()
       .single();
