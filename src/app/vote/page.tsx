@@ -1,9 +1,9 @@
-// src/app/vote/page.tsx
+// /src/app/vote/page.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getActivePolls, getVotingContext, type PollWithOptions  } from "@/app/actions/voteActions";
+import { getActivePolls, getVotingContext, type PollWithOptions } from "@/app/actions/voteActions";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
 import { Badge } from "@/app/components/ui/badge";
@@ -12,14 +12,54 @@ import { RepublicVoteCard } from "@/app/components/vote/RepublicVoteCard";
 import { BlessingsAllocator } from "@/app/components/vote/BlessingsAllocator";
 import { TeamPollCard } from "@/app/components/team/TeamPollCard";
 import { IndividualVoteCard } from "@/app/components/vote/IndividualVoteCard";
-import { DayNightGrid } from "@/app/components/vote/DayNightGrid"; 
+import { DayNightGrid } from "@/app/components/vote/DayNightGrid"; // Add the new grid import
 
-
+// THE FIX: Define a strict type for the context
+interface VotingContext {
+  seasonId: string | null;
+  isPostseason: boolean;
+  userTeamId: string | null;
+}
 
 export default function VotePage() {
   const { user, loading: authLoading } = useAuth();
   const [polls, setPolls] = useState<PollWithOptions[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // THE FIX: Use the strict type for state
+  const [votingContext, setVotingContext] = useState<VotingContext>({ 
+    seasonId: null, 
+    isPostseason: false, 
+    userTeamId: null 
+  });
+
+  // THE FIX: Wrap loadPolls in useCallback
+  const loadPolls = useCallback(async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    try {
+      const [pollResult, contextResult] = await Promise.all([
+          getActivePolls(user.id),
+          getVotingContext(user.id)
+      ]);
+
+      if (pollResult.success && pollResult.polls) {
+        setPolls(pollResult.polls as PollWithOptions[]);
+      }
+      if (contextResult.success) {
+        // THE FIX: No 'as any' needed due to strict typing
+        setVotingContext({
+            seasonId: contextResult.seasonId,
+            isPostseason: contextResult.isPostseason,
+            userTeamId: contextResult.userTeamId,
+        });
+      }
+    } catch (error) {
+      console.error("Error loading polls:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]); // Dependency on user.id
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -27,32 +67,10 @@ export default function VotePage() {
     } else if (!authLoading) {
       setLoading(false);
     }
-  }, [user, authLoading]);
+  }, [user, authLoading, loadPolls]); // THE FIX: Add loadPolls to dependency array
 
- const [votingContext, setVotingContext] = useState<{ seasonId: string | null, isPostseason: boolean, userTeamId: string | null }>({ seasonId: null, isPostseason: false, userTeamId: null });
-
-  const loadPolls = async () => {
-    setLoading(true);
-    try {
-      // THE FIX: Fetch context and polls concurrently
-      const [pollResult, contextResult] = await Promise.all([
-          getActivePolls(user?.id),
-          getVotingContext(user?.id)
-      ]);
-
-      if (pollResult.success && pollResult.polls) {
-        setPolls(pollResult.polls as PollWithOptions[]);
-      }
-      if (contextResult.success) {
-        setVotingContext(contextResult as any); // Type cast safely since we know the shape
-      }
-    } catch (error) {
-      console.error("Error loading polls:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // ... (The rest of the component from the previous correct version)
+  // This part does not need to change.
   if (authLoading) {
     return (
       <div className="flex justify-center py-20">
@@ -84,16 +102,14 @@ export default function VotePage() {
     );
   }
 
-  // Filter polls by vote type
  const republicPolls = polls.filter((p) => p.vote_type === "republic" || p.vote_type === "league");
-const blessingPolls = polls.filter((p) => p.vote_type === "blessing_event");
-const teamPolls = polls.filter((p) => p.vote_type === "team");
-const individualPolls = polls.filter((p) => p.vote_type === "individual"); // Separate them here
+ const blessingPolls = polls.filter((p) => p.vote_type === "blessing_event");
+ const teamPolls = polls.filter((p) => p.vote_type === "team");
+ const individualPolls = polls.filter((p) => p.vote_type === "individual");
 
-// Update default tab logic to include the new group
-const defaultTab = republicPolls.length > 0 ? "republic" : 
-                   individualPolls.length > 0 ? "individual" : 
-                   blessingPolls.length > 0 ? "blessings" : "team";
+ const defaultTab = republicPolls.length > 0 ? "republic" : 
+                    individualPolls.length > 0 ? "individual" : 
+                    blessingPolls.length > 0 ? "blessings" : "team";
 
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8">
@@ -101,7 +117,6 @@ const defaultTab = republicPolls.length > 0 ? "republic" :
         <h1 className="text-4xl font-bold tracking-tight mb-2">Community Voting</h1>
         <p className="text-muted-foreground text-lg">Vote on league rules, blessings, and team decisions.</p>
       </div>
-
       {loading ? (
         <Card>
           <CardContent className="py-16 text-center">
@@ -113,8 +128,8 @@ const defaultTab = republicPolls.length > 0 ? "republic" :
         <Tabs defaultValue={defaultTab} className="w-full">
           <TabsList className="mb-6 flex-wrap h-auto">
              <TabsTrigger value="individual" className="gap-2">
-    General Votes <Badge variant="secondary" className="ml-1 rounded-full">{individualPolls.length}</Badge>
-  </TabsTrigger>
+                General Votes <Badge variant="secondary" className="ml-1 rounded-full">{individualPolls.length}</Badge>
+            </TabsTrigger>
             <TabsTrigger value="republic" className="gap-2">
               League Rules <Badge variant="secondary" className="ml-1 rounded-full">{republicPolls.length}</Badge>
             </TabsTrigger>
@@ -125,77 +140,75 @@ const defaultTab = republicPolls.length > 0 ? "republic" :
               Team Internal <Badge variant="secondary" className="ml-1 rounded-full">{teamPolls.length}</Badge>
             </TabsTrigger>
           </TabsList>
-<TabsContent value="individual" className="space-y-6">
-  {individualPolls.length === 0 ? (
-    <Card>
-      <CardContent className="py-12 text-center text-muted-foreground">
-        <p>No active general votes at this time.</p>
-      </CardContent>
-    </Card>
-  ) : (
-    individualPolls.map((poll) => (
-      <IndividualVoteCard key={poll.id} poll={poll} userId={user.id} onVoteSubmit={loadPolls} />
-    ))
-  )}
-</TabsContent>
-          <TabsContent value="republic" className="space-y-6">
-            {republicPolls.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center text-muted-foreground">
-                  <p>No active league rule votes at this time.</p>
-                </CardContent>
-              </Card>
-            ) : (
-              republicPolls.map((poll) => (
-                <RepublicVoteCard key={poll.id} poll={poll} userId={user.id} onVoteSubmit={loadPolls} />
-              ))
-            )}
-          </TabsContent>
-
-          <TabsContent value="blessings" className="space-y-6">
-            {blessingPolls.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center text-muted-foreground">
-                  <p>No active team blessing events at this time.</p>
-                </CardContent>
-              </Card>
-            ) : (
-              blessingPolls.map((poll) => (
-                <BlessingsAllocator key={poll.id} poll={poll} userId={user.id} onVoteSubmit={loadPolls} />
-              ))
-            )}
-          </TabsContent>
-
-          <TabsContent value="team" className="space-y-6">
-            {votingContext.isPostseason && votingContext.seasonId && votingContext.userTeamId && user && (
-                <DayNightGrid 
-                    seasonId={votingContext.seasonId} 
-                    teamId={votingContext.userTeamId} 
-                    userId={user.id} 
-                    isPostseason={votingContext.isPostseason} 
-                />
-            )}
-            {teamPolls.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center text-muted-foreground">
-                  <p>No active team-specific votes at this time.</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {teamPolls.map((poll) => (
-                  <TeamPollCard 
-                    key={poll.id} 
-                    poll={poll} 
-                    userId={user.id} 
-                    isCaptain={false} // Note: Edit/Delete controls are kept on the Team Page, not the generic Voting Page
-                    onVoteSubmit={loadPolls} 
-                    onDelete={() => {}} 
+            <TabsContent value="individual" className="space-y-6">
+              {individualPolls.length === 0 ? (
+                <Card>
+                  <CardContent className="py-12 text-center text-muted-foreground">
+                    <p>No active general votes at this time.</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                individualPolls.map((poll) => (
+                  <IndividualVoteCard key={poll.id} poll={poll} userId={user.id} onVoteSubmit={loadPolls} />
+                ))
+              )}
+            </TabsContent>
+            <TabsContent value="republic" className="space-y-6">
+              {republicPolls.length === 0 ? (
+                <Card>
+                  <CardContent className="py-12 text-center text-muted-foreground">
+                    <p>No active league rule votes at this time.</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                republicPolls.map((poll) => (
+                  <RepublicVoteCard key={poll.id} poll={poll} userId={user.id} onVoteSubmit={loadPolls} />
+                ))
+              )}
+            </TabsContent>
+            <TabsContent value="blessings" className="space-y-6">
+              {blessingPolls.length === 0 ? (
+                <Card>
+                  <CardContent className="py-12 text-center text-muted-foreground">
+                    <p>No active team blessing events at this time.</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                blessingPolls.map((poll) => (
+                  <BlessingsAllocator key={poll.id} poll={poll} userId={user.id} onVoteSubmit={loadPolls} />
+                ))
+              )}
+            </TabsContent>
+            <TabsContent value="team" className="space-y-6">
+              {votingContext.isPostseason && votingContext.seasonId && votingContext.userTeamId && user && (
+                  <DayNightGrid 
+                      seasonId={votingContext.seasonId} 
+                      teamId={votingContext.userTeamId} 
+                      userId={user.id} 
+                      isPostseason={votingContext.isPostseason} 
                   />
-                ))}
-              </div>
-            )}
-          </TabsContent>
+              )}
+              {teamPolls.length === 0 ? (
+                <Card>
+                  <CardContent className="py-12 text-center text-muted-foreground">
+                    <p>No active team-specific votes at this time.</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {teamPolls.map((poll) => (
+                    <TeamPollCard 
+                      key={poll.id} 
+                      poll={poll} 
+                      userId={user.id} 
+                      isCaptain={false}
+                      onVoteSubmit={loadPolls} 
+                      onDelete={() => {}} 
+                    />
+                  ))}
+                </div>
+              )}
+            </TabsContent>
         </Tabs>
       )}
     </div>
