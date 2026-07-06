@@ -99,3 +99,42 @@ export async function aggregateTeamNightHours(seasonId: string, teamId: string) 
     if (error) return { success: false, error: error.message };
     return { success: true, start_hour: bestStartHour, end_hour: endHour };
 }
+
+export async function calculateSeasonNightWindow(seasonId: string) {
+    const supabase = await createServerClient();
+    const { data: submissions } = await supabase
+        .from('team_night_hours_submissions')
+        .select('start_hour, end_hour')
+        .eq('season_id', seasonId);
+        
+    if (!submissions || submissions.length === 0) return { start: 22, end: 6 }; // Default 10pm - 6am if no votes
+
+    // Tally up the 24 hours based on all team submissions
+    const hourTallies = new Array(24).fill(0);
+    for (const sub of submissions) {
+        for (let i = 0; i < 10; i++) {
+            const h = (sub.start_hour + i) % 24;
+            hourTallies[h]++;
+        }
+    }
+
+    // Find the 8 consecutive hours with the most overlap
+    let maxOverlap = -1;
+    let bestStartHour = 22; // default 10pm
+
+    for (let start = 0; start < 24; start++) {
+        let currentWindowOverlap = 0;
+        for (let i = 0; i < 8; i++) {
+            const hour = (start + i) % 24;
+            currentWindowOverlap += hourTallies[hour];
+        }
+
+        if (currentWindowOverlap > maxOverlap) {
+            maxOverlap = currentWindowOverlap;
+            bestStartHour = start;
+        }
+    }
+
+    const endHour = (bestStartHour + 8) % 24;
+    return { start: bestStartHour, end: endHour };
+}
