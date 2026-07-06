@@ -303,6 +303,8 @@ export async function fetchCardCollection(
     return { data: [], not_found: cardNames.map(name => ({ name })) };
   }
 }
+
+
 /**
  * Fetch cards in batches to respect the 75-card limit
  * Returns all successfully fetched cards and list of not found cards
