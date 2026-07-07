@@ -618,7 +618,7 @@ export default function TeamPage() {
                     <h2 className="text-xl font-semibold flex items-center gap-2">
                       <Layers className="size-5" /> Team Pool
                     </h2>
-                    {isUserTeamMember && seasonPhase === "playoffs" && (
+{(seasonPhase === "playoffs" || seasonPhase === "postseason") && (
                       <Badge variant="outline" className="bg-primary/5"> Keepers: {currentKeepersCount} / 8 </Badge>
                     )}
                   </div>
