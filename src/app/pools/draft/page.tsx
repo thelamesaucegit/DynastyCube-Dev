@@ -1,4 +1,5 @@
 // src/app/pools/draft/page.tsx
+
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
@@ -8,14 +9,11 @@ import type { PoolCard } from "@/app/actions/poolActions";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
 import { PoolFilterBar } from "@/app/components/pools/PoolFilterBar";
-
 import { Search, Layers, CheckCircle2, CircleDashed, Loader2, ArrowUp, ArrowDown } from "lucide-react";
 import { useSettings } from "@/contexts/SettingsContext";
 import { getCardImageUrl } from "@/app/utils/cardUtils";
 
 const CARDS_PER_PAGE = 20;
-
-
 
 export default function PoolsPage() {
   const { useOldestArt } = useSettings();
@@ -34,13 +32,12 @@ export default function PoolsPage() {
   const [excludeUnselected, setExcludeUnselected] = useState(false);
   
   const [filterType, setFilterType] = useState("all");
-  const [filterRarity, setFilterRarity] = useState("all"); // NEW: Rarity Filter
+  const [filterRarity, setFilterRarity] = useState("all"); 
   const [filterCmc, setFilterCmc] = useState("all");
   const [filterCubucks, setFilterCubucks] = useState("all");
   const [sortBy, setSortBy] = useState("card_name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [currentPage, setCurrentPage] = useState(1);
-
   const [stats, setStats] = useState<{
     totalCards: number;
     draftedCards: number;
@@ -82,14 +79,11 @@ export default function PoolsPage() {
   };
 
   const applyFiltersAndSorting = () => {
-    // 1. Filtering
     let filtered = [...cards];
-
     if (searchTerm) {
       const lowerSearch = searchTerm.toLowerCase();
       filtered = filtered.filter((card) =>
         card.card_name.toLowerCase().includes(lowerSearch) ||
-        // Safely check if oracle_text exists and matches!
         (card.oracle_text && card.oracle_text.toLowerCase().includes(lowerSearch))
       );
     }
@@ -100,7 +94,6 @@ export default function PoolsPage() {
       filtered = filtered.filter((card) => card.is_drafted);
     }
 
-    // --- NEW: Granular Color Logic ---
     if (filterColors.length > 0) {
       const wantColorless = filterColors.includes("colorless");
       const wantedColors = filterColors.filter((c) => c !== "colorless");
@@ -109,17 +102,9 @@ export default function PoolsPage() {
         const cardColors = card.colors || [];
         const isColorless = cardColors.length === 0;
 
-        // If they ONLY selected colorless
-        if (wantColorless && wantedColors.length === 0) {
-            return isColorless;
-        }
+        if (wantColorless && wantedColors.length === 0) return isColorless;
+        if (isColorless) return wantColorless && !matchAllColors;
 
-        // If the card is colorless, but they also selected colors
-        if (isColorless) {
-            return wantColorless && !matchAllColors;
-        }
-
-        // If card has colors, check against our strict toggles
         const hasAll = wantedColors.every(c => cardColors.includes(c));
         const hasAny = wantedColors.some(c => cardColors.includes(c));
         const hasOnly = cardColors.every(c => wantedColors.includes(c));
@@ -128,7 +113,6 @@ export default function PoolsPage() {
         if (matchAllColors) return hasAll;
         if (excludeUnselected) return hasOnly;
         
-        // Default OR logic
         return hasAny || (wantColorless && isColorless);
       });
     }
@@ -139,7 +123,6 @@ export default function PoolsPage() {
       );
     }
 
-    // --- NEW: Rarity Filter ---
     if (filterRarity !== "all") {
         filtered = filtered.filter((card) =>
             card.rarity && card.rarity.toLowerCase() === filterRarity.toLowerCase()
@@ -168,7 +151,6 @@ export default function PoolsPage() {
         });
     }
 
-    // 2. Sorting
     const sorted = filtered.sort((a, b) => {
       let valA, valB;
       switch (sortBy) {
@@ -188,7 +170,6 @@ export default function PoolsPage() {
           valA = a.card_name.toLowerCase();
           valB = b.card_name.toLowerCase();
       }
-
       if (typeof valA === 'string' && typeof valB === 'string') {
         return sortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
       } else {
@@ -211,10 +192,7 @@ export default function PoolsPage() {
     });
     return Array.from(types).sort();
   }, [cards]);
-
  
-
-  // Pagination
   const totalPages = Math.ceil(filteredAndSortedCards.length / CARDS_PER_PAGE);
   const paginatedCards = filteredAndSortedCards.slice(
     (currentPage - 1) * CARDS_PER_PAGE,
@@ -269,10 +247,10 @@ export default function PoolsPage() {
       {stats && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
               <Card><CardContent className="pt-6 text-center"><Layers className="h-5 w-5 text-primary mx-auto mb-2" /><div className="text-3xl font-bold mb-1">{stats.totalCards}</div><div className="text-sm text-muted-foreground">Total Cards</div></CardContent></Card>
-                     </div>
+          </div>
       )}
 
-          <PoolFilterBar
+      <PoolFilterBar
         searchTerm={searchTerm} setSearchTerm={setSearchTerm}
         filterColors={filterColors} setFilterColors={setFilterColors}
         matchAllColors={matchAllColors} setMatchAllColors={setMatchAllColors}
@@ -284,19 +262,14 @@ export default function PoolsPage() {
         sortBy={sortBy} setSortBy={setSortBy}
         sortOrder={sortOrder} setSortOrder={setSortOrder}
         uniqueTypes={uniqueTypes}
-        
-        showStatusFilter={true} // Only true for Draft Pool!
+        showStatusFilter={true} 
         filterStatus={filterStatus} 
-        
-        // THE FIX: Wrap setFilterStatus in a plain string handler cast
         setFilterStatus={(val) => setFilterStatus(val as "all" | "available" | "drafted")}
-        
         filteredCount={filteredAndSortedCards.length}
         totalCount={cards.length}
         currentPage={currentPage}
         cardsPerPage={CARDS_PER_PAGE}
       />
-
 
       {/* Cards Grid */}
       {filteredAndSortedCards.length === 0 ? (
@@ -317,11 +290,19 @@ export default function PoolsPage() {
                   {paginatedCards.map((card) => {
                       const imageUrl = getCardImageUrl(card, useOldestArt);
                       return (
-                          <div key={card.id} className={`relative group rounded-lg overflow-hidden border-2 transition-all duration-200 ${card.is_drafted ? "border-muted opacity-60 hover:opacity-80" : "border-border hover:border-primary hover:shadow-xl hover:-translate-y-1"}`}>
+                          // THE FIX: Added data-mtg-card-container and data-card-name here!
+                          <div 
+                              key={card.id} 
+                              data-mtg-card-container="true"
+                              data-card-name={card.card_name}
+                              className={`relative group rounded-lg overflow-hidden border-2 transition-all duration-200 ${card.is_drafted ? "border-muted opacity-60 hover:opacity-80" : "border-border hover:border-primary hover:shadow-xl hover:-translate-y-1"}`}
+                          >
                               {imageUrl ? (<Image src={imageUrl} alt={card.card_name} width={745} height={1040} sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw" className="w-full h-auto" unoptimized />) : (<div className="w-full aspect-[5/7] bg-muted flex items-center justify-center"><span className="text-muted-foreground text-xs text-center px-2">{card.card_name}</span></div>)}
+                              
                               {card.is_drafted && card.drafted_by_team && (
                                   <div className="absolute top-2 right-2"><Badge variant="secondary" className="bg-background/90 backdrop-blur-sm shadow-lg gap-1" title={`Drafted by ${card.drafted_by_team.name}`}><span className="text-base">{card.drafted_by_team.emoji}</span><span>DRAFTED</span></Badge></div>
                               )}
+                              
                               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-3">
                                   <div className="text-white">
                                       <p className="font-bold text-sm mb-1">{card.card_name}</p>
