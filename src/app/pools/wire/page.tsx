@@ -34,53 +34,25 @@ export default function WirePage() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [currentPage, setCurrentPage] = useState(1);
 
-  // THE FIX: Calculate the next Wednesday at 12:00 AM US Central Time
-  const getNextProcessingTime = () => {
+ const getNextProcessingTime = () => {
+    // Get the current date and time
     const now = new Date();
+
+    // Find the current day of the week (0=Sun, 1=Mon, ..., 3=Wed, ...)
+    const currentDay = now.getDay();
     
-    // Create a date object formatter for America/Chicago to find current offsets
-    const chicagoFormatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/Chicago',
-      year: 'numeric', month: 'numeric', day: 'numeric',
-      hour: 'numeric', minute: 'numeric', second: 'numeric',
-      hour12: false
-    });
-
-    const chicagoParts = chicagoFormatter.formatToParts(now);
-    const getPart = (type: string) => parseInt(chicagoParts.find(p => p.type === type)?.value || "0", 10);
+    // Calculate how many days we need to add to get to the next Wednesday.
+    // If today is Wednesday (3), it will calculate for next week (7 days away).
+    const daysUntilWednesday = (3 - currentDay + 7) % 7;
     
-    // Reconstruct current Central Time as a raw Date object
-    const currentCentral = new Date(
-      getPart('year'), getPart('month') - 1, getPart('day'),
-      getPart('hour'), getPart('minute'), getPart('second')
-    );
+    const nextWednesday = new Date(now);
+    // Set the date to the next Wednesday
+    nextWednesday.setDate(now.getDate() + (daysUntilWednesday === 0 ? 7 : daysUntilWednesday));
+    // Set the time to midnight. The server is in CT, so this is midnight CT.
+    nextWednesday.setHours(0, 0, 0, 0);
 
-    // Find days until next Wednesday (Day 3)
-    let daysUntilWednesday = (3 - currentCentral.getDay() + 7) % 7;
-    
-    // If it is Wednesday, but past midnight, we need NEXT Wednesday
-    if (daysUntilWednesday === 0 && currentCentral.getHours() >= 0) {
-       daysUntilWednesday = 7;
-    }
-
-    // Set target to Midnight Central Time
-    const nextWednesdayCentral = new Date(currentCentral);
-    nextWednesdayCentral.setDate(currentCentral.getDate() + daysUntilWednesday);
-    nextWednesdayCentral.setHours(0, 0, 0, 0);
-
-    // Convert Central Time target back to a global UTC timestamp
-    // Central time is UTC-6 or UTC-5. We offset it back to absolute.
-    const tzOffsetString = new Intl.DateTimeFormat('en-US', { timeZoneName: 'shortOffset', timeZone: 'America/Chicago' })
-        .formatToParts(nextWednesdayCentral)
-        .find(p => p.type === 'timeZoneName')?.value; // e.g. "GMT-5" or "GMT-6"
-        
-    const offsetHours = tzOffsetString ? parseInt(tzOffsetString.replace(/[^0-9-]/g, ''), 10) : -6;
-    
-    // The absolute UTC time the job will run
-    const absoluteUtcTarget = new Date(nextWednesdayCentral.getTime() - (offsetHours * 60 * 60 * 1000));
-
-    // Finally, use your formatter to output that absolute time in the user's chosen timezone!
-    return formatInTimezone(absoluteUtcTarget, timezone, {
+    // Now format this correct date using your existing timezone utility
+    return formatInTimezone(nextWednesday, timezone, {
         weekday: 'long',
         hour: 'numeric',
         minute: '2-digit',

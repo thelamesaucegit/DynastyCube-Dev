@@ -212,23 +212,28 @@ export async function addDraftPick(pick: DraftPick): Promise<{ success: boolean;
     const authCheck = await verifyTeamMembership(pick.team_id, supabase);
     if (!authCheck.authorized) return { success: false, error: authCheck.error };
 
-    // =========================================================================
-    // Pre-Season Exclusive Access for FREE AGENTS
-    // =========================================================================
-    if (pick.acquisition_method === 'free_agent') {
-        const { data: activeSeason } = await supabase.from('seasons').select('id').eq('is_active', true).maybeSingle();
-        const seasonId = activeSeason?.id;
+  if (pick.acquisition_method === 'free_agent') {
+    const { data: activeSeason } = await supabase.from('seasons').select('id, phase').eq('is_active', true).maybeSingle();
+    const seasonId = activeSeason?.id;
+    const SEASON_4_ID = '4b1d9936-bf5e-4ee5-bd56-741a7c12307e';
+    const EXPANSION_TEAM_IDS = [
+        '2bfc34c2-045b-4ac7-872b-05aeebd4c53b', // Changelings/Mimics
+        '624e3ecc-672d-4ee4-8a4a-7be8c61d39e9'  // Tarkir Dragons
+    ];
 
-        const PRE_SEASON_5_ID = '4b1d9936-bf5e-4ee5-bd56-741a7c12307e';
-        const EXCLUSIVE_ACCESS_TEAMS = [
-            '2bfc34c2-045b-4ac7-872b-05aeebd4c53b', // Changelings/Mimics
-            '624e3ecc-672d-4ee4-8a4a-7be8c61d39e9'  // Tarkir Dragons
-        ];
-
-        if (seasonId === PRE_SEASON_5_ID && !EXCLUSIVE_ACCESS_TEAMS.includes(pick.team_id)) {
-            return { success: false, error: "Access to Free Agency is temporarily restricted to expansion teams." };
+    // Check for Season 4 exceptional rules
+    if (seasonId === SEASON_4_ID) {
+        if (!EXPANSION_TEAM_IDS.includes(pick.team_id)) {
+            return { success: false, error: "Access to Free Agency is temporarily restricted to expansion Teams during Season 4." };
+        }
+        // If it IS an expansion team in S4, we skip the phase check below and allow the transaction.
+    } else {
+        // For all other seasons, enforce the normal "season" phase rule.
+        if (activeSeason?.phase !== 'season') {
+            return { success: false, error: "Free Agency is only active during the regular season." };
         }
     }
+}
           // =========================================================================
 
     if (pick.card_pool_id) {
