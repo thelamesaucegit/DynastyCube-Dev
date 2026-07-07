@@ -98,8 +98,8 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
     }
     
     // The mapping logic can remain, as it's robust enough to handle the correctly structured data.
-    const cards: PoolCard[] = (data || []).map((card: any) => {
-        const isDrafted = card.was_drafted === true;
+ const cards: PoolCard[] = (data || []).map((card: CardWithDraftInfo | BasePoolCard) => {
+   const isDrafted = card.was_drafted === true;
         
         // Supabase with this explicit query will return team_draft_picks as an array
         const pick = Array.isArray(card.team_draft_picks) ? card.team_draft_picks[0] : card.team_draft_picks;
