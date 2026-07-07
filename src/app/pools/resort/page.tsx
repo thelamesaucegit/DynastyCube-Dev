@@ -43,13 +43,17 @@ export default function ResortPage() {
   const [currentPage, setCurrentPage] = useState(1);
 
   const loadPageData = useCallback(async () => {
-    if (user === undefined) return;
+    // THE FIX: We only depend on user?.email, so we can check it right away.
+    // If we're logged out, we can still load the cards and season, just not the user's team.
+    if (user === undefined) return; 
+
     setLoading(true);
     setError(null);
     try {
       const [cardResult, seasonResult, teamResult] = await Promise.all([
         getResortCards(),
         getCurrentSeason(),
+        // Only call getUserTeam if the email exists.
         user?.email ? getUserTeam(user.email) : Promise.resolve({ team: null, error: undefined })
       ]);
 
@@ -68,7 +72,8 @@ export default function ResortPage() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  // THE FIX: Change the dependency from the 'user' object to the stable 'user?.email' string.
+  }, [user?.email]);
 
   useEffect(() => { loadPageData(); }, [loadPageData]);
 
