@@ -88,7 +88,6 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
       console.error(`Error fetching cards for pool [${poolIdentifier}]:`, error);
       return { cards: [], error: error.message };
     }
-
     // --- DIAGNOSTIC LOGGING ---
     console.log(`[poolActions] Fetched ${data?.length || 0} raw records from Supabase.`);
     if (data && data.length > 0) {
@@ -97,9 +96,12 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
     }
     // --------------------------
     
-    const cards: PoolCard[] = (data || []).map((card: any) => {
+    // THE FIX: Use the strict union type instead of 'any'
+    const cards: PoolCard[] = (data || []).map((card: CardWithDraftInfo | BasePoolCard) => {
         const isDraftable = 'team_draft_picks' in card && card.team_draft_picks;
-        const pick = isDraftable ? (Array.isArray(card.team_draft_picks) ? card.team_draft_picks[0] : card.team_draft_picks) : null;
+        
+        // This logic robustly handles the nested structure from the join
+        const pick = isDraftable && Array.isArray(card.team_draft_picks) ? card.team_draft_picks[0] : null;
         const team = pick?.teams;
 
         return {
