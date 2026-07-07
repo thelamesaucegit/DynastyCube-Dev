@@ -69,7 +69,6 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
   try {
     let query;
 
-    // For logical pools, we perform the join.
     if (poolIdentifier === 'draft' || poolIdentifier === 'free' || poolIdentifier === 'wire') {
       query = supabase
         .from('card_pools')
@@ -77,7 +76,6 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
         .eq('pool_name', poolIdentifier)
         .order('card_name', { ascending: true });
     } else {
-      // For physical tables, we just select the data directly.
       query = supabase
         .from(poolIdentifier)
         .select('*')
@@ -90,13 +88,18 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
       console.error(`Error fetching cards for pool [${poolIdentifier}]:`, error);
       return { cards: [], error: error.message };
     }
+
+    // --- DIAGNOSTIC LOGGING ---
+    console.log(`[poolActions] Fetched ${data?.length || 0} raw records from Supabase.`);
+    if (data && data.length > 0) {
+        console.log('[poolActions] Sample of raw data from Supabase (first 2 records):');
+        console.log(JSON.stringify(data.slice(0, 2), null, 2));
+    }
+    // --------------------------
     
-    // THE FIX: Type mapped card parameter securely as CardWithDraftInfo | BasePoolCard
-    const cards: PoolCard[] = (data || []).map((card: CardWithDraftInfo | BasePoolCard) => {
-        const isDraftable = 'team_draft_picks' in card;
-        const pick = isDraftable && card.team_draft_picks && Array.isArray(card.team_draft_picks) 
-          ? card.team_draft_picks[0] 
-          : null;
+    const cards: PoolCard[] = (data || []).map((card: any) => {
+        const isDraftable = 'team_draft_picks' in card && card.team_draft_picks;
+        const pick = isDraftable ? (Array.isArray(card.team_draft_picks) ? card.team_draft_picks[0] : card.team_draft_picks) : null;
         const team = pick?.teams;
 
         return {
@@ -127,6 +130,7 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
     return { cards: [], error: errorMessage };
   }
 }
+
 
 export async function getPoolStatistics(poolIdentifier: PoolIdentifier): Promise<{ stats: PoolStatistics | null; error?: string }> {
   try {

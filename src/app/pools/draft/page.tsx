@@ -44,6 +44,24 @@ export default function PoolsPage() {
     availableCards: number;
   } | null>(null);
 
+   useEffect(() => {
+    if (cards.length > 0) {
+      console.log(`[PoolsPage] Received ${cards.length} processed cards from the server action.`);
+      const draftedCardsWithTeam = cards.filter(c => c.is_drafted && c.drafted_by_team);
+      const draftedCardsWithoutTeam = cards.filter(c => c.is_drafted && !c.drafted_by_team);
+      
+      console.log(`[PoolsPage] Found ${draftedCardsWithTeam.length} drafted cards WITH team data.`);
+      console.log(`[PoolsPage] Found ${draftedCardsWithoutTeam.length} drafted cards WITHOUT team data.`);
+
+      if (draftedCardsWithoutTeam.length > 0) {
+          console.log('[PoolsPage] Sample card missing team data:', draftedCardsWithoutTeam[0]);
+      }
+      if (draftedCardsWithTeam.length > 0) {
+        console.log('[PoolsPage] Sample card with team data:', draftedCardsWithTeam[0]);
+      }
+    }
+  }, [cards]);
+
   useEffect(() => {
     loadPoolData();
   }, []);
