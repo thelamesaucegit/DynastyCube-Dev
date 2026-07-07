@@ -21,7 +21,7 @@ export interface PoolCard {
   cmc?: number;
   cubucks_cost?: number;
   cubecobra_elo?: number;
-  is_drafted: boolean;
+  was_drafted: boolean;
   drafted_by_team?: {
     id: string;
     name: string;
@@ -38,6 +38,7 @@ interface BasePoolCard {
   oracle_text?: string | null;
   card_type: string | null;
   rarity: string | null;
+  was_drafted: boolean;
   colors: string[] | null;
   image_url: string | null;
   oldest_image_url: string | null;
@@ -120,7 +121,7 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
             cmc: card.cmc || undefined,
             cubucks_cost: card.cubucks_cost || undefined,
             cubecobra_elo: card.cubecobra_elo || undefined,
-            is_drafted: isDrafted,
+            was_drafted: isDrafted,
             drafted_by_team: team ? { id: team.id, name: team.name, emoji: team.emoji } : undefined,
             drafted_at: pick?.drafted_at || undefined,
         };
