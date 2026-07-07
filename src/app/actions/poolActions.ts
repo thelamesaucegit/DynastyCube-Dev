@@ -71,8 +71,6 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
     let query;
 
     if (poolIdentifier === 'draft' || poolIdentifier === 'free' || poolIdentifier === 'wire') {
-      // THE FIX: Be explicit about the full join path.
-      // This tells Supabase: from card_pools, go to team_draft_picks, and FROM there, go to teams.
       query = supabase
         .from('card_pools')
         .select(`
@@ -98,13 +96,16 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
       return { cards: [], error: error.message };
     }
     
-    // The mapping logic can remain, as it's robust enough to handle the correctly structured data.
- const cards: PoolCard[] = (data || []).map((card: CardWithDraftInfo | BasePoolCard) => {
-   const isDrafted = card.was_drafted === true;
-        
-        // Supabase with this explicit query will return team_draft_picks as an array
-        const pick = Array.isArray(card.team_draft_picks) ? card.team_draft_picks[0] : card.team_draft_picks;
-        const team = pick?.teams;
+    // THE FIX: Use a type guard ('in' operator) to safely handle the union type.
+    const cards: PoolCard[] = (data || []).map((card: CardWithDraftInfo | BasePoolCard) => {
+        let pick = null;
+        let team = null;
+
+        // This type guard proves to TypeScript that 'card' is of type CardWithDraftInfo
+        if ('team_draft_picks' in card && card.team_draft_picks) {
+            pick = Array.isArray(card.team_draft_picks) ? card.team_draft_picks[0] : card.team_draft_picks;
+            team = pick?.teams;
+        }
 
         return {
             id: card.id,
@@ -121,7 +122,7 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
             cmc: card.cmc || undefined,
             cubucks_cost: card.cubucks_cost || undefined,
             cubecobra_elo: card.cubecobra_elo || undefined,
-            was_drafted: isDrafted,
+            was_drafted: card.was_drafted, // Trust the boolean from the table
             drafted_by_team: team ? { id: team.id, name: team.name, emoji: team.emoji } : undefined,
             drafted_at: pick?.drafted_at || undefined,
         };
@@ -134,7 +135,6 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
     return { cards: [], error: errorMessage };
   }
 }
-
 
 export async function getPoolStatistics(poolIdentifier: PoolIdentifier): Promise<{ stats: PoolStatistics | null; error?: string }> {
   try {
