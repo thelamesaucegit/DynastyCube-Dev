@@ -969,11 +969,11 @@ export async function checkDraftTimer(
   error?: string;
 }> {
   const supabase = adminClient ?? createServiceClient();
-
   try {
     const { data: session, error: sessionError } = await supabase
       .from("draft_sessions")
-      .select("id, status, start_time, hours_per_pick, consecutive_skipped_picks, locked_at, enforce_day_night_drafting, night_start_hour, night_end_hour, season_id")
+      // THE FIX: Added current_pick_deadline to the select query!
+      .select("id, status, start_time, hours_per_pick, consecutive_skipped_picks, locked_at, enforce_day_night_drafting, night_start_hour, night_end_hour, season_id, current_pick_deadline")
       .in("status", ["active", "scheduled"])
       .single();
 
@@ -1012,7 +1012,6 @@ export async function checkDraftTimer(
     }
 
     const { status: draftStatus, error: statusError } = await getDraftStatus(session.id, supabase);
-
     if (statusError || !draftStatus) {
       return { action: "none", message: "Draft appears complete or status unavailable." };
     }
@@ -1027,7 +1026,6 @@ export async function checkDraftTimer(
     if (picksError) return { action: "error", error: "Failed to fetch last pick time." };
 
     let timerStartTime = new Date(session.start_time);
-
     if (picks && picks.length > 0 && picks[0].drafted_at) {
       timerStartTime = new Date(picks[0].drafted_at);
     }
@@ -1036,9 +1034,8 @@ export async function checkDraftTimer(
     const msPerPick = session.hours_per_pick * 60 * 60 * 1000;
     const deadline = new Date(timerStartTime.getTime() + msPerPick);
 
-    
-
-       if (session.enforce_day_night_drafting && session.current_pick_deadline) {
+    // --- DAY/NIGHT SCALING ENGINE ---
+    if (session.enforce_day_night_drafting && session.current_pick_deadline) {
         const currentDeadline = new Date(session.current_pick_deadline);
         const currentDurationMs = currentDeadline.getTime() - timerStartTime.getTime();
         const originalDurationMs = session.hours_per_pick * 60 * 60 * 1000;
@@ -1047,8 +1044,10 @@ export async function checkDraftTimer(
         const currentHourStr = new Date().toLocaleString("en-US", { timeZone: "America/Chicago", hour: "numeric", hour12: false });
         const currentHour = parseInt(currentHourStr, 10);
         
-        const startHour = session.night_start_hour;
-        const endHour = session.night_end_hour;
+        // Use type assertions if the generated types still see these as potentially null
+        const startHour = session.night_start_hour as number;
+        const endHour = session.night_end_hour as number;
+        
         let isCurrentlyNight = false;
         if (startHour > endHour) {
             isCurrentlyNight = currentHour >= startHour || currentHour < endHour;
@@ -1056,34 +1055,32 @@ export async function checkDraftTimer(
             isCurrentlyNight = currentHour >= startHour && currentHour < endHour;
         }
 
-        // SCENARIO 1: It's NIGHT now, but the timer ISN'T scaled yet -> SCALE UP
         if (isCurrentlyNight && !isScaledForNight) {
-            console.log(`[DraftTimer] 🌙 Transition to Night! Scaling team ${teamId}'s remaining time by 4x.`);
+            console.log(`[DraftTimer] 🌙 Transition to Night! Scaling team ${draftStatus.onTheClock.teamId}'s remaining time by 4x.`);
             const remainingMs = currentDeadline.getTime() - now.getTime();
             const newDeadline = new Date(now.getTime() + (remainingMs * 4));
             await supabase.from("draft_sessions").update({ current_pick_deadline: newDeadline.toISOString() }).eq("id", session.id);
             return { action: "none", message: "Draft clock scaled 4x for night hours." };
         } 
-        // SCENARIO 2: It's DAY now, but the timer IS scaled -> SCALE DOWN
         else if (!isCurrentlyNight && isScaledForNight) {
-            console.log(`[DraftTimer] ☀️ Transition to Day! Scaling team ${teamId}'s remaining time by 0.25x.`);
+            console.log(`[DraftTimer] ☀️ Transition to Day! Scaling team ${draftStatus.onTheClock.teamId}'s remaining time by 0.25x.`);
             const remainingMs = currentDeadline.getTime() - now.getTime();
             const newDeadline = new Date(now.getTime() + (remainingMs * 0.25));
 
             if (newDeadline <= now) {
-                console.log(`[DraftTimer] ⏰ Daybreak caused immediate timeout for team ${teamId}!`);
-                // Let the code proceed to the auto-draft section below
+                console.log(`[DraftTimer] ⏰ Daybreak caused immediate timeout for team ${draftStatus.onTheClock.teamId}!`);
             } else {
                 await supabase.from("draft_sessions").update({ current_pick_deadline: newDeadline.toISOString() }).eq("id", session.id);
                 return { action: "none", message: "Draft clock scaled 0.25x for daylight hours." };
             }
         }
     }
+    // --- END DAY/NIGHT SCALING ENGINE ---
 
-      if (now >= deadline) {
+    if (now >= deadline) {
       console.log(`Deadline passed for session ${session.id}. Executing auto-pick logic.`);
       const teamId = draftStatus.onTheClock.teamId;
-        
+
       const { data: lockResult, error: lockError } = await supabase
           .from("draft_sessions")
           .update({ locked_at: new Date().toISOString() })
@@ -1157,7 +1154,6 @@ export async function checkDraftTimer(
                       failingReason = `Team ${team.id} still has ${balance} Cubucks.`;
                       break;
                   }
-
                   if (totalCards < 25) {
                       readyToComplete = false;
                       failingReason = `Team ${team.id} only has ${totalCards} cards (needs 25).`;
@@ -1167,15 +1163,11 @@ export async function checkDraftTimer(
 
               if (readyToComplete) {
                   console.log("[Draft Failsafe] ✅ All teams broke with 25+ cards. Auto-completing draft!");
-                  
                   await completeDraft(session.id, supabase);
-                  
                   await logSystemEvent("AutoDraftFailsafe", "info", `Draft auto-completed successfully as all teams ran out of funds.`);
                   actionResult = { action: "completed", message: "Draft auto-completed because all teams ran out of funds." };
-                  
               } else {
                   console.log(`[Draft Failsafe] ⏸️ Pausing draft. Criteria not met: ${failingReason}`);
-                  
                   await supabase.from("draft_sessions").update({ 
                       status: "paused", 
                       consecutive_skipped_picks: newSkipCount 
@@ -1211,7 +1203,6 @@ export async function checkDraftTimer(
             await resetSkipCounter(session.id, supabase);
             await advanceDraft(supabase);
           }
-
       } finally {
           await supabase.from("draft_sessions").update({ locked_at: null }).eq("id", session.id);
       }
