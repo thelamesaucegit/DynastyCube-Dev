@@ -70,9 +70,17 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
     let query;
 
     if (poolIdentifier === 'draft' || poolIdentifier === 'free' || poolIdentifier === 'wire') {
+      // THE FIX: Be explicit about the full join path.
+      // This tells Supabase: from card_pools, go to team_draft_picks, and FROM there, go to teams.
       query = supabase
         .from('card_pools')
-        .select(`*, team_draft_picks!left ( drafted_at, teams ( id, name, emoji ) )`)
+        .select(`
+          *,
+          team_draft_picks (
+            drafted_at,
+            teams ( id, name, emoji )
+          )
+        `)
         .eq('pool_name', poolIdentifier)
         .order('card_name', { ascending: true });
     } else {
@@ -88,20 +96,13 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
       console.error(`Error fetching cards for pool [${poolIdentifier}]:`, error);
       return { cards: [], error: error.message };
     }
-    // --- DIAGNOSTIC LOGGING ---
-    console.log(`[poolActions] Fetched ${data?.length || 0} raw records from Supabase.`);
-    if (data && data.length > 0) {
-        console.log('[poolActions] Sample of raw data from Supabase (first 2 records):');
-        console.log(JSON.stringify(data.slice(0, 2), null, 2));
-    }
-    // --------------------------
     
-    // THE FIX: Use the strict union type instead of 'any'
-    const cards: PoolCard[] = (data || []).map((card: CardWithDraftInfo | BasePoolCard) => {
-        const isDraftable = 'team_draft_picks' in card && card.team_draft_picks;
+    // The mapping logic can remain, as it's robust enough to handle the correctly structured data.
+    const cards: PoolCard[] = (data || []).map((card: any) => {
+        const isDrafted = card.was_drafted === true;
         
-        // This logic robustly handles the nested structure from the join
-        const pick = isDraftable && Array.isArray(card.team_draft_picks) ? card.team_draft_picks[0] : null;
+        // Supabase with this explicit query will return team_draft_picks as an array
+        const pick = Array.isArray(card.team_draft_picks) ? card.team_draft_picks[0] : card.team_draft_picks;
         const team = pick?.teams;
 
         return {
@@ -119,7 +120,7 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
             cmc: card.cmc || undefined,
             cubucks_cost: card.cubucks_cost || undefined,
             cubecobra_elo: card.cubecobra_elo || undefined,
-            is_drafted: !!pick,
+            is_drafted: isDrafted,
             drafted_by_team: team ? { id: team.id, name: team.name, emoji: team.emoji } : undefined,
             drafted_at: pick?.drafted_at || undefined,
         };
