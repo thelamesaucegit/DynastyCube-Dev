@@ -6,7 +6,6 @@ import { PoolTableName } from "./cardActions";
 
 export type PoolIdentifier = 'draft' | 'free' | 'wire' | PoolTableName;
 
-// This is the primary, correct interface for our card data
 export interface PoolCard {
   id: string;
   card_id: string;
@@ -31,19 +30,39 @@ export interface PoolCard {
   drafted_at?: string;
 }
 
-// This interface is a helper to strictly type the complex nested object
-// that the Supabase query returns.
-interface CardWithDraftInfo extends Omit<PoolCard, 'is_drafted' | 'drafted_by_team' | 'drafted_at'> {
-  team_draft_picks: {
-        drafted_at: string | null;
-        teams: {
-            id: string;
-            name: string;
-            emoji: string;
-        } | null;
-    }[] | null;
+interface BasePoolCard {
+  id: string;
+  card_id: string;
+  card_name: string;
+  card_set: string | null;
+  oracle_text?: string | null;
+  card_type: string | null;
+  rarity: string | null;
+  colors: string[] | null;
+  image_url: string | null;
+  oldest_image_url: string | null;
+  mana_cost: string | null;
+  cmc: number | null;
+  cubucks_cost: number | null;
+  cubecobra_elo: number | null;
 }
 
+interface CardWithDraftInfo extends BasePoolCard {
+  team_draft_picks: {
+    drafted_at: string | null;
+    teams: {
+      id: string;
+      name: string;
+      emoji: string;
+    } | null;
+  }[] | null;
+}
+
+export interface PoolStatistics {
+  totalCards: number;
+  draftedCards: number;
+  availableCards: number;
+}
 
 export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{ cards: PoolCard[]; error?: string }> {
   const supabase = await createServerClient();
@@ -72,9 +91,12 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
       return { cards: [], error: error.message };
     }
     
-    // Map the complex nested data to our clean PoolCard interface
-    const cards: PoolCard[] = (data || []).map((card: any) => {
-        const pick = Array.isArray(card.team_draft_picks) ? card.team_draft_picks[0] : card.team_draft_picks;
+    // THE FIX: Type mapped card parameter securely as CardWithDraftInfo | BasePoolCard
+    const cards: PoolCard[] = (data || []).map((card: CardWithDraftInfo | BasePoolCard) => {
+        const isDraftable = 'team_draft_picks' in card;
+        const pick = isDraftable && card.team_draft_picks && Array.isArray(card.team_draft_picks) 
+          ? card.team_draft_picks[0] 
+          : null;
         const team = pick?.teams;
 
         return {
@@ -104,14 +126,6 @@ export async function getCardsForPool(poolIdentifier: PoolIdentifier): Promise<{
     console.error(`Unexpected error in getCardsForPool for pool "${poolIdentifier}":`, errorMessage);
     return { cards: [], error: errorMessage };
   }
-}
-
-// The other functions in this file can remain as they were, as they are now compatible with this approach.
-// ... (getPoolStatistics, getPoolCardsWithStatus etc.)
-export interface PoolStatistics {
-  totalCards: number;
-  draftedCards: number;
-  availableCards: number;
 }
 
 export async function getPoolStatistics(poolIdentifier: PoolIdentifier): Promise<{ stats: PoolStatistics | null; error?: string }> {
