@@ -19,7 +19,22 @@ export const CorruptedImage: React.FC<CorruptedImageProps> = ({ src, alt, isCorr
 
     // Only apply the effect if the lore is active AND the card is corruptible
     const canBeCorrupted = isEffectsActive && isCorruptible;
+        
+    
+    // ---  DIAGNOSTIC LOGGING ---
 
+useEffect(() => {
+        if (isCorruptible) {
+            console.log(`[CorruptedImage] 👁️ Rendered "${alt}" | isEffectsActive: ${isEffectsActive} | canBeCorrupted: ${canBeCorrupted}`);
+        }
+    }, [alt, isCorruptible, isEffectsActive, canBeCorrupted]);
+
+    useEffect(() => {
+        if (isGlitching) {
+            console.log(`[CorruptedImage] ⚡ Glitch activated for "${alt}" (Hover state)`);
+        }
+    }, [isGlitching, alt]);
+    // --------------------------------
     const generateClipPath = () => {
         const x1 = Math.random() * 50;
         const x2 = x1 + Math.random() * 30 + 10;
