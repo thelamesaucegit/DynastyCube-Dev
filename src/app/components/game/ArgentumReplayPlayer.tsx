@@ -59,7 +59,7 @@ export function ArgentumReplayPlayer({ matchId, initialGameStates, cardDataMap, 
     const { turnNumber, currentPhase } = currentSnapshot.gameState;
 
     return (
-        <div className="flex flex-col h-[calc(100vh-2rem)] w-full bg-background">
+        <div data-disable-corruption="true" className="flex flex-col h-[calc(100vh-2rem)] w-full bg-background">
             <div className="flex-grow overflow-hidden relative">
                 <GameBoard
                     spectatorMode={true}
