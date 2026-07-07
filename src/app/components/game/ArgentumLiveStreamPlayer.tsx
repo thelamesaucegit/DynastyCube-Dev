@@ -93,7 +93,7 @@ export function ArgentumLiveStreamPlayer({ matchId, initialGameStates, cardDataM
         const minutes = Math.floor(timeUntilStart / 60000);
         const seconds = Math.floor((timeUntilStart % 60000) / 1000);
         return (
-            <div className="flex flex-col h-screen w-full bg-black text-white items-center justify-center">
+            <div data-disable-corruption="true" className="flex flex-col h-screen w-full bg-black text-white items-center justify-center">
                 <div className="relative size-24 mb-6">
                     <div className="absolute inset-0 bg-blue-500 rounded-full animate-ping opacity-20"></div>
                     <div className="absolute inset-2 bg-blue-600 rounded-full flex items-center justify-center">
@@ -116,7 +116,7 @@ export function ArgentumLiveStreamPlayer({ matchId, initialGameStates, cardDataM
         <main className="w-full h-screen bg-gray-900 flex flex-col">
             <ResponsiveContext.Provider value={responsiveSizes}>
                 <SettingsProvider>
-                    <div className="flex-grow overflow-hidden relative">
+                    <div data-disable-corruption="true" className="flex-grow overflow-hidden relative">
                         <GameBoard
                             spectatorMode={true}
                             snapshot={currentSnapshot}

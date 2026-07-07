@@ -76,7 +76,7 @@ const ZoneViewer = ({ zoneName, cards, cardDataMap }: { zoneName: string, cards:
         <DialogTitle className="text-white">{zoneName}</DialogTitle>
       </DialogHeader>
       <ScrollArea className="max-h-[60vh] p-4">
-        <div className="flex flex-wrap gap-4">
+        <div data-disable-corruption="true"  className="flex flex-wrap gap-4">
           {cards.length > 0 ? cards.map(card => {
             const cardInfo = cardDataMap[card.name];
             // FIX: Handle the case where cardInfo might be undefined
@@ -186,7 +186,7 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     }, {});
 
     return (
-        <div className="flex-grow flex justify-center items-center gap-2 px-24">
+        <div data-disable-corruption="true" className="flex-grow flex justify-center items-center gap-2 px-24">
             {Object.entries(groups).map(([name, cards]) => (
                 <div key={name} className="relative" style={{ width: '80px', height: '112px' }}>
                     {cards.map((card, i) => (
@@ -224,7 +224,7 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
     );
 };    
     return (
-      <div className="relative w-full h-1/2 p-4 flex flex-col">
+      <div data-disable-corruption="true"  className="relative w-full h-1/2 p-4 flex flex-col">
           <div className="flex-grow flex flex-col gap-2">{rows.map((row, i) => renderRow(row))}</div>
           <div className="absolute top-4 left-4 flex flex-col items-start gap-3 z-10">
               <div className="flex items-center gap-4">
@@ -249,7 +249,7 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
   };
 
   return (
-    <div className="bg-gray-900 text-white rounded-lg overflow-hidden select-none">
+    <div data-disable-corruption="true" className="bg-gray-900 text-white rounded-lg overflow-hidden select-none">
         <div className="relative h-[80vh] flex flex-col">
             {renderPlayerArea(player2, 'top')}
           {currentState.stack.length > 0 && (
@@ -272,7 +272,7 @@ export function ReplayPlayer({ initialGameStates, matchId, team1, team2, cardDat
                 </div>
             )}
         </div>
-        <div className="grid grid-cols-3 gap-4 p-4 border-t border-gray-700 bg-gray-800">
+        <div data-disable-corruption="true" className="grid grid-cols-3 gap-4 p-4 border-t border-gray-700 bg-gray-800">
             <ScrollArea className="h-24 col-span-1 rounded-md bg-black/20 p-2"><div className="flex flex-col-reverse">{eventLog.map((msg, i) => <p key={i} className="text-xs text-gray-400 font-mono">{`> ${msg}`}</p>)}</div></ScrollArea>
             <div className="col-span-1 flex items-center justify-center gap-2">
                 <Button onClick={() => setCurrentStepIndex(0)} variant="ghost" size="icon" disabled={isPlaying}><SkipBack /></Button>
