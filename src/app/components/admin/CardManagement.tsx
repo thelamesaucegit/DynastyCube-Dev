@@ -212,8 +212,8 @@ export const CardManagement: React.FC<CardManagementProps> = ({ onUpdate }) => {
     setActionLoading(false);
   };
 
-  const draftedCount = poolCards.filter((c) => c.is_drafted).length;
-  const undraftedCount = poolCards.filter((c) => !c.is_drafted).length;
+  const draftedCount = poolCards.filter((c) => c.was_drafted).length;
+  const undraftedCount = poolCards.filter((c) => !c.was_drafted).length;
   const totalCount = cards.length;
 
   const getAffectedCount = (filter: "all" | "undrafted" | "drafted") => {
