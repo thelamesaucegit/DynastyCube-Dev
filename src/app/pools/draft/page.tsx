@@ -47,8 +47,8 @@ export default function PoolsPage() {
    useEffect(() => {
     if (cards.length > 0) {
       console.log(`[PoolsPage] Received ${cards.length} processed cards from the server action.`);
-      const draftedCardsWithTeam = cards.filter(c => c.is_drafted && c.drafted_by_team);
-      const draftedCardsWithoutTeam = cards.filter(c => c.is_drafted && !c.drafted_by_team);
+      const draftedCardsWithTeam = cards.filter(c => c.was_drafted && c.drafted_by_team);
+      const draftedCardsWithoutTeam = cards.filter(c => c.was_drafted && !c.drafted_by_team);
       
       console.log(`[PoolsPage] Found ${draftedCardsWithTeam.length} drafted cards WITH team data.`);
       console.log(`[PoolsPage] Found ${draftedCardsWithoutTeam.length} drafted cards WITHOUT team data.`);
@@ -107,9 +107,9 @@ export default function PoolsPage() {
     }
 
     if (filterStatus === "available") {
-      filtered = filtered.filter((card) => !card.is_drafted);
+      filtered = filtered.filter((card) => !card.was_drafted);
     } else if (filterStatus === "drafted") {
-      filtered = filtered.filter((card) => card.is_drafted);
+      filtered = filtered.filter((card) => card.was_drafted);
     }
 
     if (filterColors.length > 0) {
@@ -317,7 +317,7 @@ export default function PoolsPage() {
                           >
                               {imageUrl ? (<Image src={imageUrl} alt={card.card_name} width={745} height={1040} sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw" className="w-full h-auto" unoptimized />) : (<div className="w-full aspect-[5/7] bg-muted flex items-center justify-center"><span className="text-muted-foreground text-xs text-center px-2">{card.card_name}</span></div>)}
                               
-                              {card.is_drafted && card.drafted_by_team && (
+                              {card.was_drafted && card.drafted_by_team && (
                                   <div className="absolute top-2 right-2"><Badge variant="secondary" className="bg-background/90 backdrop-blur-sm shadow-lg gap-1" title={`Drafted by ${card.drafted_by_team.name}`}><span className="text-base">{card.drafted_by_team.emoji}</span><span>DRAFTED</span></Badge></div>
                               )}
                               
@@ -327,7 +327,7 @@ export default function PoolsPage() {
                                       <p className="text-xs opacity-90">{card.card_type}</p>
                                       {card.card_set && (<p className="text-xs opacity-75 mt-1">{card.card_set}</p>)}
                                       {card.cubecobra_elo != null && (<p className="text-xs mt-1"><span className="bg-purple-500/80 px-1.5 py-0.5 rounded text-white font-medium">ELO: {card.cubecobra_elo.toLocaleString()}</span></p>)}
-                                      {card.is_drafted && card.drafted_by_team && (
+                                      {card.was_drafted && card.drafted_by_team && (
                                           <div className="mt-2 pt-2 border-t border-white/20">
                                               <p className="text-xs">{card.drafted_by_team.emoji} {card.drafted_by_team.name}</p>
                                               {card.drafted_at && (<p className="text-xs opacity-75">{new Date(card.drafted_at).toLocaleDateString()}</p>)}
