@@ -93,6 +93,21 @@ export interface BlessingResultRaw {
   teams?: { id: string; name: string; emoji: string } | null;
 }
 
+export interface BlessingTeamChance {
+  team_id: string;
+  team_name: string;
+  team_emoji: string;
+  votes: number;
+  odds: number;
+}
+
+export interface BlessingCalculatedOdds {
+  option_id: string;
+  option_text: string;
+  total_yes_votes: number;
+  team_chances: BlessingTeamChance[];
+}
+
 export interface TypedPollResults {
   type: VoteType;
   results?: PollResult[];
@@ -103,9 +118,8 @@ export interface TypedPollResults {
     option_text: string;
     teams_voting: { team_id: string; team_name: string; team_emoji: string }[] | null;
   }[];
-  rawData?: BlessingResultRaw[]; 
+  rawData?: BlessingResultRaw[] | BlessingCalculatedOdds[]; 
 }
-
 export interface PollWithOptions extends Poll {
   options: PollOption[];
   userVotes?: string[]; 
