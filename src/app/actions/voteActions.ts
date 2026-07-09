@@ -23,14 +23,9 @@ interface RawPollWithOptions {
   created_at: string;
   updated_at: string;
   team_id: string | null;
-  options: {
-    id: string;
-    poll_id: string;
-    option_text: string;
-    option_order: number;
-    vote_count: number;
-  }[];
+  options: PollOption[]; // <-- FIXED: Uses the exact same type expected by PollWithOptions
 }
+
 
 export interface Poll {
   id: string;
@@ -133,15 +128,15 @@ export async function getActivePolls(userId?: string) {
         id, title, description, created_by, starts_at, ends_at, is_active,
         allow_multiple_votes, show_results_before_end, vote_type, total_votes,
         created_at, updated_at, team_id,
-        options:poll_options ( id, poll_id, option_text, option_order, vote_count )
-      `)
+        options:poll_options ( id, poll_id, option_text, option_order, vote_count, created_at ) 
+      `) // <-- FIXED: Added created_at to the poll_options fetch!
       .eq("is_active", true)
       .is("team_id", null)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
     
-    // THE FIX: Use the strict RawPollWithOptions type here
+    // Use the strict RawPollWithOptions type here
     const polls = (data as RawPollWithOptions[]) || [];
 
     const pollsWithOptions: PollWithOptions[] = polls.map((poll) => {
