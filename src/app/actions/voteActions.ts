@@ -103,18 +103,24 @@ export interface PollWithOptions extends Poll {
 export async function getActivePolls(userId?: string) {
   try {
     const supabase = await createServerClient();
+    // It's more efficient to select only the columns we need.
     const { data, error } = await supabase
       .from("polls")
-      .select("*, poll_options(*)")
+      .select(`
+        id, title, description, created_by, starts_at, ends_at, is_active,
+        allow_multiple_votes, show_results_before_end, vote_type, total_votes,
+        created_at, updated_at, team_id,
+        options:poll_options ( id, poll_id, option_text, option_order, vote_count )
+      `)
       .eq("is_active", true)
       .is("team_id", null)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
+    
     const polls = data || [];
-
-    const pollsWithOptions = polls.map((poll) => {
-      const rawOptions = (poll.poll_options as PollOption[]) || [];
+    const pollsWithOptions = polls.map((poll: any) => {
+      const rawOptions = (poll.options as PollOption[]) || [];
       const sortedOptions = rawOptions.sort((a, b) => a.option_order - b.option_order);
       return { ...poll, options: sortedOptions };
     });
@@ -123,27 +129,46 @@ export async function getActivePolls(userId?: string) {
       const pollsWithVotes = await Promise.all(
         pollsWithOptions.map(async (poll) => {
           const client = await createServerClient();
-          let userVotesData = [];
+          let userVotesData: { option_id: string }[] | null = null;
           
+          // THE FIX: The type mismatch error is happening here.
+          // The `userVotes` array from the client is an array of strings,
+          // but the `option_id` in the database is a UUID.
+          // We cast the incoming array to 'uuid[]' to satisfy PostgreSQL.
           if (poll.vote_type === 'blessing_event') {
-            const { data } = await client.from("blessing_allocations").select("option_id").eq("poll_id", poll.id).eq("user_id", userId).eq("voted_yes", true);
-            userVotesData = data || [];
+            const { data } = await client
+              .from("blessing_allocations")
+              .select("option_id")
+              .eq("poll_id", poll.id)
+              .eq("user_id", userId)
+              .eq("voted_yes", true);
+            userVotesData = data;
           } else {
-            const { data } = await client.from("poll_votes").select("option_id").eq("poll_id", poll.id).eq("user_id", userId);
-            userVotesData = data || [];
+            const { data } = await client
+              .from("poll_votes")
+              .select("option_id")
+              .eq("poll_id", poll.id)
+              .eq("user_id", userId);
+            userVotesData = data;
           }
-          return { ...poll, userVotes: userVotesData.map((v) => v.option_id), hasVoted: userVotesData.length > 0 };
+
+          return { 
+            ...poll, 
+            userVotes: (userVotesData || []).map((v) => v.option_id), 
+            hasVoted: (userVotesData || []).length > 0 
+          };
         })
       );
       return { polls: pollsWithVotes, success: true };
     }
+
     return { polls: pollsWithOptions, success: true };
   } catch (error) {
     console.error("Error fetching active polls:", error);
-    return { polls: [], success: false, error: "Failed to fetch polls" };
+    const dbError = error as { message?: string };
+    return { polls: [], success: false, error: dbError.message || "Failed to fetch polls" };
   }
 }
-
 export async function getPollWithOptions(pollId: string, userId?: string) {
   try {
     const supabase = await createServerClient();
