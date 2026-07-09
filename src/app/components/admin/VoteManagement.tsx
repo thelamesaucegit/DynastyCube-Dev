@@ -40,6 +40,7 @@ export function VoteManagement() {
     voteType: "individual" as VoteType,
     options: ["", ""],
     activateOnChampionship: false,
+    isMultipleWinner: false,
   });
 
   useEffect(() => {
@@ -85,7 +86,8 @@ export function VoteManagement() {
       validOptions,
       user.id,
       formData.voteType,
-      formData.activateOnChampionship ? 'championship_match_start' : null
+      formData.activateOnChampionship ? 'championship_match_start' : null,
+      formData.isMultipleWinner 
     );
 
     if (result.success) {
@@ -299,8 +301,18 @@ export function VoteManagement() {
                 {formData.voteType === "team" && "Members vote within their team, and each team gets its own internal result."}
                 {formData.voteType === "republic" && "Electoral style: Individuals vote to determine their team's consensus. The option with the most team-consensus votes wins the league."}
                 {formData.voteType === "blessing_event" && "A dynamic lottery where teams pool 'Yes' votes to increase their mathematical odds of receiving specific blessings."}
+            {formData.voteType === "republic" && (
+              <label className="flex items-center gap-2 mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg cursor-pointer">
+                <input type="checkbox" checked={formData.isMultipleWinner} onChange={(e) => setFormData({ ...formData, isMultipleWinner: e.target.checked })} className="w-4 h-4 text-blue-600" />
+                <div>
+                  <span className="text-sm font-bold text-blue-900 dark:text-blue-100">Seasonal Rules (Multiple Winners)</span>
+                  <p className="text-xs text-blue-700 dark:text-blue-300">If checked, ANY option that receives a majority consensus (>50% of active voting teams) will be declared a winner.</p>
+                </div>
+              </label>
+            )}
               </p>
             </div>
+            
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Poll Options * (minimum 2)</label>
@@ -429,48 +441,54 @@ export function VoteManagement() {
               </div>
             ) : (
               <>
-                {/* --- INDIVIDUAL RESULTS --- */}
-                {results.type === "individual" && results.results && results.results.length > 0 && (
-                  <div className="space-y-4">
-                    {results.results.map((result) => (
-                      <div key={result.option_id} className="space-y-2">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="font-semibold text-gray-900 dark:text-gray-100">{result.option_text}</span>
-                          <span className="text-gray-600 dark:text-gray-400">{result.vote_count} votes ({result.percentage}%)</span>
-                        </div>
-                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4"><div className="bg-blue-600 h-4 rounded-full" style={{ width: `${result.percentage}%` }}></div></div>
+                {/* --- REPUBLIC LEAGUE WINNER DISPLAY (THE FINAL FIX) --- */}
+                {results.type === 'republic' && results.league_result && (
+                  <div className="mb-6 bg-gradient-to-r from-orange-50 to-yellow-50 dark:from-orange-900/20 dark:to-yellow-900/20 border border-orange-200 dark:border-orange-700 rounded-lg p-4">
+                    <h4 className="font-semibold text-orange-800 dark:text-orange-300 mb-2">
+                      {results.is_multiple_winner ? 'League Winners (Majority Consensus)' : 'League Winner'}
+                    </h4>
+                    
+                    {results.is_multiple_winner ? (
+                      <div className="space-y-1">
+                        {results.league_result.winning_options && results.league_result.winning_options.length > 0 ? (
+                          results.league_result.winning_options.map(wo => (
+                            <p key={wo.id} className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                              <Check className="size-5 text-green-600" /> {wo.text}
+                            </p>
+                          ))
+                        ) : (
+                          <p className="text-lg font-bold text-gray-500 italic">No option reached a majority consensus.</p>
+                        )}
                       </div>
-                    ))}
+                    ) : (
+                      <p className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                        {results.league_result.winning_option_text || "Awaiting consensus"}
+                      </p>
+                    )}
                   </div>
                 )}
-                {/* --- TEAM & REPUBLIC RESULTS --- */}
+                
+                {/* --- TEAM RESULTS (Works for both Republic and Team) --- */}
                 {(results.type === "team" || results.type === "republic") && results.team_results && results.team_results.length > 0 && (
-                    <div className="space-y-6">
-                        {results.type === 'republic' && results.league_result?.winning_option_text && (
-                          <div className="bg-gradient-to-r from-orange-50 to-yellow-50 dark:from-orange-900/20 dark:to-yellow-900/20 border border-orange-200 dark:border-orange-700 rounded-lg p-4">
-                            <h4 className="font-semibold text-orange-800 dark:text-orange-300 mb-2">League Winner</h4>
-                            <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{results.league_result.winning_option_text}</p>
+                  <div className="space-y-4">
+                    <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">{results.type === 'republic' ? 'Team Consensus' : 'Team Results'}</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {results.team_results.map((teamResult: TeamPollResult) => (
+                        <div key={teamResult.team_id} className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-2xl">{teamResult.team_emoji}</span>
+                            <span className="font-bold text-gray-900 dark:text-gray-100">{teamResult.team_name}</span>
                           </div>
-                        )}
-                        <div>
-                            <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">{results.type === 'republic' ? 'Team Consensus' : 'Team Results'}</h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {results.team_results.map((teamResult: TeamPollResult) => (
-                                <div key={teamResult.team_id} className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <span className="text-2xl">{teamResult.team_emoji}</span>
-                                    <span className="font-bold text-gray-900 dark:text-gray-100">{teamResult.team_name}</span>
-                                </div>
-                                <p className="text-gray-600 dark:text-gray-400">{teamResult.winning_option_text || "No votes yet"}</p>
-                                <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">{teamResult.total_weighted_votes} weighted votes</p>
-                                </div>
-                            ))}
-                            </div>
+                          <p className="text-gray-600 dark:text-gray-400">{teamResult.winning_option_text || "No votes yet"}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">{teamResult.total_weighted_votes} weighted votes</p>
                         </div>
+                      ))}
                     </div>
+                  </div>
                 )}
-                {/* THE FIX: Display Blessing Event Raw Data */}
-                {{results.type === "blessing_event" && results.rawData && results.rawData.length > 0 && (
+
+                {/* --- BLESSING EVENT RESULTS --- */}
+                {results.type === "blessing_event" && results.rawData && (results.rawData as BlessingCalculatedOdds[]).length > 0 && (
                   <div className="space-y-6">
                     <div>
                         <h4 className="font-semibold text-gray-900 dark:text-gray-100">Live Blessing Odds</h4>
@@ -478,8 +496,6 @@ export function VoteManagement() {
                           These are the baseline mathematical odds based on current votes. During resolution, winning teams are eliminated from subsequent rolls, causing actual odds to shift dynamically.
                         </p>
                     </div>
-
-                    {/* We tell TypeScript exactly what shape this array is */}
                     {(results.rawData as BlessingCalculatedOdds[]).map((option) => (
                       <div key={option.option_id} className="bg-purple-50 dark:bg-purple-900/10 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
                         <div className="flex items-center justify-between mb-3 border-b border-purple-200 dark:border-purple-800 pb-2">
@@ -488,7 +504,6 @@ export function VoteManagement() {
                                 {option.total_yes_votes} Total Votes
                             </span>
                         </div>
-                        
                         <div className="space-y-2">
                           {option.team_chances.map((tc: BlessingTeamChance) => (
                             <div key={tc.team_id} className={`flex items-center justify-between text-sm p-2 rounded-md ${tc.votes > 0 ? 'bg-white dark:bg-gray-800 shadow-sm' : 'opacity-60 grayscale'}`}>
@@ -509,6 +524,8 @@ export function VoteManagement() {
                     ))}
                   </div>
                 )}
+              </>
+            )}
             <button onClick={() => setShowResults(false)} className="mt-6 w-full bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-bold transition-colors">
               Close
             </button>
