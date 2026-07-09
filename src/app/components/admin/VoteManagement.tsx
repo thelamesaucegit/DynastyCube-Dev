@@ -19,7 +19,7 @@ import {
 } from "@/app/actions/voteActions";
 import { manuallyTriggerDeckVotesForWeek } from "@/app/actions/adminActions";
 import { getActiveSeason } from "@/app/actions/cubucksActions";
-import { Loader2, Plus, Sparkles } from "lucide-react";
+import { Loader2, Plus, Check, Sparkles } from "lucide-react";
 
 export function VoteManagement() {
   const { user } = useAuth();
