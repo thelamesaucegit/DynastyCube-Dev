@@ -466,34 +466,117 @@ export async function resolveBlessingEvent(pollId: string) {
 }
 
 export async function getPollResultsByType(pollId: string) {
+  // --- DIAGNOSTICS: Stage 1 ---
+  console.log(`[Admin Results] Initiating results fetch for poll ID: ${pollId}`);
   try {
     const supabase = await createServerClient();
     const { data: poll, error: pollError } = await supabase.from("polls").select("vote_type").eq("id", pollId).single();
-    if (pollError) throw pollError;
-    if (!poll) return { results: null, success: false, error: "Poll not found" };
 
-    if (poll.vote_type === "individual") {
-      const { data, error } = await supabase.rpc("get_poll_results", { p_poll_id: pollId });
-      if (error) throw error;
-      return { results: { type: "individual" as VoteType, results: data as PollResult[] }, success: true };
+    if (pollError) {
+        console.error("[Admin Results] ERROR at Stage 1: Could not fetch poll type.", pollError);
+        throw pollError;
     }
+    if (!poll) {
+        console.error(`[Admin Results] ERROR at Stage 1: Poll with ID ${pollId} not found.`);
+        return { results: null, success: false, error: "Poll not found" };
+    }
+    
+    console.log(`[Admin Results] Poll is of type: "${poll.vote_type}". Proceeding to appropriate logic...`);
 
-    if (poll.vote_type === "team" || poll.vote_type === "republic" || poll.vote_type === "league") {
-      const { data, error } = await supabase.rpc("get_poll_results_by_type", { p_poll_id: pollId });
-      if (error) throw error;
-      const typedResults = data as TypedPollResults;
-      if (poll.vote_type === "republic") typedResults.type = "republic" as VoteType;
-      return { results: typedResults, success: true };
+
+    if (poll.vote_type === "republic" || poll.vote_type === "league") {
+        // --- DIAGNOSTICS: Stage 2 (Republic) ---
+        console.log(`[Admin Results - Republic] Calling RPC 'get_poll_results_by_type' with p_poll_id: ${pollId}`);
+        const { data, error } = await supabase.rpc("get_poll_results_by_type", { p_poll_id: pollId });
+
+        if (error) {
+            console.error("[Admin Results - Republic] ERROR at Stage 2: RPC call failed.", error);
+            throw error;
+        }
+
+        console.log("[Admin Results - Republic] Successfully received data from RPC:", JSON.stringify(data, null, 2));
+        const typedResults = data as TypedPollResults;
+        typedResults.type = "republic";
+        return { results: typedResults, success: true };
     }
 
     if (poll.vote_type === "blessing_event") {
-       const { data: blessingResults, error } = await supabase.from("blessing_results").select(`roll_value, team_odds, poll_options(id, option_text), teams(id, name, emoji)`).eq("poll_id", pollId);
-       if (error) throw error;
-       return { results: { type: "blessing_event" as VoteType, rawData: blessingResults as unknown as BlessingResultRaw[] }, success: true };
+        // --- DIAGNOSTICS: Stage 2 (Blessing) ---
+        console.log("[Admin Results - Blessing] Starting live odds calculation.");
+       
+        // Step 1: Fetch teams
+        const { data: teamsData, error: teamsError } = await supabase.from('teams').select('id, name, emoji').eq('is_hidden', false);
+        if(teamsError) throw new Error(`Blessing Error fetching teams: ${teamsError.message}`);
+        const teams = teamsData || [];
+        console.log(`[Admin Results - Blessing] Found ${teams.length} active teams.`);
+
+        // Step 2: Fetch options
+        const { data: optionsData, error: optionsError } = await supabase.from('poll_options').select('id, option_text').eq('poll_id', pollId).order('option_order');
+        if(optionsError) throw new Error(`Blessing Error fetching options: ${optionsError.message}`);
+        const options = optionsData || [];
+        console.log(`[Admin Results - Blessing] Found ${options.length} poll options.`);
+        
+        // Step 3: Fetch allocations
+        const { data: allocationsData, error: allocationsError } = await supabase.from('blessing_allocations').select('team_id, option_id, voted_yes').eq('poll_id', pollId);
+        if(allocationsError) throw new Error(`Blessing Error fetching allocations: ${allocationsError.message}`);
+        const allocations = allocationsData || [];
+        console.log(`[Admin Results - Blessing] Found ${allocations.length} total allocation records for this poll.`);
+
+        // Step 4: Calculate total 'Yes' votes per team
+        const teamTotalYes: Record<string, number> = {};
+        teams.forEach(t => teamTotalYes[t.id] = 0);
+        allocations.forEach(a => {
+            if (a.voted_yes && a.team_id) {
+                teamTotalYes[a.team_id] = (teamTotalYes[a.team_id] || 0) + 1;
+            }
+        });
+        console.log("[Admin Results - Blessing] Calculated total 'Yes' votes per team:", JSON.stringify(teamTotalYes, null, 2));
+
+        // Step 5: Calculate odds
+        const numTeams = teams.length;
+        const baseOdds = numTeams > 0 ? 100.0 / (numTeams + 1) : 0;
+        const calculatedOdds = options.map(opt => {
+            let totalOptionYes = 0;
+            const teamChances = teams.map(team => {
+                const teamVotesForOption = allocations.filter(a => a.option_id === opt.id && a.team_id === team.id && a.voted_yes).length;
+                totalOptionYes += teamVotesForOption;
+                
+                const totalYesForTeam = teamTotalYes[team.id] || 0;
+                let odds = 1.0; 
+                if (totalYesForTeam > 0 && teamVotesForOption > 0) {
+                    odds = baseOdds * (teamVotesForOption / totalYesForTeam);
+                    if (odds < 1.0) odds = 1.0;
+                }
+
+                return {
+                    team_id: team.id,
+                    team_name: team.name,
+                    team_emoji: team.emoji,
+                    votes: teamVotesForOption,
+                    odds: parseFloat(odds.toFixed(2))
+                };
+            }).sort((a, b) => b.odds - a.odds); 
+
+            return {
+                option_id: opt.id,
+                option_text: opt.option_text,
+                total_yes_votes: totalOptionYes,
+                team_chances: teamChances
+            };
+        });
+        
+        console.log("[Admin Results - Blessing] Final calculated odds object:", JSON.stringify(calculatedOdds, null, 2));
+        return { results: { type: "blessing_event", rawData: calculatedOdds }, success: true };
     }
-    return { results: null, success: false, error: "Unsupported poll type" };
+
+    // Fallback for other types
+    const { data, error } = await supabase.rpc("get_poll_results", { p_poll_id: pollId });
+    if (error) throw error;
+    return { results: { type: "individual", results: data as PollResult[] }, success: true };
+
   } catch (error) {
-    console.error("Error fetching typed poll results:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error(`[Admin Results] FATAL ERROR in getPollResultsByType for poll ${pollId}:`, errorMessage);
     return { results: null, success: false, error: "Failed to fetch results" };
   }
 }
