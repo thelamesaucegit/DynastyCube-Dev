@@ -38,6 +38,7 @@ export interface Poll {
   allow_multiple_votes: boolean;
   show_results_before_end: boolean;
   vote_type: VoteType;
+  is_multiple_winner?: boolean;
   total_votes: number;
   created_at: string;
   updated_at: string;
@@ -83,6 +84,7 @@ export interface TeamPollResult {
 export interface LeaguePollResult {
   winning_option_id: string | null;
   winning_option_text: string | null;
+   winning_options?: { id: string; text: string }[] | null;
   teams_for_option: Record<string, string[]>;
 }
 
@@ -113,6 +115,7 @@ export interface TypedPollResults {
   results?: PollResult[];
   team_results?: TeamPollResult[];
   league_result?: LeaguePollResult;
+  is_multiple_winner?: boolean;
   all_options?: {
     option_id: string;
     option_text: string;
@@ -373,7 +376,8 @@ export async function getAllPolls() {
 export async function createPoll(
   title: string, description: string | null, endsAt: string, allowMultipleVotes: boolean,
   showResultsBeforeEnd: boolean, options: string[], createdBy: string, voteType: VoteType = "individual",
-  triggerEventName: string | null = null
+  triggerEventName: string | null = null,
+  isMultipleWinner: boolean = false
 ) {
   try {
     const supabase = await createServerClient();
@@ -399,7 +403,8 @@ export async function createPoll(
       vote_type: voteType, 
       created_by: createdBy, 
       is_active: isActive, 
-      team_id: null
+      team_id: null,
+      is_multiple_winner: isMultipleWinner
     };
 
     if (triggerEventId) {
