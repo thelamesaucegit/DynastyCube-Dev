@@ -306,7 +306,7 @@ export function VoteManagement() {
                 <input type="checkbox" checked={formData.isMultipleWinner} onChange={(e) => setFormData({ ...formData, isMultipleWinner: e.target.checked })} className="w-4 h-4 text-blue-600" />
                 <div>
                   <span className="text-sm font-bold text-blue-900 dark:text-blue-100">Seasonal Rules (Multiple Winners)</span>
-                  <p className="text-xs text-blue-700 dark:text-blue-300">If checked, ANY option that receives a majority consensus (>50% of active voting teams) will be declared a winner.</p>
+                  <p className="text-xs text-blue-700 dark:text-blue-300">If checked, ANY option that receives a majority consensus (%gt;50&percnt; of active voting teams) will be declared a winner.</p>
                 </div>
               </label>
             )}
