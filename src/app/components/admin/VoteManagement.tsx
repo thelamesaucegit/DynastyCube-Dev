@@ -163,20 +163,39 @@ export function VoteManagement() {
     }
   };
 
-const handleViewResults = async (poll: Poll) => {
+ const handleViewResults = async (poll: Poll) => {
     setSelectedPoll(poll);
     setShowResults(true);
-    setResults(null); 
-    const result = await getPollResultsByType(poll.id);
-    if (result.success && result.results) {
-      setResults(result.results);
-    } else {
-      console.error("Failed to fetch poll results:", result.error);
-      // Set results to an empty object of the correct type to stop the loader
-      setResults({ type: poll.vote_type, results: [], team_results: [], league_result: null, rawData: [] });
+    setResults(null); // Clear previous results while loading
+    
+    try {
+      const result = await getPollResultsByType(poll.id);
+      if (result.success && result.results) {
+        setResults(result.results);
+      } else {
+        console.error("Failed to fetch poll results:", result.error);
+        // THE FIX: Set league_result to 'undefined' instead of 'null' to match the type definition.
+        setResults({ 
+          type: poll.vote_type, 
+          results: [], 
+          team_results: [], 
+          league_result: undefined, 
+          rawData: [] 
+        });
+      }
+    } catch (e) {
+        console.error("Critical error in handleViewResults:", e);
+        setResults({ 
+          type: poll.vote_type, 
+          results: [], 
+          team_results: [], 
+          league_result: undefined, 
+          rawData: [] 
+        });
     }
   };
 
+  
    const handleResolveBlessings = async (pollId: string) => {
     if (!confirm("Resolve this blessing event now? This will roll the random lottery for all blessings in this poll.")) return;
     
