@@ -13,6 +13,8 @@ import {
   type Poll,
   type VoteType,
   type TypedPollResults,
+  type BlessingCalculatedOdds, 
+  type BlessingTeamChance, 
   type TeamPollResult,
 } from "@/app/actions/voteActions";
 import { manuallyTriggerDeckVotesForWeek } from "@/app/actions/adminActions";
@@ -163,16 +165,39 @@ export function VoteManagement() {
     }
   };
 
-  const handleViewResults = async (poll: Poll) => {
+ const handleViewResults = async (poll: Poll) => {
     setSelectedPoll(poll);
     setShowResults(true);
-    const result = await getPollResultsByType(poll.id);
-    if (result.success && result.results) {
-      setResults(result.results);
+    setResults(null); // Clear previous results while loading
+    
+    try {
+      const result = await getPollResultsByType(poll.id);
+      if (result.success && result.results) {
+        setResults(result.results);
+      } else {
+        console.error("Failed to fetch poll results:", result.error);
+        // THE FIX: Set league_result to 'undefined' instead of 'null' to match the type definition.
+        setResults({ 
+          type: poll.vote_type, 
+          results: [], 
+          team_results: [], 
+          league_result: undefined, 
+          rawData: [] 
+        });
+      }
+    } catch (e) {
+        console.error("Critical error in handleViewResults:", e);
+        setResults({ 
+          type: poll.vote_type, 
+          results: [], 
+          team_results: [], 
+          league_result: undefined, 
+          rawData: [] 
+        });
     }
   };
 
-  // WILL BE IMPLEMENTED IN NEXT STEP
+  
    const handleResolveBlessings = async (pollId: string) => {
     if (!confirm("Resolve this blessing event now? This will roll the random lottery for all blessings in this poll.")) return;
     
@@ -392,82 +417,98 @@ export function VoteManagement() {
             <div className="flex items-start justify-between mb-6">
               <div>
                 <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">{selectedPoll.title}</h3>
-                <div className="flex items-center gap-2">
-                  <p className="text-gray-600 dark:text-gray-400">Total Votes: {selectedPoll.total_votes}</p>
-                </div>
+                <p className="text-gray-600 dark:text-gray-400">Total Votes: {selectedPoll.total_votes}</p>
               </div>
               <button onClick={() => setShowResults(false)} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-2xl">✕</button>
             </div>
             
-            {results?.type === "individual" && results.results && (
-              <div className="space-y-4">
-                {results.results.map((result) => (
-                  <div key={result.option_id} className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-semibold text-gray-900 dark:text-gray-100">{result.option_text}</span>
-                      <span className="text-gray-600 dark:text-gray-400">{result.vote_count} votes ({result.percentage}%)</span>
-                    </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
-                      <div className="bg-blue-600 h-4 rounded-full transition-all" style={{ width: `${result.percentage}%` }}></div>
-                    </div>
-                  </div>
-                ))}
+            {!results ? (
+              <div className="text-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+                <p className="mt-2 text-muted-foreground">Loading results...</p>
               </div>
-            )}
-
-            {results?.type === "team" && results.team_results && (
-              <div className="space-y-4">
-                <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">Team Results</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {results.team_results.map((teamResult: TeamPollResult) => (
-                    <div key={teamResult.team_id} className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-2xl">{teamResult.team_emoji}</span>
-                        <span className="font-bold text-gray-900 dark:text-gray-100">{teamResult.team_name}</span>
-                      </div>
-                      <p className="text-gray-600 dark:text-gray-400">{teamResult.winning_option_text || "No votes yet"}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">{teamResult.total_weighted_votes} weighted votes</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {results?.type === "republic" && (
-              <div className="space-y-6">
-                {results.league_result && results.league_result.winning_option_text && (
-                  <div className="bg-gradient-to-r from-orange-50 to-yellow-50 dark:from-orange-900/20 dark:to-yellow-900/20 border border-orange-200 dark:border-orange-700 rounded-lg p-4">
-                    <h4 className="font-semibold text-orange-800 dark:text-orange-300 mb-2">League Winner</h4>
-                    <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{results.league_result.winning_option_text}</p>
-                  </div>
-                )}
-                {results.team_results && (
-                  <div>
-                    <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">Team Votes (Consensus)</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {results.team_results.map((teamResult: TeamPollResult) => (
-                        <div key={teamResult.team_id} className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-2xl">{teamResult.team_emoji}</span>
-                            <span className="font-bold text-gray-900 dark:text-gray-100">{teamResult.team_name}</span>
-                          </div>
-                          <p className="text-gray-600 dark:text-gray-400">{teamResult.winning_option_text || "No consensus yet"}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">{teamResult.total_weighted_votes} weighted internal votes</p>
+            ) : (
+              <>
+                {/* --- INDIVIDUAL RESULTS --- */}
+                {results.type === "individual" && results.results && results.results.length > 0 && (
+                  <div className="space-y-4">
+                    {results.results.map((result) => (
+                      <div key={result.option_id} className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="font-semibold text-gray-900 dark:text-gray-100">{result.option_text}</span>
+                          <span className="text-gray-600 dark:text-gray-400">{result.vote_count} votes ({result.percentage}%)</span>
                         </div>
-                      ))}
-                    </div>
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4"><div className="bg-blue-600 h-4 rounded-full" style={{ width: `${result.percentage}%` }}></div></div>
+                      </div>
+                    ))}
                   </div>
                 )}
-              </div>
-            )}
+                {/* --- TEAM & REPUBLIC RESULTS --- */}
+                {(results.type === "team" || results.type === "republic") && results.team_results && results.team_results.length > 0 && (
+                    <div className="space-y-6">
+                        {results.type === 'republic' && results.league_result?.winning_option_text && (
+                          <div className="bg-gradient-to-r from-orange-50 to-yellow-50 dark:from-orange-900/20 dark:to-yellow-900/20 border border-orange-200 dark:border-orange-700 rounded-lg p-4">
+                            <h4 className="font-semibold text-orange-800 dark:text-orange-300 mb-2">League Winner</h4>
+                            <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{results.league_result.winning_option_text}</p>
+                          </div>
+                        )}
+                        <div>
+                            <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">{results.type === 'republic' ? 'Team Consensus' : 'Team Results'}</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {results.team_results.map((teamResult: TeamPollResult) => (
+                                <div key={teamResult.team_id} className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-2xl">{teamResult.team_emoji}</span>
+                                    <span className="font-bold text-gray-900 dark:text-gray-100">{teamResult.team_name}</span>
+                                </div>
+                                <p className="text-gray-600 dark:text-gray-400">{teamResult.winning_option_text || "No votes yet"}</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">{teamResult.total_weighted_votes} weighted votes</p>
+                                </div>
+                            ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+                {/* THE FIX: Display Blessing Event Raw Data */}
+                {{results.type === "blessing_event" && results.rawData && results.rawData.length > 0 && (
+                  <div className="space-y-6">
+                    <div>
+                        <h4 className="font-semibold text-gray-900 dark:text-gray-100">Live Blessing Odds</h4>
+                        <p className="text-xs text-muted-foreground mb-3">
+                          These are the baseline mathematical odds based on current votes. During resolution, winning teams are eliminated from subsequent rolls, causing actual odds to shift dynamically.
+                        </p>
+                    </div>
 
-            {results?.type === "blessing_event" && (
-              <div className="p-8 text-center text-muted-foreground border-2 border-dashed border-border rounded-lg">
-                <p>Blessing Events have their own specialized results view.</p>
-                <p className="text-xs mt-2">Check the main Voting Page for detailed lottery results.</p>
-              </div>
-            )}
-
+                    {/* We tell TypeScript exactly what shape this array is */}
+                    {(results.rawData as BlessingCalculatedOdds[]).map((option) => (
+                      <div key={option.option_id} className="bg-purple-50 dark:bg-purple-900/10 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3 border-b border-purple-200 dark:border-purple-800 pb-2">
+                            <h5 className="font-bold text-lg text-purple-900 dark:text-purple-300">{option.option_text}</h5>
+                            <span className="text-sm font-medium text-purple-700 dark:text-purple-400 bg-purple-200 dark:bg-purple-900/50 px-2 py-0.5 rounded">
+                                {option.total_yes_votes} Total Votes
+                            </span>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          {option.team_chances.map((tc: BlessingTeamChance) => (
+                            <div key={tc.team_id} className={`flex items-center justify-between text-sm p-2 rounded-md ${tc.votes > 0 ? 'bg-white dark:bg-gray-800 shadow-sm' : 'opacity-60 grayscale'}`}>
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">{tc.team_emoji}</span>
+                                <span className={`font-medium ${tc.votes > 0 ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500'}`}>{tc.team_name}</span>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <span className="text-gray-500 w-16 text-right">{tc.votes} votes</span>
+                                <span className={`font-bold w-12 text-right ${tc.votes > 0 ? 'text-purple-600 dark:text-purple-400' : 'text-gray-400'}`}>
+                                    {tc.odds}%
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
             <button onClick={() => setShowResults(false)} className="mt-6 w-full bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-bold transition-colors">
               Close
             </button>

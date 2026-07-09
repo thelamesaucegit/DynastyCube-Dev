@@ -163,7 +163,6 @@ export async function placeWireBid(cardPoolId: string, bidAmount: number): Promi
 // ============================================
 // CRON JOB ACTION (for automated processing)
 // ============================================
-
 export async function processWireBids(): Promise<{ success: boolean; processedBids: number; movedToFreeAgency: number; error?: string }> {
     console.log("Starting Wire bid processing...");
     const supabase = createAdminClient(); 
@@ -180,10 +179,10 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
         if (seasonError || !activeSeason) {
             return { success: true, processedBids: 0, movedToFreeAgency: 0, error: "No active season found." };
         }
-
         const seasonId = activeSeason.id;
 
         const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+
         const { data: processableCards, error: cardError } = await supabase
             .from('card_pools')
             .select('id, on_wire_since, card_name')
@@ -191,16 +190,23 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
             .lte('on_wire_since', twoDaysAgo);
 
         if (cardError) throw new Error(`Failed to fetch processable cards: ${cardError.message}`);
+
         if (!processableCards || processableCards.length === 0) {
             console.log("No cards on The Wire are ready for processing.");
             return { success: true, processedBids: 0, movedToFreeAgency: 0 };
         }
 
         console.log(`Found ${processableCards.length} cards to process.`);
-        const cardIds = processableCards.map(c => c.id);
 
-        const { data: allBidsData, error: bidsError } = await supabase.from('wire_bids').select('*').in('card_pool_id', cardIds);
+        // THE FIX: Do not use .in() with a massive array. 
+        // Fetch all active bids for the season instead. Safe, small, and fast!
+        const { data: allBidsData, error: bidsError } = await supabase
+            .from('wire_bids')
+            .select('*')
+            .eq('season_id', seasonId);
+
         if (bidsError) throw new Error(`Failed to fetch bids: ${bidsError.message}`);
+
         const allBids = (allBidsData as WireBid[]) || [];
 
         const { data: draftOrder, error: orderError } = await supabase.from('draft_order').select('team_id, lottery_number').eq('season_id', seasonId);
@@ -218,8 +224,6 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
         });
 
         const notificationsToInsert: { user_id: string; notification_type: string; message: string; }[] = [];
-
-        // NEW: Safe deletion array! We only push to this if the RPC succeeds.
         const successfulCardIds: string[] = [];
 
         // 3. Loop through each card and process its bids
@@ -230,7 +234,7 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
             if (bidsForCard.length === 0) {
                 await supabase.from('card_pools').update({ pool_name: 'free', on_wire_since: null }).eq('id', card.id);
                 movedToFreeAgency++;
-                successfulCardIds.push(card.id); // Safely handled
+                successfulCardIds.push(card.id); 
                 console.log(`Card ${card.id} moved to Free Agency.`);
                 continue;
             }
@@ -261,11 +265,10 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
             });
             
             if (rpcError) {
-                // If it fails, we DO NOT push the ID to successfulCardIds. The bid is retained!
                 console.error(`Error processing wire win for card ${card.id} and team ${winner.team_id}:`, rpcError);
             } else {
                 processedBids++;
-                successfulCardIds.push(card.id); // Safely processed
+                successfulCardIds.push(card.id); 
 
                 // Notifications Logic
                 const winnerUsers = teamMembersMap.get(winner.team_id) || [];
@@ -297,7 +300,14 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
         
         // 5. Clean up ONLY successfully processed bids
         if (successfulCardIds.length > 0) {
-            await supabase.from('wire_bids').delete().in('card_pool_id', successfulCardIds);
+            // Because there could be hundreds of successful card IDs, we can batch delete bids 
+            // by just deleting any bid where the season_id matches AND the pool_name is now "draft" or "free",
+            // but the array delete is usually fine unless there are thousands of *bids*.
+            // To be perfectly safe, we delete bids in batches of 100.
+            for (let i = 0; i < successfulCardIds.length; i += 100) {
+                const batch = successfulCardIds.slice(i, i + 100);
+                await supabase.from('wire_bids').delete().in('card_pool_id', batch);
+            }
         }
 
         if (notificationsToInsert.length > 0) {

@@ -8,6 +8,25 @@ import { createServerClient } from "@/lib/supabase";
 // =================================================================================================
 export type VoteType = "individual" | "team" | "league" | "republic" | "blessing_event";
 
+interface RawPollWithOptions {
+  id: string;
+  title: string;
+  description: string | null;
+  created_by: string | null;
+  starts_at: string;
+  ends_at: string;
+  is_active: boolean;
+  allow_multiple_votes: boolean;
+  show_results_before_end: boolean;
+  vote_type: VoteType;
+  total_votes: number;
+  created_at: string;
+  updated_at: string;
+  team_id: string | null;
+  options: PollOption[]; // <-- FIXED: Uses the exact same type expected by PollWithOptions
+}
+
+
 export interface Poll {
   id: string;
   title: string;
@@ -74,6 +93,21 @@ export interface BlessingResultRaw {
   teams?: { id: string; name: string; emoji: string } | null;
 }
 
+export interface BlessingTeamChance {
+  team_id: string;
+  team_name: string;
+  team_emoji: string;
+  votes: number;
+  odds: number;
+}
+
+export interface BlessingCalculatedOdds {
+  option_id: string;
+  option_text: string;
+  total_yes_votes: number;
+  team_chances: BlessingTeamChance[];
+}
+
 export interface TypedPollResults {
   type: VoteType;
   results?: PollResult[];
@@ -84,9 +118,8 @@ export interface TypedPollResults {
     option_text: string;
     teams_voting: { team_id: string; team_name: string; team_emoji: string }[] | null;
   }[];
-  rawData?: BlessingResultRaw[]; 
+  rawData?: BlessingResultRaw[] | BlessingCalculatedOdds[]; 
 }
-
 export interface PollWithOptions extends Poll {
   options: PollOption[];
   userVotes?: string[]; 
@@ -105,17 +138,23 @@ export async function getActivePolls(userId?: string) {
     const supabase = await createServerClient();
     const { data, error } = await supabase
       .from("polls")
-      .select("*, poll_options(*)")
+      .select(`
+        id, title, description, created_by, starts_at, ends_at, is_active,
+        allow_multiple_votes, show_results_before_end, vote_type, total_votes,
+        created_at, updated_at, team_id,
+        options:poll_options ( id, poll_id, option_text, option_order, vote_count, created_at ) 
+      `) // <-- FIXED: Added created_at to the poll_options fetch!
       .eq("is_active", true)
       .is("team_id", null)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
-    const polls = data || [];
+    
+    // Use the strict RawPollWithOptions type here
+    const polls = (data as RawPollWithOptions[]) || [];
 
-    const pollsWithOptions = polls.map((poll) => {
-      const rawOptions = (poll.poll_options as PollOption[]) || [];
-      const sortedOptions = rawOptions.sort((a, b) => a.option_order - b.option_order);
+    const pollsWithOptions: PollWithOptions[] = polls.map((poll) => {
+      const sortedOptions = poll.options.sort((a, b) => a.option_order - b.option_order);
       return { ...poll, options: sortedOptions };
     });
 
@@ -123,24 +162,39 @@ export async function getActivePolls(userId?: string) {
       const pollsWithVotes = await Promise.all(
         pollsWithOptions.map(async (poll) => {
           const client = await createServerClient();
-          let userVotesData = [];
+          let userVotesData: { option_id: string }[] | null = null;
           
           if (poll.vote_type === 'blessing_event') {
-            const { data } = await client.from("blessing_allocations").select("option_id").eq("poll_id", poll.id).eq("user_id", userId).eq("voted_yes", true);
-            userVotesData = data || [];
+            const { data } = await client
+              .from("blessing_allocations")
+              .select("option_id")
+              .eq("poll_id", poll.id)
+              .eq("user_id", userId)
+              .eq("voted_yes", true);
+            userVotesData = data;
           } else {
-            const { data } = await client.from("poll_votes").select("option_id").eq("poll_id", poll.id).eq("user_id", userId);
-            userVotesData = data || [];
+            const { data } = await client
+              .from("poll_votes")
+              .select("option_id")
+              .eq("poll_id", poll.id)
+              .eq("user_id", userId);
+            userVotesData = data;
           }
-          return { ...poll, userVotes: userVotesData.map((v) => v.option_id), hasVoted: userVotesData.length > 0 };
+          return { 
+            ...poll, 
+            userVotes: (userVotesData || []).map((v) => v.option_id), 
+            hasVoted: (userVotesData || []).length > 0 
+          };
         })
       );
       return { polls: pollsWithVotes, success: true };
     }
+
     return { polls: pollsWithOptions, success: true };
   } catch (error) {
     console.error("Error fetching active polls:", error);
-    return { polls: [], success: false, error: "Failed to fetch polls" };
+    const dbError = error as { message?: string };
+    return { polls: [], success: false, error: dbError.message || "Failed to fetch polls" };
   }
 }
 
