@@ -166,16 +166,17 @@ export function VoteManagement() {
 const handleViewResults = async (poll: Poll) => {
     setSelectedPoll(poll);
     setShowResults(true);
-    setResults(null); // Clear previous results
+    setResults(null); 
     const result = await getPollResultsByType(poll.id);
     if (result.success && result.results) {
       setResults(result.results);
     } else {
       console.error("Failed to fetch poll results:", result.error);
+      // Set results to an empty object of the correct type to stop the loader
+      setResults({ type: poll.vote_type, results: [], team_results: [], league_result: null, rawData: [] });
     }
   };
 
-  // WILL BE IMPLEMENTED IN NEXT STEP
    const handleResolveBlessings = async (pollId: string) => {
     if (!confirm("Resolve this blessing event now? This will roll the random lottery for all blessings in this poll.")) return;
     
@@ -395,21 +396,20 @@ const handleViewResults = async (poll: Poll) => {
             <div className="flex items-start justify-between mb-6">
               <div>
                 <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">{selectedPoll.title}</h3>
-                <div className="flex items-center gap-2">
-                  <p className="text-gray-600 dark:text-gray-400">Total Votes: {selectedPoll.total_votes}</p>
-                </div>
+                <p className="text-gray-600 dark:text-gray-400">Total Votes: {selectedPoll.total_votes}</p>
               </div>
               <button onClick={() => setShowResults(false)} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-2xl">✕</button>
             </div>
             
-           {!results ? (
+            {!results ? (
               <div className="text-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
                 <p className="mt-2 text-muted-foreground">Loading results...</p>
               </div>
             ) : (
               <>
-                {results.type === "individual" && results.results && (
+                {/* --- INDIVIDUAL RESULTS --- */}
+                {results.type === "individual" && results.results && results.results.length > 0 && (
                   <div className="space-y-4">
                     {results.results.map((result) => (
                       <div key={result.option_id} className="space-y-2">
@@ -417,62 +417,52 @@ const handleViewResults = async (poll: Poll) => {
                           <span className="font-semibold text-gray-900 dark:text-gray-100">{result.option_text}</span>
                           <span className="text-gray-600 dark:text-gray-400">{result.vote_count} votes ({result.percentage}%)</span>
                         </div>
-                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
-                          <div className="bg-blue-600 h-4 rounded-full transition-all" style={{ width: `${result.percentage}%` }}></div>
-                        </div>
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4"><div className="bg-blue-600 h-4 rounded-full" style={{ width: `${result.percentage}%` }}></div></div>
                       </div>
                     ))}
                   </div>
                 )}
-                {results.type === "team" && results.team_results && (
-                  <div className="space-y-4">
-                    <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">Team Results</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {results.team_results.map((teamResult: TeamPollResult) => (
-                        <div key={teamResult.team_id} className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-2xl">{teamResult.team_emoji}</span>
-                            <span className="font-bold text-gray-900 dark:text-gray-100">{teamResult.team_name}</span>
+                {/* --- TEAM & REPUBLIC RESULTS --- */}
+                {(results.type === "team" || results.type === "republic") && results.team_results && results.team_results.length > 0 && (
+                    <div className="space-y-6">
+                        {results.type === 'republic' && results.league_result?.winning_option_text && (
+                          <div className="bg-gradient-to-r from-orange-50 to-yellow-50 dark:from-orange-900/20 dark:to-yellow-900/20 border border-orange-200 dark:border-orange-700 rounded-lg p-4">
+                            <h4 className="font-semibold text-orange-800 dark:text-orange-300 mb-2">League Winner</h4>
+                            <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{results.league_result.winning_option_text}</p>
                           </div>
-                          <p className="text-gray-600 dark:text-gray-400">{teamResult.winning_option_text || "No votes yet"}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">{teamResult.total_weighted_votes} weighted votes</p>
+                        )}
+                        <div>
+                            <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">{results.type === 'republic' ? 'Team Consensus' : 'Team Results'}</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {results.team_results.map((teamResult: TeamPollResult) => (
+                                <div key={teamResult.team_id} className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-2xl">{teamResult.team_emoji}</span>
+                                    <span className="font-bold text-gray-900 dark:text-gray-100">{teamResult.team_name}</span>
+                                </div>
+                                <p className="text-gray-600 dark:text-gray-400">{teamResult.winning_option_text || "No votes yet"}</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">{teamResult.total_weighted_votes} weighted votes</p>
+                                </div>
+                            ))}
+                            </div>
                         </div>
-                      ))}
                     </div>
+                )}
+                {/* THE FIX: Display Blessing Event Raw Data */}
+                {results.type === "blessing_event" && results.rawData && results.rawData.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">Blessing Lottery Raw Results</h4>
+                    <pre className="bg-gray-900 text-white text-xs p-4 rounded-md overflow-x-auto">
+                      {JSON.stringify(results.rawData, null, 2)}
+                    </pre>
                   </div>
                 )}
-                {results.type === "republic" && (
-                   <div className="space-y-6">
-                     {results.league_result && results.league_result.winning_option_text && (
-                       <div className="bg-gradient-to-r from-orange-50 to-yellow-50 dark:from-orange-900/20 dark:to-yellow-900/20 border border-orange-200 dark:border-orange-700 rounded-lg p-4">
-                         <h4 className="font-semibold text-orange-800 dark:text-orange-300 mb-2">League Winner</h4>
-                         <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{results.league_result.winning_option_text}</p>
-                       </div>
-                     )}
-                     {results.team_results && (
-                       <div>
-                         <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">Team Votes (Consensus)</h4>
-                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                           {results.team_results.map((teamResult: TeamPollResult) => (
-                             <div key={teamResult.team_id} className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                               <div className="flex items-center gap-2 mb-2">
-                                 <span className="text-2xl">{teamResult.team_emoji}</span>
-                                 <span className="font-bold text-gray-900 dark:text-gray-100">{teamResult.team_name}</span>
-                               </div>
-                               <p className="text-gray-600 dark:text-gray-400">{teamResult.winning_option_text || "No consensus yet"}</p>
-                               <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">{teamResult.total_weighted_votes} weighted internal votes</p>
-                             </div>
-                           ))}
-                         </div>
-                       </div>
-                     )}
-                   </div>
-                )}
-                {results.type === "blessing_event" && (
-                  <div className="p-8 text-center text-muted-foreground border-2 border-dashed border-border rounded-lg">
-                    <p>Blessing Events have their own specialized results view.</p>
-                    <p className="text-xs mt-2">Check the main Voting Page for detailed lottery results.</p>
-                  </div>
+
+                {/* --- FALLBACK FOR EMPTY RESULTS --- */}
+                {results.results?.length === 0 && results.team_results?.length === 0 && results.rawData?.length === 0 && (
+                     <div className="p-8 text-center text-muted-foreground border-2 border-dashed border-border rounded-lg">
+                        <p>No results have been recorded for this poll yet.</p>
+                    </div>
                 )}
               </>
             )}
