@@ -496,7 +496,9 @@ export async function getPollResultsByType(pollId: string) {
 
         console.log("[Admin Results - Republic] Successfully received data from RPC:", JSON.stringify(data, null, 2));
         const typedResults = data as TypedPollResults;
-        typedResults.type = "republic";
+        
+        // THE FIX: Explicitly cast to VoteType
+        typedResults.type = "republic" as VoteType; 
         return { results: typedResults, success: true };
     }
 
@@ -566,13 +568,17 @@ export async function getPollResultsByType(pollId: string) {
         });
         
         console.log("[Admin Results - Blessing] Final calculated odds object:", JSON.stringify(calculatedOdds, null, 2));
-        return { results: { type: "blessing_event", rawData: calculatedOdds }, success: true };
+        
+        // THE FIX: Explicitly cast to VoteType
+        return { results: { type: "blessing_event" as VoteType, rawData: calculatedOdds }, success: true };
     }
 
     // Fallback for other types
     const { data, error } = await supabase.rpc("get_poll_results", { p_poll_id: pollId });
     if (error) throw error;
-    return { results: { type: "individual", results: data as PollResult[] }, success: true };
+    
+    // THE FIX: Explicitly cast to VoteType
+    return { results: { type: "individual" as VoteType, results: data as PollResult[] }, success: true };
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
