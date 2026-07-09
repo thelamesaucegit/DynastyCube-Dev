@@ -13,6 +13,8 @@ import {
   type Poll,
   type VoteType,
   type TypedPollResults,
+  type BlessingCalculatedOdds, 
+  type BlessingTeamChance, 
   type TeamPollResult,
 } from "@/app/actions/voteActions";
 import { manuallyTriggerDeckVotesForWeek } from "@/app/actions/adminActions";
@@ -468,23 +470,45 @@ export function VoteManagement() {
                     </div>
                 )}
                 {/* THE FIX: Display Blessing Event Raw Data */}
-                {results.type === "blessing_event" && results.rawData && results.rawData.length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">Blessing Lottery Raw Results</h4>
-                    <pre className="bg-gray-900 text-white text-xs p-4 rounded-md overflow-x-auto">
-                      {JSON.stringify(results.rawData, null, 2)}
-                    </pre>
+                {{results.type === "blessing_event" && results.rawData && results.rawData.length > 0 && (
+                  <div className="space-y-6">
+                    <div>
+                        <h4 className="font-semibold text-gray-900 dark:text-gray-100">Live Blessing Odds</h4>
+                        <p className="text-xs text-muted-foreground mb-3">
+                          These are the baseline mathematical odds based on current votes. During resolution, winning teams are eliminated from subsequent rolls, causing actual odds to shift dynamically.
+                        </p>
+                    </div>
+
+                    {/* We tell TypeScript exactly what shape this array is */}
+                    {(results.rawData as BlessingCalculatedOdds[]).map((option) => (
+                      <div key={option.option_id} className="bg-purple-50 dark:bg-purple-900/10 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3 border-b border-purple-200 dark:border-purple-800 pb-2">
+                            <h5 className="font-bold text-lg text-purple-900 dark:text-purple-300">{option.option_text}</h5>
+                            <span className="text-sm font-medium text-purple-700 dark:text-purple-400 bg-purple-200 dark:bg-purple-900/50 px-2 py-0.5 rounded">
+                                {option.total_yes_votes} Total Votes
+                            </span>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          {option.team_chances.map((tc: BlessingTeamChance) => (
+                            <div key={tc.team_id} className={`flex items-center justify-between text-sm p-2 rounded-md ${tc.votes > 0 ? 'bg-white dark:bg-gray-800 shadow-sm' : 'opacity-60 grayscale'}`}>
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">{tc.team_emoji}</span>
+                                <span className={`font-medium ${tc.votes > 0 ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500'}`}>{tc.team_name}</span>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <span className="text-gray-500 w-16 text-right">{tc.votes} votes</span>
+                                <span className={`font-bold w-12 text-right ${tc.votes > 0 ? 'text-purple-600 dark:text-purple-400' : 'text-gray-400'}`}>
+                                    {tc.odds}%
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
-
-                {/* --- FALLBACK FOR EMPTY RESULTS --- */}
-                {results.results?.length === 0 && results.team_results?.length === 0 && results.rawData?.length === 0 && (
-                     <div className="p-8 text-center text-muted-foreground border-2 border-dashed border-border rounded-lg">
-                        <p>No results have been recorded for this poll yet.</p>
-                    </div>
-                )}
-              </>
-            )}
             <button onClick={() => setShowResults(false)} className="mt-6 w-full bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-bold transition-colors">
               Close
             </button>
