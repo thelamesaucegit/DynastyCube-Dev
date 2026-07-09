@@ -8,6 +8,30 @@ import { createServerClient } from "@/lib/supabase";
 // =================================================================================================
 export type VoteType = "individual" | "team" | "league" | "republic" | "blessing_event";
 
+interface RawPollWithOptions {
+  id: string;
+  title: string;
+  description: string | null;
+  created_by: string | null;
+  starts_at: string;
+  ends_at: string;
+  is_active: boolean;
+  allow_multiple_votes: boolean;
+  show_results_before_end: boolean;
+  vote_type: VoteType;
+  total_votes: number;
+  created_at: string;
+  updated_at: string;
+  team_id: string | null;
+  options: {
+    id: string;
+    poll_id: string;
+    option_text: string;
+    option_order: number;
+    vote_count: number;
+  }[];
+}
+
 export interface Poll {
   id: string;
   title: string;
@@ -103,7 +127,6 @@ export interface PollWithOptions extends Poll {
 export async function getActivePolls(userId?: string) {
   try {
     const supabase = await createServerClient();
-    // It's more efficient to select only the columns we need.
     const { data, error } = await supabase
       .from("polls")
       .select(`
@@ -118,10 +141,11 @@ export async function getActivePolls(userId?: string) {
 
     if (error) throw error;
     
-    const polls = data || [];
-    const pollsWithOptions = polls.map((poll: any) => {
-      const rawOptions = (poll.options as PollOption[]) || [];
-      const sortedOptions = rawOptions.sort((a, b) => a.option_order - b.option_order);
+    // THE FIX: Use the strict RawPollWithOptions type here
+    const polls = (data as RawPollWithOptions[]) || [];
+
+    const pollsWithOptions: PollWithOptions[] = polls.map((poll) => {
+      const sortedOptions = poll.options.sort((a, b) => a.option_order - b.option_order);
       return { ...poll, options: sortedOptions };
     });
 
@@ -131,10 +155,6 @@ export async function getActivePolls(userId?: string) {
           const client = await createServerClient();
           let userVotesData: { option_id: string }[] | null = null;
           
-          // THE FIX: The type mismatch error is happening here.
-          // The `userVotes` array from the client is an array of strings,
-          // but the `option_id` in the database is a UUID.
-          // We cast the incoming array to 'uuid[]' to satisfy PostgreSQL.
           if (poll.vote_type === 'blessing_event') {
             const { data } = await client
               .from("blessing_allocations")
@@ -151,7 +171,6 @@ export async function getActivePolls(userId?: string) {
               .eq("user_id", userId);
             userVotesData = data;
           }
-
           return { 
             ...poll, 
             userVotes: (userVotesData || []).map((v) => v.option_id), 
@@ -169,6 +188,7 @@ export async function getActivePolls(userId?: string) {
     return { polls: [], success: false, error: dbError.message || "Failed to fetch polls" };
   }
 }
+
 export async function getPollWithOptions(pollId: string, userId?: string) {
   try {
     const supabase = await createServerClient();
