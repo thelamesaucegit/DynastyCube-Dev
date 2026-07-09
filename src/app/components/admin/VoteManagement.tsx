@@ -102,6 +102,8 @@ export function VoteManagement() {
         voteType: "individual",
         options: ["", ""],
         activateOnChampionship: false,
+                isMultipleWinner: false,
+
       });
       loadPolls();
     } else {
