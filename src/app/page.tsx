@@ -124,7 +124,7 @@ export default function HomePage() {
   useEffect(() => {
     const moveBackground = () => setBgPosition({ x: Math.floor(Math.random() * 100), y: Math.floor(Math.random() * 100) });
     const initialTimeout = setTimeout(moveBackground, 100);
-    const panInterval = setInterval(moveBackground, 60000);
+    const panInterval = setInterval(moveBackground, 120000);
     return () => {
       clearTimeout(initialTimeout);
       clearInterval(panInterval);
@@ -165,7 +165,7 @@ const visibleTxs = recentTransactions.slice(0, activeTeamCount);
             backgroundSize: "150%", 
             backgroundRepeat: "no-repeat",
             backgroundPosition: `${bgPosition.x}% ${bgPosition.y}%`,
-            transition: "background-position 60s ease-in-out", 
+            transition: "background-position 120s ease-in-out", 
           }}
         />
         <div className="absolute inset-0 bg-black/65" /> 
