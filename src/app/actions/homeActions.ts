@@ -101,6 +101,91 @@ export interface CypherStats {
 }
 
 
+export interface RecentTransaction {
+  id: string;
+  card_id: string;
+  card_name: string;
+  card_type?: string;
+  image_url?: string;
+  oldest_image_url?: string;
+  team_id: string;
+  team_name: string;
+  team_emoji: string;
+  from_team_id?: string;
+  from_team_name?: string;
+  from_team_emoji?: string;
+  acquisition_method: string;
+  acquired_at: string;
+}
+
+// Strict Database Return Type for Transactions
+interface DbTransactionRow {
+  id: string;
+  card_id: string;
+  card_name: string;
+  card_type: string | null;
+  image_url: string | null;
+  oldest_image_url: string | null;
+  team_id: string;
+  from_team_id: string | null;
+  acquisition_method: string;
+  acquired_at: string;
+  teams: { id: string; name: string; emoji: string } | { id: string; name: string; emoji: string }[] | null;
+  from_teams: { id: string; name: string; emoji: string } | { id: string; name: string; emoji: string }[] | null;
+}
+
+export async function getRecentTransactions(limit: number = 10): Promise<{
+  transactions: RecentTransaction[];
+  error?: string;
+}> {
+  const supabase = await createClient();
+  try {
+    const { data, error } = await supabase
+      .from("card_transactions")
+      .select(`
+        id, card_id, card_name, card_type, image_url, oldest_image_url, team_id, from_team_id, acquisition_method, acquired_at,
+        teams!card_transactions_team_id_fkey ( id, name, emoji ),
+        from_teams:teams!card_transactions_from_team_id_fkey ( id, name, emoji )
+      `)
+      .order("acquired_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error("Error fetching recent transactions:", error);
+      return { transactions: [], error: error.message };
+    }
+
+    const rawRows = (data || []) as unknown as DbTransactionRow[];
+
+    const transactions: RecentTransaction[] = rawRows.map((tx) => {
+      const team = Array.isArray(tx.teams) ? tx.teams[0] : tx.teams;
+      const fromTeam = Array.isArray(tx.from_teams) ? tx.from_teams[0] : tx.from_teams;
+
+      return {
+        id: tx.id,
+        card_id: tx.card_id,
+        card_name: tx.card_name,
+        card_type: tx.card_type || undefined,
+        image_url: tx.image_url || undefined,
+        oldest_image_url: tx.oldest_image_url || undefined,
+        team_id: tx.team_id,
+        team_name: team?.name || "Unknown Team",
+        team_emoji: team?.emoji || "❓",
+        from_team_id: tx.from_team_id || undefined,
+        from_team_name: fromTeam?.name || undefined,
+        from_team_emoji: fromTeam?.emoji || undefined,
+        acquisition_method: tx.acquisition_method,
+        acquired_at: tx.acquired_at,
+      };
+    });
+
+    return { transactions };
+  } catch (error) {
+    console.error("Unexpected error fetching recent transactions:", error);
+    return { transactions: [], error: "An unexpected error occurred" };
+  }
+}
+
 /**
  * Get the currently active draft session ID
  */
