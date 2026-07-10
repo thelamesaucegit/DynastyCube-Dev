@@ -88,7 +88,7 @@ export default function NewsPage() {
                   <Badge>Latest</Badge>
                 </div>
                 <CardTitle className="text-3xl group-hover:text-primary transition-colors">
-                  {news[0].title}
+                  <TargetedGlitchedText text={news[0].title}/>
                 </CardTitle>
                 <div className="flex items-center gap-4 text-sm text-muted-foreground pt-2">
                   <span className="flex items-center gap-1.5">
@@ -104,7 +104,7 @@ export default function NewsPage() {
               <CardContent>
                 {/* Truncated view */}
                 <p className="leading-relaxed whitespace-pre-line text-muted-foreground line-clamp-4">
-                  {news[0].content}
+                  <TargetedGlitchedText text={news[0].content}/>
                 </p>
                 <div className="mt-4 flex justify-end">
                    <span className="text-sm font-semibold text-primary opacity-0 group-hover:opacity-100 transition-opacity flex items-center">
@@ -126,7 +126,7 @@ export default function NewsPage() {
                 >
                   <CardHeader className="pb-3">
                     <CardTitle className="text-xl line-clamp-2 group-hover:text-primary transition-colors">
-                      {newsItem.title}
+                      <TargetedGlitchedText text={newsItem.title}/>
                     </CardTitle>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground pt-1">
                       <span className="flex items-center gap-1.5">
@@ -141,7 +141,7 @@ export default function NewsPage() {
                   </CardHeader>
                   <CardContent className="flex-1 flex flex-col">
                     <p className="text-muted-foreground leading-relaxed whitespace-pre-line line-clamp-4 flex-1">
-                      {newsItem.content}
+                      <TargetedGlitchedText text={newsItem.content}/>
                     </p>
                     <div className="mt-4 flex justify-end">
                        <span className="text-sm font-semibold text-primary opacity-0 group-hover:opacity-100 transition-opacity flex items-center">
@@ -178,7 +178,9 @@ export default function NewsPage() {
           >
             <div className="p-6 border-b border-border flex justify-between items-start bg-muted/30">
               <div>
-                <h2 className="text-2xl md:text-3xl font-bold text-foreground">{selectedNews.title}</h2>
+                <h2 className="text-2xl md:text-3xl font-bold text-foreground">
+                  <TargetedGlitchedText text={selectedNews.title}/>
+                </h2>
                 <div className="flex items-center gap-4 text-sm text-muted-foreground mt-2">
                   <span className="flex items-center gap-1.5">
                     <CalendarDays className="h-3.5 w-3.5" />
@@ -199,7 +201,7 @@ export default function NewsPage() {
             </div>
             <div className="p-6 overflow-y-auto">
               <p className="whitespace-pre-line text-base md:text-lg leading-relaxed text-foreground/90">
-                {selectedNews.content}
+                <TargetedGlitchedText text={selectedNews.content}/>
               </p>
             </div>
           </div>
