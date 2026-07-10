@@ -521,6 +521,8 @@ export function VoteManagement() {
                                     ))}
                                 </div>
                             )}
+                   </>
+                    )}
             <button onClick={() => setShowResults(false)} className="mt-6 w-full bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-bold transition-colors">
               Close
             </button>
