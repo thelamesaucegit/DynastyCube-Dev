@@ -80,7 +80,7 @@ export async function importNextSetToChamber(): Promise<{
         return {
             card_id: card.id,
             card_name: card.name,
-            card_set: card.set_name,
+            card_set: card.set,
             card_type: card.type_line,
             rarity: card.rarity,
             oracle_text: extractOracleText(card),
