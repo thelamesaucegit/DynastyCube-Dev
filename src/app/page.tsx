@@ -9,21 +9,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/ca
 import { Button } from "@/app/components/ui/button";
 import { PlayoffBracket } from "@/app/components/PlayoffBracket";
 import { Badge } from "@/app/components/ui/badge";
-import { ArrowRight, Info, X } from "lucide-react";
+import { ArrowRight, Info, X, Vote, BookOpen, Sparkles } from "lucide-react";
 import CountdownTimer from "@/app/components/CountdownTimer";
 import { DraftStatusWidget } from "@/app/components/DraftStatusWidget";
 import { CardPreview } from "@/app/components/CardPreview";
 import { LiveStreamWidget } from "@/app/components/LiveStreamWidget";
 import {
-  getRecentDraftPicks,
+  getRecentTransactions,
   getCurrentSeason,
   getAdminNews,
   getActiveCountdownTimer,
   getActiveDraftSession,
-  type RecentDraftPick,
+  getHomepageActivePolls,
+  getCypherStats,
+  type RecentTransaction,
   type CurrentSeason,
   type AdminNews,
   type CountdownTimer as CountdownTimerType,
+  type HomepagePoll,
+  type CypherStats
 } from "@/app/actions/homeActions";
 import { getLatestStreamMatch, type StreamMatch } from "@/app/actions/liveStreamActions";
 import { getTeamsWithDetails } from "@/app/actions/teamActions";
@@ -43,17 +47,19 @@ export default function HomePage() {
   // Core Page State
   const [season, setSeason] = useState<CurrentSeason | null>(null);
   const [adminNews, setAdminNews] = useState<AdminNews[]>([]);
-  const [selectedNews, setSelectedNews] = useState<AdminNews | null>(null); // <-- NEW STATE
+  const [selectedNews, setSelectedNews] = useState<AdminNews | null>(null);
   const [countdownTimer, setCountdownTimer] = useState<CountdownTimerType | null>(null);
   const [liveMatch, setLiveMatch] = useState<StreamMatch | null>(null);
+  const [activePolls, setActivePolls] = useState<HomepagePoll[]>([]);
+  const [cypherStats, setCypherStats] = useState<CypherStats | null>(null);
   const [activeTeamCount, setActiveTeamCount] = useState(8);
   const [loadingCore, setLoadingCore] = useState(true);
   const [bgPosition, setBgPosition] = useState({ x: 50, y: 50 });
 
   // Draft-Specific State (Loaded Non-Blockingly)
-  const [recentPicks, setRecentPicks] = useState<RecentDraftPick[]>([]);
   const [draftSessionId, setDraftSessionId] = useState<string | null>(null);
   const [loadingDraft, setLoadingDraft] = useState(true);
+ const [recentTransactions, setRecentTransactions] = useState<RecentTransaction[]>([]); // Replaces recentPicks
 
   // 1. Load Core Data
   const loadCoreData = useCallback(async () => {
@@ -66,17 +72,21 @@ export default function HomePage() {
       const isActivePlayPhase = currentPhase && currentPhase !== 'postseason' && currentPhase !== 'draft';
       
       const liveMatchPromise = isActivePlayPhase ? getLatestStreamMatch() : Promise.resolve({ match: null });
-      const [teamsResult, newsResult, timerResult, streamResult] = await Promise.all([
+      const [teamsResult, newsResult, timerResult, streamResult, pollsResult, cypherResult] = await Promise.all([
         getTeamsWithDetails(),
-        getAdminNews(1), // <-- THE FIX: Only fetch 1 item for the home page!
+        getAdminNews(1), 
         getActiveCountdownTimer(),
         liveMatchPromise,
+        getHomepageActivePolls(),
+        getCypherStats()
       ]);
       
       setActiveTeamCount(teamsResult.teams?.filter(t => !(t as { is_hidden?: boolean }).is_hidden).length || 8);
       setAdminNews(newsResult.news);
       setCountdownTimer(timerResult.timer);
       setLiveMatch(streamResult.match);
+      setActivePolls(pollsResult.polls || []);
+      setCypherStats(cypherResult.stats || null);
     } catch (error) {
       console.error("Error loading core home page data:", error);
     } finally {
@@ -85,16 +95,17 @@ export default function HomePage() {
   }, []);
 
   // 2. Load Draft Data
+
   const loadDraftData = useCallback(async () => {
     try {
-      const [draftSessionResult, picksResult] = await Promise.all([
+      const [draftSessionResult, txResult] = await Promise.all([
         getActiveDraftSession(),
-        getRecentDraftPicks(20)
+        getRecentTransactions(20) // Fetch from the new unified ledger
       ]);
       setDraftSessionId(draftSessionResult.session?.id || null);
-      setRecentPicks(picksResult.picks);
+      setRecentTransactions(txResult.transactions);
     } catch (error) {
-      console.error("Error loading background draft data:", error);
+      console.error("Error loading background tx data:", error);
     } finally {
       setLoadingDraft(false);
     }
@@ -207,6 +218,68 @@ export default function HomePage() {
         <PlayoffBracket seasonId={season.id} seasonName={season.season_name} />
       )}
 
+      {/* --- NOTIFICATIONS ROW: VOTES & CYPHER --- */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Active Votes Card */}
+        {activePolls.length > 0 && (
+          <Link href="/vote" className="group">
+            <Card className="h-full border-primary/20 hover:border-primary/50 transition-colors bg-gradient-to-br from-card to-primary/5 shadow-sm">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold flex items-center gap-2 mb-2">
+                      <Vote className="size-5 text-primary" />
+                      Active Votes
+                    </h3>
+                    <ul className="text-sm text-muted-foreground space-y-1 list-disc pl-5">
+                      {activePolls.slice(0, 3).map(poll => (
+                        <li key={poll.id} className="truncate pr-2">{poll.title}</li>
+                      ))}
+                      {activePolls.length > 3 && (
+                        <li className="italic">+{activePolls.length - 3} more</li>
+                      )}
+                    </ul>
+                  </div>
+                  <ArrowRight className="size-5 text-primary opacity-0 group-hover:opacity-100 transition-opacity mt-1 shrink-0" />
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        )}
+
+        {/* Cypher Status Card */}
+        {cypherStats && (
+          <Link href="/cypher" className="group">
+            <Card className="h-full border-amber-500/30 hover:border-amber-500/60 transition-colors bg-gradient-to-br from-card to-amber-500/5 shadow-sm">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold flex items-center gap-2 mb-2 text-amber-600 dark:text-amber-500">
+                      <BookOpen className="size-5" />
+                      The Cypher
+                    </h3>
+                    <div className="flex items-center gap-3">
+                      <div className="text-3xl font-black text-foreground">
+                        {cypherStats.percentRemaining}%
+                      </div>
+                      <div className="text-sm text-muted-foreground leading-tight">
+                        of the pages remain <br /> shrouded in mystery.
+                      </div>
+                    </div>
+                    {cypherStats.hasRecentCypher && (
+                      <Badge className="mt-3 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 shadow-none">
+                        <Sparkles className="size-3 mr-1" /> New page discovered!
+                      </Badge>
+                    )}
+                  </div>
+                  <ArrowRight className="size-5 text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity mt-1 shrink-0" />
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        )}
+      </div>
+
       {/* --- LATEST NEWS SECTION --- */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
@@ -256,7 +329,7 @@ export default function HomePage() {
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">Latest Card Acquisitions</h2>
           <Button variant="ghost" asChild>
-            <Link href={liveDraftLink}>View All</Link>
+            <Link href="/transactions">View All</Link> {/* THE FIX: Directs to the new page */}
           </Button>
         </div>
         <Card>
@@ -264,36 +337,42 @@ export default function HomePage() {
             {loadingDraft ? (
                <div className="p-12 text-center text-muted-foreground flex items-center justify-center gap-3">
                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
-                 Checking draft board...
+                 Checking transactions...
                </div>
-            ) : visiblePicks.length > 0 ? (
+            ) : visibleTxs.length > 0 ? (
               <div className="flex flex-col">
-                {visiblePicks.map((pick) => (
-                  <CardPreview key={pick.id} card={{ card_name: pick.card_name, image_url: pick.image_url, oldest_image_url: pick.oldest_image_url }}>
+                {visibleTxs.map((tx) => (
+                  <CardPreview key={tx.id} card={{ card_name: tx.card_name, image_url: tx.image_url, oldest_image_url: tx.oldest_image_url }}>
                     <div className="p-4 hover:bg-accent/50 transition-colors cursor-pointer border-b border-border/50 last:border-0">
                       <div className="flex items-center justify-between">
                         <div className="flex-1 flex items-center gap-4">
-                          {pick.image_url && (<Image src={pick.image_url} alt={pick.card_name} width={40} height={56} className="rounded-sm object-cover shadow-sm hidden sm:block"/>)}
+                          {tx.image_url && (<Image src={tx.image_url} alt={tx.card_name} width={40} height={56} className="rounded-sm object-cover shadow-sm hidden sm:block"/>)}
                           <div>
                             <div className="flex items-center gap-2 mb-1">
-                              <span className="font-semibold text-lg">{pick.card_name}</span>
-                              {pick.card_type && (<Badge variant="secondary" className="text-[10px]">{pick.card_type}</Badge>)}
+                              <span className="font-semibold text-lg">{tx.card_name}</span>
+                              {tx.card_type && (<Badge variant="secondary" className="text-[10px]">{tx.card_type}</Badge>)}
                             </div>
                             <p className="text-sm text-muted-foreground flex items-center gap-1.5">
-                              <span className="text-lg">{pick.team_emoji}</span>
-                              <span className="font-medium text-foreground/80">{pick.team_name}</span>
-                              {pick.pick_number && <span className="text-xs opacity-70 ml-1">&middot; Pick #{pick.pick_number}</span>}
+                              <span className="text-lg">{tx.team_emoji}</span>
+                              <span className="font-medium text-foreground/80">{tx.team_name}</span>
+                              
+                              {/* THE FIX: Enhanced acquisition method badge/text */}
+                              <span className="text-xs ml-1 opacity-70 border-l border-border/50 pl-2">
+                                {tx.acquisition_method === 'trade' && tx.from_team_emoji 
+                                  ? `via Trade from ${tx.from_team_emoji}`
+                                  : `via ${tx.acquisition_method.replace('_', ' ')}`}
+                              </span>
                             </p>
                           </div>
                         </div>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap ml-4 font-medium bg-muted/50 px-2 py-1 rounded-full">{getRelativeTime(pick.drafted_at)}</span>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap ml-4 font-medium bg-muted/50 px-2 py-1 rounded-full">{getRelativeTime(tx.acquired_at)}</span>
                       </div>
                     </div>
                   </CardPreview>
                 ))}
               </div>
             ) : (
-              <div className="p-12 text-center text-muted-foreground">No draft picks yet. Check back once the draft begins!</div>
+              <div className="p-12 text-center text-muted-foreground">No transactions yet.</div>
             )}
           </CardContent>
         </Card>
