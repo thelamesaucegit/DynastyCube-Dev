@@ -689,7 +689,10 @@ export async function createTeamPoll(
   try {
     const supabase = await createServerClient();
     if (!title || title.trim().length === 0) return { success: false, error: "Title is required" };
-    if (!options || options.length < 2) return { success: false, error: "At least 2 options are required" };
+    
+    //Changed from < 2 to < 1. This allows automated 1-option polls (like defaulting to the current captain/motto).
+    if (!options || options.length < 1) return { success: false, error: "At least 1 option is required" }; 
+    
     if (new Date(endsAt) <= new Date()) return { success: false, error: "End date must be in the future" };
 
     const isCutPoll = title.trim().startsWith("Cut ");
@@ -697,14 +700,13 @@ export async function createTeamPoll(
     
     if (!isCutPoll) {
       const { data: isCaptain } = await supabase.rpc("user_has_team_role", { p_user_id: userId, p_team_id: teamId, p_role: "captain" });
-      if (!isCaptain) return { success: false, error: "Only team captains can create general polls" };
+      if (!isCaptain) return { success: false, error: "Only Team Captains can create general polls" };
     } else {
       const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const { count, error: countError } = await supabase.from("polls").select("id", { count: "exact", head: true }).eq("team_id", teamId).eq("created_by", userId).like("title", "Cut %").gte("created_at", oneDayAgo);
       if (countError) throw countError;
       if (count && count >= 1) return { success: false, error: "You can only initiate one cut vote per 24 hours." };
       
-      // We can now safely tag this!
       finalTriggerEvent = 'cut_card_vote';
     }
 
@@ -721,9 +723,9 @@ export async function createTeamPoll(
         created_by: userId, 
         is_active: true, 
         team_id: teamId,
-        trigger_event: finalTriggerEvent // <-- Uses the actual string!
+        trigger_event: finalTriggerEvent
       }).select().single();
-
+      
     if (pollError) throw pollError;
     if (!poll) return { success: false, error: "Failed to create poll" };
 
@@ -1025,7 +1027,6 @@ export async function initiatePostseasonTeamVotes(): Promise<{ success: boolean;
 
         const endsAt = new Date(season.end_date).toISOString();
 
-        // Gather all required data
         const { data: teamsData } = await supabase.from('teams').select('id, name, motto');
         const { data: identitiesData } = await supabase.from('team_identities').select('team_id, identity_key, motto');
         const { data: membersData } = await supabase.from('team_members_with_roles').select('*');
@@ -1037,13 +1038,13 @@ export async function initiatePostseasonTeamVotes(): Promise<{ success: boolean;
         const approvedMottos = mottosData || [];
 
         let createdCount = 0;
+        let internalErrorLog = "";
 
         for (const team of teams) {
             const teamMembers = members.filter(m => m.team_id === team.id);
             
-            // 1. Generate Captain Vote
-            if (teamMembers.length >= 2) {
-                // Sort so the current captain is option #1
+            // 1. Generate Captain Vote ( Now processes even if there is only 1 member)
+            if (teamMembers.length >= 1) {
                 const sortedMembers = [...teamMembers].sort((a, b) => {
                     const aCap = a.roles.includes('captain') ? 1 : 0;
                     const bCap = b.roles.includes('captain') ? 1 : 0;
@@ -1052,7 +1053,7 @@ export async function initiatePostseasonTeamVotes(): Promise<{ success: boolean;
                 
                 const captainOptions = sortedMembers.map(m => m.roles.includes('captain') ? `${m.user_display_name} (Current Captain)` : m.user_display_name);
 
-                await createTeamPoll(
+                const pollRes = await createTeamPoll(
                     team.id,
                     "Team Captain Election",
                     "Vote for your team's Captain for the upcoming season.",
@@ -1062,54 +1063,54 @@ export async function initiatePostseasonTeamVotes(): Promise<{ success: boolean;
                     captainOptions,
                     user.id
                 );
-                createdCount++;
+                if (pollRes.success) createdCount++;
+                else internalErrorLog += `| Capt err [${team.name}]: ${pollRes.error} | `;
             }
 
-            // 2. Generate Motto Vote(s)
+            // 2. Generate Motto Vote(s) (THE FIX: Always generates using the default motto as the baseline)
             const teamIdentities = identities.filter(i => i.team_id === team.id);
             
             if (teamIdentities.length > 0) {
-                // Generate a split vote for Changelings/Mimics
                 for (const identity of teamIdentities) {
                     const identityMottos = approvedMottos.filter(m => m.team_id === team.id && m.identity_key === identity.identity_key);
-                    if (identityMottos.length > 0) {
-                        const mottoOptions = [`Keep current: "${identity.motto}"`, ...identityMottos.map(m => m.motto_text)];
-                        const identityName = identity.identity_key === 'changelings' ? 'Changelings' : 'Mimics';
-                        
-                        await createTeamPoll(
-                            team.id,
-                            `Team Motto Election (${identityName})`,
-                            `Vote for the new motto for your ${identityName} identity.`,
-                            endsAt,
-                            false, true, mottoOptions, user.id
-                        );
-                        createdCount++;
-                    }
-                }
-            } else {
-                // Generate a standard vote for regular teams
-                const teamMottos = approvedMottos.filter(m => m.team_id === team.id && !m.identity_key);
-                if (teamMottos.length > 0) {
-                    const mottoOptions = [`Keep current: "${team.motto}"`, ...teamMottos.map(m => m.motto_text)];
-                    await createTeamPoll(
+                    const mottoOptions = [`Keep current: "${identity.motto}"`, ...identityMottos.map(m => m.motto_text)];
+                    const identityName = identity.identity_key === 'changelings' ? 'Changelings' : 'Mimics';
+                    
+                    const pollRes = await createTeamPoll(
                         team.id,
-                        "Team Motto Election",
-                        "Vote for your team's new motto for the upcoming season.",
+                        `Team Motto Election (${identityName})`,
+                        `Vote for the new motto for your ${identityName} identity.`,
                         endsAt,
                         false, true, mottoOptions, user.id
                     );
-                    createdCount++;
+                    if (pollRes.success) createdCount++;
+                    else internalErrorLog += `| Motto err [${team.name}]: ${pollRes.error} | `;
                 }
+            } else {
+                const teamMottos = approvedMottos.filter(m => m.team_id === team.id && !m.identity_key);
+                const mottoOptions = [`Keep current: "${team.motto}"`, ...teamMottos.map(m => m.motto_text)];
+                
+                const pollRes = await createTeamPoll(
+                    team.id,
+                    "Team Motto Election",
+                    "Vote for your team's new motto for the upcoming season.",
+                    endsAt,
+                    false, true, mottoOptions, user.id
+                );
+                if (pollRes.success) createdCount++;
+                else internalErrorLog += `| Motto err [${team.name}]: ${pollRes.error} | `;
             }
         }
 
-        // Flag the mottos as "polled" so they aren't generated again if an admin double-clicks
         if (approvedMottos.length > 0) {
             const mottoIds = approvedMottos.map(m => m.id);
             await supabase.from('motto_submissions').update({ status: 'polled' }).in('id', mottoIds);
         }
 
-        return { success: true, count: createdCount, message: `Successfully created ${createdCount} postseason votes.` };
+        // If something failed internally, append it to the success message so you can see it in the UI!
+        const finalMessage = `Successfully created ${createdCount} postseason votes. ${internalErrorLog ? `(Errors caught: ${internalErrorLog})` : ''}`;
+        return { success: true, count: createdCount, message: finalMessage };
+
     } catch (error: unknown) {
         return { success: false, error: String(error) };
     }
