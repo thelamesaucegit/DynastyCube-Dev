@@ -89,6 +89,18 @@ export interface RecentGame {
   played_at: string;
 }
 
+export interface HomepagePoll {
+  id: string;
+  title: string;
+  vote_type: string;
+}
+
+export interface CypherStats {
+  percentRemaining: number;
+  hasRecentCypher: boolean;
+}
+
+
 /**
  * Get the currently active draft session ID
  */
@@ -333,5 +345,111 @@ export async function getRecentGames(limit: number = 5): Promise<{
   } catch (error) {
     console.error("Unexpected error fetching recent games:", error);
     return { games: [], error: "An unexpected error occurred" };
+  }
+}
+
+/**
+ * Get active polls filtered for the homepage (Global + User's Team)
+ */
+export async function getHomepageActivePolls(): Promise<{ polls: HomepagePoll[]; error?: string }> {
+  const supabase = await createClient();
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    let userTeamId: string | null = null;
+    
+    if (user) {
+      const { data: teamMember } = await supabase
+        .from('team_members')
+        .select('team_id')
+        .eq('user_id', user.id)
+        .single();
+      if (teamMember) userTeamId = teamMember.team_id;
+    }
+
+    const { data: polls, error } = await supabase
+      .from('polls')
+      .select('id, title, vote_type, team_id')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
+
+    if (error) return { polls: [], error: error.message };
+
+    const activePolls: HomepagePoll[] = (polls || [])
+      .filter((poll) => {
+        // Filter out team polls that don't belong to the user
+        if (poll.vote_type === 'team') {
+          return poll.team_id === userTeamId;
+        }
+        return true; // Global polls are allowed
+      })
+      .map((poll) => ({
+        id: poll.id,
+        title: poll.title,
+        vote_type: poll.vote_type,
+      }));
+
+    return { polls: activePolls };
+  } catch (error: unknown) {
+    return { polls: [], error: String(error) };
+  }
+}
+
+/**
+ * Get aggregate cypher completion stats
+ */
+export async function getCypherStats(): Promise<{ stats: CypherStats | null; error?: string }> {
+  const supabase = await createClient();
+  try {
+    const { data: cyphers, error: cypherError } = await supabase
+      .from('cyphers')
+      .select('id, content, created_at')
+      .eq('is_published', true);
+
+    if (cypherError) return { stats: null, error: cypherError.message };
+    if (!cyphers || cyphers.length === 0) {
+      return { stats: { percentRemaining: 100, hasRecentCypher: false } };
+    }
+
+    const { data: revealed } = await supabase.from('cypher_revealed_words').select('cypher_id, word');
+
+    const revealedMap = new Map<string, Set<string>>();
+    revealed?.forEach((r) => {
+      if (!revealedMap.has(r.cypher_id)) revealedMap.set(r.cypher_id, new Set<string>());
+      revealedMap.get(r.cypher_id)!.add(r.word.toLowerCase());
+    });
+
+    let totalUniqueWords = 0;
+    let totalRevealedWords = 0;
+    let hasRecentCypher = false;
+
+    const threeDaysAgo = new Date();
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+    cyphers.forEach((cypher) => {
+      if (new Date(cypher.created_at) >= threeDaysAgo) {
+        hasRecentCypher = true;
+      }
+
+      const matches = Array.from(cypher.content.matchAll(/([a-zA-Z']+)/g)) as RegExpMatchArray[];
+      const uniqueWords = new Set<string>(matches.map((m) => m[0].toLowerCase()));
+      
+      totalUniqueWords += uniqueWords.size;
+
+      const revealedSet = revealedMap.get(cypher.id);
+      if (revealedSet) {
+        let revealedCount = 0;
+        uniqueWords.forEach((word) => {
+          if (revealedSet.has(word)) revealedCount++;
+        });
+        totalRevealedWords += revealedCount;
+      }
+    });
+
+    const completionPercentage = totalUniqueWords > 0 ? Math.round((totalRevealedWords / totalUniqueWords) * 100) : 0;
+    const percentRemaining = 100 - completionPercentage;
+
+    return { stats: { percentRemaining, hasRecentCypher } };
+  } catch (error: unknown) {
+    return { stats: null, error: String(error) };
   }
 }
