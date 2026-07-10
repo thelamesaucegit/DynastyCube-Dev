@@ -1,4 +1,5 @@
 // src/app/page.tsx
+
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
@@ -8,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/ca
 import { Button } from "@/app/components/ui/button";
 import { PlayoffBracket } from "@/app/components/PlayoffBracket";
 import { Badge } from "@/app/components/ui/badge";
-import { ArrowRight, Info } from "lucide-react";
+import { ArrowRight, Info, X } from "lucide-react";
 import CountdownTimer from "@/app/components/CountdownTimer";
 import { DraftStatusWidget } from "@/app/components/DraftStatusWidget";
 import { CardPreview } from "@/app/components/CardPreview";
@@ -31,6 +32,7 @@ function getRelativeTime(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
   if (diffInSeconds < 60) return "Just now";
   if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
   if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
@@ -41,6 +43,7 @@ export default function HomePage() {
   // Core Page State
   const [season, setSeason] = useState<CurrentSeason | null>(null);
   const [adminNews, setAdminNews] = useState<AdminNews[]>([]);
+  const [selectedNews, setSelectedNews] = useState<AdminNews | null>(null); // <-- NEW STATE
   const [countdownTimer, setCountdownTimer] = useState<CountdownTimerType | null>(null);
   const [liveMatch, setLiveMatch] = useState<StreamMatch | null>(null);
   const [activeTeamCount, setActiveTeamCount] = useState(8);
@@ -52,7 +55,7 @@ export default function HomePage() {
   const [draftSessionId, setDraftSessionId] = useState<string | null>(null);
   const [loadingDraft, setLoadingDraft] = useState(true);
 
-  // 1. Load Core Data (Blocks the main UI until finished)
+  // 1. Load Core Data
   const loadCoreData = useCallback(async () => {
     try {
       const seasonResult = await getCurrentSeason();
@@ -65,7 +68,7 @@ export default function HomePage() {
       const liveMatchPromise = isActivePlayPhase ? getLatestStreamMatch() : Promise.resolve({ match: null });
       const [teamsResult, newsResult, timerResult, streamResult] = await Promise.all([
         getTeamsWithDetails(),
-        getAdminNews(3),
+        getAdminNews(1), // <-- THE FIX: Only fetch 1 item for the home page!
         getActiveCountdownTimer(),
         liveMatchPromise,
       ]);
@@ -81,7 +84,7 @@ export default function HomePage() {
     }
   }, []);
 
-  // 2. Load Draft Data (Runs in the background, updates dynamically)
+  // 2. Load Draft Data
   const loadDraftData = useCallback(async () => {
     try {
       const [draftSessionResult, picksResult] = await Promise.all([
@@ -97,21 +100,16 @@ export default function HomePage() {
     }
   }, []);
 
-  // Initial Load
   useEffect(() => {
     loadCoreData();
     loadDraftData();
   }, [loadCoreData, loadDraftData]);
 
-  // Background Polling for Draft Picks (Every 15 seconds)
   useEffect(() => {
-    const interval = setInterval(() => {
-      loadDraftData();
-    }, 15000);
+    const interval = setInterval(() => { loadDraftData(); }, 15000);
     return () => clearInterval(interval);
   }, [loadDraftData]);
 
-  // Background Panning Effect
   useEffect(() => {
     const moveBackground = () => setBgPosition({ x: Math.floor(Math.random() * 100), y: Math.floor(Math.random() * 100) });
     const initialTimeout = setTimeout(moveBackground, 100);
@@ -122,21 +120,14 @@ export default function HomePage() {
     };
   }, []);
 
-  // Helper to resolve human-readable season phase labels
   const getPhaseDisplayLabel = (phase?: string) => {
     switch (phase) {
-      case "draft":
-        return "Draft";
-      case "preseason":
-        return "Pre Season";
-      case "season":
-        return "Regular Season";
-      case "playoffs":
-        return "Post Season";
-      case "postseason":
-        return "Off Season";
-      default:
-        return "Active";
+      case "draft": return "Draft";
+      case "preseason": return "Pre Season";
+      case "season": return "Regular Season";
+      case "playoffs": return "Post Season";
+      case "postseason": return "Off Season";
+      default: return "Active";
     }
   };
 
@@ -173,7 +164,6 @@ export default function HomePage() {
             {season && (
               <div className="mb-3">
                 <Badge variant="secondary" className="text-[10px] bg-black/50 text-white border-white/20 backdrop-blur-md">
-                  {/* THE FIX: Render the strict season_name and dynamic phase label cleanly! */}
                   {season.season_name} • {getPhaseDisplayLabel(season.phase)}
                 </Badge>
               </div>
@@ -212,10 +202,12 @@ export default function HomePage() {
       </section>
 
       {isPlayActive && liveMatch && <LiveStreamWidget initialMatch={liveMatch} onStreamEnd={loadCoreData} />}
-       {(currentPhase === 'playoffs' || currentPhase === 'postseason') && season && (
+      
+      {(currentPhase === 'playoffs' || currentPhase === 'postseason') && season && (
         <PlayoffBracket seasonId={season.id} seasonName={season.season_name} />
       )}
 
+      {/* --- LATEST NEWS SECTION --- */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">Latest News</h2>
@@ -225,38 +217,29 @@ export default function HomePage() {
         </div>
         {adminNews.length > 0 ? (
           <div className="space-y-6">
-            <Card className="overflow-hidden hover:shadow-lg transition-shadow">
+            <Card 
+              className="overflow-hidden hover:shadow-lg transition-all cursor-pointer border-transparent hover:border-primary/50 group"
+              onClick={() => setSelectedNews(adminNews[0])}
+            >
               <CardHeader className="pb-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <Badge>Latest</Badge>
-                  <span className="text-xs text-muted-foreground">{new Date(adminNews[0].created_at).toLocaleDateString()}</span>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Badge>Latest</Badge>
+                    <span className="text-xs text-muted-foreground">{new Date(adminNews[0].created_at).toLocaleDateString()}</span>
+                  </div>
                 </div>
-                <CardTitle className="text-2xl md:text-3xl">{adminNews[0].title}</CardTitle>
+                <CardTitle className="text-2xl md:text-3xl group-hover:text-primary transition-colors">{adminNews[0].title}</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="leading-relaxed whitespace-pre-line text-muted-foreground line-clamp-3">{adminNews[0].content}</p>
-                <p className="text-xs text-muted-foreground mt-4 font-medium">{adminNews[0].author_name}</p>
+                <div className="flex justify-between items-center mt-4">
+                  <p className="text-xs text-muted-foreground font-medium">{adminNews[0].author_name}</p>
+                  <span className="text-sm font-semibold text-primary opacity-0 group-hover:opacity-100 transition-opacity flex items-center">
+                    Read full story <ArrowRight className="ml-1 size-3" />
+                  </span>
+                </div>
               </CardContent>
             </Card>
-            {adminNews.length > 1 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {adminNews.slice(1).map((item) => (
-                  <Card key={item.id} className="hover:shadow-md transition-shadow">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Badge variant="outline">News</Badge>
-                        <span className="text-xs text-muted-foreground">{new Date(item.created_at).toLocaleDateString()}</span>
-                      </div>
-                      <CardTitle className="text-lg line-clamp-2">{item.title}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-muted-foreground line-clamp-2">{item.content}</p>
-                      <p className="text-xs text-muted-foreground mt-3">{item.author_name}</p>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
           </div>
         ) : (
           <Card>
@@ -315,6 +298,43 @@ export default function HomePage() {
           </CardContent>
         </Card>
       </section>
+
+      {/* --- MODAL OVERLAY --- */}
+      {selectedNews && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setSelectedNews(null)}
+        >
+          <div 
+            className="bg-background border border-border shadow-2xl rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 border-b border-border flex justify-between items-start bg-muted/30">
+              <div>
+                <Badge className="mb-2">Latest</Badge>
+                <h2 className="text-2xl md:text-3xl font-bold text-foreground">{selectedNews.title}</h2>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
+                  <span>{new Date(selectedNews.created_at).toLocaleDateString()}</span>
+                  <span>•</span>
+                  <span>{selectedNews.author_name}</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSelectedNews(null)}
+                className="p-2 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground shrink-0"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto">
+              <p className="whitespace-pre-line text-base md:text-lg leading-relaxed text-foreground/90">
+                {selectedNews.content}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
