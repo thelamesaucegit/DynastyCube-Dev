@@ -154,7 +154,7 @@ export default function HomePage() {
   const liveDraftLink = draftSessionId ? `/draft/${draftSessionId}/live` : "#";
   const currentPhase = season?.phase;
   const isPlayActive = currentPhase && currentPhase !== 'postseason' && currentPhase !== 'draft';
-
+const visibleTxs = recentTransactions.slice(0, activeTeamCount);
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8 space-y-12">
       <section className="relative overflow-hidden rounded-2xl min-h-[200px] flex flex-col justify-center border border-border/50 shadow-md">
