@@ -1,4 +1,5 @@
 // src/app/components/lore/CorruptedImage.tsx
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -16,14 +17,13 @@ const CORRUPTION_TEXTURE_URL = '/images/lore/corruption.png';
 export const CorruptedImage: React.FC<CorruptedImageProps> = ({ src, alt, isCorruptible }) => {
     const { isEffectsActive } = useLoreEffects();
     const [isGlitching, setIsGlitching] = useState(false);
+    const [glitchStyle, setGlitchStyle] = useState({ bgPos: '50% 50%', mask: 'none' });
 
     // Only apply the effect if the lore is active AND the card is corruptible
     const canBeCorrupted = isEffectsActive && isCorruptible;
-        
-    
-    // ---  DIAGNOSTIC LOGGING ---
 
-useEffect(() => {
+    // --- DIAGNOSTIC LOGGING ---
+    useEffect(() => {
         if (isCorruptible) {
             console.log(`[CorruptedImage] 👁️ Rendered "${alt}" | isEffectsActive: ${isEffectsActive} | canBeCorrupted: ${canBeCorrupted}`);
         }
@@ -35,14 +35,41 @@ useEffect(() => {
         }
     }, [isGlitching, alt]);
     // --------------------------------
-    const generateClipPath = () => {
-        const x1 = Math.random() * 50;
-        const x2 = x1 + Math.random() * 30 + 10;
-        const y1 = Math.random() * 80;
-        const y2 = y1 + Math.random() * 15 + 5;
-        return `polygon(${x1}% ${y1}%, ${x2}% ${y1}%, ${x2}% ${y2}%, ${x1}% ${y2}%)`;
+
+    // Generates a randomized layout of organic corruption blobs and background shifts
+    const generateCorruptionState = () => {
+        const bgX = Math.random() * 100;
+        const bgY = Math.random() * 100;
+
+        // Create 3 overlapping radial gradients for a soft, spreading organic blotch
+        const masks = Array.from({ length: 3 }).map(() => {
+            const x = Math.random() * 100;
+            const y = Math.random() * 100;
+            const size = Math.random() * 30 + 30; // Between 30% and 60% radius
+            return `radial-gradient(circle at ${x}% ${y}%, rgba(0,0,0,1) 0%, rgba(0,0,0,0) ${size}%)`;
+        });
+
+        return {
+            bgPos: `${bgX}% ${bgY}%`,
+            mask: masks.join(', ')
+        };
     };
-    
+
+    // Rapidly change the glitch appearance while hovering
+    useEffect(() => {
+        if (!isGlitching) {
+            setGlitchStyle({ bgPos: '50% 50%', mask: 'none' });
+            return;
+        }
+
+        setGlitchStyle(generateCorruptionState()); // Initial set
+        const intervalId = setInterval(() => {
+            setGlitchStyle(generateCorruptionState());
+        }, 150); // Shifts every 150ms for a frantic, unstable look
+
+        return () => clearInterval(intervalId);
+    }, [isGlitching]);
+
     return (
         <div 
             className="relative w-full h-full"
@@ -58,9 +85,11 @@ useEffect(() => {
                     className="absolute inset-0 w-full h-full transition-opacity duration-300"
                     style={{
                         backgroundImage: `url(${CORRUPTION_TEXTURE_URL})`,
-                        backgroundSize: 'cover',
+                        backgroundSize: '200%', // Enlarge so the shifting is highly visible
+                        backgroundPosition: glitchStyle.bgPos,
                         opacity: isGlitching ? 1 : 0,
-                        clipPath: isGlitching ? generateClipPath() : 'none',
+                        WebkitMaskImage: isGlitching ? glitchStyle.mask : 'none',
+                        maskImage: isGlitching ? glitchStyle.mask : 'none',
                         animation: isGlitching ? 'glitch-shift 0.2s infinite' : 'none'
                     }}
                  />
