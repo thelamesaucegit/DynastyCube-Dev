@@ -689,18 +689,26 @@ export async function createTeamPoll(
   try {
     const supabase = await createServerClient();
     if (!title || title.trim().length === 0) return { success: false, error: "Title is required" };
-    
-    //Changed from < 2 to < 1. This allows automated 1-option polls (like defaulting to the current captain/motto).
     if (!options || options.length < 1) return { success: false, error: "At least 1 option is required" }; 
-    
     if (new Date(endsAt) <= new Date()) return { success: false, error: "End date must be in the future" };
 
     const isCutPoll = title.trim().startsWith("Cut ");
     let finalTriggerEvent = null;
     
     if (!isCutPoll) {
-      const { data: isCaptain } = await supabase.rpc("user_has_team_role", { p_user_id: userId, p_team_id: teamId, p_role: "captain" });
-      if (!isCaptain) return { success: false, error: "Only Team Captains can create general polls" };
+      // --- THE FIX: Allow Site Admins OR Team Captains to generate polls ---
+      const [roleCheck, adminCheck] = await Promise.all([
+          supabase.rpc("user_has_team_role", { p_user_id: userId, p_team_id: teamId, p_role: "captain" }),
+          supabase.from("users").select("is_admin").eq("id", userId).single()
+      ]);
+
+      const isCaptain = roleCheck.data || false;
+      const isAdmin = adminCheck.data?.is_admin || false;
+
+      if (!isCaptain && !isAdmin) {
+          return { success: false, error: "Only Team Captains or Admins can create polls." };
+      }
+      // ---------------------------------------------------------------------
     } else {
       const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const { count, error: countError } = await supabase.from("polls").select("id", { count: "exact", head: true }).eq("team_id", teamId).eq("created_by", userId).like("title", "Cut %").gte("created_at", oneDayAgo);
