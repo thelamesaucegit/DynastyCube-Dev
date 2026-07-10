@@ -31,6 +31,8 @@ import {
 } from "@/app/actions/homeActions";
 import { getLatestStreamMatch, type StreamMatch } from "@/app/actions/liveStreamActions";
 import { getTeamsWithDetails } from "@/app/actions/teamActions";
+import { TargetedGlitchedText } from "@/app/components/lore/TargetedGlitchedText";
+
 
 function getRelativeTime(dateString: string): string {
   const date = new Date(dateString);
@@ -279,7 +281,7 @@ const visibleTxs = recentTransactions.slice(0, activeTeamCount);
         )}
       </div>
 
-      {/* --- LATEST NEWS SECTION --- */}
+     {/* --- LATEST NEWS SECTION --- */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">Latest News</h2>
@@ -300,10 +302,14 @@ const visibleTxs = recentTransactions.slice(0, activeTeamCount);
                     <span className="text-xs text-muted-foreground">{new Date(adminNews[0].created_at).toLocaleDateString()}</span>
                   </div>
                 </div>
-                <CardTitle className="text-2xl md:text-3xl group-hover:text-primary transition-colors">{adminNews[0].title}</CardTitle>
+                <CardTitle className="text-2xl md:text-3xl group-hover:text-primary transition-colors">
+                  <TargetedGlitchedText text={adminNews[0].title} />
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="leading-relaxed whitespace-pre-line text-muted-foreground line-clamp-3">{adminNews[0].content}</p>
+                <p className="leading-relaxed whitespace-pre-line text-muted-foreground line-clamp-3">
+                  <TargetedGlitchedText text={adminNews[0].content} />
+                </p>
                 <div className="flex justify-between items-center mt-4">
                   <p className="text-xs text-muted-foreground font-medium">{adminNews[0].author_name}</p>
                   <span className="text-sm font-semibold text-primary opacity-0 group-hover:opacity-100 transition-opacity flex items-center">
@@ -390,7 +396,9 @@ const visibleTxs = recentTransactions.slice(0, activeTeamCount);
             <div className="p-6 border-b border-border flex justify-between items-start bg-muted/30">
               <div>
                 <Badge className="mb-2">Latest</Badge>
-                <h2 className="text-2xl md:text-3xl font-bold text-foreground">{selectedNews.title}</h2>
+                <h2 className="text-2xl md:text-3xl font-bold text-foreground">
+                                  <TargetedGlitchedText text={selectedNews.title} />  
+                </h2>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
                   <span>{new Date(selectedNews.created_at).toLocaleDateString()}</span>
                   <span>•</span>
@@ -406,7 +414,7 @@ const visibleTxs = recentTransactions.slice(0, activeTeamCount);
             </div>
             <div className="p-6 overflow-y-auto">
               <p className="whitespace-pre-line text-base md:text-lg leading-relaxed text-foreground/90">
-                {selectedNews.content}
+<TargetedGlitchedText text={selectedNews.content} />
               </p>
             </div>
           </div>
