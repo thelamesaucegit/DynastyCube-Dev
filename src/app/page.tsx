@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/ca
 import { Button } from "@/app/components/ui/button";
 import { PlayoffBracket } from "@/app/components/PlayoffBracket";
 import { Badge } from "@/app/components/ui/badge";
-import { ArrowRight, Info, X, Vote, BookOpen, Sparkles } from "lucide-react";
+import { ArrowRight, Info, X, Vote, BookOpen, Sparkles, LockOpen } from "lucide-react";
 import CountdownTimer from "@/app/components/CountdownTimer";
 import { DraftStatusWidget } from "@/app/components/DraftStatusWidget";
 import { CardPreview } from "@/app/components/CardPreview";
@@ -267,7 +267,7 @@ const visibleTxs = recentTransactions.slice(0, activeTeamCount);
                     </div>
                     {cypherStats.hasRecentCypher && (
                       <Badge className="mt-3 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 shadow-none">
-                        < className="size-3 mr-1" /> New Cypher discovered!
+                        <LockOpen className="size-3 mr-1" /> New Cypher discovered!
                       </Badge>
                     )}
                   </div>
