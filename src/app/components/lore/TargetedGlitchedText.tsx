@@ -8,7 +8,7 @@ import { GlitchEffect } from './GlitchEffect';
 // 1. Define the keyword filter
 // \b ensures whole word matching (e.g., 'hour' not 'flour')
 // s? makes the plural 's' optional
-export const KEYWORD_REGEX = /\b(time|timezone|timed|timer|timing|timepiece|clock|clocked|clockwork|hour|minute|era|age|timetwister|timewalk|aeon|eon|moment|tick|tock)s?\b/gi;
+export const KEYWORD_REGEX = /\b(time|timezone|timed|timer|timing|timepiece|clock|clocked|clockwork|hour|minute|era|age|timetwister|timewalk|aeon|eon|moment|ticking|tock)s?\b/gi;
 
 export const TargetedGlitchedText: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { isEffectsActive } = useLoreEffects();
