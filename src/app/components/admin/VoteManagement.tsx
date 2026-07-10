@@ -484,7 +484,7 @@ export function VoteManagement() {
                         </div>
                     </div>
                 )}
-                {/* THE FIX: Display Blessing Event Raw Data */}
+                {/*  Display Blessing Event Raw Data */}
             {results.type === "blessing_event" && results.rawData && results.rawData.length > 0 && (
                                 <div className="space-y-6">
                                     <div>
