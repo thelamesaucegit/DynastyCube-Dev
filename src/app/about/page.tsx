@@ -216,8 +216,9 @@ export default async function AboutPage() {
                     backgroundColor: `${primaryColor}10`,
                   }}
                 >
-                  <CardContent className="p-5 flex items-center gap-4">
-                    <span className="text-4xl drop-shadow-sm">{team.emoji}</span>
+                  {/* THE FIX: Replaced items-center with min-h, allowed break-words instead of truncate on the motto */}
+                  <CardContent className="p-5 flex items-center gap-4 min-h-[120px]">
+                    <span className="text-4xl drop-shadow-sm shrink-0">{team.emoji}</span>
                     <div className="flex-1 min-w-0">
                       <h3 
                         className="text-xl font-bold truncate" 
@@ -225,7 +226,7 @@ export default async function AboutPage() {
                       >
                         <TargetedGlitchedText text={team.name} />
                       </h3>
-                      <p className="text-sm italic opacity-80 text-foreground truncate">
+                      <p className="text-sm italic opacity-80 text-foreground mt-1 leading-snug break-words">
                         &quot;<TargetedGlitchedText text={team.motto} />&quot;
                       </p>
                     </div>
