@@ -330,7 +330,7 @@ const visibleTxs = recentTransactions.slice(0, activeTeamCount);
       
       {currentPhase === 'draft' && (<DraftStatusWidget variant="full" />)}
       
-      <section className="max-w-5xl mx-auto w-full space-y-4">
+     <section className="max-w-5xl mx-auto w-full space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">Latest Card Acquisitions</h2>
           <Button variant="ghost" asChild>
@@ -346,6 +346,7 @@ const visibleTxs = recentTransactions.slice(0, activeTeamCount);
                </div>
             ) : visibleTxs.length > 0 ? (
               <div className="flex flex-col">
+                
                 {visibleTxs.map((tx) => (
                   <CardPreview key={tx.id} card={{ card_name: tx.card_name, image_url: tx.image_url, oldest_image_url: tx.oldest_image_url }}>
                     <div className="p-4 hover:bg-accent/50 transition-colors cursor-pointer border-b border-border/50 last:border-0">
@@ -354,27 +355,39 @@ const visibleTxs = recentTransactions.slice(0, activeTeamCount);
                           {tx.image_url && (<Image src={tx.image_url} alt={tx.card_name} width={40} height={56} className="rounded-sm object-cover shadow-sm hidden sm:block"/>)}
                           <div>
                             <div className="flex items-center gap-2 mb-1">
-                              <span className="font-semibold text-lg">{tx.card_name}</span>
-                              {tx.card_type && (<Badge variant="secondary" className="text-[10px]">{tx.card_type}</Badge>)}
+                              <span className="font-semibold text-lg">
+                                <TargetedGlitchedText text={tx.card_name} />
+                              </span>
+                              {tx.card_type && (
+                                <Badge variant="secondary" className="text-[10px]">
+                                  <TargetedGlitchedText text={tx.card_type} />
+                                </Badge>
+                              )}
                             </div>
                             <p className="text-sm text-muted-foreground flex items-center gap-1.5">
                               <span className="text-lg">{tx.team_emoji}</span>
-                              <span className="font-medium text-foreground/80">{tx.team_name}</span>
+                              <span className="font-medium text-foreground/80">
+                                <TargetedGlitchedText text={tx.team_name} />
+                              </span>
                               
-                              {/* THE FIX: Enhanced acquisition method badge/text */}
                               <span className="text-xs ml-1 opacity-70 border-l border-border/50 pl-2">
-                                {tx.acquisition_method === 'trade' && tx.from_team_emoji 
-                                  ? `via Trade from ${tx.from_team_emoji}`
-                                  : `via ${tx.acquisition_method.replace('_', ' ')}`}
+                                <TargetedGlitchedText text={
+                                  tx.acquisition_method === 'trade' && tx.from_team_emoji 
+                                    ? `via Trade from ${tx.from_team_emoji}`
+                                    : `via ${tx.acquisition_method.replace('_', ' ')}`
+                                } />
                               </span>
                             </p>
                           </div>
                         </div>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap ml-4 font-medium bg-muted/50 px-2 py-1 rounded-full">{getRelativeTime(tx.acquired_at)}</span>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap ml-4 font-medium bg-muted/50 px-2 py-1 rounded-full">
+                          <TargetedGlitchedText text={getRelativeTime(tx.acquired_at)} />
+                        </span>
                       </div>
                     </div>
                   </CardPreview>
                 ))}
+                
               </div>
             ) : (
               <div className="p-12 text-center text-muted-foreground">No transactions yet.</div>

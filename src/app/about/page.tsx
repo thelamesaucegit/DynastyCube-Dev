@@ -7,6 +7,7 @@ import { Button } from "@/app/components/ui/button";
 import { Separator } from "@/app/components/ui/separator";
 import { Users, History, Trophy, Globe, Disc, ArrowRight, BookOpen } from "lucide-react";
 import { getTeamsWithDetails } from "@/app/actions/teamActions";
+import { TargetedGlitchedText } from "@/app/components/lore/TargetedGlitchedText";
 
 export const metadata = {
   title: "About | The Dynasty Cube",
@@ -22,7 +23,6 @@ export default async function AboutPage() {
     <div className="container max-w-4xl mx-auto px-4 py-12 space-y-16">
       {/* Introduction / Welcome with Large Fading Background Logo */}
       <section className="relative text-center space-y-6 pt-16 pb-8 md:pt-24 md:pb-12">
-        {/* Container for the large, faded background logo. */}
         <div className="absolute top-0 inset-x-0 flex justify-center items-start h-[400px] z-0 overflow-hidden pointer-events-none">
           <Image
             src="/images/logo/logo.jpg"
@@ -30,21 +30,19 @@ export default async function AboutPage() {
             width={480}
             height={480}
             aria-hidden="true"
-            // Removed the incorrect opacity class. The mask now operates on a fully opaque image.
             style={{
               maskImage: "linear-gradient(to bottom, black 40%, transparent 100%)",
-              WebkitMaskImage: "linear-gradient(to bottom, black 40%, transparent 100%)", // Vendor prefix for Safari
+              WebkitMaskImage: "linear-gradient(to bottom, black 40%, transparent 100%)",
             }}
           />
         </div>
-
-        {/* Content wrapper with a positive z-index to ensure it's on top */}
         <div className="relative z-10">
           <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-foreground">
             The Dynasty Cube
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            A collaborative, living draft league in which Teams draft through the history of Magic, culminating in a metagame shaped entirely by player choice.
+            {/* Wrap the description string */}
+            <TargetedGlitchedText text="A collaborative, living draft league in which Teams draft through the history of Magic, culminating in a metagame shaped entirely by player choice." />
           </p>
         </div>
       </section>
@@ -79,9 +77,9 @@ export default async function AboutPage() {
           The Three Pillars
         </h2>
         <p className="text-lg text-muted-foreground">
-          The Dynasty Cube combines a typical cube rotisserie draft with the long-term planning of a dynasty sports league and the ever-evolving, eldtrich horror of a community-driven &quot;e-splort&quot; simulation.
+          {/* Wrap the pillar summary */}
+          <TargetedGlitchedText text="The Dynasty Cube combines a typical cube rotisserie draft with the long-term planning of a dynasty sports league and the ever-evolving, eldtrich horror of a community-driven 'e-splort' simulation." />
         </p>
-
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card className="h-full">
             <CardHeader>
@@ -91,7 +89,8 @@ export default async function AboutPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="text-muted-foreground">
-              Instead of passing hidden packs, players make draft picks publicly, one at a time, from a known pool of cards. Each pick influences the direction every other Team takes.
+              {/* Wrap card texts */}
+              <TargetedGlitchedText text="Instead of passing hidden packs, players make draft picks publicly, one at a time, from a known pool of cards. Each pick influences the direction every other Team takes." />
             </CardContent>
           </Card>
           <Card className="h-full">
@@ -102,7 +101,7 @@ export default async function AboutPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="text-muted-foreground">
-              Teams have one matchup per week consisting of several games played, culminating in a playoff elimination tournament. Teams can trade cards future draft picks and more to improve their &quot;roster&quot; now, or rebuild for the future.
+              <TargetedGlitchedText text="Teams have one matchup per week consisting of several games played, culminating in a playoff elimination tournament. Teams can trade cards future draft picks and more to improve their 'roster' now, or rebuild for the future." />
             </CardContent>
           </Card>
           <Card className="h-full">
@@ -113,7 +112,10 @@ export default async function AboutPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="text-muted-foreground">
-              Inspired by <a href="https://en.wikipedia.org/wiki/Blaseball" target="_blank" rel="noreferrer" className="underline underline-offset-4 hover:text-foreground">Blaseball</a>, your decisions echo beyond the draft. Between Seasons, Teams vote on new mechanics, and gain new powersE. The game Evolves.
+              <span className="block mb-2">
+                <TargetedGlitchedText text="Inspired by" /> <a href="https://en.wikipedia.org/wiki/Blaseball" target="_blank" rel="noreferrer" className="underline underline-offset-4 hover:text-foreground">Blaseball</a>, <TargetedGlitchedText text="your decisions echo beyond the draft." />
+              </span>
+              <TargetedGlitchedText text="Between Seasons, Teams vote on new mechanics, and gain new powers. The game Evolves." />
             </CardContent>
           </Card>
         </div>
@@ -129,21 +131,21 @@ export default async function AboutPage() {
         </h2>
         <div className="bg-slate-950 text-slate-200 p-6 md:p-8 rounded-xl font-serif space-y-5 border border-slate-800 shadow-inner text-center">
           <p>
-            In the <strong>BEGINNING</strong>, <strong>The Cube</strong> was a Celestial - a sentient, cosmological being. For millennia it consumed, silently, slowly but purposefully, until nothing remained of its home plane.
+            <TargetedGlitchedText text="In the BEGINNING, The Cube was a Celestial - a sentient, cosmological being. For millennia it consumed, silently, slowly but purposefully, until nothing remained of its home plane." />
           </p>
           <p>
-            Further eons passed without consequence, The Cube lying dormant until, quite suddenly - something changed. <em>The Dynasty Cube&apos;s Spark had ignited.</em> 
+            <TargetedGlitchedText text="Further eons passed without consequence, The Cube lying dormant until, quite suddenly - something changed. The Dynasty Cube's Spark had ignited." /> 
           </p>
-          <p><strong>THE DYNASTY CUBE AWAKENS.</strong></p>
+          <p><strong><TargetedGlitchedText text="THE DYNASTY CUBE AWAKENS." /></strong></p>
           <p>
-            With this new power, The Cube was no longer confined to its own barren plane - it could reach its tendrils to neighboring planes and pull in all it could ever desire. Something else had changed however - all that it consumed, it could still <em>sense</em>. What it pulled in from these neighboring planes still gave The Cube power, but now they were <em>within</em> The Cube. Part of it.
+            <TargetedGlitchedText text="With this new power, The Cube was no longer confined to its own barren plane - it could reach its tendrils to neighboring planes and pull in all it could ever desire. Something else had changed however - all that it consumed, it could still sense. What it pulled in from these neighboring planes still gave The Cube power, but now they were within The Cube. Part of it." />
           </p>
-          <p><strong>THE LEAGUE IS FORMED.</strong></p>
+          <p><strong><TargetedGlitchedText text="THE LEAGUE IS FORMED." /></strong></p>
           <p>
-             At first, there was only <em>chaos</em>. The displaced inhabitants of these disparate planes were lost, aimless, hopeless - trapped within a Celestial with unfathomable, seemingly infinite power. In time, like found like, and factions were formed, representatives of their home planes desperate for an escape.
+             <TargetedGlitchedText text="At first, there was only chaos. The displaced inhabitants of these disparate planes were lost, aimless, hopeless - trapped within a Celestial with unfathomable, seemingly infinite power. In time, like found like, and factions were formed, representatives of their home planes desperate for an escape." />
           </p>
           <p className="font-bold text-lg pt-4 tracking-widest text-white">
-            THE BLIND ETERNITIES SHIFT.
+            <TargetedGlitchedText text="THE BLIND ETERNITIES SHIFT." />
           </p>
         </div>
       </section>
@@ -153,46 +155,37 @@ export default async function AboutPage() {
       {/* How It Works */}
       <section className="space-y-8">
         <h2 className="text-3xl font-bold">How The League Works</h2>
-
         <div className="space-y-6 pl-4 border-l-2 border-muted">
           
           <div>
             <h3 className="text-xl font-semibold mb-2">1. The Draft</h3>
             <p className="text-muted-foreground">
-              Each round, each Team picks one card from the Draft Pool at a time, in reverse standings order from the previous Season. This repeats until each Team has constructed their Team Pool. Starting from Magic&apos;s earliest sets, The League drafts sequentially through history.
+              <TargetedGlitchedText text="Each round, each Team picks one card from the Draft Pool at a time, in reverse standings order from the previous Season. This repeats until each Team has constructed their Team Pool. Starting from Magic's earliest sets, The League drafts sequentially through history." />
             </p>
- <p className="italic text-muted-foreground text-lg">
-A custom built algorithm informs the prioritization of each card in the draft for each Team - users may manually adjust their Team&apos;s draft priority, 
-   but if they don&apos;t each Team will make intelligent draft selections based on the most powerful cards available in addition to what colors they have already drafted and what colors are still &quot;open&quot;.            
- </p>
+            <p className="italic text-muted-foreground text-lg mt-2">
+              <TargetedGlitchedText text="A custom built algorithm informs the prioritization of each card in the draft for each Team - users may manually adjust their Team's draft priority, but if they don't each Team will make intelligent draft selections based on the most powerful cards available in addition to what colors they have already drafted and what colors are still 'open'." />            
+            </p>
           </div>
           
           <div>
             <h3 className="text-xl font-semibold mb-2">2. The Season</h3>
             <p className="text-muted-foreground">
-              Each week, Teams will submit a deck from their drafted pools and play out matches to determine rankings, leading up to the Championship match. Teams collaborate on strategies, acquire undrafted cards from THE WIRE or Free Agent Pool, and trade cards and other resources with one another.
+              <TargetedGlitchedText text="Each week, Teams will submit a deck from their drafted pools and play out matches to determine rankings, leading up to the Championship match. Teams collaborate on strategies, acquire undrafted cards from THE WIRE or Free Agent Pool, and trade cards and other resources with one another." />
             </p>
-            
- <p className="italic text-muted-foreground text-lg">
-Upon completion of The Draft, a simple deck will be automatically generated for each Team and submitted as the default deck for the upcoming weekly matchup. 
-   Simulated matches are scheduled throughout Thursday - Tuesday. 
-   Additionally, members of each Team may coordinate &quot;Best-of-Three&quot; PvP matches against their weekly opponent - these PvP matches are weighted double their simulated counterparts for determining weekly match outcomes and Season records.
-         </p>
-            </div>
-
+            <p className="italic text-muted-foreground text-lg mt-2">
+              <TargetedGlitchedText text="Upon completion of The Draft, a simple deck will be automatically generated for each Team and submitted as the default deck for the upcoming weekly matchup. Simulated matches are scheduled throughout Thursday - Tuesday. Additionally, members of each Team may coordinate 'Best-of-Three' PvP matches against their weekly opponent - these PvP matches are weighted double their simulated counterparts for determining weekly match outcomes and Season records." />
+            </p>
+          </div>
           
           <div>
             <h3 className="text-xl font-semibold mb-2">3. The Off-Season</h3>
             <p className="text-muted-foreground">
-              After the Championship, The Cube shifts. Older cards become harder to retain, and the <em>next</em> chronological Magic set is added the Draft Pool. The Teams then convene to vote on new rules, shaping the environment for the coming Season.
+              <TargetedGlitchedText text="After the Championship, The Cube shifts. Older cards become harder to retain, and the next chronological Magic set is added the Draft Pool. The Teams then convene to vote on new rules, shaping the environment for the coming Season." />
             </p>
-            
- <p className="italic text-muted-foreground text-lg">
-   Any cards that went undrafted reduce in value, while cards that were drafted increse. Cards that remained unclaimed by any Team for multiple Seasons become &quot;Retired&quot; and are removed from the available card pool entirely. 
-   The following Season, The League budget allowed for each Team is adjusted, but the most expensive cards become more costly to retain.     
-        </p>
-</div>
-          
+            <p className="italic text-muted-foreground text-lg mt-2">
+              <TargetedGlitchedText text="Any cards that went undrafted reduce in value, while cards that were drafted increase. Cards that remained unclaimed by any Team for multiple Seasons become 'Retired' and are removed from the available card pool entirely. The following Season, The League budget allowed for each Team is adjusted, but the most expensive cards become more costly to retain." />     
+            </p>
+          </div>
         </div>
       </section>
 
@@ -205,14 +198,13 @@ Upon completion of The Draft, a simple deck will be automatically generated for 
               The Teams
             </h2>
             <p className="text-muted-foreground">
-              Participants are separated into distinct factions. Together, Team members collaborate on draft strategies, evaluate trades, build their decks, and vote on the future rules of the league.
+              <TargetedGlitchedText text="Participants are separated into distinct factions. Together, Team members collaborate on draft strategies, evaluate trades, build their decks, and vote on the future rules of the league." />
             </p>
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {sortedTeams.length > 0 ? (
             sortedTeams.map((team) => {
-              // Changed purple fallback to a neutral gray
               const primaryColor = team.primary_color || "#6b7280";
               
               return (
@@ -221,7 +213,7 @@ Upon completion of The Draft, a simple deck will be automatically generated for 
                   className="border-l-4 transition-all hover:shadow-md"
                   style={{
                     borderLeftColor: primaryColor,
-                    backgroundColor: `${primaryColor}10`, // Appends hex opacity for a subtle 6% tint
+                    backgroundColor: `${primaryColor}10`,
                   }}
                 >
                   <CardContent className="p-5 flex items-center gap-4">
@@ -231,10 +223,10 @@ Upon completion of The Draft, a simple deck will be automatically generated for 
                         className="text-xl font-bold truncate" 
                         style={{ color: primaryColor }}
                       >
-                        {team.name}
+                        <TargetedGlitchedText text={team.name} />
                       </h3>
                       <p className="text-sm italic opacity-80 text-foreground truncate">
-                        &quot;{team.motto}&quot;
+                        &quot;<TargetedGlitchedText text={team.motto} />&quot;
                       </p>
                     </div>
                   </CardContent>
@@ -254,12 +246,12 @@ Upon completion of The Draft, a simple deck will be automatically generated for 
         <div className="max-w-2xl mx-auto space-y-4 mb-8">
           <h2 className="text-3xl font-bold">Shape the Multiverse</h2>
           <p className="text-muted-foreground text-lg">
-            The Dynasty Cube is more than just a draft—it&apos;s a living community. Whether you&apos;re strategizing with your Team members, negotiating blockbuster trades with rivals, or voting on rules and mechanics that will shape the next era, your voice matters.
+            <TargetedGlitchedText text="The Dynasty Cube is more than just a draft—it's a living community. Whether you're strategizing with your Team members, negotiating blockbuster trades with rivals, or voting on rules and mechanics that will shape the next era, your voice matters." />
           </p>
         </div>
         
         <p className="text-2xl font-serif italic text-muted-foreground mb-6">
-          &quot;It&apos;s already here. There&apos;s no stopping it now.&quot;
+          &quot;<TargetedGlitchedText text="It's already here. There's no stopping it now." />&quot;
         </p>
         
         <Button size="lg" className="h-14 px-8 text-lg" asChild>
@@ -270,10 +262,9 @@ Upon completion of The Draft, a simple deck will be automatically generated for 
         </Button>
         
         <p className="text-sm text-muted-foreground max-w-md mx-auto mt-6">
-          Join the server, find your faction, and leave your mark on the Cube.
+          <TargetedGlitchedText text="Join the server, find your faction, and leave your mark on the Cube." />
         </p>
       </section>
-      
     </div>
   );
 }
