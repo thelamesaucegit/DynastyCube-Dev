@@ -154,7 +154,6 @@ export default function HomePage() {
   const liveDraftLink = draftSessionId ? `/draft/${draftSessionId}/live` : "#";
   const currentPhase = season?.phase;
   const isPlayActive = currentPhase && currentPhase !== 'postseason' && currentPhase !== 'draft';
-  const visiblePicks = recentPicks.slice(0, activeTeamCount);
 
   return (
     <div className="container max-w-7xl mx-auto px-4 py-8 space-y-12">
