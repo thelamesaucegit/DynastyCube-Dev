@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/ca
 import { Button } from "@/app/components/ui/button";
 import { PlayoffBracket } from "@/app/components/PlayoffBracket";
 import { Badge } from "@/app/components/ui/badge";
-import { ArrowRight, Info, X } from "lucide-react";
+import { ArrowRight, Info, X, Vote, BookOpen, Sparkles } from "lucide-react";
 import CountdownTimer from "@/app/components/CountdownTimer";
 import { DraftStatusWidget } from "@/app/components/DraftStatusWidget";
 import { CardPreview } from "@/app/components/CardPreview";
@@ -20,10 +20,14 @@ import {
   getAdminNews,
   getActiveCountdownTimer,
   getActiveDraftSession,
+  getHomepageActivePolls,
+  getCypherStats,
   type RecentDraftPick,
   type CurrentSeason,
   type AdminNews,
   type CountdownTimer as CountdownTimerType,
+  type HomepagePoll,
+  type CypherStats
 } from "@/app/actions/homeActions";
 import { getLatestStreamMatch, type StreamMatch } from "@/app/actions/liveStreamActions";
 import { getTeamsWithDetails } from "@/app/actions/teamActions";
@@ -43,9 +47,11 @@ export default function HomePage() {
   // Core Page State
   const [season, setSeason] = useState<CurrentSeason | null>(null);
   const [adminNews, setAdminNews] = useState<AdminNews[]>([]);
-  const [selectedNews, setSelectedNews] = useState<AdminNews | null>(null); // <-- NEW STATE
+  const [selectedNews, setSelectedNews] = useState<AdminNews | null>(null);
   const [countdownTimer, setCountdownTimer] = useState<CountdownTimerType | null>(null);
   const [liveMatch, setLiveMatch] = useState<StreamMatch | null>(null);
+  const [activePolls, setActivePolls] = useState<HomepagePoll[]>([]);
+  const [cypherStats, setCypherStats] = useState<CypherStats | null>(null);
   const [activeTeamCount, setActiveTeamCount] = useState(8);
   const [loadingCore, setLoadingCore] = useState(true);
   const [bgPosition, setBgPosition] = useState({ x: 50, y: 50 });
@@ -66,17 +72,21 @@ export default function HomePage() {
       const isActivePlayPhase = currentPhase && currentPhase !== 'postseason' && currentPhase !== 'draft';
       
       const liveMatchPromise = isActivePlayPhase ? getLatestStreamMatch() : Promise.resolve({ match: null });
-      const [teamsResult, newsResult, timerResult, streamResult] = await Promise.all([
+      const [teamsResult, newsResult, timerResult, streamResult, pollsResult, cypherResult] = await Promise.all([
         getTeamsWithDetails(),
-        getAdminNews(1), // <-- THE FIX: Only fetch 1 item for the home page!
+        getAdminNews(1), 
         getActiveCountdownTimer(),
         liveMatchPromise,
+        getHomepageActivePolls(),
+        getCypherStats()
       ]);
       
       setActiveTeamCount(teamsResult.teams?.filter(t => !(t as { is_hidden?: boolean }).is_hidden).length || 8);
       setAdminNews(newsResult.news);
       setCountdownTimer(timerResult.timer);
       setLiveMatch(streamResult.match);
+      setActivePolls(pollsResult.polls || []);
+      setCypherStats(cypherResult.stats || null);
     } catch (error) {
       console.error("Error loading core home page data:", error);
     } finally {
@@ -206,6 +216,68 @@ export default function HomePage() {
       {(currentPhase === 'playoffs' || currentPhase === 'postseason') && season && (
         <PlayoffBracket seasonId={season.id} seasonName={season.season_name} />
       )}
+
+      {/* --- NOTIFICATIONS ROW: VOTES & CYPHER --- */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Active Votes Card */}
+        {activePolls.length > 0 && (
+          <Link href="/vote" className="group">
+            <Card className="h-full border-primary/20 hover:border-primary/50 transition-colors bg-gradient-to-br from-card to-primary/5 shadow-sm">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold flex items-center gap-2 mb-2">
+                      <Vote className="size-5 text-primary" />
+                      Active Votes
+                    </h3>
+                    <ul className="text-sm text-muted-foreground space-y-1 list-disc pl-5">
+                      {activePolls.slice(0, 3).map(poll => (
+                        <li key={poll.id} className="truncate pr-2">{poll.title}</li>
+                      ))}
+                      {activePolls.length > 3 && (
+                        <li className="italic">+{activePolls.length - 3} more</li>
+                      )}
+                    </ul>
+                  </div>
+                  <ArrowRight className="size-5 text-primary opacity-0 group-hover:opacity-100 transition-opacity mt-1 shrink-0" />
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        )}
+
+        {/* Cypher Status Card */}
+        {cypherStats && (
+          <Link href="/cypher" className="group">
+            <Card className="h-full border-amber-500/30 hover:border-amber-500/60 transition-colors bg-gradient-to-br from-card to-amber-500/5 shadow-sm">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold flex items-center gap-2 mb-2 text-amber-600 dark:text-amber-500">
+                      <BookOpen className="size-5" />
+                      The Cypher
+                    </h3>
+                    <div className="flex items-center gap-3">
+                      <div className="text-3xl font-black text-foreground">
+                        {cypherStats.percentRemaining}%
+                      </div>
+                      <div className="text-sm text-muted-foreground leading-tight">
+                        of the pages remain <br /> shrouded in mystery.
+                      </div>
+                    </div>
+                    {cypherStats.hasRecentCypher && (
+                      <Badge className="mt-3 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 shadow-none">
+                        <Sparkles className="size-3 mr-1" /> New page discovered!
+                      </Badge>
+                    )}
+                  </div>
+                  <ArrowRight className="size-5 text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity mt-1 shrink-0" />
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        )}
+      </div>
 
       {/* --- LATEST NEWS SECTION --- */}
       <section className="space-y-4">
