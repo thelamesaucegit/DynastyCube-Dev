@@ -15,14 +15,14 @@ import { DraftStatusWidget } from "@/app/components/DraftStatusWidget";
 import { CardPreview } from "@/app/components/CardPreview";
 import { LiveStreamWidget } from "@/app/components/LiveStreamWidget";
 import {
-  getRecentDraftPicks,
+  getRecentTransactions,
   getCurrentSeason,
   getAdminNews,
   getActiveCountdownTimer,
   getActiveDraftSession,
   getHomepageActivePolls,
   getCypherStats,
-  type RecentDraftPick,
+  type RecentTransaction,
   type CurrentSeason,
   type AdminNews,
   type CountdownTimer as CountdownTimerType,
@@ -57,9 +57,9 @@ export default function HomePage() {
   const [bgPosition, setBgPosition] = useState({ x: 50, y: 50 });
 
   // Draft-Specific State (Loaded Non-Blockingly)
-  const [recentPicks, setRecentPicks] = useState<RecentDraftPick[]>([]);
   const [draftSessionId, setDraftSessionId] = useState<string | null>(null);
   const [loadingDraft, setLoadingDraft] = useState(true);
+ const [recentTransactions, setRecentTransactions] = useState<RecentTransaction[]>([]); // Replaces recentPicks
 
   // 1. Load Core Data
   const loadCoreData = useCallback(async () => {
@@ -95,16 +95,17 @@ export default function HomePage() {
   }, []);
 
   // 2. Load Draft Data
+
   const loadDraftData = useCallback(async () => {
     try {
-      const [draftSessionResult, picksResult] = await Promise.all([
+      const [draftSessionResult, txResult] = await Promise.all([
         getActiveDraftSession(),
-        getRecentDraftPicks(20)
+        getRecentTransactions(20) // Fetch from the new unified ledger
       ]);
       setDraftSessionId(draftSessionResult.session?.id || null);
-      setRecentPicks(picksResult.picks);
+      setRecentTransactions(txResult.transactions);
     } catch (error) {
-      console.error("Error loading background draft data:", error);
+      console.error("Error loading background tx data:", error);
     } finally {
       setLoadingDraft(false);
     }
@@ -328,7 +329,7 @@ export default function HomePage() {
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">Latest Card Acquisitions</h2>
           <Button variant="ghost" asChild>
-            <Link href={liveDraftLink}>View All</Link>
+            <Link href="/transactions">View All</Link> {/* THE FIX: Directs to the new page */}
           </Button>
         </div>
         <Card>
@@ -336,36 +337,42 @@ export default function HomePage() {
             {loadingDraft ? (
                <div className="p-12 text-center text-muted-foreground flex items-center justify-center gap-3">
                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
-                 Checking draft board...
+                 Checking transactions...
                </div>
-            ) : visiblePicks.length > 0 ? (
+            ) : visibleTxs.length > 0 ? (
               <div className="flex flex-col">
-                {visiblePicks.map((pick) => (
-                  <CardPreview key={pick.id} card={{ card_name: pick.card_name, image_url: pick.image_url, oldest_image_url: pick.oldest_image_url }}>
+                {visibleTxs.map((tx) => (
+                  <CardPreview key={tx.id} card={{ card_name: tx.card_name, image_url: tx.image_url, oldest_image_url: tx.oldest_image_url }}>
                     <div className="p-4 hover:bg-accent/50 transition-colors cursor-pointer border-b border-border/50 last:border-0">
                       <div className="flex items-center justify-between">
                         <div className="flex-1 flex items-center gap-4">
-                          {pick.image_url && (<Image src={pick.image_url} alt={pick.card_name} width={40} height={56} className="rounded-sm object-cover shadow-sm hidden sm:block"/>)}
+                          {tx.image_url && (<Image src={tx.image_url} alt={tx.card_name} width={40} height={56} className="rounded-sm object-cover shadow-sm hidden sm:block"/>)}
                           <div>
                             <div className="flex items-center gap-2 mb-1">
-                              <span className="font-semibold text-lg">{pick.card_name}</span>
-                              {pick.card_type && (<Badge variant="secondary" className="text-[10px]">{pick.card_type}</Badge>)}
+                              <span className="font-semibold text-lg">{tx.card_name}</span>
+                              {tx.card_type && (<Badge variant="secondary" className="text-[10px]">{tx.card_type}</Badge>)}
                             </div>
                             <p className="text-sm text-muted-foreground flex items-center gap-1.5">
-                              <span className="text-lg">{pick.team_emoji}</span>
-                              <span className="font-medium text-foreground/80">{pick.team_name}</span>
-                              {pick.pick_number && <span className="text-xs opacity-70 ml-1">&middot; Pick #{pick.pick_number}</span>}
+                              <span className="text-lg">{tx.team_emoji}</span>
+                              <span className="font-medium text-foreground/80">{tx.team_name}</span>
+                              
+                              {/* THE FIX: Enhanced acquisition method badge/text */}
+                              <span className="text-xs ml-1 opacity-70 border-l border-border/50 pl-2">
+                                {tx.acquisition_method === 'trade' && tx.from_team_emoji 
+                                  ? `via Trade from ${tx.from_team_emoji}`
+                                  : `via ${tx.acquisition_method.replace('_', ' ')}`}
+                              </span>
                             </p>
                           </div>
                         </div>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap ml-4 font-medium bg-muted/50 px-2 py-1 rounded-full">{getRelativeTime(pick.drafted_at)}</span>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap ml-4 font-medium bg-muted/50 px-2 py-1 rounded-full">{getRelativeTime(tx.acquired_at)}</span>
                       </div>
                     </div>
                   </CardPreview>
                 ))}
               </div>
             ) : (
-              <div className="p-12 text-center text-muted-foreground">No draft picks yet. Check back once the draft begins!</div>
+              <div className="p-12 text-center text-muted-foreground">No transactions yet.</div>
             )}
           </CardContent>
         </Card>
