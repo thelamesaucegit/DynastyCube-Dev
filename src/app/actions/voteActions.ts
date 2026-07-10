@@ -902,3 +902,215 @@ export async function getVotingContext(userId?: string) {
     return { success: false, seasonId: null, isPostseason: false, userTeamId: null };
   }
 }
+
+// =================================================================================================
+// POSTSEASON & MOTTO ACTIONS
+// =================================================================================================
+
+export interface MottoSubmission {
+    id: string;
+    team_id: string;
+    user_id: string;
+    identity_key: string | null;
+    motto_text: string;
+    status: 'pending' | 'approved' | 'rejected' | 'polled';
+    created_at: string;
+    team_name: string;
+    user_name: string;
+}
+
+interface DbMottoSubmission {
+    id: string;
+    team_id: string;
+    user_id: string;
+    identity_key: string | null;
+    motto_text: string;
+    status: 'pending' | 'approved' | 'rejected' | 'polled';
+    created_at: string;
+    teams: { name: string } | { name: string }[] | null;
+    users: { display_name: string } | { display_name: string }[] | null;
+}
+
+interface DbTeamMemberWithRoles {
+    member_id: string;
+    user_id: string;
+    user_email: string;
+    user_display_name: string;
+    team_id: string;
+    roles: string[];
+}
+
+// For Users to submit a motto
+export async function submitTeamMotto(teamId: string, mottoText: string, identityKey: string | null = null): Promise<{ success: boolean; error?: string }> {
+    const supabase = await createServerClient();
+    try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { success: false, error: "Not authenticated" };
+
+        if (!mottoText || mottoText.trim().length < 3) {
+            return { success: false, error: "Motto is too short." };
+        }
+
+        const { error } = await supabase.from('motto_submissions').insert({
+            team_id: teamId,
+            user_id: user.id,
+            identity_key: identityKey,
+            motto_text: mottoText.trim()
+        });
+
+        if (error) throw error;
+        return { success: true };
+    } catch (error: unknown) {
+        return { success: false, error: String(error) };
+    }
+}
+
+// For Admins to view pending mottos
+export async function getPendingMottos(): Promise<{ mottos: MottoSubmission[]; error?: string }> {
+    const supabase = await createServerClient();
+    try {
+        const { data, error } = await supabase
+            .from('motto_submissions')
+            .select(`
+                *,
+                teams ( name ),
+                users ( display_name )
+            `)
+            .eq('status', 'pending')
+            .order('created_at', { ascending: true });
+
+        if (error) throw error;
+
+        const rawRows = (data || []) as unknown as DbMottoSubmission[];
+        
+        const mottos: MottoSubmission[] = rawRows.map(row => {
+            const team = Array.isArray(row.teams) ? row.teams[0] : row.teams;
+            const user = Array.isArray(row.users) ? row.users[0] : row.users;
+            return {
+                ...row,
+                team_name: team?.name || "Unknown Team",
+                user_name: user?.display_name || "Unknown User"
+            };
+        });
+
+        return { mottos };
+    } catch (error: unknown) {
+        return { mottos: [], error: String(error) };
+    }
+}
+
+// For Admins to approve/reject
+export async function updateMottoStatus(id: string, status: 'approved' | 'rejected'): Promise<{ success: boolean; error?: string }> {
+    const supabase = await createServerClient();
+    try {
+        const { error } = await supabase.from('motto_submissions').update({ status }).eq('id', id);
+        if (error) throw error;
+        return { success: true };
+    } catch (error: unknown) {
+        return { success: false, error: String(error) };
+    }
+}
+
+// Generator for Postseason Team Votes (Captains & Mottos)
+export async function initiatePostseasonTeamVotes(): Promise<{ success: boolean; message?: string; error?: string; count?: number }> {
+    const supabase = await createServerClient();
+    try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { success: false, error: "Not authenticated" };
+
+        const { data: season } = await supabase.from('seasons').select('id, end_date').eq('is_active', true).single();
+        if (!season || !season.end_date) {
+            return { success: false, error: "The active season must have an 'end_date' set before generating these votes!" };
+        }
+
+        const endsAt = new Date(season.end_date).toISOString();
+
+        // Gather all required data
+        const { data: teamsData } = await supabase.from('teams').select('id, name, motto');
+        const { data: identitiesData } = await supabase.from('team_identities').select('team_id, identity_key, motto');
+        const { data: membersData } = await supabase.from('team_members_with_roles').select('*');
+        const { data: mottosData } = await supabase.from('motto_submissions').select('*').eq('status', 'approved');
+
+        const teams = teamsData || [];
+        const identities = identitiesData || [];
+        const members = (membersData as unknown as DbTeamMemberWithRoles[]) || [];
+        const approvedMottos = mottosData || [];
+
+        let createdCount = 0;
+
+        for (const team of teams) {
+            const teamMembers = members.filter(m => m.team_id === team.id);
+            
+            // 1. Generate Captain Vote
+            if (teamMembers.length >= 2) {
+                // Sort so the current captain is option #1
+                const sortedMembers = [...teamMembers].sort((a, b) => {
+                    const aCap = a.roles.includes('captain') ? 1 : 0;
+                    const bCap = b.roles.includes('captain') ? 1 : 0;
+                    return bCap - aCap;
+                });
+                
+                const captainOptions = sortedMembers.map(m => m.roles.includes('captain') ? `${m.user_display_name} (Current Captain)` : m.user_display_name);
+
+                await createTeamPoll(
+                    team.id,
+                    "Team Captain Election",
+                    "Vote for your team's Captain for the upcoming season.",
+                    endsAt,
+                    false, // allowMultipleVotes
+                    true,  // showResultsBeforeEnd
+                    captainOptions,
+                    user.id
+                );
+                createdCount++;
+            }
+
+            // 2. Generate Motto Vote(s)
+            const teamIdentities = identities.filter(i => i.team_id === team.id);
+            
+            if (teamIdentities.length > 0) {
+                // Generate a split vote for Changelings/Mimics
+                for (const identity of teamIdentities) {
+                    const identityMottos = approvedMottos.filter(m => m.team_id === team.id && m.identity_key === identity.identity_key);
+                    if (identityMottos.length > 0) {
+                        const mottoOptions = [`Keep current: "${identity.motto}"`, ...identityMottos.map(m => m.motto_text)];
+                        const identityName = identity.identity_key === 'changelings' ? 'Changelings' : 'Mimics';
+                        
+                        await createTeamPoll(
+                            team.id,
+                            `Team Motto Election (${identityName})`,
+                            `Vote for the new motto for your ${identityName} identity.`,
+                            endsAt,
+                            false, true, mottoOptions, user.id
+                        );
+                        createdCount++;
+                    }
+                }
+            } else {
+                // Generate a standard vote for regular teams
+                const teamMottos = approvedMottos.filter(m => m.team_id === team.id && !m.identity_key);
+                if (teamMottos.length > 0) {
+                    const mottoOptions = [`Keep current: "${team.motto}"`, ...teamMottos.map(m => m.motto_text)];
+                    await createTeamPoll(
+                        team.id,
+                        "Team Motto Election",
+                        "Vote for your team's new motto for the upcoming season.",
+                        endsAt,
+                        false, true, mottoOptions, user.id
+                    );
+                    createdCount++;
+                }
+            }
+        }
+
+        // Flag the mottos as "polled" so they aren't generated again if an admin double-clicks
+        if (approvedMottos.length > 0) {
+            const mottoIds = approvedMottos.map(m => m.id);
+            await supabase.from('motto_submissions').update({ status: 'polled' }).in('id', mottoIds);
+        }
+
+        return { success: true, count: createdCount, message: `Successfully created ${createdCount} postseason votes.` };
+    } catch (error: unknown) {
+        return { success: false, error: String(error) };
+    }
+}
