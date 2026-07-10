@@ -1,14 +1,17 @@
-// /src/app/components/team/TeamVoting.tsx
+// src/app/components/team/TeamVoting.tsx
+
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { getTeamPolls, deleteTeamPoll, getVotingContext } from "@/app/actions/voteActions";
+import { getTeamPolls, deleteTeamPoll, getVotingContext, submitTeamMotto } from "@/app/actions/voteActions";
 import type { PollWithOptions } from "@/app/actions/voteActions";
 import { TeamPollCard } from "./TeamPollCard";
 import { CreateTeamPollDialog } from "./CreateTeamPollDialog";
 import { Button } from "@/app/components/ui/button";
+import { Input } from "@/app/components/ui/input"; // Ensure you import Input
+import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
-import { Plus, Vote, Loader2, AlertCircle } from "lucide-react";
+import { Plus, Vote, Loader2, AlertCircle, Sparkles } from "lucide-react";
 import { DayNightGrid } from "@/app/components/vote/DayNightGrid";
 
 interface TeamVotingProps {
@@ -16,7 +19,6 @@ interface TeamVotingProps {
   userRoles: string[];
 }
 
-// THE FIX: Define a strict type for the context
 interface SeasonContext {
   seasonId: string | null;
   isPostseason: boolean;
@@ -29,7 +31,13 @@ export function TeamVoting({ teamId, userRoles }: TeamVotingProps) {
   const [error, setError] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   
-  // THE FIX: Use the strict type for state
+  // --- NEW: Motto Submission State ---
+  const [mottoText, setMottoText] = useState("");
+  const [mottoIdentity, setMottoIdentity] = useState<string>("standard");
+  const [submittingMotto, setSubmittingMotto] = useState(false);
+  const [mottoSuccess, setMottoSuccess] = useState<string | null>(null);
+  const [mottoError, setMottoError] = useState<string | null>(null);
+
   const [seasonContext, setSeasonContext] = useState<SeasonContext>({ 
     seasonId: null, 
     isPostseason: false 
@@ -38,7 +46,6 @@ export function TeamVoting({ teamId, userRoles }: TeamVotingProps) {
   const isCaptain = userRoles.includes("captain");
   const userId = user?.id || "";
 
-  // THE FIX: Wrap loadPolls in useCallback
   const loadPolls = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
@@ -48,7 +55,6 @@ export function TeamVoting({ teamId, userRoles }: TeamVotingProps) {
         getTeamPolls(teamId, userId),
         getVotingContext()
     ]);
-
     if (result.success) {
       setPolls(result.polls);
     } else {
@@ -56,19 +62,17 @@ export function TeamVoting({ teamId, userRoles }: TeamVotingProps) {
     }
     
     if (contextResult.success) {
-        // THE FIX: No 'as any' needed
         setSeasonContext({
             seasonId: contextResult.seasonId,
             isPostseason: contextResult.isPostseason
         });
     }
-
     setLoading(false);
   }, [teamId, userId]);
 
   useEffect(() => {
     loadPolls();
-  }, [loadPolls]); // THE FIX: Add loadPolls to dependency array
+  }, [loadPolls]);
 
   const handleDelete = async (pollId: string) => {
     if (!userId) return;
@@ -82,13 +86,29 @@ export function TeamVoting({ teamId, userRoles }: TeamVotingProps) {
     }
   };
 
-  const handlePollCreated = () => {
-    loadPolls();
+  // --- NEW: Submit Motto Handler ---
+  const handleSubmitMotto = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mottoText.trim()) return;
+
+    setSubmittingMotto(true);
+    setMottoError(null);
+    setMottoSuccess(null);
+
+    const identityKey = mottoIdentity === "standard" ? null : mottoIdentity;
+    const res = await submitTeamMotto(teamId, mottoText, identityKey);
+
+    if (res.success) {
+        setMottoSuccess("✅ Motto submitted successfully! Awaiting Admin approval.");
+        setMottoText("");
+    } else {
+        setMottoError(res.error || "Failed to submit motto.");
+    }
+    setSubmittingMotto(false);
   };
 
-  const handleVoteSubmit = () => {
-    loadPolls();
-  };
+  const handlePollCreated = () => loadPolls();
+  const handleVoteSubmit = () => loadPolls();
 
   if (loading) {
     return (
@@ -99,21 +119,23 @@ export function TeamVoting({ teamId, userRoles }: TeamVotingProps) {
     );
   }
 
-  // ... (The rest of the component JSX from the previous correct version)
-  // This part does not need to change.
   const activePolls = polls.filter((p) => p.status !== "ended");
   const endedPolls = polls.filter((p) => p.status === "ended");
 
+  // Determine if this is the Changelings team to show identity choices (checking team name/slug pattern matches)
+  const isChangelings = teamId === '2bfc34c2-045b-4ac7-872b-05aeebd4c53b'; 
+
   return (
-    <div>
+    <div className="space-y-6">
       {isCaptain && (
-        <div className="flex items-center justify-end mb-4">
+        <div className="flex items-center justify-end">
           <Button onClick={() => setShowCreateDialog(true)} size="sm">
             <Plus className="size-4 mr-1" />
             Create Poll
           </Button>
         </div>
       )}
+
       {seasonContext.isPostseason && seasonContext.seasonId && (
           <DayNightGrid 
               seasonId={seasonContext.seasonId} 
@@ -122,12 +144,55 @@ export function TeamVoting({ teamId, userRoles }: TeamVotingProps) {
               isPostseason={seasonContext.isPostseason} 
           />
       )}
+
+      {/* --- NEW: MOTTO SUBMISSION FORM (VISIBLE IN POSTSEASON) --- */}
+      {seasonContext.isPostseason && (
+        <Card className="border-indigo-200 dark:border-indigo-800 bg-indigo-50/10">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-md font-bold flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
+              <Sparkles className="size-4" />
+              Propose Faction Motto
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmitMotto} className="space-y-4">
+              <div className="flex flex-col sm:flex-row gap-3">
+                {isChangelings && (
+                  <select 
+                    value={mottoIdentity} 
+                    onChange={(e) => setMottoIdentity(e.target.value)}
+                    className="px-3 py-2 border border-border rounded-lg bg-background text-sm font-semibold max-w-[180px] shrink-0"
+                  >
+                    <option value="changelings">Changelings Identity</option>
+                    <option value="mimics">Mimics Identity</option>
+                  </select>
+                )}
+                <Input 
+                  placeholder="Enter proposed motto text..." 
+                  value={mottoText}
+                  onChange={(e) => setMottoText(e.target.value)}
+                  maxLength={100}
+                  className="flex-1"
+                  disabled={submittingMotto}
+                />
+                <Button type="submit" disabled={submittingMotto || !mottoText.trim()} className="shrink-0">
+                  {submittingMotto ? <Loader2 className="size-4 animate-spin" /> : "Submit"}
+                </Button>
+              </div>
+              {mottoSuccess && <p className="text-xs text-green-600 font-medium">{mottoSuccess}</p>}
+              {mottoError && <p className="text-xs text-destructive font-medium">{mottoError}</p>}
+            </form>
+          </CardContent>
+        </Card>
+      )}
+
       {error && polls.length > 0 && (
         <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-3 mb-4">
           <AlertCircle className="size-4 shrink-0" />
           {error}
         </div>
       )}
+
       {activePolls.length > 0 && (
         <div className="space-y-3 mb-6">
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Active Polls</h3>
@@ -143,6 +208,7 @@ export function TeamVoting({ teamId, userRoles }: TeamVotingProps) {
           ))}
         </div>
       )}
+
       {endedPolls.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Recent Polls</h3>
@@ -158,10 +224,11 @@ export function TeamVoting({ teamId, userRoles }: TeamVotingProps) {
           ))}
         </div>
       )}
+
       {polls.length === 0 && (
         <div className="text-center py-12">
           <Vote className="size-10 mx-auto mb-3 text-muted-foreground opacity-50" />
-          <p className="text-lg font-medium mb-1">No polls yet</p>
+          <p className="text-lg font-medium mb-1">No active polls</p>
           <p className="text-sm text-muted-foreground mb-4">
             {isCaptain
               ? "Create a poll to get your team's input on decisions"
@@ -175,6 +242,7 @@ export function TeamVoting({ teamId, userRoles }: TeamVotingProps) {
           )}
         </div>
       )}
+
       <CreateTeamPollDialog
         teamId={teamId}
         userId={userId}
