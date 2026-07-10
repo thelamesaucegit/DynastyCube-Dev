@@ -267,7 +267,7 @@ const visibleTxs = recentTransactions.slice(0, activeTeamCount);
                     </div>
                     {cypherStats.hasRecentCypher && (
                       <Badge className="mt-3 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 shadow-none">
-                        <Sparkles className="size-3 mr-1" /> New page discovered!
+                        < className="size-3 mr-1" /> New Cypher discovered!
                       </Badge>
                     )}
                   </div>
@@ -328,7 +328,7 @@ const visibleTxs = recentTransactions.slice(0, activeTeamCount);
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">Latest Card Acquisitions</h2>
           <Button variant="ghost" asChild>
-            <Link href="/transactions">View All</Link> {/* THE FIX: Directs to the new page */}
+            <Link href="/transactions">View All</Link> 
           </Button>
         </div>
         <Card>
