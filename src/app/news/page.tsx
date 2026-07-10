@@ -9,6 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/ca
 import { Badge } from "@/app/components/ui/badge";
 import { Button } from "@/app/components/ui/button";
 import { Loader2, CalendarDays, User, ArrowLeft, Newspaper, AlertCircle, ArrowRight, X } from "lucide-react";
+import { TargetedGlitchedText } from "@/app/components/lore/TargetedGlitchedText";
+
 
 export default function NewsPage() {
   const [news, setNews] = useState<AdminNews[]>([]);
