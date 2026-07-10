@@ -1,4 +1,5 @@
 // src/app/components/lore/LoreEffectsProvider.tsx
+
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
@@ -17,6 +18,7 @@ const TimeRift = () => {
     useEffect(() => {
         if (!LORE_EFFECTS_ENABLED) return;
         let timeoutId: NodeJS.Timeout;
+
         const triggerRift = () => {
             const delay = Math.random() * 20000 + 10000;
             timeoutId = setTimeout(() => {
@@ -29,6 +31,7 @@ const TimeRift = () => {
                 triggerRift();
             }, delay);
         };
+
         triggerRift();
         return () => clearTimeout(timeoutId);
     }, []);
@@ -59,7 +62,25 @@ const TimeRift = () => {
 const GlobalCardCorruption = () => {
     const [targetElement, setTargetElement] = useState<HTMLElement | null>(null);
     const [rect, setRect] = useState<DOMRect | null>(null);
-    const [clipPath, setClipPath] = useState('none');
+    const [glitchStyle, setGlitchStyle] = useState({ bgPos: '50% 50%', mask: 'none' });
+
+    // Organic blob generator
+    const generateCorruptionState = () => {
+        const bgX = Math.random() * 100;
+        const bgY = Math.random() * 100;
+
+        const masks = Array.from({ length: 3 }).map(() => {
+            const x = Math.random() * 100;
+            const y = Math.random() * 100;
+            const size = Math.random() * 30 + 30; 
+            return `radial-gradient(circle at ${x}% ${y}%, rgba(0,0,0,1) 0%, rgba(0,0,0,0) ${size}%)`;
+        });
+
+        return {
+            bgPos: `${bgX}% ${bgY}%`,
+            mask: masks.join(', ')
+        };
+    };
 
     useEffect(() => {
         if (!LORE_EFFECTS_ENABLED) return;
@@ -67,14 +88,12 @@ const GlobalCardCorruption = () => {
         const handleMouseOver = (e: MouseEvent) => {
             const target = e.target as HTMLElement;
             
-            // THE FIX: Check for EITHER the custom container OR a Scryfall image
             const container = target.closest('[data-mtg-card-container="true"]');
             const imageContainer = target.closest('[src*="scryfall"]');
             
             const activeTarget = container || imageContainer;
 
             if (activeTarget) {
-                // If it's the container, grab the name from the data attribute. Otherwise, grab the alt text.
                 const cardName = container ? container.getAttribute('data-card-name') || '' : imageContainer?.getAttribute('alt') || '';
                 
                 if (target.closest('[data-disable-corruption="true"]')) return;
@@ -83,18 +102,11 @@ const GlobalCardCorruption = () => {
                 if (KEYWORD_REGEX.test(cardName)) {
                     setTargetElement(activeTarget as HTMLElement);
                     setRect(activeTarget.getBoundingClientRect());
-                    
-                    const x1 = Math.random() * 50;
-                    const x2 = x1 + Math.random() * 30 + 10;
-                    const y1 = Math.random() * 80;
-                    const y2 = y1 + Math.random() * 15 + 5;
-                    setClipPath(`polygon(${x1}% ${y1}%, ${x2}% ${y1}%, ${x2}% ${y2}%, ${x1}% ${y2}%)`);
                 }
             }
         };
 
         const handleMouseOut = (e: MouseEvent) => {
-            // Determine if we actually left the container or just moved to a child element inside it
             const target = e.target as HTMLElement;
             const relatedTarget = e.relatedTarget as HTMLElement;
             
@@ -125,6 +137,18 @@ const GlobalCardCorruption = () => {
         };
     }, [targetElement]);
 
+    // Rapidly change the glitch appearance while hovering over a target
+    useEffect(() => {
+        if (!targetElement) return;
+
+        setGlitchStyle(generateCorruptionState()); // Initial set
+        const intervalId = setInterval(() => {
+            setGlitchStyle(generateCorruptionState());
+        }, 150); 
+
+        return () => clearInterval(intervalId);
+    }, [targetElement]);
+
     if (!targetElement || !rect) return null;
 
     return (
@@ -133,8 +157,10 @@ const GlobalCardCorruption = () => {
             style={{
                 top: rect.top, left: rect.left, width: rect.width, height: rect.height,
                 backgroundImage: `url('/images/lore/corruption.png')`,
-                backgroundSize: 'cover',
-                clipPath: clipPath,
+                backgroundSize: '200%',
+                backgroundPosition: glitchStyle.bgPos,
+                WebkitMaskImage: glitchStyle.mask,
+                maskImage: glitchStyle.mask,
                 animation: 'glitch-shift 0.2s infinite'
             }}
         />
