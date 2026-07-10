@@ -55,19 +55,14 @@ export const CorruptedImage: React.FC<CorruptedImageProps> = ({ src, alt, isCorr
         };
     };
 
-    // Rapidly change the glitch appearance while hovering
+    // Calculate the glitch appearance exactly ONCE when the hover starts
     useEffect(() => {
         if (!isGlitching) {
             setGlitchStyle({ bgPos: '50% 50%', mask: 'none' });
             return;
         }
 
-        setGlitchStyle(generateCorruptionState()); // Initial set
-        const intervalId = setInterval(() => {
-            setGlitchStyle(generateCorruptionState());
-        }, 150); // Shifts every 150ms for a frantic, unstable look
-
-        return () => clearInterval(intervalId);
+        setGlitchStyle(generateCorruptionState());
     }, [isGlitching]);
 
     return (
@@ -82,10 +77,10 @@ export const CorruptedImage: React.FC<CorruptedImageProps> = ({ src, alt, isCorr
             {/* Corruption Overlay */}
             {canBeCorrupted && (
                  <div
-                    className="absolute inset-0 w-full h-full transition-opacity duration-300"
+                    className="absolute inset-0 w-full h-full transition-opacity duration-300 pointer-events-none"
                     style={{
                         backgroundImage: `url(${CORRUPTION_TEXTURE_URL})`,
-                        backgroundSize: '200%', // Enlarge so the shifting is highly visible
+                        backgroundSize: '200%', 
                         backgroundPosition: glitchStyle.bgPos,
                         opacity: isGlitching ? 1 : 0,
                         WebkitMaskImage: isGlitching ? glitchStyle.mask : 'none',
