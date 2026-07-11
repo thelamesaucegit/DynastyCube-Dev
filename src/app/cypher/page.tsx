@@ -132,7 +132,7 @@ export default function CypherPage() {
                         
                         {/* THE FIX: Changed revealed word color from purple to blue (text-blue-600 / dark:text-blue-400) */}
                         if (token.isRevealed) {
-                            return <span key={idx} className="text-blue-600 dark:text-blue-400 font-bold transition-all">{token.text}</span>;
+                            return <span key={idx} className="text-blue-600 dark:text-blue-400 font-bold transition-all"><TargetedGlitchedText text={token.text}/></span>;
                         }
 
                         {/* THE FIX: Changed hidden card block hover states from purple to golden yellow */}
