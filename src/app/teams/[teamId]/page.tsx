@@ -42,6 +42,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/ta
 import { MoonStar, Sun, Target, Layers, BookOpen, ArrowLeftRight, Swords, Crown, Users, Loader2, AlertCircle, ExternalLink, CalendarDays, CheckCircle2, XCircle, Vote } from "lucide-react";
 import { useSettings } from "@/contexts/SettingsContext";
 import { getCardImageUrl } from "@/app/utils/cardUtils";
+import { TargetedGlitchedText } from "@/app/components/lore/TargetedGlitchedText";
 
 interface TeamMember {
   id: string;
