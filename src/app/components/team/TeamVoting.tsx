@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/ca
 import { useAuth } from "@/contexts/AuthContext";
 import { Plus, Vote, Loader2, AlertCircle, Sparkles } from "lucide-react";
 import { DayNightGrid } from "@/app/components/vote/DayNightGrid";
+import { TargetedGlitchedText } from "@/app/components/lore/TargetedGlitchedText";
 
 interface TeamVotingProps {
   teamId: string;
@@ -231,8 +232,8 @@ export function TeamVoting({ teamId, userRoles }: TeamVotingProps) {
           <p className="text-lg font-medium mb-1">No active polls</p>
           <p className="text-sm text-muted-foreground mb-4">
             {isCaptain
-              ? "Create a poll to get your team's input on decisions"
-              : "Your team captain hasn't created any polls yet"}
+              ? "Create a poll to get your Team's input on decisions"
+              : "Your Team Captain hasn't created any polls yet"}
           </p>
           {isCaptain && (
             <Button onClick={() => setShowCreateDialog(true)} size="sm">

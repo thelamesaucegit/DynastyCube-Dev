@@ -1,4 +1,4 @@
-///src/app/components/vote/DayNightGrid.tsx
+// src/app/components/vote/DayNightGrid.tsx
 
 "use client";
 
@@ -8,6 +8,7 @@ import { Button } from "@/app/components/ui/button";
 import { Loader2, Moon, Sun, Save } from "lucide-react";
 import { toast } from "sonner";
 import { getUserNightVote, submitUserNightVote, getTeamNightSubmission } from "@/app/actions/dayNightActions";
+import { TargetedGlitchedText } from "@/app/components/lore/TargetedGlitchedText";
 
 interface DayNightGridProps {
     seasonId: string;
@@ -22,7 +23,6 @@ export function DayNightGrid({ seasonId, teamId, userId, isPostseason }: DayNigh
     const [dragMode, setDragMode] = useState<"select" | "deselect">("select");
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    
     const [teamConsensus, setTeamConsensus] = useState<{start: number, end: number} | null>(null);
 
     useEffect(() => {
@@ -110,10 +110,12 @@ export function DayNightGrid({ seasonId, teamId, userId, isPostseason }: DayNigh
             <CardHeader className="bg-indigo-50/50 dark:bg-indigo-900/20 rounded-t-xl pb-4">
                 <div className="flex items-center gap-2 mb-1">
                     <Moon className="size-5 text-indigo-500" />
-                    <CardTitle className="text-xl font-bold">Draft Night Blackout Hours</CardTitle>
+                    <CardTitle className="text-xl font-bold">
+                        <TargetedGlitchedText text="Draft Night Blackout Hours" />
+                    </CardTitle>
                 </div>
                 <CardDescription>
-                    Select up to 10 hours you want blacked out as &quot;Night Time&quot;. Your team&apos;s 10-hour consensus will be submitted to the league. Times listed are in US CT. Night timers last 4x as long.
+                    <TargetedGlitchedText text="Select up to 10 hours you want blacked out as &quot;Night Time&quot;. Your team&apos;s 10-hour consensus will be submitted to the league. Times listed are in US CT. Night timers last 4x as long." />
                 </CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
@@ -123,7 +125,7 @@ export function DayNightGrid({ seasonId, teamId, userId, isPostseason }: DayNigh
                     <div className="space-y-6">
                         <div className="flex justify-between items-center text-sm font-medium">
                             <span className={selectedHours.size === 10 ? "text-amber-500" : "text-muted-foreground"}>
-                                {selectedHours.size} / 10 Hours Selected
+                               <TargetedGlitchedText text={`${selectedHours.size} / 10 Hours Selected`} />
                             </span>
                             {teamConsensus && (
                                 <span className="text-indigo-600 dark:text-indigo-400">
@@ -131,13 +133,11 @@ export function DayNightGrid({ seasonId, teamId, userId, isPostseason }: DayNigh
                                 </span>
                             )}
                         </div>
-
                         {/* 24-Hour Grid */}
                         <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-12 gap-2 select-none touch-none">
                             {Array.from({ length: 24 }).map((_, h) => {
                                 const isSelected = selectedHours.has(h);
                                 const isTeamWindow = isConsensusHour(h);
-
                                 return (
                                     <div
                                         key={h}
@@ -157,14 +157,13 @@ export function DayNightGrid({ seasonId, teamId, userId, isPostseason }: DayNigh
                                 );
                             })}
                         </div>
-
                         <Button 
                             onClick={handleSave} 
                             disabled={saving} 
                             className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
                         >
                             {saving ? <Loader2 className="animate-spin mr-2 size-4" /> : <Save className="mr-2 size-4" />}
-                            Save Blackout Hours
+                            <TargetedGlitchedText text="Save Blackout Hours" />
                         </Button>
                     </div>
                 )}
