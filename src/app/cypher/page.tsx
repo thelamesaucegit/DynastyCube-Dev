@@ -10,6 +10,8 @@ import { toast } from "sonner";
 import { getObfuscatedCyphers, submitCypherGuess, purchaseCypherWord, type ObfuscatedCypher, type CypherToken } from "@/app/actions/cypherActions";
 import { getUserEssenceBalance } from "@/app/actions/essenceActions";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/app/components/ui/accordion";
+import { TargetedGlitchedText } from "@/app/components/lore/TargetedGlitchedText";
+
 
 export default function CypherPage() {
   const [cyphers, setCyphers] = useState<ObfuscatedCypher[]>([]);
