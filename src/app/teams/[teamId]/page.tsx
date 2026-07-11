@@ -449,7 +449,7 @@ export default function TeamPage() {
                     {team.name}
                   </h1>
                   <p className="text-sm sm:text-base md:text-lg text-muted-foreground italic truncate" title={team.motto}>
-                    &quot;{team.motto}&quot;
+                    &quot;<TargetedGlitchedText text={team.motto} />&quot;
                   </p>
                 </div>
                 
@@ -486,7 +486,7 @@ export default function TeamPage() {
                 The Great Aurora
               </h3>
               <p className="text-sm text-zinc-300 font-medium">
-                As long as the cosmos remain neutral, any team member may initiate a 12-hour vote to transform the team&apos;s identity.
+                            <TargetedGlitchedText text="As long as the cosmos remain neutral, any team member may initiate a 12-hour vote to transform the team's identity." />
               </p>
             </div>
            <Button 
@@ -495,7 +495,7 @@ export default function TeamPage() {
                 const activeIdentity = team.short_name === 'changelings' ? 'changelings' : 'mimics';
                 const result = await createIdentitySwapPoll(team.id, user.id, activeIdentity);
 
-                // THE FIX: Check for the new isExisting flag
+                //  Check for the new isExisting flag
                 if (result.isExisting) {
                     toast.info(result.error); // Show the "already in progress" message
                     setActiveTab('votes');   // Redirect user to the votes tab
