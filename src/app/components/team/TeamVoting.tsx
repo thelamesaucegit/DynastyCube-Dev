@@ -232,8 +232,8 @@ export function TeamVoting({ teamId, userRoles }: TeamVotingProps) {
           <p className="text-lg font-medium mb-1">No active polls</p>
           <p className="text-sm text-muted-foreground mb-4">
             {isCaptain
-              ? "Create a poll to get your team's input on decisions"
-              : "Your team captain hasn't created any polls yet"}
+              ? "Create a poll to get your Team's input on decisions"
+              : "Your Team Captain hasn't created any polls yet"}
           </p>
           {isCaptain && (
             <Button onClick={() => setShowCreateDialog(true)} size="sm">
