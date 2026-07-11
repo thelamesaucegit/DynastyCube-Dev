@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/ca
 import { useAuth } from "@/contexts/AuthContext";
 import { Plus, Vote, Loader2, AlertCircle, Sparkles } from "lucide-react";
 import { DayNightGrid } from "@/app/components/vote/DayNightGrid";
+import { TargetedGlitchedText } from "@/app/components/lore/TargetedGlitchedText";
 
 interface TeamVotingProps {
   teamId: string;
