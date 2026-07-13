@@ -1,5 +1,3 @@
-// src/app/the-drain/page.tsx
-
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -55,11 +53,12 @@ export default function TheDrainPage() {
       
       {/* --- THE OPTIMIZED BACKGROUND ANIMATION LAYER --- */}
       <div className="fixed inset-0 z-0 pointer-events-none flex items-center justify-center bg-black">
-        {/* 1. [...](asc_slot://start-slot-15)The 4 cycling images rendered via next/image */}
-        {.map((num, i) => (
+        {/* 1. The 4 cycling images rendered via next/image */}
+        {/* THE FIX: Restored the [1, 2, 3, 4] array before .map */}
+        {[1, 2, 3, 4].map((num, i) => (
             <div
                 key={num}
-                className="absolute inset-0 w-full h-full transition-opacity duration-1000"
+                className="absolute inset-0 w-full h-full"
                 style={{
                     // Smooth 3-second crossfade opacity transition
                     opacity: bgIndex === i ? 0.35 : 0, 
@@ -70,8 +69,8 @@ export default function TheDrainPage() {
                     src={`/images/pages/drain${num}.png`}
                     alt={`Drain Visual ${num}`}
                     fill
-                    priority={i === 0} // Preload the first image immediately for instant rendering
-                    quality={50} // Heavy compression of background assets to save bandwidth
+                    priority={i === 0} // Preload the first image immediately
+                    quality={50} // Heavy compression to save bandwidth
                     className="object-cover object-center"
                 />
             </div>
@@ -97,11 +96,9 @@ export default function TheDrainPage() {
 
       {/* --- FOREGROUND CONTENT LAYER --- */}
       <div className="relative z-10 w-full max-w-lg mx-auto flex flex-col items-center">
-        
         <h1 className="text-zinc-500 tracking-[0.5em] text-sm md:text-base mb-16 opacity-50 cursor-default drop-shadow-md">
           THE DRAIN
         </h1>
-
         <form onSubmit={handleSubmit} className="w-full relative mb-12">
             <input
                 type="text"
@@ -114,14 +111,12 @@ export default function TheDrainPage() {
                 spellCheck="false"
             />
         </form>
-
         <div className="h-24 flex items-center justify-center text-center">
             {communing && (
                 <span className="text-zinc-600 tracking-[0.3em] text-sm animate-pulse">
                     COMMUNING...
                 </span>
             )}
-            
             {response && !communing && (
                 <p 
                     className={`text-zinc-300 tracking-wider text-sm leading-loose transition-opacity duration-1000 ${fade ? 'opacity-100' : 'opacity-0'}`}
@@ -130,7 +125,6 @@ export default function TheDrainPage() {
                 </p>
             )}
         </div>
-
       </div>
     </div>
   );
