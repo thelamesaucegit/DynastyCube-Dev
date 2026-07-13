@@ -1,4 +1,5 @@
 // src/app/actions/seasonSchedulerActions.ts
+
 "use server";
 
 import { getTeamsWithDetails, type TeamWithDetails } from "./teamActions";
@@ -10,6 +11,7 @@ import { createServerClient, type AnySupabaseClient } from '@/lib/supabase';
 // ==================================
 // TYPES
 // ==================================
+
 interface Matchup {
   week: number;
   teamAId: string;
@@ -27,6 +29,7 @@ function createServiceClient() {
 // ==================================
 // ALGORITHM HELPERS
 // ==================================
+
 function seededShuffle<T>(array: T[], seed: number): T[] {
     let m = array.length, t: T, i: number;
     const random = () => {
@@ -52,6 +55,25 @@ function getTargetDateCT(baseDate: Date, addDays: number, targetHourCT: number):
     return d;
 }
 
+// --- NEW HELPER: Get valid streaming slots (Thursday to Tuesday) ---
+function getValidWeekSlots(weekStartDate: Date): Date[] {
+    const validSlots: Date[] = [];
+    
+    // We assume weekStartDate is a Wednesday (based on the original setup gap).
+    // If week start is Wednesday at 00:00, Thursday is day 1, Tuesday is day 6.
+    // We will generate 24 hours of slots for each valid day (Thu, Fri, Sat, Sun, Mon, Tue)
+    // Total slots: 6 days * 24 hours = 144 valid slots.
+    const validDayOffsets = [1, 2, 3, 4, 5, 6]; // 1=Thu, 6=Tue. (0=Wed is skipped)
+    
+    for (const dayOffset of validDayOffsets) {
+        // Generate slots from 12:00 AM (0) to 11:00 PM (23) CT for each valid day
+        for (let hourCT = 0; hourCT <= 23; hourCT++) {
+            validSlots.push(getTargetDateCT(weekStartDate, dayOffset, hourCT));
+        }
+    }
+    return validSlots;
+}
+
 export async function generateSeasonMatchups(
   teams: TeamWithDetails[],
   regularSeasonWeeks: number,
@@ -64,9 +86,11 @@ export async function generateSeasonMatchups(
     if (isOdd) {
       schedulableTeams.push({ id: "BYE", name: "Bye Week" } as TeamWithDetails);
     }
+
     const teamCount = schedulableTeams.length;
     const numRounds = teamCount - 1;
     const half = teamCount / 2;
+
     const teamIndexes = schedulableTeams.map((_, i) => i);
     const fixedTeamIndex = teamIndexes.shift()!;
 
@@ -91,6 +115,7 @@ export async function generateSeasonMatchups(
             }
         }
     }
+
     if (includeRivalsWeek) {
         const rivalsWeekNumber = regularSeasonWeeks + 1;
         const teamsByShortName = new Map(teams.map(t => [t.short_name, t]));
@@ -106,12 +131,14 @@ export async function generateSeasonMatchups(
             }
         }
     }
+
     return allMatchups;
 }
 
 // ==================================
 // ORCHESTRATION ACTION
 // ==================================
+
 export async function generateFullSeasonSchedule(
   seasonId: string,
   totalRegularSeasonWeeks: number,
@@ -119,6 +146,7 @@ export async function generateFullSeasonSchedule(
   adminClient?: AnySupabaseClient
 ): Promise<{ success: boolean; error?: string; scheduledGamesCount?: number }> {
   const supabase = adminClient ?? await createServerClient();
+
   try {
     const { data: teams } = await supabase.from('teams').select('id').not('is_hidden', 'is', true);
     if (!teams || teams.length < 2) {
@@ -133,7 +161,6 @@ export async function generateFullSeasonSchedule(
         return { success: false, error: "No weeks found for this season to schedule matches into." };
     }
 
-    // THE FIX: Check if this is a test season to apply the standard 10-minute cadence
     const { data: seasonData } = await supabase.from('seasons').select('season_name, season_number').eq('id', seasonId).single();
     const isTestSeason = seasonData?.season_name.toUpperCase().includes("TEST");
 
@@ -158,7 +185,8 @@ export async function generateFullSeasonSchedule(
             }
         }
 
-        const requiredGames = 5;
+        // THE FIX: Updated to 9 games per week
+        const requiredGames = 9; 
         const weekTotalGames = matchupRecords.length * requiredGames;
         
         let simCursor: Date;
@@ -166,12 +194,11 @@ export async function generateFullSeasonSchedule(
 
         if (isTestSeason) {
             // For tests: Simulation starts immediately at Week Start. Stream starts 10 mins later.
-            // Everything advances by exactly 10 minutes.
             simCursor = new Date(weekInfo.start_date);
             streamCursor = new Date(simCursor.getTime() + (10 * 60000));
 
             for (const matchup of matchupRecords) {
-                for (let i = 0; i < 3; i++) {
+                for (let i = 0; i < requiredGames; i++) {
                     const { error: gError } = await supabase.from('schedule').insert({
                         season_id: seasonId, season_number: seasonData?.season_number, week_id: weekInfo.id, week_number: weekInfo.week_number,
                         team1_id: matchup.teamAId, team2_id: matchup.teamBId, weekly_matchup_id: matchup.recordId,
@@ -185,36 +212,50 @@ export async function generateFullSeasonSchedule(
                 }
             }
 
-            // Sync the exact Week bounds!
             await supabase.from("schedule_weeks").update({
                 end_date: streamCursor.toISOString(),
                 match_completion_deadline: streamCursor.toISOString()
             }).eq('id', weekInfo.id);
 
         } else {
-            // Standard Production Season Logic (1 hour stream gaps)
-            const firstSlotTimeCT = getTargetDateCT(new Date(weekInfo.start_date), 1, 0); 
-            const availableSlots = Array.from({length: 144}, (_, i) => i);
-            const shuffledSlots = seededShuffle(availableSlots, weekInfo.week_number).slice(0, weekTotalGames).sort((a,b) => a-b);
+            // THE FIX: Use custom valid slots (Thursday to Tuesday)
+            const availableDateSlots = getValidWeekSlots(new Date(weekInfo.start_date));
             
+            // Randomly shuffle the date slots predictably based on the week number
+            const shuffledDateSlots = seededShuffle(availableDateSlots, weekInfo.week_number)
+                .slice(0, weekTotalGames)
+                .sort((a, b) => a.getTime() - b.getTime()); // Chronological order
+            
+            // Generate the match sequence ensuring NO consecutive games for the same matchup
+            const finalSchedule: typeof matchupRecords = [];
             const counts = new Map();
             matchupRecords.forEach(m => counts.set(m.recordId, requiredGames));
-            const finalSchedule: typeof matchupRecords = [];
+            
             let lastRecordId: string | null = null;
             
             for (let i = 0; i < weekTotalGames; i++) {
-                const available = matchupRecords.filter(m => counts.get(m.recordId) > 0 && m.recordId !== lastRecordId);
-                const chosen = available.length > 0 ? available[Math.floor(Math.random() * available.length)] : matchupRecords.find(m => counts.get(m.recordId) > 0)!;
+                // Find all matchups that still need games scheduled, EXCLUDING the one that just played
+                let available = matchupRecords.filter(m => counts.get(m.recordId) > 0 && m.recordId !== lastRecordId);
+                
+                // Failsafe: If the ONLY remaining games belong to the last team that played, we have no choice but to break the rule.
+                if (available.length === 0) {
+                    available = matchupRecords.filter(m => counts.get(m.recordId) > 0);
+                }
+
+                // Randomly pick one of the available matchups
+                const chosen = available[Math.floor(Math.random() * available.length)];
+                
                 counts.set(chosen.recordId, counts.get(chosen.recordId) - 1);
                 lastRecordId = chosen.recordId;
                 finalSchedule.push(chosen);
             }
             
+            // Final Database Insertion
             for (let i = 0; i < weekTotalGames; i++) {
                 const matchup = finalSchedule[i];
-                // Stream is at the exact hour mark.
-                const streamTime = new Date(firstSlotTimeCT.getTime() + shuffledSlots[i] * 3600000);
-                // Simulation occurs exactly 30 minutes PRIOR to the stream broadcast to act as a buffer.
+                const streamTime = shuffledDateSlots[i];
+                
+                // Simulation occurs exactly 30 minutes PRIOR to the stream broadcast
                 const simTime = new Date(streamTime.getTime() - 30 * 60000); 
                 
                 const { error: gError } = await supabase.from('schedule').insert({
@@ -227,6 +268,7 @@ export async function generateFullSeasonSchedule(
             }
         }
     }
+
     return { success: true, scheduledGamesCount: gamesCreated };
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error in full schedule generation.";
