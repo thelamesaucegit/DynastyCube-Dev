@@ -89,13 +89,10 @@ export default function HomePage() {
   const currentPhase = season?.phase;
   const isPlayActive = currentPhase && currentPhase !== 'postseason' && currentPhase !== 'draft';
   const visibleTxs = recentTransactions.slice(0, activeTeamCount);
-
-  return (
-
+return (
     <div className="relative space-y-12 container max-w-7xl mx-auto px-4 py-8">
       
       {/* --- OPTIMIZED FULL PAGE BACKGROUND --- */}
-     {/* --- OPTIMIZED FULL PAGE BACKGROUND --- */}
       <div className="fixed inset-0 z-[-1] bg-slate-950 pointer-events-none">
         <Image
           src="/images/logo/logo.jpg"
@@ -177,60 +174,39 @@ export default function HomePage() {
 
       {/* --- NOTIFICATIONS ROW: VOTES & CYPHER --- */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Active Votes Card */}
         {activePolls.length > 0 && (
           <Link href="/vote" className="group">
             <Card className="h-full bg-slate-900/70 backdrop-blur-md border-primary/30 hover:border-primary/60 transition-colors shadow-lg">
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="text-lg font-bold flex items-center gap-2 mb-2">
-                      <Vote className="size-5 text-primary" />
-                      Active Votes
-                    </h3>
-                    <ul className="text-sm text-muted-foreground space-y-1 list-disc pl-5">
-                      {activePolls.slice(0, 3).map(poll => (
-                        <li key={poll.id} className="truncate pr-2">{poll.title}</li>
-                      ))}
-                      {activePolls.length > 3 && (
-                        <li className="italic">+{activePolls.length - 3} more</li>
-                      )}
-                    </ul>
-                  </div>
-                  <ArrowRight className="size-5 text-primary opacity-0 group-hover:opacity-100 transition-opacity mt-1 shrink-0" />
-                </div>
-              </CardContent>
+                <CardContent className="p-6">
+                    <div className="flex items-start justify-between">
+                        <div>
+                            <h3 className="text-lg font-bold flex items-center gap-2 mb-2"><Vote className="size-5 text-primary" />Active Votes</h3>
+                            <ul className="text-sm text-muted-foreground space-y-1 list-disc pl-5">
+                                {activePolls.slice(0, 3).map(poll => (<li key={poll.id} className="truncate pr-2">{poll.title}</li>))}
+                                {activePolls.length > 3 && (<li className="italic">+{activePolls.length - 3} more</li>)}
+                            </ul>
+                        </div>
+                        <ArrowRight className="size-5 text-primary opacity-0 group-hover:opacity-100 transition-opacity mt-1 shrink-0" />
+                    </div>
+                </CardContent>
             </Card>
           </Link>
         )}
-
-        {/* Cypher Status Card */}
         {cypherStats && (
           <Link href="/cypher" className="group">
             <Card className="h-full bg-slate-900/70 backdrop-blur-md border-amber-500/30 hover:border-amber-500/60 transition-colors shadow-lg">
               <CardContent className="p-6">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="text-lg font-bold flex items-center gap-2 mb-2 text-amber-600 dark:text-amber-500">
-                      <BookOpen className="size-5" />
-                      The Cypher
-                    </h3>
-                    <div className="flex items-center gap-3">
-                      <div className="text-3xl font-black text-foreground">
-                        {cypherStats.percentRemaining}%
-                      </div>
-                      <div className="text-sm text-muted-foreground leading-tight">
-                        of the pages remain <br /> shrouded in mystery.
-                      </div>
+                    <div className="flex items-start justify-between">
+                        <div>
+                            <h3 className="text-lg font-bold flex items-center gap-2 mb-2 text-amber-600 dark:text-amber-500"><BookOpen className="size-5" />The Cypher</h3>
+                            <div className="flex items-center gap-3">
+                                <div className="text-3xl font-black text-foreground">{cypherStats.percentRemaining}%</div>
+                                <div className="text-sm text-muted-foreground leading-tight">of the pages remain <br /> shrouded in mystery.</div>
+                            </div>
+                            {cypherStats.hasRecentCypher && (<Badge className="mt-3 bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30 shadow-none"><LockOpen className="size-3 mr-1" /> New Cypher discovered!</Badge>)}
+                        </div>
+                        <ArrowRight className="size-5 text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity mt-1 shrink-0" />
                     </div>
-                    {cypherStats.hasRecentCypher && (
-                      <Badge className="mt-3 bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30 shadow-none">
-                        <LockOpen className="size-3 mr-1" /> New Cypher discovered!
-                      </Badge>
-                    )}
-                  </div>
-                  <ArrowRight className="size-5 text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity mt-1 shrink-0" />
-                </div>
               </CardContent>
             </Card>
           </Link>
@@ -241,44 +217,28 @@ export default function HomePage() {
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">Latest News</h2>
-          <Button variant="ghost" asChild>
-            <Link href="/news">View All</Link>
-          </Button>
+          <Button variant="ghost" asChild><Link href="/news">View All</Link></Button>
         </div>
         {adminNews.length > 0 ? (
           <div className="space-y-6">
-            <Card 
-              className="bg-slate-900/70 backdrop-blur-md overflow-hidden hover:shadow-xl transition-all cursor-pointer border-transparent hover:border-primary/50 group shadow-lg"
-              onClick={() => setSelectedNews(adminNews[0])}
-            >
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <Badge>Latest</Badge>
-                    <span className="text-xs text-muted-foreground">{new Date(adminNews[0].created_at).toLocaleDateString()}</span>
-                  </div>
-                </div>
-                <CardTitle className="text-2xl md:text-3xl group-hover:text-primary transition-colors">
-                  <TargetedGlitchedText text={adminNews[0].title} />
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="leading-relaxed whitespace-pre-line text-muted-foreground line-clamp-3">
-                  <TargetedGlitchedText text={adminNews[0].content} />
-                </p>
-                <div className="flex justify-between items-center mt-4">
-                  <p className="text-xs text-muted-foreground font-medium">{adminNews[0].author_name}</p>
-                  <span className="text-sm font-semibold text-primary opacity-0 group-hover:opacity-100 transition-opacity flex items-center">
-                    Read full story <ArrowRight className="ml-1 size-3" />
-                  </span>
-                </div>
-              </CardContent>
+            <Card onClick={() => setSelectedNews(adminNews[0])} className="bg-slate-900/70 backdrop-blur-md overflow-hidden hover:shadow-xl transition-all cursor-pointer border-transparent hover:border-primary/50 group shadow-lg">
+                <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2"><Badge>Latest</Badge><span className="text-xs text-muted-foreground">{new Date(adminNews[0].created_at).toLocaleDateString()}</span></div>
+                    </div>
+                    <CardTitle className="text-2xl md:text-3xl group-hover:text-primary transition-colors"><TargetedGlitchedText text={adminNews[0].title} /></CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <p className="leading-relaxed whitespace-pre-line text-muted-foreground line-clamp-3"><TargetedGlitchedText text={adminNews[0].content} /></p>
+                    <div className="flex justify-between items-center mt-4">
+                        <p className="text-xs text-muted-foreground font-medium">{adminNews[0].author_name}</p>
+                        <span className="text-sm font-semibold text-primary opacity-0 group-hover:opacity-100 transition-opacity flex items-center">Read full story <ArrowRight className="ml-1 size-3" /></span>
+                    </div>
+                </CardContent>
             </Card>
           </div>
         ) : (
-          <Card className="bg-slate-900/70 backdrop-blur-md">
-            <CardContent className="p-8 text-center text-muted-foreground">No news available yet. Check back soon!</CardContent>
-          </Card>
+          <Card className="bg-slate-900/70 backdrop-blur-md"><CardContent className="p-8 text-center text-muted-foreground">No news available yet. Check back soon!</CardContent></Card>
         )}
       </section>
 
@@ -289,61 +249,40 @@ export default function HomePage() {
      <section className="max-w-5xl mx-auto w-full space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">Latest Card Acquisitions</h2>
-          <Button variant="ghost" asChild>
-            <Link href="/transactions">View All</Link> 
-          </Button>
+          <Button variant="ghost" asChild><Link href="/transactions">View All</Link></Button>
         </div>
         <Card className="bg-slate-900/70 backdrop-blur-md shadow-lg">
           <CardContent className="p-0">
-            {loadingDraft ? (
-               <div className="p-12 text-center text-muted-foreground flex items-center justify-center gap-3">
-                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
-                 Checking transactions...
-               </div>
-            ) : visibleTxs.length > 0 ? (
+            {/* THE FIX: Removed loadingDraft and now only check if visibleTxs has items */}
+            {visibleTxs.length > 0 ? (
               <div className="flex flex-col">
-                
                 {visibleTxs.map((tx) => (
                   <CardPreview key={tx.id} card={{ card_name: tx.card_name, image_url: tx.image_url, oldest_image_url: tx.oldest_image_url }}>
                     <div className="p-4 hover:bg-accent/50 transition-colors cursor-pointer border-b border-border/50 last:border-0">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1 flex items-center gap-4">
-                          {tx.image_url && (<Image src={tx.image_url} alt={tx.card_name} width={40} height={56} className="rounded-sm object-cover shadow-sm hidden sm:block"/>)}
-                          <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="font-semibold text-lg">
-                                <TargetedGlitchedText text={tx.card_name} />
-                              </span>
-                              {tx.card_type && (
-                                <Badge variant="secondary" className="text-[10px]">
-                                  <TargetedGlitchedText text={tx.card_type} />
-                                </Badge>
-                              )}
+                        <div className="flex items-center justify-between">
+                            <div className="flex-1 flex items-center gap-4">
+                                {tx.image_url && (<Image src={tx.image_url} alt={tx.card_name} width={40} height={56} className="rounded-sm object-cover shadow-sm hidden sm:block"/>)}
+                                <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="font-semibold text-lg"><TargetedGlitchedText text={tx.card_name} /></span>
+                                        {tx.card_type && (<Badge variant="secondary" className="text-[10px]"><TargetedGlitchedText text={tx.card_type} /></Badge>)}
+                                    </div>
+                                    <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                                        <span className="text-lg">{tx.team_emoji}</span>
+                                        <span className="font-medium text-foreground/80"><TargetedGlitchedText text={tx.team_name} /></span>
+                                        <span className="text-xs ml-1 opacity-70 border-l border-border/50 pl-2">
+                                            <TargetedGlitchedText text={tx.acquisition_method === 'trade' && tx.from_team_emoji ? `via Trade from ${tx.from_team_emoji}`: `via ${tx.acquisition_method.replace('_', ' ')}`} />
+                                        </span>
+                                    </p>
+                                </div>
                             </div>
-                            <p className="text-sm text-muted-foreground flex items-center gap-1.5">
-                              <span className="text-lg">{tx.team_emoji}</span>
-                              <span className="font-medium text-foreground/80">
-                                <TargetedGlitchedText text={tx.team_name} />
-                              </span>
-                              
-                              <span className="text-xs ml-1 opacity-70 border-l border-border/50 pl-2">
-                                <TargetedGlitchedText text={
-                                  tx.acquisition_method === 'trade' && tx.from_team_emoji 
-                                    ? `via Trade from ${tx.from_team_emoji}`
-                                    : `via ${tx.acquisition_method.replace('_', ' ')}`
-                                } />
-                              </span>
-                            </p>
-                          </div>
+                            <span className="text-xs text-muted-foreground whitespace-nowrap ml-4 font-medium bg-muted/50 px-2 py-1 rounded-full">
+                                <TargetedGlitchedText text={getRelativeTime(tx.acquired_at)} />
+                            </span>
                         </div>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap ml-4 font-medium bg-muted/50 px-2 py-1 rounded-full">
-                          <TargetedGlitchedText text={getRelativeTime(tx.acquired_at)} />
-                        </span>
-                      </div>
                     </div>
                   </CardPreview>
                 ))}
-                
               </div>
             ) : (
               <div className="p-12 text-center text-muted-foreground">No transactions yet.</div>
@@ -354,37 +293,22 @@ export default function HomePage() {
 
       {/* --- MODAL OVERLAY --- */}
       {selectedNews && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
-          onClick={() => setSelectedNews(null)}
-        >
-          <div 
-            className="bg-slate-900/90 backdrop-blur-xl border border-border shadow-2xl rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div onClick={() => setSelectedNews(null)} className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div onClick={(e) => e.stopPropagation()} className="bg-slate-900/90 backdrop-blur-xl border border-border shadow-2xl rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-border flex justify-between items-start bg-muted/30">
-              <div>
-                <Badge className="mb-2">Latest</Badge>
-                <h2 className="text-2xl md:text-3xl font-bold text-foreground">
-                                  <TargetedGlitchedText text={selectedNews.title} />  
-                </h2>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
-                  <span>{new Date(selectedNews.created_at).toLocaleDateString()}</span>
-                  <span>•</span>
-                  <span>{selectedNews.author_name}</span>
+                <div>
+                    <Badge className="mb-2">Latest</Badge>
+                    <h2 className="text-2xl md:text-3xl font-bold text-foreground"><TargetedGlitchedText text={selectedNews.title} /></h2>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
+                        <span>{new Date(selectedNews.created_at).toLocaleDateString()}</span>
+                        <span>•</span>
+                        <span>{selectedNews.author_name}</span>
+                    </div>
                 </div>
-              </div>
-              <button 
-                onClick={() => setSelectedNews(null)}
-                className="p-2 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground shrink-0"
-              >
-                <X className="size-5" />
-              </button>
+                <button onClick={() => setSelectedNews(null)} className="p-2 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground shrink-0"><X className="size-5" /></button>
             </div>
             <div className="p-6 overflow-y-auto">
-              <p className="whitespace-pre-line text-base md:text-lg leading-relaxed text-foreground/90">
-<TargetedGlitchedText text={selectedNews.content} />
-              </p>
+                <p className="whitespace-pre-line text-base md:text-lg leading-relaxed text-foreground/90"><TargetedGlitchedText text={selectedNews.content} /></p>
             </div>
           </div>
         </div>
