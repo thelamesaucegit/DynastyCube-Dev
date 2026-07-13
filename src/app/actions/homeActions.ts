@@ -3,6 +3,8 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import type { StreamMatch } from './liveStreamActions';
+
 
 // Create a Supabase client with cookies support
 async function createClient() {
