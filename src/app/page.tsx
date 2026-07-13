@@ -409,7 +409,7 @@ export default function HomePage() {
               <div>
                 <Badge className="mb-2">Latest</Badge>
                 <h2 className="text-2xl md:text-3xl font-bold text-foreground">
-                  <TargetedGlitchedText text={selectedNews.title} />  
+                                  <TargetedGlitchedText text={selectedNews.title} />  
                 </h2>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
                   <span>{new Date(selectedNews.created_at).toLocaleDateString()}</span>
@@ -426,7 +426,7 @@ export default function HomePage() {
             </div>
             <div className="p-6 overflow-y-auto">
               <p className="whitespace-pre-line text-base md:text-lg leading-relaxed text-foreground/90">
-                <TargetedGlitchedText text={selectedNews.content} />
+<TargetedGlitchedText text={selectedNews.content} />
               </p>
             </div>
           </div>
