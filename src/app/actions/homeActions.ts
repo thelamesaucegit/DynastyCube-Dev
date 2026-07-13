@@ -134,6 +134,18 @@ interface DbTransactionRow {
   from_teams: { id: string; name: string; emoji: string } | { id: string; name: string; emoji: string }[] | null;
 }
 
+export interface HomepageData {
+  season: CurrentSeason | null;
+  adminNews: AdminNews[];
+  countdownTimer: CountdownTimerType | null;
+  liveMatch: StreamMatch | null;
+  activePolls: HomepagePoll[];
+  cypherStats: CypherStats | null;
+  activeTeamCount: number;
+  recentTransactions: RecentTransaction[];
+  activeDraftSessionId: string | null;
+}
+
 export async function getRecentTransactions(limit: number = 10): Promise<{
   transactions: RecentTransaction[];
   error?: string;
@@ -432,7 +444,50 @@ export async function getRecentGames(limit: number = 5): Promise<{
     return { games: [], error: "An unexpected error occurred" };
   }
 }
+export async function getHomepageData(): Promise<{ data: HomepageData | null; error?: string }> {
+  try {
+    // All requests are now bundled and run in parallel on the server
+    const [
+      seasonResult,
+      teamsResult,
+      newsResult,
+      timerResult,
+      liveMatchResult,
+      pollsResult,
+      cypherResult,
+      transactionsResult,
+      draftSessionResult
+    ] = await Promise.all([
+      getCurrentSeason(),
+      getTeamsWithDetails(),
+      getAdminNews(1),
+      getActiveCountdownTimer(),
+      getLatestStreamMatch(),
+      getHomepageActivePolls(),
+      getCypherStats(),
+      getRecentTransactions(20),
+      getActiveDraftSession()
+    ]);
 
+    const homepageData: HomepageData = {
+      season: seasonResult.season,
+      adminNews: newsResult.news,
+      countdownTimer: timerResult.timer,
+      liveMatch: liveMatchResult.match,
+      activePolls: pollsResult.polls || [],
+      cypherStats: cypherResult.stats || null,
+      activeTeamCount: teamsResult.teams?.filter(t => !(t as { is_hidden?: boolean }).is_hidden).length || 8,
+      recentTransactions: transactionsResult.transactions,
+      activeDraftSessionId: draftSessionResult.session?.id || null,
+    };
+
+    return { data: homepageData };
+
+  } catch (error) {
+    console.error("Error fetching comprehensive homepage data:", error);
+    return { data: null, error: "Failed to load homepage data." };
+  }
+}
 /**
  * Get active polls filtered for the homepage (Global + User's Team)
  */
