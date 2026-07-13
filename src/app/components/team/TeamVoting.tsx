@@ -34,7 +34,7 @@ export function TeamVoting({ teamId, userRoles }: TeamVotingProps) {
   
   // --- NEW: Motto Submission State ---
   const [mottoText, setMottoText] = useState("");
-  const [mottoIdentity, setMottoIdentity] = useState<string>("standard");
+  const [mottoIdentity, setMottoIdentity] = useState<string>("changelings"); 
   const [submittingMotto, setSubmittingMotto] = useState(false);
   const [mottoSuccess, setMottoSuccess] = useState<string | null>(null);
   const [mottoError, setMottoError] = useState<string | null>(null);
