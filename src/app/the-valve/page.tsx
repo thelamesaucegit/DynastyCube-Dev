@@ -27,11 +27,11 @@ export default function TheValvePage() {
         document.body.style.backgroundPosition = "center";
         document.body.style.backgroundAttachment = "fixed";
         
-        // Use a dark semi-transparent blend mode to darken the image by 80% natively
-        document.body.style.backgroundColor = "rgba(2, 6, 23, 0.8)"; // tailwind slate-950 at 80%
+        // Use a dark semi-transparent blend mode to darken the image by 80%
+        document.body.style.backgroundColor = "rgba(2, 6, 23, 0.8)"; // slate-950 at 80%
         document.body.style.backgroundBlendMode = "overlay";
 
-        // Clean up on unmount so it doesn't bleed into other pages!
+        // Clean up on unmount so it doesn't bleed into other pages
         return () => {
             document.body.style.backgroundImage = "";
             document.body.style.backgroundSize = "";
@@ -41,7 +41,6 @@ export default function TheValvePage() {
             document.body.style.backgroundBlendMode = "";
         };
     }, []);
-    // --------------------------------------------------------
 
     const loadNominations = async () => {
         const res = await getValveNominations();
@@ -84,6 +83,7 @@ export default function TheValvePage() {
     };
 
     const handleToggleVote = async (nominationId: string) => {
+        // Optimistic UI update
         setNominations(prev => prev.map(n => {
             if (n.id === nominationId) {
                 return { ...n, has_voted: !n.has_voted, vote_count: n.has_voted ? n.vote_count - 1 : n.vote_count + 1 };
@@ -99,7 +99,6 @@ export default function TheValvePage() {
     };
 
     return (
-        // THE FIX: Stripped out all background classes from the main wrapper
         <div className="min-h-screen text-slate-300 py-12 px-4 selection:bg-red-900 overflow-x-hidden">
             <div className="relative z-10 max-w-4xl mx-auto">
                 
@@ -115,7 +114,6 @@ export default function TheValvePage() {
                 </div>
 
                 {/* NOMINATION INPUT */}
-                {/* THE FIX: Made the card backgrounds slightly transparent (bg-opacity-80 and backdrop-blur) */}
                 <Card className="bg-slate-900/80 backdrop-blur-sm border-red-900/30 mb-12 shadow-xl">
                     <CardContent className="p-6 relative">
                         <h2 className="text-xl font-bold text-slate-200 mb-4 flex items-center gap-2">
