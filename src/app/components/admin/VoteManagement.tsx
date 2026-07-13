@@ -11,33 +11,34 @@ import {
   togglePollActive,
   getPollResultsByType,
   resolveBlessingEvent,
-  getPendingMottos,             // <-- NEW
-  updateMottoStatus,            // <-- NEW
-  initiatePostseasonTeamVotes,  // <-- NEW
+  getPendingMottos,
+  updateMottoStatus,
+  initiatePostseasonTeamVotes,
   type Poll,
   type VoteType,
   type TypedPollResults,
   type BlessingCalculatedOdds, 
   type BlessingTeamChance, 
   type TeamPollResult,
-  type MottoSubmission          // <-- NEW
+  type MottoSubmission
 } from "@/app/actions/voteActions";
 import { manuallyTriggerDeckVotesForWeek } from "@/app/actions/adminActions";
 import { getActiveSeason } from "@/app/actions/cubucksActions";
-import { Loader2, Plus, Sparkles, Check, X, ShieldAlert } from "lucide-react";
+import { Loader2, Plus, Sparkles, Check, X, ShieldAlert, Archive } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs"; 
 
 export function VoteManagement() {
   const { user } = useAuth();
   const [polls, setPolls] = useState<Poll[]>([]);
-  const [pendingMottos, setPendingMottos] = useState<MottoSubmission[]>([]); // <-- NEW
-  
+  const [pendingMottos, setPendingMottos] = useState<MottoSubmission[]>([]); 
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedPoll, setSelectedPoll] = useState<Poll | null>(null);
   const [results, setResults] = useState<TypedPollResults | null>(null);
   const [showResults, setShowResults] = useState(false);
   const [initiating, setInitiating] = useState(false);
-
+ const [activeTab, setActiveTab] = useState("active"); 
+  
   const [formData, setFormData] = useState({
     title: "", description: "", endsAt: "", allowMultipleVotes: false,
     showResultsBeforeEnd: true, voteType: "individual" as VoteType,
@@ -45,9 +46,13 @@ export function VoteManagement() {
   });
 
   useEffect(() => {
-    loadPolls();
-    loadMottos();
+  loadAllData();
   }, []);
+   const loadAllData = async () => {
+      setLoading(true);
+      await Promise.all([loadPolls(), loadMottos()]);
+      setLoading(false);
+  };
 
   const loadPolls = async () => {
     setLoading(true);
@@ -212,6 +217,9 @@ export function VoteManagement() {
   const formatDate = (dateString: string) => new Date(dateString).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
   const getDefaultEndDate = () => { const date = new Date(); date.setDate(date.getDate() + 7); return date.toISOString().slice(0, 16); };
 
+  const activePolls = polls.filter(p => p.is_active && new Date(p.ends_at) > new Date());
+  const archivedPolls = polls.filter(p => !p.is_active || new Date(p.ends_at) <= new Date());
+
   if (loading) {
     return (
       <div className="text-center py-12">
@@ -360,71 +368,28 @@ export function VoteManagement() {
         </div>
       )}
 
-      <div className="space-y-4">
-        <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">All Polls ({polls.length})</h3>
-        {polls.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-12 text-center">
-            <div className="text-6xl mb-4">📭</div>
-            <p className="text-gray-600 dark:text-gray-400">No polls created yet. Create your first poll to get started!</p>
-          </div>
-        ) : (
-          polls.map((poll) => {
-            const now = new Date();
-            const endsAt = new Date(poll.ends_at);
-            const isEnded = endsAt < now;
-            const statusColor = poll.is_active ? isEnded ? "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300" : "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300" : "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300";
-            return (
-              <div key={poll.id} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2 flex-wrap">
-                      <h4 className="text-xl font-bold text-gray-900 dark:text-gray-100">{poll.title}</h4>
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusColor}`}>
-                        {poll.is_active ? (isEnded ? "Ended" : "Active") : "Inactive"}
-                      </span>
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                        poll.vote_type === "individual" ? "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300" :
-                        poll.vote_type === "team" ? "bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300" :
-                        poll.vote_type === "blessing_event" ? "bg-pink-100 dark:bg-pink-900/30 text-pink-800 dark:text-pink-300" :
-                        "bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300"
-                      }`}>
-                        {poll.vote_type === "individual" && "Individual"}
-                        {poll.vote_type === "team" && "Team Internal"}
-                        {poll.vote_type === "republic" && "League Republic"}
-                        {poll.vote_type === "blessing_event" && "Team Blessings"}
-                      </span>
-                    </div>
-                    {poll.description && <p className="text-gray-600 dark:text-gray-400 mb-3">{poll.description}</p>}
-                    <div className="flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-400">
-                      <span>📊 {poll.total_votes} votes</span>
-                      <span>⏰ Ends: {formatDate(poll.ends_at)}</span>
-                      {poll.allow_multiple_votes && <span>✓ Multiple choice</span>}
-                      {poll.show_results_before_end && <span>👁️ Results visible</span>}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={() => handleViewResults(poll)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-semibold transition-colors">
-                    View Results
-                  </button>
-                  <button onClick={() => handleToggleActive(poll.id, poll.is_active)} className={`px-4 py-2 rounded font-semibold transition-colors ${poll.is_active ? "bg-yellow-600 hover:bg-yellow-700 text-white" : "bg-green-600 hover:bg-green-700 text-white"}`}>
-                    {poll.is_active ? "Deactivate" : "Activate"}
-                  </button>
-                  
-                  {poll.vote_type === 'blessing_event' && (isEnded || !poll.is_active) && (
-                    <button onClick={() => handleResolveBlessings(poll.id)} className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded font-semibold flex items-center gap-1 transition-colors">
-                      <Sparkles className="size-4" /> Resolve Lottery
-                    </button>
-                  )}
-                  <button onClick={() => handleDeletePoll(poll.id)} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-semibold transition-colors">
-                    Delete
-                  </button>
-                </div>
+    {/* --- TABS FOR ACTIVE/ARCHIVED POLLS --- */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="active">Active Polls ({activePolls.length})</TabsTrigger>
+              <TabsTrigger value="archived">Archived ({archivedPolls.length})</TabsTrigger>
+          </TabsList>
+          <TabsContent value="active">
+              <div className="space-y-4 mt-4">
+                  {activePolls.length > 0 ? activePolls.map(poll => (
+                      <PollCard key={poll.id} poll={poll} onToggleActive={handleToggleActive} onDelete={handleDeletePoll} onViewResults={handleViewResults} />
+                  )) : <p className="text-center py-8 text-muted-foreground">No active polls.</p>}
               </div>
-            );
-          })
-        )}
-      </div>
+          </TabsContent>
+          <TabsContent value="archived">
+              <div className="space-y-4 mt-4">
+                  {archivedPolls.length > 0 ? archivedPolls.map(poll => (
+                      <PollCard key={poll.id} poll={poll} onToggleActive={handleToggleActive} onDelete={handleDeletePoll} onViewResults={handleViewResults} />
+                  )) : <p className="text-center py-8 text-muted-foreground">No archived polls.</p>}
+              </div>
+          </TabsContent>
+      </Tabs>
+      
 
       {showResults && selectedPoll && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
