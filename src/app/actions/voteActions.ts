@@ -1,7 +1,7 @@
 // src/app/actions/voteActions.ts
 "use server";
 
-import { createServerClient } from "@/lib/supabase";
+import { createServerClient, createAdminClient } from "@/lib/supabase";
 
 // =================================================================================================
 // TYPES
@@ -977,7 +977,7 @@ export async function submitTeamMotto(teamId: string, mottoText: string, identit
 
 // For Admins to view pending mottos
 export async function getPendingMottos(): Promise<{ mottos: MottoSubmission[]; error?: string }> {
-    const supabase = await createServerClient();
+    const supabase = createAdminClient(); 
     try {
         const { data, error } = await supabase
             .from('motto_submissions')
@@ -990,25 +990,43 @@ export async function getPendingMottos(): Promise<{ mottos: MottoSubmission[]; e
             .order('created_at', { ascending: true });
 
         if (error) throw error;
+      type DbMottoSubmission = {
+            id: string;
+            team_id: string;
+            user_id: string;
+            identity_key: string | null;
+            motto_text: string;
+            status: string;
+            created_at: string;
+            teams: { name: string } | null;
+            users: { user_display_name: string | null } | null;
+        };
 
         const rawRows = (data || []) as unknown as DbMottoSubmission[];
         
         const mottos: MottoSubmission[] = rawRows.map(row => {
             const team = Array.isArray(row.teams) ? row.teams[0] : row.teams;
             const user = Array.isArray(row.users) ? row.users[0] : row.users;
-            return {
-                ...row,
-                team_name: team?.name || "Unknown Team",
-                user_name: user?.display_name || "Unknown User"
+           return {
+                id: row.id,
+                team_id: row.team_id,
+                user_id: row.user_id,
+                identity_key: row.identity_key,
+                motto_text: row.motto_text,
+                status: row.status,
+                created_at: row.created_at,
+                team_name: row.teams?.name || "Unknown Team",
+                user_name: row.users?.user_display_name || "Unknown User"
             };
         });
 
         return { mottos };
     } catch (error: unknown) {
-        return { mottos: [], error: String(error) };
+        const message = error instanceof Error ? error.message : "An unknown error has occurred.";
+        console.error("Error in getPendingMottos:", message);
+        return { mottos: [], error: message };
     }
 }
-
 // For Admins to approve/reject
 export async function updateMottoStatus(id: string, status: 'approved' | 'rejected'): Promise<{ success: boolean; error?: string }> {
     const supabase = await createServerClient();
