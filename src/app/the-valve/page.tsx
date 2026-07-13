@@ -3,6 +3,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Image from "next/image"; // <-- IMPORT NEXT.JS OPTIMIZED IMAGE
 import { searchValveCards, getValveNominations, nominateCardForValve, toggleValveVote, type ValveNomination } from "@/app/actions/valveActions";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
@@ -18,29 +19,6 @@ export default function TheValvePage() {
     const [searchResults, setSearchResults] = useState<string[]>([]);
     const [searching, setSearching] = useState(false);
     const [nominating, setNominating] = useState(false);
-
-    // --- THE FIX: Inject background directly onto the body ---
-    useEffect(() => {
-        // Set the background image on mount
-        document.body.style.backgroundImage = "url('/images/pages/valve.png')";
-        document.body.style.backgroundSize = "cover";
-        document.body.style.backgroundPosition = "center";
-        document.body.style.backgroundAttachment = "fixed";
-        
-        // Use a dark semi-transparent blend mode to darken the image by 80%
-        document.body.style.backgroundColor = "rgba(2, 6, 23, 0.8)"; // slate-950 at 80%
-        document.body.style.backgroundBlendMode = "overlay";
-
-        // Clean up on unmount so it doesn't bleed into other pages
-        return () => {
-            document.body.style.backgroundImage = "";
-            document.body.style.backgroundSize = "";
-            document.body.style.backgroundPosition = "";
-            document.body.style.backgroundAttachment = "";
-            document.body.style.backgroundColor = "";
-            document.body.style.backgroundBlendMode = "";
-        };
-    }, []);
 
     const loadNominations = async () => {
         const res = await getValveNominations();
@@ -83,7 +61,6 @@ export default function TheValvePage() {
     };
 
     const handleToggleVote = async (nominationId: string) => {
-        // Optimistic UI update
         setNominations(prev => prev.map(n => {
             if (n.id === nominationId) {
                 return { ...n, has_voted: !n.has_voted, vote_count: n.has_voted ? n.vote_count - 1 : n.vote_count + 1 };
@@ -99,7 +76,30 @@ export default function TheValvePage() {
     };
 
     return (
-        <div className="min-h-screen text-slate-300 py-12 px-4 selection:bg-red-900 overflow-x-hidden">
+        <div className="relative min-h-screen text-slate-300 py-12 px-4 selection:bg-red-900 overflow-x-hidden">
+            
+            {/* --- THE OPTIMIZED FIXED BACKGROUND LAYERS --- */}
+            <div className="fixed inset-0 z-0 pointer-events-none w-full h-full bg-slate-950">
+                {/* 
+                  1. Uses Next.js optimized loading.
+                  2. 'fill' expands it natively to 100% of the viewport.
+                  3. 'quality={60}' aggressively compresses the size with virtually no visible loss in background details.
+                  4. Served as WebP/AVIF depending on browser support.
+                */}
+                <Image 
+                    src="/images/pages/valve.png" 
+                    alt="Valve Background" 
+                    fill
+                    priority // Prioritizes loading of the page-specific background image
+                    quality={60} 
+                    className="object-cover object-center opacity-20" // Replaces backgroundBlendMode overlay natively
+                />
+                
+                {/* 80% Transparency black overlay wrapper for high contrast readability */}
+                <div className="absolute inset-0 bg-slate-950/85" />
+            </div>
+
+            {/* --- FOREGROUND CONTENT (Elevated above background via z-10) --- */}
             <div className="relative z-10 max-w-4xl mx-auto">
                 
                 {/* HEADER */}
