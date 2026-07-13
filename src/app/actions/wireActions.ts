@@ -8,6 +8,7 @@ import { type CardData } from "@/app/actions/cardActions";
 // ============================================
 // TYPES
 // ============================================
+const CARDS_PER_PAGE = 50;
 
 export interface WireBid {
     id: string;
@@ -25,6 +26,119 @@ export interface WireCard extends CardData {
 // ============================================
 // PUBLIC-FACING ACTIONS (for UI)
 // ============================================
+
+export async function getPaginatedWireCards(params: {
+  currentPage: number;
+  sortBy: string;
+  sortOrder: 'asc' | 'desc';
+  searchTerm?: string;
+  filterColors?: string[];
+  matchAllColors?: boolean;
+  excludeUnselected?: boolean;
+  filterType?: string;
+  filterRarity?: string;
+  filterCmc?: string;
+  filterCubucks?: string;
+}): Promise<{ cards: WireCard[]; totalCount: number; error?: string }> {
+  const supabase = createServerClient();
+  const {
+    currentPage, sortBy, sortOrder, searchTerm, filterColors, matchAllColors,
+    excludeUnselected, filterType, filterRarity, filterCmc, filterCubucks
+  } = params;
+
+  try {
+    let query = supabase.from('card_pools').select('*', { count: 'exact' }).eq('pool_name', 'wire');
+
+    // SEARCH TERM FILTER
+    if (searchTerm) {
+      query = query.or(`card_name.ilike.%${searchTerm}%,oracle_text.ilike.%${searchTerm}%`);
+    }
+
+    // COLOR FILTER
+    if (filterColors && filterColors.length > 0) {
+      const colorFilter = filterColors.map(c => `colors.cs.{"${c}"}`).join(',');
+      const colorlessFilter = 'colors.is.null';
+
+      if (matchAllColors) {
+          query = query.or(`colors.cs.{${filterColors.join(',')}}`);
+      } else {
+          if (filterColors.includes('colorless')) {
+              query = query.or(`${colorFilter},${colorlessFilter}`);
+          } else {
+              query = query.or(colorFilter);
+          }
+      }
+      if (excludeUnselected) {
+        query = query.not('colors', 'cd', `{${filterColors.join(',')}}`);
+      }
+    }
+
+    // TYPE FILTER
+    if (filterType && filterType !== 'all') {
+      query = query.ilike('card_type', `%${filterType}%`);
+    }
+
+    // RARITY FILTER
+    if (filterRarity && filterRarity !== 'all') {
+        query = query.eq('rarity', filterRarity);
+    }
+    
+    // CMC FILTER
+    if (filterCmc && filterCmc !== 'all') {
+        if (filterCmc === "0-1") query = query.lte('cmc', 1);
+        else if (filterCmc === "2-3") query = query.gte('cmc', 2).lte('cmc', 3);
+        else if (filterCmc === "4-5") query = query.gte('cmc', 4).lte('cmc', 5);
+        else if (filterCmc === "6+") query = query.gte('cmc', 6);
+    }
+
+    // CUBUCKS FILTER
+    if (filterCubucks && filterCubucks !== 'all') {
+        if (filterCubucks === "0-1") query = query.lte('cubucks_cost', 1);
+        else if (filterCubucks === "2-3") query = query.gte('cubucks_cost', 2).lte('cubucks_cost', 3);
+        else if (filterCubucks === "4-6") query = query.gte('cubucks_cost', 4).lte('cubucks_cost', 6);
+        else if (filterCubucks === "7+") query = query.gte('cubucks_cost', 7);
+    }
+
+    // SORTING
+    // Color sort needs to be handled in JS after fetching, as it's a complex multi-value sort.
+    if (sortBy !== 'color') {
+        query = query.order(sortBy, { ascending: sortOrder === 'asc' });
+    }
+
+    // PAGINATION
+    const startIndex = (currentPage - 1) * CARDS_PER_PAGE;
+    query = query.range(startIndex, startIndex + CARDS_PER_PAGE - 1);
+
+    const { data, error, count } = await query;
+
+    if (error) throw error;
+    
+    let finalCards = data || [];
+    
+    // Post-fetch sorting for color
+    if (sortBy === 'color') {
+        const getColorSortValue = (colors?: string[] | null) => {
+            if (!colors || colors.length === 0) return 7;
+            if (colors.length > 1) return 6;
+            const c = colors[0];
+            if (c === 'W') return 1; if (c === 'U') return 2; if (c === 'B') return 3; if (c === 'R') return 4; if (c === 'G') return 5;
+            return 8;
+        };
+        finalCards.sort((a, b) => {
+            const valA = getColorSortValue(a.colors);
+            const valB = getColorSortValue(b.colors);
+            if (valA === valB) return a.card_name.localeCompare(b.card_name);
+            return sortOrder === 'asc' ? valA - valB : valB - valA;
+        });
+    }
+    
+    return { cards: finalCards, totalCount: count || 0 };
+
+  } catch (error) {
+    console.error("Error in getPaginatedWireCards:", error);
+    return { cards: [], totalCount: 0, error: 'Failed to fetch cards from The Wire.' };
+  }
+}
 
 export async function getWireCards(): Promise<{ cards: WireCard[]; error?: string }> {
     const supabase = await createServerClient();
