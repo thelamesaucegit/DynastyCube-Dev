@@ -20,6 +20,40 @@ export default function TheValvePage() {
     const [searching, setSearching] = useState(false);
     const [nominating, setNominating] = useState(false);
 
+    // --- THE FIX: Proportional Scroll Tracking State ---
+    const [scrollPercentage, setScrollPercentage] = useState(0);
+
+    // Calculate exactly how far down the page the user has scrolled (0 to 100)
+    useEffect(() => {
+        const updateScroll = () => {
+            const scrollY = window.scrollY;
+            const scrollHeight = document.documentElement.scrollHeight;
+            const clientHeight = document.documentElement.clientHeight;
+            const maxScroll = scrollHeight - clientHeight;
+
+            if (maxScroll > 0) {
+                // Constrain between 0 and 100
+                setScrollPercentage(Math.min(Math.max((scrollY / maxScroll) * 100, 0), 100));
+            } else {
+                setScrollPercentage(0);
+            }
+        };
+
+        window.addEventListener('scroll', updateScroll, { passive: true });
+        window.addEventListener('resize', updateScroll);
+        
+        // Trigger initially and shortly after load to account for DOM painting/resizing
+        updateScroll();
+        const timeoutId = setTimeout(updateScroll, 200);
+
+        return () => {
+            window.removeEventListener('scroll', updateScroll);
+            window.removeEventListener('resize', updateScroll);
+            clearTimeout(timeoutId);
+        };
+    }, [nominations, searchResults]); // Re-bind when content height potentially changes
+    // ----------------------------------------------------
+
     const loadNominations = async () => {
         const res = await getValveNominations();
         if (res.success && res.nominations) {
@@ -79,8 +113,7 @@ export default function TheValvePage() {
     return (
         <div className="relative min-h-screen text-slate-300 py-12 px-4 selection:bg-red-900">
             
-            {/* --- FIXED BACKGROUND LAYER --- */}
-            {/* This div sits perfectly between your app's solid layout background and this page's content */}
+            {/* --- FIXED BACKGROUND LAYER WITH PROPORTIONAL SCROLL --- */}
             <div className="fixed inset-0 z-0 pointer-events-none">
                 <Image 
                     src="/images/pages/valve.png"
@@ -88,7 +121,12 @@ export default function TheValvePage() {
                     fill
                     priority
                     quality={80}
-                    className="object-cover object-center opacity-40" // 40% opacity so the image is highly visible
+                    className="object-cover opacity-40" // 40% opacity so the image is highly visible
+                    style={{ 
+                        // THE FIX: Binds the image's vertical position exactly to the scroll percentage!
+                        objectPosition: `center ${scrollPercentage}%`,
+                        transform: 'translate3d(0, 0, 0)' // Hardware acceleration for smoother scrolling
+                    }}
                 />
                 {/* A gradient overlay to ensure text contrast at the top and bottom of the page */}
                 <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-slate-950/50 to-slate-950/90" />
@@ -109,7 +147,7 @@ export default function TheValvePage() {
                 </div>
 
                 {/* NOMINATION INPUT */}
-                {/* THE FIX: bg-black/40 and backdrop-blur-md creates a "frosted glass" effect */}
+                {/* THE FIX: bg-black/40 and backdrop-blur-md creates a "frosted glass" effect so the background shines through */}
                 <Card className="bg-black/40 backdrop-blur-md border-red-900/40 mb-12 shadow-2xl">
                     <CardContent className="p-6 relative">
                         <h2 className="text-xl font-bold text-slate-100 mb-4 flex items-center gap-2 drop-shadow-md">
