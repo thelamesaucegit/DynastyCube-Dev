@@ -34,7 +34,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/ta
 import {
   Users, Trophy, Layers, Coins, CalendarDays, Swords, 
   Megaphone, Vote, Timer, AlertTriangle, ScrollText, BookOpen, 
-  Settings, Shield, Sparkles, Play, Key, ArrowRight, Database, Plug, Lightbulb, Crown
+  Settings, Shield, Sparkles, Play, Key, ArrowRight, Database, ListOrdered, Plug, Lightbulb, Crown
 } from "lucide-react";
 
 // The 6 Consolidated Tab Types
