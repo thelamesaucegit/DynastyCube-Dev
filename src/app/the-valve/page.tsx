@@ -85,8 +85,7 @@ export default function TheValvePage() {
                     backgroundAttachment: 'fixed', // Creates the parallax effect
                 }}
             />
-            {/* 80% Transparency Overlay */}
-            <div className="fixed inset-0 z-[-1] bg-slate-950/80" />
+     
 
             <div className="relative z-10 max-w-4xl mx-auto">
                 {/* HEADER */}
