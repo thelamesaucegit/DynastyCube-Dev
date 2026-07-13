@@ -6,6 +6,7 @@ import { importNextSetToChamber } from "./chamberActions";
 import { generateDraftOrder } from "./draftOrderActions";
 import { logSystemEvent } from "@/lib/systemLogger";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { finalizeExpiredWeeklyMatchups } from "@/app/actions/weeklyMatchupActions"; 
 
 
 
@@ -751,6 +752,10 @@ export async function checkAndExecuteSeasonRollover(): Promise<{ success: boolea
   console.log("======================================================");
   console.log("[RolloverCron] ⏰ EXECUTED: checkAndExecuteSeasonRollover()");
   console.log("======================================================");
+  
+  //  Sweep for expired weeks and enforce time-based finalization
+  await finalizeExpiredWeeklyMatchups(); 
+  
   try {
     const { createClient } = await import("@supabase/supabase-js");
     const supabase = createClient(
