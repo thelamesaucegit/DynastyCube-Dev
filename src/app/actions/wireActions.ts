@@ -113,7 +113,7 @@ export async function getPaginatedWireCards(params: {
 
     if (error) throw error;
     
-    let finalCards = data || [];
+    const finalCards = data || [];
     
     // Post-fetch sorting for color
     if (sortBy === 'color') {
