@@ -14,21 +14,8 @@ import CountdownTimer from "@/app/components/CountdownTimer";
 import { DraftStatusWidget } from "@/app/components/DraftStatusWidget";
 import { CardPreview } from "@/app/components/CardPreview";
 import { LiveStreamWidget } from "@/app/components/LiveStreamWidget";
-import {
-  getRecentTransactions,
-  getCurrentSeason,
-  getAdminNews,
-  getActiveCountdownTimer,
-  getActiveDraftSession,
-  getHomepageActivePolls,
-  getCypherStats,
-  type RecentTransaction,
-  type CurrentSeason,
-  type AdminNews,
-  type CountdownTimer as CountdownTimerType,
-  type HomepagePoll,
-  type CypherStats
-} from "@/app/actions/homeActions";
+import { getHomepageData, type HomepageData } from "@/app/actions/homeActions"; 
+
 import { getLatestStreamMatch, type StreamMatch } from "@/app/actions/liveStreamActions";
 import { getTeamsWithDetails } from "@/app/actions/teamActions";
 import { TargetedGlitchedText } from "@/app/components/lore/TargetedGlitchedText";
@@ -45,80 +32,29 @@ function getRelativeTime(dateString: string): string {
 }
 
 export default function HomePage() {
-  // Core Page State
-  const [season, setSeason] = useState<CurrentSeason | null>(null);
-  const [adminNews, setAdminNews] = useState<AdminNews[]>([]);
-  const [selectedNews, setSelectedNews] = useState<AdminNews | null>(null);
-  const [countdownTimer, setCountdownTimer] = useState<CountdownTimerType | null>(null);
-  const [liveMatch, setLiveMatch] = useState<StreamMatch | null>(null);
-  const [activePolls, setActivePolls] = useState<HomepagePoll[]>([]);
-  const [cypherStats, setCypherStats] = useState<CypherStats | null>(null);
-  const [activeTeamCount, setActiveTeamCount] = useState(8);
-  const [loadingCore, setLoadingCore] = useState(true);
+  const [pageData, setPageData] = useState<HomepageData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedNews, setSelectedNews] = useState<HomepageData['adminNews'][0] | null>(null);
 
-  // Draft-Specific State (Loaded Non-Blockingly)
-  const [draftSessionId, setDraftSessionId] = useState<string | null>(null);
-  const [loadingDraft, setLoadingDraft] = useState(true);
-  const [recentTransactions, setRecentTransactions] = useState<RecentTransaction[]>([]);
-
-  // 1. Load Core Data
-  const loadCoreData = useCallback(async () => {
+  // THE FIX: Single, efficient data loading callback
+  const loadPageData = useCallback(async () => {
     try {
-      const seasonResult = await getCurrentSeason();
-      const currentSeason = seasonResult.season;
-      setSeason(currentSeason);
-      
-      const currentPhase = currentSeason?.phase;
-      const isActivePlayPhase = currentPhase && currentPhase !== 'postseason' && currentPhase !== 'draft';
-      
-      const liveMatchPromise = isActivePlayPhase ? getLatestStreamMatch() : Promise.resolve({ match: null });
-      const [teamsResult, newsResult, timerResult, streamResult, pollsResult, cypherResult] = await Promise.all([
-        getTeamsWithDetails(),
-        getAdminNews(1), 
-        getActiveCountdownTimer(),
-        liveMatchPromise,
-        getHomepageActivePolls(),
-        getCypherStats()
-      ]);
-      
-      setActiveTeamCount(teamsResult.teams?.filter(t => !(t as { is_hidden?: boolean }).is_hidden).length || 8);
-      setAdminNews(newsResult.news);
-      setCountdownTimer(timerResult.timer);
-      setLiveMatch(streamResult.match);
-      setActivePolls(pollsResult.polls || []);
-      setCypherStats(cypherResult.stats || null);
+      const result = await getHomepageData();
+      if (result.data) {
+        setPageData(result.data);
+      } else {
+        console.error("Failed to load homepage data:", result.error);
+      }
     } catch (error) {
-      console.error("Error loading core home page data:", error);
+      console.error("Critical error on homepage:", error);
     } finally {
-      setLoadingCore(false); 
-    }
-  }, []);
-
-  // 2. Load Draft Data
-  const loadDraftData = useCallback(async () => {
-    try {
-      const [draftSessionResult, txResult] = await Promise.all([
-        getActiveDraftSession(),
-        getRecentTransactions(20) // Fetch from the new unified ledger
-      ]);
-      setDraftSessionId(draftSessionResult.session?.id || null);
-      setRecentTransactions(txResult.transactions);
-    } catch (error) {
-      console.error("Error loading background tx data:", error);
-    } finally {
-      setLoadingDraft(false);
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadCoreData();
-    loadDraftData();
-  }, [loadCoreData, loadDraftData]);
-
-  useEffect(() => {
-    const interval = setInterval(() => { loadDraftData(); }, 15000);
-    return () => clearInterval(interval);
-  }, [loadDraftData]);
+    loadPageData();
+  }, [loadPageData]);
 
   const getPhaseDisplayLabel = (phase?: string) => {
     switch (phase) {
@@ -131,7 +67,7 @@ export default function HomePage() {
     }
   };
 
-  if (loadingCore) {
+ if (loading) {
     return (
       <div className="container max-w-7xl mx-auto px-4 py-16 text-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
@@ -139,16 +75,27 @@ export default function HomePage() {
       </div>
     );
   }
+  
+  if (!pageData) {
+      return <div className="text-center py-16">Failed to load page data. Please try again.</div>;
+  }
 
-  const liveDraftLink = draftSessionId ? `/draft/${draftSessionId}/live` : "#";
+  const {
+      season, adminNews, countdownTimer, liveMatch, activePolls, cypherStats,
+      activeTeamCount, recentTransactions, activeDraftSessionId
+  } = pageData;
+
+  const liveDraftLink = activeDraftSessionId ? `/draft/${activeDraftSessionId}/live` : "#";
   const currentPhase = season?.phase;
   const isPlayActive = currentPhase && currentPhase !== 'postseason' && currentPhase !== 'draft';
   const visibleTxs = recentTransactions.slice(0, activeTeamCount);
 
   return (
+
     <div className="relative space-y-12 container max-w-7xl mx-auto px-4 py-8">
       
       {/* --- OPTIMIZED FULL PAGE BACKGROUND --- */}
+     {/* --- OPTIMIZED FULL PAGE BACKGROUND --- */}
       <div className="fixed inset-0 z-[-1] bg-slate-950 pointer-events-none">
         <Image
           src="/images/logo/logo.jpg"
@@ -156,10 +103,9 @@ export default function HomePage() {
           fill
           priority
           quality={75}
-          className="object-cover opacity-60"
+          className="object-cover opacity-20" // Lower opacity for the global background
           style={{ animation: 'bg-pan 120s linear infinite alternate' }}
         />
-        <div className="absolute inset-0 bg-black/60" />
       </div>
       <style jsx global>{`
         @keyframes bg-pan {
@@ -168,8 +114,19 @@ export default function HomePage() {
         }
       `}</style>
 
-      {/* --- HERO SECTION --- */}
-      <section className="relative overflow-hidden rounded-2xl min-h-[200px] flex flex-col justify-center border border-border/30 shadow-lg bg-black/30 backdrop-blur-sm">
+      {/* --- HERO SECTION (The "Window") --- */}
+      <section className="relative overflow-hidden rounded-2xl min-h-[200px] flex flex-col justify-center border border-border/30 shadow-lg">
+        {/* Full opacity image layer visible ONLY inside this section */}
+        <Image
+            src="/images/logo/logo.jpg"
+            alt=""
+            fill
+            priority
+            quality={90}
+            className="object-cover"
+            style={{ animation: 'bg-pan 120s linear infinite alternate' }}
+        />
+        <div className="absolute inset-0 bg-black/65" /> 
         <div className="relative px-6 py-8 md:px-10 md:py-10 z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
           <div className="max-w-2xl">
             {season && (
