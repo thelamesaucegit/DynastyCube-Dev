@@ -3,7 +3,8 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import type { StreamMatch } from './liveStreamActions';
+import { getTeamsWithDetails } from "@/app/actions/teamActions";
+import { getLatestStreamMatch, type StreamMatch } from "@/app/actions/liveStreamActions";
 
 
 // Create a Supabase client with cookies support
