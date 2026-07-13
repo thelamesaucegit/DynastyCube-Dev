@@ -7,6 +7,8 @@ import { generateDraftOrder } from "./draftOrderActions";
 import { logSystemEvent } from "@/lib/systemLogger";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { finalizeExpiredWeeklyMatchups } from "@/app/actions/weeklyMatchupActions"; 
+import { initiatePostseasonTeamVotes } from "@/app/actions/voteActions";
+
 
 
 
@@ -732,7 +734,10 @@ export async function checkAndExecutePlayoffsToPostseasonTransition(): Promise<{
       const { advancePlayoffBracket } = await import("@/app/actions/weeklyMatchupActions");
       
       await advancePlayoffBracket(season.id, isTestSeason);
+            console.log(`[CronPhase] Triggering automated postseason (Captain & Motto) votes...`);
+      await initiatePostseasonTeamVotes();
       console.log(`[CronPhase] Postseason successfully triggered.`);
+      
       return { success: true, transitioned: true };
     }
 
