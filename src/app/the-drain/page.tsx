@@ -3,6 +3,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Image from "next/image"; // <-- IMPORT NEXT.JS OPTIMIZED IMAGE
 import { offerToTheDrain } from "@/app/actions/drainActions";
 
 export default function TheDrainPage() {
@@ -50,32 +51,36 @@ export default function TheDrainPage() {
   };
 
   return (
-    // Removed the solid bg-black class here so our fixed background shows through
     <div className="relative min-h-[85vh] flex flex-col items-center justify-center px-4 font-mono select-none overflow-hidden">
       
-      {/* --- BACKGROUND ANIMATION LAYER --- */}
+      {/* --- THE OPTIMIZED BACKGROUND ANIMATION LAYER --- */}
       <div className="fixed inset-0 z-0 pointer-events-none flex items-center justify-center bg-black">
-        {/* 1. The 4 cycling images */}
-        {[1, 2, 3, 4].map((num, i) => (
+        {/* 1. [...](asc_slot://start-slot-15)The 4 cycling images rendered via next/image */}
+        {.map((num, i) => (
             <div
                 key={num}
-                className="absolute inset-0 w-full h-full"
+                className="absolute inset-0 w-full h-full transition-opacity duration-1000"
                 style={{
-                    backgroundImage: `url('/images/pages/drain${num}.png')`,
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                    // Using inline styles for a smooth 3-second crossfade
-                    opacity: bgIndex === i ? 0.5 : 0, 
-                    transition: 'opacity 3s ease-in-out'
+                    // Smooth 3-second crossfade opacity transition
+                    opacity: bgIndex === i ? 0.35 : 0, 
+                    transition: 'opacity 3000ms ease-in-out'
                 }}
-            />
+            >
+                <Image
+                    src={`/images/pages/drain${num}.png`}
+                    alt={`Drain Visual ${num}`}
+                    fill
+                    priority={i === 0} // Preload the first image immediately for instant rendering
+                    quality={50} // Heavy compression of background assets to save bandwidth
+                    className="object-cover object-center"
+                />
+            </div>
         ))}
         
         {/* 2. The Animated Radial Gradient Overlay */}
         <div 
             className="absolute w-[150vw] h-[150vh]"
             style={{ 
-                // A transparent center that fades into solid black
                 background: 'radial-gradient(circle at center, transparent 15%, black 45%)',
                 animation: 'drain-breathe 6s infinite alternate ease-in-out'
             }} 
@@ -89,7 +94,6 @@ export default function TheDrainPage() {
             100% { transform: scale(1.25); }
         }
       `}</style>
-
 
       {/* --- FOREGROUND CONTENT LAYER --- */}
       <div className="relative z-10 w-full max-w-lg mx-auto flex flex-col items-center">
