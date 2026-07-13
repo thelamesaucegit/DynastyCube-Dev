@@ -458,4 +458,7 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
 
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
-        console.error("Fatal error in processWir
+        console.error("Fatal error in processWireBids:", message);
+        return { success: false, processedBids, movedToFreeAgency, error: message };
+    }
+}
