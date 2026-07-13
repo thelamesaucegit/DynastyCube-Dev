@@ -137,7 +137,7 @@ interface DbTransactionRow {
 export interface HomepageData {
   season: CurrentSeason | null;
   adminNews: AdminNews[];
-  countdownTimer: CountdownTimerType | null;
+  countdownTimer: CountdownTimer| null;
   liveMatch: StreamMatch | null;
   activePolls: HomepagePoll[];
   cypherStats: CypherStats | null;
