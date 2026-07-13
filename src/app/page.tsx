@@ -33,7 +33,6 @@ import { getLatestStreamMatch, type StreamMatch } from "@/app/actions/liveStream
 import { getTeamsWithDetails } from "@/app/actions/teamActions";
 import { TargetedGlitchedText } from "@/app/components/lore/TargetedGlitchedText";
 
-
 function getRelativeTime(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
@@ -56,12 +55,11 @@ export default function HomePage() {
   const [cypherStats, setCypherStats] = useState<CypherStats | null>(null);
   const [activeTeamCount, setActiveTeamCount] = useState(8);
   const [loadingCore, setLoadingCore] = useState(true);
-  const [bgPosition, setBgPosition] = useState({ x: 50, y: 50 });
 
   // Draft-Specific State (Loaded Non-Blockingly)
   const [draftSessionId, setDraftSessionId] = useState<string | null>(null);
   const [loadingDraft, setLoadingDraft] = useState(true);
- const [recentTransactions, setRecentTransactions] = useState<RecentTransaction[]>([]); // Replaces recentPicks
+  const [recentTransactions, setRecentTransactions] = useState<RecentTransaction[]>([]);
 
   // 1. Load Core Data
   const loadCoreData = useCallback(async () => {
@@ -97,7 +95,6 @@ export default function HomePage() {
   }, []);
 
   // 2. Load Draft Data
-
   const loadDraftData = useCallback(async () => {
     try {
       const [draftSessionResult, txResult] = await Promise.all([
@@ -123,16 +120,6 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, [loadDraftData]);
 
-  useEffect(() => {
-    const moveBackground = () => setBgPosition({ x: Math.floor(Math.random() * 100), y: Math.floor(Math.random() * 100) });
-    const initialTimeout = setTimeout(moveBackground, 100);
-    const panInterval = setInterval(moveBackground, 120000);
-    return () => {
-      clearTimeout(initialTimeout);
-      clearInterval(panInterval);
-    };
-  }, []);
-
   const getPhaseDisplayLabel = (phase?: string) => {
     switch (phase) {
       case "draft": return "Draft";
@@ -156,21 +143,33 @@ export default function HomePage() {
   const liveDraftLink = draftSessionId ? `/draft/${draftSessionId}/live` : "#";
   const currentPhase = season?.phase;
   const isPlayActive = currentPhase && currentPhase !== 'postseason' && currentPhase !== 'draft';
-const visibleTxs = recentTransactions.slice(0, activeTeamCount);
+  const visibleTxs = recentTransactions.slice(0, activeTeamCount);
+
   return (
-    <div className="container max-w-7xl mx-auto px-4 py-8 space-y-12">
-      <section className="relative overflow-hidden rounded-2xl min-h-[200px] flex flex-col justify-center border border-border/50 shadow-md">
-        <div
-          className="absolute inset-0"
-          style={{
-            backgroundImage: "url('/images/logo/logo.jpg')",
-            backgroundSize: "150%", 
-            backgroundRepeat: "no-repeat",
-            backgroundPosition: `${bgPosition.x}% ${bgPosition.y}%`,
-            transition: "background-position 120s ease-in-out", 
-          }}
+    <div className="relative space-y-12 container max-w-7xl mx-auto px-4 py-8">
+      
+      {/* --- OPTIMIZED FULL PAGE BACKGROUND --- */}
+      <div className="fixed inset-0 z-[-1] bg-slate-950 pointer-events-none">
+        <Image
+          src="/images/logo/logo.jpg"
+          alt="Dynasty Cube Background"
+          fill
+          priority
+          quality={75}
+          className="object-cover opacity-60"
+          style={{ animation: 'bg-pan 120s linear infinite alternate' }}
         />
-        <div className="absolute inset-0 bg-black/65" /> 
+        <div className="absolute inset-0 bg-black/60" />
+      </div>
+      <style jsx global>{`
+        @keyframes bg-pan {
+          0% { object-position: 0% 50%; }
+          100% { object-position: 100% 50%; }
+        }
+      `}</style>
+
+      {/* --- HERO SECTION --- */}
+      <section className="relative overflow-hidden rounded-2xl min-h-[200px] flex flex-col justify-center border border-border/30 shadow-lg bg-black/30 backdrop-blur-sm">
         <div className="relative px-6 py-8 md:px-10 md:py-10 z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
           <div className="max-w-2xl">
             {season && (
@@ -224,7 +223,7 @@ const visibleTxs = recentTransactions.slice(0, activeTeamCount);
         {/* Active Votes Card */}
         {activePolls.length > 0 && (
           <Link href="/vote" className="group">
-            <Card className="h-full border-primary/20 hover:border-primary/50 transition-colors bg-gradient-to-br from-card to-primary/5 shadow-sm">
+            <Card className="h-full bg-slate-900/70 backdrop-blur-md border-primary/30 hover:border-primary/60 transition-colors shadow-lg">
               <CardContent className="p-6">
                 <div className="flex items-start justify-between">
                   <div>
@@ -251,7 +250,7 @@ const visibleTxs = recentTransactions.slice(0, activeTeamCount);
         {/* Cypher Status Card */}
         {cypherStats && (
           <Link href="/cypher" className="group">
-            <Card className="h-full border-amber-500/30 hover:border-amber-500/60 transition-colors bg-gradient-to-br from-card to-amber-500/5 shadow-sm">
+            <Card className="h-full bg-slate-900/70 backdrop-blur-md border-amber-500/30 hover:border-amber-500/60 transition-colors shadow-lg">
               <CardContent className="p-6">
                 <div className="flex items-start justify-between">
                   <div>
@@ -268,7 +267,7 @@ const visibleTxs = recentTransactions.slice(0, activeTeamCount);
                       </div>
                     </div>
                     {cypherStats.hasRecentCypher && (
-                      <Badge className="mt-3 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 shadow-none">
+                      <Badge className="mt-3 bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30 shadow-none">
                         <LockOpen className="size-3 mr-1" /> New Cypher discovered!
                       </Badge>
                     )}
@@ -292,7 +291,7 @@ const visibleTxs = recentTransactions.slice(0, activeTeamCount);
         {adminNews.length > 0 ? (
           <div className="space-y-6">
             <Card 
-              className="overflow-hidden hover:shadow-lg transition-all cursor-pointer border-transparent hover:border-primary/50 group"
+              className="bg-slate-900/70 backdrop-blur-md overflow-hidden hover:shadow-xl transition-all cursor-pointer border-transparent hover:border-primary/50 group shadow-lg"
               onClick={() => setSelectedNews(adminNews[0])}
             >
               <CardHeader className="pb-3">
@@ -320,7 +319,7 @@ const visibleTxs = recentTransactions.slice(0, activeTeamCount);
             </Card>
           </div>
         ) : (
-          <Card>
+          <Card className="bg-slate-900/70 backdrop-blur-md">
             <CardContent className="p-8 text-center text-muted-foreground">No news available yet. Check back soon!</CardContent>
           </Card>
         )}
@@ -337,7 +336,7 @@ const visibleTxs = recentTransactions.slice(0, activeTeamCount);
             <Link href="/transactions">View All</Link> 
           </Button>
         </div>
-        <Card>
+        <Card className="bg-slate-900/70 backdrop-blur-md shadow-lg">
           <CardContent className="p-0">
             {loadingDraft ? (
                <div className="p-12 text-center text-muted-foreground flex items-center justify-center gap-3">
@@ -403,14 +402,14 @@ const visibleTxs = recentTransactions.slice(0, activeTeamCount);
           onClick={() => setSelectedNews(null)}
         >
           <div 
-            className="bg-background border border-border shadow-2xl rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
+            className="bg-slate-900/90 backdrop-blur-xl border border-border shadow-2xl rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-6 border-b border-border flex justify-between items-start bg-muted/30">
               <div>
                 <Badge className="mb-2">Latest</Badge>
                 <h2 className="text-2xl md:text-3xl font-bold text-foreground">
-                                  <TargetedGlitchedText text={selectedNews.title} />  
+                  <TargetedGlitchedText text={selectedNews.title} />  
                 </h2>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
                   <span>{new Date(selectedNews.created_at).toLocaleDateString()}</span>
@@ -427,13 +426,12 @@ const visibleTxs = recentTransactions.slice(0, activeTeamCount);
             </div>
             <div className="p-6 overflow-y-auto">
               <p className="whitespace-pre-line text-base md:text-lg leading-relaxed text-foreground/90">
-<TargetedGlitchedText text={selectedNews.content} />
+                <TargetedGlitchedText text={selectedNews.content} />
               </p>
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 }
