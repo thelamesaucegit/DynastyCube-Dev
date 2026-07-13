@@ -1,4 +1,5 @@
 // src/app/admin/page.tsx
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -25,37 +26,33 @@ import { CypherManagement } from "@/app/components/admin/CypherManagement";
 import { getTeamsWithMembers } from "../actions/teamActions";
 import { getCardPool } from "../actions/cardActions";
 import { SimMatchScheduler } from "@/app/components/admin/SimMatchScheduler";
-import { getAllSeasons, getActiveSeasonNumber } from "@/app/actions/scheduleActions";
+import { getActiveSeasonNumber } from "@/app/actions/scheduleActions";
 import { PvpReplayList } from "@/app/components/admin/PvpReplayList"; 
-
-
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
 import {
-  Users, Trophy, Layers, Coins, CalendarRange, CalendarDays, Swords, 
-  BarChart3, Megaphone, Vote, Timer, AlertTriangle, ScrollText, BookOpen, 
-  Settings, Shield, Crown, Database, Plug, Lightbulb, ArrowRight, ListOrdered, 
-  Sparkles, Play, Key
+  Users, Trophy, Layers, Coins, CalendarDays, Swords, 
+  Megaphone, Vote, Timer, AlertTriangle, ScrollText, BookOpen, 
+  Settings, Shield, Sparkles, Play, Key, ArrowRight, Database, Plug, Lightbulb, Crown
 } from "lucide-react";
 
-type TabType = "users" | "teams" | "cards" | "cubucks" | "essence" | "seasons" | "matches" | "sim-schedule" | "draft-order" | "draft-session" | "news" | "timers" | "reports" | "votes" | "settings" | "history" | "glossary" | "cypher";
+// The 6 Consolidated Tab Types
+type TabType = "dashboard" | "teams" | "content" | "seasons" | "draft" | "community";
 
 interface Stats {
   totalUsers: number;
   activeTeams: number;
   cardPoolSize: number;
-  draftEvents: number;
   activeSeasonNumber: number;
 }
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<TabType>("users");
+  const [activeTab, setActiveTab] = useState<TabType>("dashboard");
   const [stats, setStats] = useState<Stats>({
     totalUsers: 0,
     activeTeams: 8,
     cardPoolSize: 0,
-    draftEvents: 0,
     activeSeasonNumber: 1,
   });
 
@@ -75,7 +72,6 @@ export default function AdminPage() {
         totalUsers: totalMembers,
         activeTeams: teams.length,
         cardPoolSize: cards.length,
-        draftEvents: 0,
         activeSeasonNumber: activeSeasonNumber ?? 1,
       });
     } catch (error) {
@@ -84,152 +80,210 @@ export default function AdminPage() {
   };
 
   const tabItems: { id: TabType; label: string; icon: React.ReactNode }[] = [
-    { id: "users", label: "Users", icon: <Users className="size-4" /> },
-    { id: "teams", label: "Teams", icon: <Trophy className="size-4" /> },
-    { id: "cards", label: "Cards", icon: <Layers className="size-4" /> },
-    { id: "cubucks", label: "Cubucks", icon: <Coins className="size-4" /> },
-    { id: "essence", label: "Essence", icon: <Sparkles className="size-4" /> },
-    { id: "sim-schedule", label: "Sim Schedule", icon: <CalendarRange className="size-4" /> },
-    { id: "seasons", label: "Seasons", icon: <CalendarDays className="size-4" /> },
-    { id: "matches", label: "Matches", icon: <Swords className="size-4" /> },
-    { id: "draft-order", label: "Draft Order", icon: <ListOrdered className="size-4" /> },
-    { id: "draft-session", label: "Draft Session", icon: <Play className="size-4" /> },
-    { id: "cypher", label: "The Cypher", icon: <Key className="size-4" /> }, // <-- ADD CYPHER
-    { id: "news", label: "News", icon: <Megaphone className="size-4" /> },
-    { id: "votes", label: "Voting", icon: <Vote className="size-4" /> },
-    { id: "timers", label: "Timers", icon: <Timer className="size-4" /> },
-    { id: "reports", label: "Reports", icon: <AlertTriangle className="size-4" /> },
-    { id: "history", label: "History", icon: <ScrollText className="size-4" /> },
-    { id: "glossary", label: "Glossary", icon: <BookOpen className="size-4" /> },
-    { id: "settings", label: "Settings", icon: <Settings className="size-4" /> },
+    { id: "dashboard", label: "Dashboard", icon: <Shield className="size-4" /> },
+    { id: "teams", label: "Teams & Users", icon: <Users className="size-4" /> },
+    { id: "content", label: "Content Mgmt", icon: <Layers className="size-4" /> },
+    { id: "seasons", label: "Seasons & Matches", icon: <CalendarDays className="size-4" /> },
+    { id: "draft", label: "Draft & Economy", icon: <Play className="size-4" /> },
+    { id: "community", label: "Community Tools", icon: <Megaphone className="size-4" /> },
   ];
 
   const statCards = [
     { label: "Total Users", value: stats.totalUsers, icon: <Users className="size-5 text-muted-foreground" /> },
     { label: "Active Teams", value: stats.activeTeams, icon: <Trophy className="size-5 text-muted-foreground" /> },
     { label: "Card Pool Size", value: stats.cardPoolSize, icon: <Layers className="size-5 text-muted-foreground" /> },
-    { label: "Draft Events", value: stats.draftEvents, icon: <Swords className="size-5 text-muted-foreground" /> },
+    { label: "Active Season", value: `Season ${stats.activeSeasonNumber}`, icon: <CalendarDays className="size-5 text-muted-foreground" /> },
   ];
 
   const renderTabContent = () => {
     switch (activeTab) {
-      case "users": return <UserManagement />;
-      case "teams": return <TeamManagement onUpdate={loadStats} />;
-      case "cards": return (
-        <div className="space-y-8">
-          <CardManagement onUpdate={loadStats} />
-          <hr className="border-border" />
-          <CardRatingSync />
-        </div>
-      );
-      case "cubucks": return <CubucksManagement />;
-      case "essence": return <EssenceManagement />;
-      case "cypher": return <CypherManagement />; // <-- RENDER CYPHER
-      case "sim-schedule": return (
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-xl font-semibold flex items-center gap-2"><Swords className="size-5" /> Simulated Match Scheduler</h2>
-            <p className="text-sm text-muted-foreground mt-1">Schedule simulated matches between teams using their current decklists.</p>
-          </div>
-          <SimMatchScheduler activeSeasonNumber={stats.activeSeasonNumber} />
-        </div>
-      );
-      case "seasons": return <SeasonManagement />;
-      case "news": return <NewsManagement />;
-      case "votes": return <VoteManagement />;
-      case "matches": return (
-        <div className="space-y-8">
-            <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg"><Swords className="size-5" /> Forge Match Simulator</CardTitle>
-                <CardDescription>Use the dedicated match runner page to simulate a match between two decklists using custom AI profiles and record the results.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <Button asChild><a href="/admin/match-runner" className="inline-flex items-center gap-2">Open Match Runner <ArrowRight className="size-4" /></a></Button>
-            </CardContent>
-            </Card>
-
-            {/* THE FIX: ADD THE NEW PVP REPLAY LIST TO THE MATCHES TAB! */}
-            <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg"><Play className="size-5" /> PvP Replay Uploads</CardTitle>
-                <CardDescription>Manage and view imported Cockatrice (.cor) match replays uploaded by players.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <PvpReplayList />
-            </CardContent>
-            </Card>
-        </div>
-      );
-      case "draft-order": return <DraftOrderManagement />;
-      case "draft-session": return <DraftSessionManagement />;
-      case "timers": return <CountdownTimerManagement />;
-      case "reports": return (
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-xl font-semibold flex items-center gap-2"><AlertTriangle className="size-5" /> Report Management</h2>
-            <p className="text-sm text-muted-foreground mt-1">Review and manage user-submitted reports for bad actors, bugs, and issues</p>
-          </div>
-          <ReportManagement />
-        </div>
-      );
-      case "history": return <HistoryRequestManagement />;
-      case "glossary": return <GlossaryManagement />;
-      case "settings": return (
-        <div className="space-y-6">
-          <div>
-            <h2 className="text-xl font-semibold flex items-center gap-2"><Settings className="size-5" /> Admin Settings</h2>
-            <p className="text-sm text-muted-foreground mt-1">Configure admin panel settings and permissions</p>
-          </div>
+      case "dashboard": 
+        return (
           <div className="space-y-6">
-            <ChamberManagement />
-            <ResortManagement />
-            <TradeSettings />
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg"><Crown className="size-5" /> Team Role Management</CardTitle>
-                <CardDescription>Manage team member roles across all teams. Assign or remove Captain, Broker, Historian, and Pilot roles for any team member.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button asChild><a href="/admin/roles" className="inline-flex items-center gap-2">Manage Team Roles <ArrowRight className="size-4" /></a></Button>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Shield className="size-5" /> Admin Users</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">Manage who has admin access to this panel. Admin emails are currently configured in: <code className="bg-muted px-2 py-1 rounded text-xs">src/app/utils/adminUtils.ts</code></p>
-                <div className="bg-accent rounded-lg p-4 flex items-start gap-2">
-                  <Lightbulb className="size-4 mt-0.5 shrink-0" />
-                  <p className="text-sm"><strong>Tip:</strong> For production, move admin emails to environment variables or implement role-based access control in your database.</p>
+            <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle className="size-5 text-destructive" />
+                <h2 className="text-xl font-semibold">User Reports</h2>
+            </div>
+            <ReportManagement />
+            
+            <hr className="border-border my-6" />
+            
+            <div className="flex items-center gap-2 mb-2">
+                <Settings className="size-5 text-muted-foreground" />
+                <h2 className="text-xl font-semibold">Core Settings</h2>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <ChamberManagement />
+                <ResortManagement />
+                <div className="lg:col-span-2">
+                    <TradeSettings />
                 </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Database className="size-5" /> Database Configuration</CardTitle></CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">To fully enable admin features, you&apos;ll need to set up database tables:</p>
-                <ul className="text-sm text-muted-foreground space-y-2 ml-4 list-disc">
-                  <li><strong className="text-foreground">team_members</strong> - Link users to teams</li>
-                  <li><strong className="text-foreground">card_pools</strong> - Store MTG cards for drafts</li>
-                  <li><strong className="text-foreground">user_roles</strong> - Manage user permissions</li>
-                  <li><strong className="text-foreground">draft_events</strong> - Track draft events and results</li>
-                </ul>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Plug className="size-5" /> API Integration</CardTitle></CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">Some features require additional setup:</p>
-                <ul className="text-sm text-muted-foreground space-y-2 ml-4 list-disc">
-                  <li><strong className="text-foreground">Supabase Admin API</strong> - For user management</li>
-                  <li><strong className="text-foreground">Scryfall API</strong> - Already integrated for card search</li>
-                  <li><strong className="text-foreground">Service Role Key</strong> - Required for admin operations</li>
-                </ul>
-              </CardContent>
-            </Card>
+            </div>
           </div>
-        </div>
-      );
+        );
+        
+      case "teams": 
+        return (
+          <div className="space-y-8">
+            <div>
+              <h2 className="text-xl font-semibold flex items-center gap-2 mb-1"><Users className="size-5" /> User & Player Directory</h2>
+              <p className="text-sm text-muted-foreground">Manage system users, view registration metrics, and assign platform privileges.</p>
+            </div>
+            <UserManagement /> 
+            
+            <hr className="border-border my-6"/> 
+            
+            <div>
+              <h2 className="text-xl font-semibold flex items-center gap-2 mb-1"><Trophy className="size-5" /> Faction Management</h2>
+              <p className="text-sm text-muted-foreground">Review faction details, manage rosters, and assign team affiliations.</p>
+            </div>
+            <TeamManagement onUpdate={loadStats} />
+          </div>
+        );
+        
+      case "content": 
+        return (
+          <div className="space-y-8">
+            <div>
+              <h2 className="text-xl font-semibold flex items-center gap-2 mb-1"><Layers className="size-5" /> Cube Card Management</h2>
+              <p className="text-sm text-muted-foreground">Add new cards to the draft pool, adjust base valuations, and prune pool bloat.</p>
+            </div>
+            <CardManagement onUpdate={loadStats} /> 
+            
+            <hr className="border-border my-6"/>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <CardRatingSync />
+                <GlossaryManagement />
+            </div>
+            
+            <hr className="border-border my-6"/>
+            <CypherManagement />
+          </div>
+        );
+        
+       case "seasons": 
+        return (
+          <div className="space-y-8">
+            <div>
+              <h2 className="text-xl font-semibold flex items-center gap-2 mb-1"><CalendarDays className="size-5" /> Season Timeline</h2>
+              <p className="text-sm text-muted-foreground">Initialize new seasons, adjust phase progression boundaries, and trigger playoff transitions.</p>
+            </div>
+            <SeasonManagement /> 
+            
+            <hr className="border-border my-6"/>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                   <h2 className="text-xl font-semibold flex items-center gap-2 mb-1"><Swords className="size-5" /> Sim Match Scheduler</h2>
+                   <p className="text-sm text-muted-foreground mb-4">Predictably schedule week-specific simulated Forge matches on the half-hour CT.</p>
+                   <SimMatchScheduler activeSeasonNumber={stats.activeSeasonNumber} />
+                </div>
+                <div className="space-y-6">
+                   <div>
+                       <h2 className="text-xl font-semibold flex items-center gap-2 mb-1"><Play className="size-5" /> Match Utilities</h2>
+                       <p className="text-sm text-muted-foreground mb-4 font-medium">Quick links to run live game simulations or view uploads.</p>
+                       <Card className="mb-4">
+                          <CardHeader className="py-4">
+                            <CardTitle className="text-md flex items-center gap-2"><Swords className="size-4 text-primary" /> Forge Match Simulator</CardTitle>
+                          </CardHeader>
+                          <CardContent className="pb-4">
+                            <Button asChild size="sm" className="w-full">
+                              <a href="/admin/match-runner" className="inline-flex items-center justify-between w-full">
+                                <span>Open Match Runner</span>
+                                <ArrowRight className="size-4" />
+                              </a>
+                            </Button>
+                          </CardContent>
+                       </Card>
+                       <Card>
+                          <CardHeader className="py-4">
+                            <CardTitle className="text-md flex items-center gap-2"><Crown className="size-4 text-yellow-500" /> Team Role Management</CardTitle>
+                          </CardHeader>
+                          <CardContent className="pb-4">
+                            <Button asChild size="sm" variant="outline" className="w-full">
+                              <a href="/admin/roles" className="inline-flex items-center justify-between w-full">
+                                <span>Manage Team Roles</span>
+                                <ArrowRight className="size-4" />
+                              </a>
+                            </Button>
+                          </CardContent>
+                       </Card>
+                   </div>
+                </div>
+            </div>
+            
+            <hr className="border-border my-6"/>
+            <PvpReplayList />
+          </div>
+        );
+        
+       case "draft": 
+        return (
+          <div className="space-y-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                  <h2 className="text-xl font-semibold flex items-center gap-2 mb-1"><ListOrdered className="size-5" /> Draft Order Generation</h2>
+                  <p className="text-sm text-muted-foreground mb-4">Calculate reverse-standing lottery seeds or assign manual pick offsets.</p>
+                  <DraftOrderManagement />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold flex items-center gap-2 mb-1"><Play className="size-5" /> Draft Session Control</h2>
+                  <p className="text-sm text-muted-foreground mb-4">Schedule active timers, adjust horas per pick, or forcefully pause ongoing draft events.</p>
+                  <DraftSessionManagement />
+                </div>
+            </div>
+            
+            <hr className="border-border my-6"/>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                  <h2 className="text-xl font-semibold flex items-center gap-2 mb-1"><Coins className="size-5 text-yellow-600" /> Çubucks Financial Ledger</h2>
+                  <p className="text-sm text-muted-foreground mb-4">Adjust team coin balances, distribute performance rewards, or fine infractions.</p>
+                  <CubucksManagement />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold flex items-center gap-2 mb-1"><Sparkles className="size-5 text-indigo-500" /> Team Essence Ledger</h2>
+                  <p className="text-sm text-muted-foreground mb-4">Distribute celestial Essence crystals utilized by teams to trigger specific meta-abilities.</p>
+                  <EssenceManagement />
+                </div>
+            </div>
+          </div>
+        );
+        
+       case "community": 
+        return (
+          <div className="space-y-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                  <h2 className="text-xl font-semibold flex items-center gap-2 mb-1"><Megaphone className="size-5 text-primary" /> News Bulletin Manager</h2>
+                  <p className="text-sm text-muted-foreground mb-4">Publish dynamic, system-wide news alerts that display directly on player dashboards.</p>
+                  <NewsManagement />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold flex items-center gap-2 mb-1"><Vote className="size-5 text-indigo-500" /> Voting & Mottos</h2>
+                  <p className="text-sm text-muted-foreground mb-4">Approve player-proposed team mottos or schedule league-wide policy referendums.</p>
+                  <VoteManagement />
+                </div>
+            </div>
+            
+            <hr className="border-border my-6"/>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                  <h2 className="text-xl font-semibold flex items-center gap-2 mb-1"><Timer className="size-5 text-amber-500" /> Countdown Timers</h2>
+                  <p className="text-sm text-muted-foreground mb-4">Create, edit, or terminate the active homepage timers (e.g. offseason clocks).</p>
+                  <CountdownTimerManagement />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold flex items-center gap-2 mb-1"><ScrollText className="size-5 text-emerald-500" /> History & Archives</h2>
+                  <p className="text-sm text-muted-foreground mb-4">Review historical team rosters, draft records, and finalize historical queries.</p>
+                  <HistoryRequestManagement />
+                </div>
+            </div>
+          </div>
+        );
+        
       default: return null;
     }
   };
@@ -244,7 +298,7 @@ export default function AdminPage() {
           </div>
           <p className="text-muted-foreground">Manage Dynasty Cube users, teams, and card pools</p>
         </div>
-
+        
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {statCards.map((stat) => (
             <Card key={stat.label}>
@@ -258,18 +312,18 @@ export default function AdminPage() {
             </Card>
           ))}
         </div>
-
+        
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabType)}>
-          <TabsList className="flex-wrap h-auto gap-1 mb-6">
+          <TabsList className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 h-auto mb-6 gap-1 p-1 bg-muted rounded-xl">
             {tabItems.map((tab) => (
-              <TabsTrigger key={tab.id} value={tab.id} className="gap-1.5">
+              <TabsTrigger key={tab.id} value={tab.id} className="gap-1.5 py-2.5 rounded-lg font-medium text-xs sm:text-sm">
                 {tab.icon}
-                <span className="hidden sm:inline">{tab.label}</span>
+                <span>{tab.label}</span>
               </TabsTrigger>
             ))}
           </TabsList>
-
-          <Card>
+          
+          <Card className="border-border/50 bg-background/50 backdrop-blur-md shadow-xl mt-6">
             <CardContent className="pt-6">
               {tabItems.map((tab) => (
                 <TabsContent key={tab.id} value={tab.id}>
