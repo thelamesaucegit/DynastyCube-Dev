@@ -3,6 +3,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Image from "next/image"; 
 import { offerToTheDrain } from "@/app/actions/drainActions";
 
 export default function TheDrainPage() {
@@ -50,32 +51,36 @@ export default function TheDrainPage() {
   };
 
   return (
-    // Removed the solid bg-black class here so our fixed background shows through
     <div className="relative min-h-[85vh] flex flex-col items-center justify-center px-4 font-mono select-none overflow-hidden">
       
-      {/* --- BACKGROUND ANIMATION LAYER --- */}
+      {/* --- THE OPTIMIZED BACKGROUND ANIMATION LAYER --- */}
       <div className="fixed inset-0 z-0 pointer-events-none flex items-center justify-center bg-black">
-        {/* 1. The 4 cycling images */}
+        {/* 1. The 4 cycling images rendered via next/image */}
         {[1, 2, 3, 4].map((num, i) => (
             <div
                 key={num}
-                className="absolute inset-0 w-full h-full"
+                className="absolute inset-0 w-full h-full transition-opacity duration-1000"
                 style={{
-                    backgroundImage: `url('/images/pages/drain${num}.png')`,
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                    // Using inline styles for a smooth 3-second crossfade
-                    opacity: bgIndex === i ? 0.5 : 0, 
-                    transition: 'opacity 3s ease-in-out'
+                    // Smooth 3-second crossfade opacity transition
+                    opacity: bgIndex === i ? 0.35 : 0, 
+                    transition: 'opacity 3000ms ease-in-out'
                 }}
-            />
+            >
+                <Image
+                    src={`/images/pages/drain${num}.png`}
+                    alt={`Drain Visual ${num}`}
+                    fill
+                    priority={i === 0} // Preload the first image immediately
+                    quality={50} // Heavy compression to save bandwidth
+                    className="object-cover object-center"
+                />
+            </div>
         ))}
         
         {/* 2. The Animated Radial Gradient Overlay */}
         <div 
             className="absolute w-[150vw] h-[150vh]"
             style={{ 
-                // A transparent center that fades into solid black
                 background: 'radial-gradient(circle at center, transparent 15%, black 45%)',
                 animation: 'drain-breathe 6s infinite alternate ease-in-out'
             }} 
@@ -90,11 +95,11 @@ export default function TheDrainPage() {
         }
       `}</style>
 
-
       {/* --- FOREGROUND CONTENT LAYER --- */}
       <div className="relative z-10 w-full max-w-lg mx-auto flex flex-col items-center">
         
-        <h1 className="text-zinc-500 tracking-[0.5em] text-sm md:text-base mb-16 opacity-50 cursor-default drop-shadow-md">
+        {/* THE FIX: Increased opacity to 90%, changed text to zinc-200, and added a custom white text-shadow */}
+        <h1 className="text-zinc-200 tracking-[0.5em] text-sm md:text-base mb-16 opacity-90 cursor-default [text-shadow:_0_0_15px_rgba(255,255,255,0.7)] drop-shadow-[0_0_12px_rgba(255,255,255,0.6)]">
           THE DRAIN
         </h1>
 
@@ -105,7 +110,8 @@ export default function TheDrainPage() {
                 onChange={(e) => setInput(e.target.value)}
                 disabled={communing}
                 placeholder="OFFER TRIBUTE"
-                className="w-full bg-transparent border-b border-zinc-800 text-center text-zinc-300 placeholder:text-zinc-800 py-4 focus:outline-none focus:border-zinc-500 transition-colors uppercase tracking-widest disabled:opacity-50"
+                /* THE FIX: Brightened border (zinc-600), made active text pure white, and added a heavy text-shadow glow to user input */
+                className="w-full bg-transparent border-b border-zinc-600 text-center text-white placeholder:text-zinc-500 placeholder:[text-shadow:none] py-4 focus:outline-none focus:border-zinc-300 transition-colors uppercase tracking-widest disabled:opacity-50 [text-shadow:_0_0_12px_rgba(255,255,255,0.8)]"
                 autoComplete="off"
                 spellCheck="false"
             />
@@ -113,14 +119,16 @@ export default function TheDrainPage() {
 
         <div className="h-24 flex items-center justify-center text-center">
             {communing && (
-                <span className="text-zinc-600 tracking-[0.3em] text-sm animate-pulse">
+                /* THE FIX: Added glowing text-shadow to the loading state */
+                <span className="text-zinc-200 tracking-[0.3em] text-sm animate-pulse [text-shadow:_0_0_15px_rgba(255,255,255,0.8)]">
                     COMMUNING...
                 </span>
             )}
             
             {response && !communing && (
+                /* THE FIX: Made response text pure white, slightly bolder, and gave it an intense double text-shadow */
                 <p 
-                    className={`text-zinc-300 tracking-wider text-sm leading-loose transition-opacity duration-1000 ${fade ? 'opacity-100' : 'opacity-0'}`}
+                    className={`text-white font-semibold tracking-wider text-sm md:text-base leading-loose transition-opacity duration-1000 ${fade ? 'opacity-100' : 'opacity-0'} [text-shadow:_0_0_20px_rgba(255,255,255,1),_0_0_8px_rgba(255,255,255,0.8)]`}
                 >
                     {response}
                 </p>
