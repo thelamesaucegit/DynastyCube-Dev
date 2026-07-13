@@ -169,7 +169,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {isPlayActive && liveMatch && <LiveStreamWidget initialMatch={liveMatch} onStreamEnd={loadCoreData} />}
+      {isPlayActive && liveMatch && <LiveStreamWidget initialMatch={liveMatch} onStreamEnd={loadPageData} />}
       
       {(currentPhase === 'playoffs' || currentPhase === 'postseason') && season && (
         <PlayoffBracket seasonId={season.id} seasonName={season.season_name} />
