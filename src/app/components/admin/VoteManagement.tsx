@@ -385,7 +385,8 @@ export function VoteManagement() {
           <TabsContent value="archived">
               <div className="space-y-4 mt-4">
                   {archivedPolls.length > 0 ? archivedPolls.map(poll => (
-                      <PollCard key={poll.id} poll={poll} onToggleActive={handleToggleActive} onDelete={handleDeletePoll} onViewResults={handleViewResults} />
+                      <PollCard key={poll.id} poll={poll} onToggleActive={handleToggleActive} onDelete={handleDeletePoll} onViewResults={handleViewResults}  onResolveBlessings={handleResolveBlessings} 
+ />
                   )) : <p className="text-center py-8 text-muted-foreground">No archived polls.</p>}
               </div>
           </TabsContent>
