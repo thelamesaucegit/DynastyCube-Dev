@@ -377,7 +377,8 @@ export function VoteManagement() {
           <TabsContent value="active">
               <div className="space-y-4 mt-4">
                   {activePolls.length > 0 ? activePolls.map(poll => (
-                      <PollCard key={poll.id} poll={poll} onToggleActive={handleToggleActive} onDelete={handleDeletePoll} onViewResults={handleViewResults} />
+                      <PollCard key={poll.id} poll={poll} onToggleActive={handleToggleActive} onDelete={handleDeletePoll} onViewResults={handleViewResults} onResolveBlessings={handleResolveBlessings} 
+ />
                   )) : <p className="text-center py-8 text-muted-foreground">No active polls.</p>}
               </div>
           </TabsContent>
