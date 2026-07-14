@@ -978,55 +978,62 @@ export async function submitTeamMotto(teamId: string, mottoText: string, identit
 // For Admins to view pending mottos
 export async function getPendingMottos(): Promise<{ mottos: MottoSubmission[]; error?: string }> {
     const supabase = createAdminClient(); 
+
     try {
         const { data, error } = await supabase
             .from('motto_submissions')
             .select(`
                 *,
                 teams ( name ),
-                users ( display_name )
+                users ( user_display_name )
             `)
             .eq('status', 'pending')
             .order('created_at', { ascending: true });
 
         if (error) throw error;
-      type DbMottoSubmission = {
+
+        // Define the shape of the raw database row for safety
+        type DbMottoSubmission = {
             id: string;
             team_id: string;
             user_id: string;
             identity_key: string | null;
             motto_text: string;
-            status: string;
+            status: string; // The database sees this as a generic string
             created_at: string;
             teams: { name: string } | null;
             users: { user_display_name: string | null } | null;
         };
-
-        const rawRows = (data || []) as unknown as DbMottoSubmission[];
         
+        const rawRows = (data || []) as DbMottoSubmission[];
+
         const mottos: MottoSubmission[] = rawRows.map(row => {
             const team = Array.isArray(row.teams) ? row.teams[0] : row.teams;
             const user = Array.isArray(row.users) ? row.users[0] : row.users;
-           return {
+
+            return {
                 id: row.id,
                 team_id: row.team_id,
                 user_id: row.user_id,
                 identity_key: row.identity_key,
                 motto_text: row.motto_text,
-                status: row.status,
+                // THE FIX: Assert the status type to match the MottoSubmission interface
+                status: row.status as 'pending' | 'approved' | 'rejected' | 'polled',
                 created_at: row.created_at,
-                team_name: row.teams?.name || "Unknown Team",
-                user_name: row.users?.user_display_name || "Unknown User"
+                team_name: team?.name || "Unknown Team",
+                user_name: user?.user_display_name || "Unknown User"
             };
         });
 
         return { mottos };
+
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : "An unknown error has occurred.";
         console.error("Error in getPendingMottos:", message);
         return { mottos: [], error: message };
     }
 }
+
 // For Admins to approve/reject
 export async function updateMottoStatus(id: string, status: 'approved' | 'rejected'): Promise<{ success: boolean; error?: string }> {
     const supabase = await createServerClient();

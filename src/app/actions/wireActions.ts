@@ -22,13 +22,14 @@ export interface WireCard extends CardData {
     currentUserTeamBid?: number;
 }
 
+const CARDS_PER_PAGE = 50;
+
 // ============================================
 // PUBLIC-FACING ACTIONS (for UI)
 // ============================================
 
 export async function getWireCards(): Promise<{ cards: WireCard[]; error?: string }> {
     const supabase = await createServerClient();
-
     try {
         const { data: { user } } = await supabase.auth.getUser();
         let userTeamId: string | null = null;
@@ -66,7 +67,7 @@ export async function getWireCards(): Promise<{ cards: WireCard[]; error?: strin
             .in('card_pool_id', cardIds);
         
         const bidMap = new Map(teamBids?.map(b => [b.card_pool_id, b.bid_amount]) || []);
-
+        
         const cardsWithBids: WireCard[] = wireCardsData.map(card => ({
             ...card,
             currentUserTeamBid: bidMap.get(card.id),
@@ -80,9 +81,152 @@ export async function getWireCards(): Promise<{ cards: WireCard[]; error?: strin
     }
 }
 
+// THE NEW PAGINATED & FILTERED SERVER ACTION
+export async function getPaginatedWireCards(params: {
+    currentPage: number;
+    sortBy: string;
+    sortOrder: 'asc' | 'desc';
+    searchTerm?: string;
+    filterColors?: string[];
+    matchAllColors?: boolean;
+    excludeUnselected?: boolean;
+    filterType?: string;
+    filterRarity?: string;
+    filterCmc?: string;
+    filterCubucks?: string;
+}): Promise<{ cards: WireCard[]; totalCount: number; error?: string }> {
+    // THE FIX: Added 'await' to properly resolve the Supabase Client promise!
+    const supabase = await createServerClient();
+    
+    const {
+        currentPage, sortBy, sortOrder, searchTerm, filterColors, matchAllColors,
+        excludeUnselected, filterType, filterRarity, filterCmc, filterCubucks
+    } = params;
+
+    try {
+        let query = supabase.from('card_pools').select('*', { count: 'exact' }).eq('pool_name', 'wire').not('hidden', 'eq', true);
+
+        // SEARCH TERM FILTER
+        if (searchTerm) {
+            query = query.or(`card_name.ilike.%${searchTerm}%,oracle_text.ilike.%${searchTerm}%`);
+        }
+
+        // COLOR FILTER
+        if (filterColors && filterColors.length > 0) {
+            const wantColorless = filterColors.includes('colorless');
+            const standardColors = filterColors.filter(c => c !== 'colorless');
+
+            if (matchAllColors && standardColors.length > 0) {
+                query = query.contains('colors', standardColors);
+            } else if (standardColors.length > 0) {
+                const colorFilterStr = standardColors.map(c => `colors.cs.{${c}}`).join(',');
+                if (wantColorless) {
+                    query = query.or(`colors.is.null,${colorFilterStr}`);
+                } else {
+                    query = query.or(colorFilterStr);
+                }
+            } else if (wantColorless) {
+                query = query.is('colors', null);
+            }
+
+            if (excludeUnselected && standardColors.length > 0) {
+                query = query.containedBy('colors', standardColors);
+            }
+        }
+
+        // TYPE FILTER
+        if (filterType && filterType !== 'all') {
+            query = query.ilike('card_type', `%${filterType}%`);
+        }
+
+        // RARITY FILTER
+        if (filterRarity && filterRarity !== 'all') {
+            query = query.eq('rarity', filterRarity);
+        }
+        
+        // CMC FILTER
+        if (filterCmc && filterCmc !== 'all') {
+            if (filterCmc === "0-1") query = query.lte('cmc', 1);
+            else if (filterCmc === "2-3") query = query.gte('cmc', 2).lte('cmc', 3);
+            else if (filterCmc === "4-5") query = query.gte('cmc', 4).lte('cmc', 5);
+            else if (filterCmc === "6+") query = query.gte('cmc', 6);
+        }
+
+        // CUBUCKS FILTER
+        if (filterCubucks && filterCubucks !== 'all') {
+            if (filterCubucks === "0-1") query = query.lte('cubucks_cost', 1);
+            else if (filterCubucks === "2-3") query = query.gte('cubucks_cost', 2).lte('cubucks_cost', 3);
+            else if (filterCubucks === "4-6") query = query.gte('cubucks_cost', 4).lte('cubucks_cost', 6);
+            else if (filterCubucks === "7+") query = query.gte('cubucks_cost', 7);
+        }
+
+        // SORTING (Non-color)
+        if (sortBy !== 'color') {
+            query = query.order(sortBy, { ascending: sortOrder === 'asc' });
+        }
+
+        // PAGINATION
+        const startIndex = (currentPage - 1) * CARDS_PER_PAGE;
+        query = query.range(startIndex, startIndex + CARDS_PER_PAGE - 1);
+
+        const { data, error, count } = await query;
+
+        if (error) throw error;
+        
+        let finalCards = data as WireCard[] || [];
+        
+        // POST-FETCH SORTING FOR COLOR (Requires JS evaluation)
+        if (sortBy === 'color') {
+            const getColorSortValue = (colors?: string[] | null) => {
+                if (!colors || colors.length === 0) return 7;
+                if (colors.length > 1) return 6;
+                const c = colors[0];
+                if (c === 'W') return 1; if (c === 'U') return 2; if (c === 'B') return 3; if (c === 'R') return 4; if (c === 'G') return 5;
+                return 8;
+            };
+            finalCards.sort((a, b) => {
+                const valA = getColorSortValue(a.colors);
+                const valB = getColorSortValue(b.colors);
+                if (valA === valB) return a.card_name.localeCompare(b.card_name);
+                return sortOrder === 'asc' ? valA - valB : valB - valA;
+            });
+        }
+
+        // FETCH CURRENT USER BIDS TO APPEND TO CARDS
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && finalCards.length > 0) {
+            const { data: activeSeason } = await supabase.from('seasons').select('id').eq('is_active', true).single();
+            const { data: teamMember } = await supabase.from('team_members').select('team_id').eq('user_id', user.id).single();
+            
+            if (activeSeason && teamMember) {
+                const cardIds = finalCards.map(c => c.id);
+                const { data: teamBids } = await supabase
+                    .from('wire_bids')
+                    .select('card_pool_id, bid_amount')
+                    .eq('team_id', teamMember.team_id)
+                    .eq('season_id', activeSeason.id)
+                    .in('card_pool_id', cardIds);
+                
+                if (teamBids && teamBids.length > 0) {
+                    const bidMap = new Map(teamBids.map(b => [b.card_pool_id, b.bid_amount]));
+                    finalCards = finalCards.map(card => ({
+                        ...card,
+                        currentUserTeamBid: bidMap.get(card.id),
+                    }));
+                }
+            }
+        }
+        
+        return { cards: finalCards, totalCount: count || 0 };
+
+    } catch (error) {
+        console.error("Error in getPaginatedWireCards:", error);
+        return { cards: [], totalCount: 0, error: 'Failed to fetch cards from The Wire.' };
+    }
+}
+
 export async function placeWireBid(cardPoolId: string, bidAmount: number): Promise<{ success: boolean; error?: string }> {
     const supabase = await createServerClient();
-
     try {
         if (bidAmount < 1) {
             return { success: false, error: "Bid must be at least 1 Cubuck." };
@@ -117,7 +261,6 @@ export async function placeWireBid(cardPoolId: string, bidAmount: number): Promi
             return { success: false, error: "Access to The Wire is temporarily restricted to expansion teams." };
         }
         // =========================================================================
-
         
         const { data: card } = await supabase.from('card_pools').select('card_id').eq('id', cardPoolId).single();
         if (!card) return { success: false, error: "Card not found." };
@@ -163,6 +306,7 @@ export async function placeWireBid(cardPoolId: string, bidAmount: number): Promi
 // ============================================
 // CRON JOB ACTION (for automated processing)
 // ============================================
+
 export async function processWireBids(): Promise<{ success: boolean; processedBids: number; movedToFreeAgency: number; error?: string }> {
     console.log("Starting Wire bid processing...");
     const supabase = createAdminClient(); 
@@ -179,8 +323,8 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
         if (seasonError || !activeSeason) {
             return { success: true, processedBids: 0, movedToFreeAgency: 0, error: "No active season found." };
         }
-        const seasonId = activeSeason.id;
 
+        const seasonId = activeSeason.id;
         const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
 
         const { data: processableCards, error: cardError } = await supabase
@@ -198,8 +342,6 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
 
         console.log(`Found ${processableCards.length} cards to process.`);
 
-        // THE FIX: Do not use .in() with a massive array. 
-        // Fetch all active bids for the season instead. Safe, small, and fast!
         const { data: allBidsData, error: bidsError } = await supabase
             .from('wire_bids')
             .select('*')
@@ -211,6 +353,7 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
 
         const { data: draftOrder, error: orderError } = await supabase.from('draft_order').select('team_id, lottery_number').eq('season_id', seasonId);
         if (orderError) throw new Error(`Failed to fetch draft order for tie-breakers: ${orderError.message}`);
+
         const tieBreakerMap = new Map(draftOrder?.map(o => [o.team_id, o.lottery_number]) || []);
 
         const { data: teamsData } = await supabase.from('teams').select('id, name, emoji');
@@ -300,10 +443,6 @@ export async function processWireBids(): Promise<{ success: boolean; processedBi
         
         // 5. Clean up ONLY successfully processed bids
         if (successfulCardIds.length > 0) {
-            // Because there could be hundreds of successful card IDs, we can batch delete bids 
-            // by just deleting any bid where the season_id matches AND the pool_name is now "draft" or "free",
-            // but the array delete is usually fine unless there are thousands of *bids*.
-            // To be perfectly safe, we delete bids in batches of 100.
             for (let i = 0; i < successfulCardIds.length; i += 100) {
                 const batch = successfulCardIds.slice(i, i + 100);
                 await supabase.from('wire_bids').delete().in('card_pool_id', batch);
