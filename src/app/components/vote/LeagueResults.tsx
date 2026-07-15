@@ -18,7 +18,7 @@ interface LeagueResultsProps {
 
 }
 
-export function LeagueResults({ leagueResult, teamResults, allOptions }: LeagueResultsProps) {
+export function LeagueResults({ leagueResult, teamResults, allOptions, isMultipleWinner }: LeagueResultsProps) {
   // Count teams voting for each option
   const getTeamCountForOption = (optionId: string) => {
     const option = allOptions.find((o) => o.option_id === optionId);
