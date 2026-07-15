@@ -502,54 +502,33 @@ export async function getPollResultsByType(pollId: string) {
         return { results: typedResults, success: true };
     }
 
-    if (poll.vote_type === "blessing_event") {
-        // --- DIAGNOSTICS: Stage 2 (Blessing) ---
-        console.log("[Admin Results - Blessing] Starting live odds calculation.");
-       
-        // Step 1: Fetch teams
-        const { data: teamsData, error: teamsError } = await supabase.from('teams').select('id, name, emoji').eq('is_hidden', false);
-        if(teamsError) throw new Error(`Blessing Error fetching teams: ${teamsError.message}`);
+   if (poll.vote_type === "blessing_event") {
+        const { data: teamsData } = await supabase.from('teams').select('id, name, emoji').eq('is_hidden', false);
         const teams = teamsData || [];
-        console.log(`[Admin Results - Blessing] Found ${teams.length} active teams.`);
 
-        // Step 2: Fetch options
-        const { data: optionsData, error: optionsError } = await supabase.from('poll_options').select('id, option_text').eq('poll_id', pollId).order('option_order');
-        if(optionsError) throw new Error(`Blessing Error fetching options: ${optionsError.message}`);
+        const { data: optionsData } = await supabase.from('poll_options').select('id, option_text').eq('poll_id', pollId).order('option_order');
         const options = optionsData || [];
-        console.log(`[Admin Results - Blessing] Found ${options.length} poll options.`);
         
-        // Step 3: Fetch allocations
-        const { data: allocationsData, error: allocationsError } = await supabase.from('blessing_allocations').select('team_id, option_id, voted_yes').eq('poll_id', pollId);
-        if(allocationsError) throw new Error(`Blessing Error fetching allocations: ${allocationsError.message}`);
+        const { data: allocationsData } = await supabase.from('blessing_allocations').select('team_id, option_id, voted_yes').eq('poll_id', pollId);
         const allocations = allocationsData || [];
-        console.log(`[Admin Results - Blessing] Found ${allocations.length} total allocation records for this poll.`);
 
-        // Step 4: Calculate total 'Yes' votes per team
-        const teamTotalYes: Record<string, number> = {};
-        teams.forEach(t => teamTotalYes[t.id] = 0);
-        allocations.forEach(a => {
-            if (a.voted_yes && a.team_id) {
-                teamTotalYes[a.team_id] = (teamTotalYes[a.team_id] || 0) + 1;
-            }
-        });
-        console.log("[Admin Results - Blessing] Calculated total 'Yes' votes per team:", JSON.stringify(teamTotalYes, null, 2));
+        const virtualVotes = 90;
+        const basePityOdds = 1.0;
 
-        // Step 5: Calculate odds
-        const numTeams = teams.length;
-        const baseOdds = numTeams > 0 ? 100.0 / (numTeams + 1) : 0;
         const calculatedOdds = options.map(opt => {
-            let totalOptionYes = 0;
-            const teamChances = teams.map(team => {
-                const teamVotesForOption = allocations.filter(a => a.option_id === opt.id && a.team_id === team.id && a.voted_yes).length;
-                totalOptionYes += teamVotesForOption;
-                
-                const totalYesForTeam = teamTotalYes[team.id] || 0;
-                let odds = 1.0; 
-                if (totalYesForTeam > 0 && teamVotesForOption > 0) {
-                    odds = baseOdds * (teamVotesForOption / totalYesForTeam);
-                    if (odds < 1.0) odds = 1.0;
-                }
+            // Get total "Yes" votes for THIS specific option across the whole league
+            const globalVotesForOption = allocations.filter(a => a.option_id === opt.id && a.voted_yes).length;
+            
+            // Calculate the value of a single vote for this option
+            const voteValue = 100.0 / (virtualVotes + globalVotesForOption);
 
+            const teamChances = teams.map(team => {
+                // Get this team's "Yes" votes for this option
+                const teamVotesForOption = allocations.filter(a => a.option_id === opt.id && a.team_id === team.id && a.voted_yes).length;
+                
+                // Final Odds = Base + (Their Votes * Vote Value)
+                const odds = basePityOdds + (teamVotesForOption * voteValue);
+                
                 return {
                     team_id: team.id,
                     team_name: team.name,
@@ -562,14 +541,11 @@ export async function getPollResultsByType(pollId: string) {
             return {
                 option_id: opt.id,
                 option_text: opt.option_text,
-                total_yes_votes: totalOptionYes,
+                total_yes_votes: globalVotesForOption,
                 team_chances: teamChances
             };
         });
         
-        console.log("[Admin Results - Blessing] Final calculated odds object:", JSON.stringify(calculatedOdds, null, 2));
-        
-        // THE FIX: Explicitly cast to VoteType
         return { results: { type: "blessing_event" as VoteType, rawData: calculatedOdds }, success: true };
     }
 
