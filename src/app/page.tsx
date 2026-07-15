@@ -178,31 +178,42 @@ export default function HomePage() {
 
         {/* --- NOTIFICATIONS ROW (Frosted Glass Effect) --- */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {activePolls.length > 0 && (
-            <Link href="/vote" className="group">
-              <Card className="h-full bg-slate-900/60 backdrop-blur-md border-primary/30 hover:border-primary/60 transition-colors shadow-lg">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="text-lg font-bold flex items-center gap-2 mb-2">
-                        <Vote className="size-5 text-primary" />
-                        Active Votes
-                      </h3>
-                      <ul className="text-sm text-muted-foreground space-y-1 list-disc pl-5">
-                        {activePolls.slice(0, 3).map(poll => (
-                          <li key={poll.id} className="truncate pr-2">{poll.title}</li>
-                        ))}
-                        {activePolls.length > 3 && (
-                          <li className="italic">+{activePolls.length - 3} more</li>
-                        )}
-                      </ul>
-                    </div>
-                    <ArrowRight className="size-5 text-primary opacity-0 group-hover:opacity-100 transition-opacity mt-1 shrink-0" />
+        {/* Active Votes Card */}
+        {activePolls.length > 0 && (
+          <Link href="/vote" className="group">
+            <Card className="h-full bg-slate-900/70 backdrop-blur-md border-primary/30 hover:border-primary/60 transition-colors shadow-lg">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold flex items-center gap-2 mb-2">
+                      <Vote className="size-5 text-primary" />
+                      Community Votes
+                    </h3>
+                    <ul className="text-sm text-muted-foreground space-y-1 pl-1">
+                      {activePolls.slice(0, 3).map((poll: any) => {
+                        const isEnded = new Date(poll.ends_at || Date.now()) < new Date() || !poll.is_active;
+                        return (
+                           <li key={poll.id} className="truncate flex items-center gap-2">
+                             {isEnded ? (
+                                <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Ended</Badge>
+                             ) : (
+                                <Badge className="text-[9px] px-1.5 py-0 bg-green-500/20 text-green-500 border-green-500/30">Active</Badge>
+                             )}
+                             {poll.title}
+                           </li>
+                        );
+                      })}
+                      {activePolls.length > 3 && (
+                        <li className="italic text-xs mt-2 pl-12 text-muted-foreground/60">+{activePolls.length - 3} more</li>
+                      )}
+                    </ul>
                   </div>
-                </CardContent>
-              </Card>
-            </Link>
-          )}
+                  <ArrowRight className="size-5 text-primary opacity-0 group-hover:opacity-100 transition-opacity mt-1 shrink-0" />
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        )}
 
           {cypherStats && (
             <Link href="/cypher" className="group">
