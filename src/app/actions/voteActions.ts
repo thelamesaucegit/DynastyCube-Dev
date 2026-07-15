@@ -251,7 +251,7 @@ export async function getPollWithOptions(pollId: string, userId?: string) {
 
 export async function getPollResults(pollId: string) {
   try {
-    const supabase = await createServerClient();
+    const supabase = createAdminClient(); 
     const { data, error } = await supabase.rpc("get_poll_results", { p_poll_id: pollId });
     if (error) throw error;
     return { results: data as PollResult[], success: true };
@@ -469,7 +469,7 @@ export async function getPollResultsByType(pollId: string) {
   // --- DIAGNOSTICS: Stage 1 ---
   console.log(`[Admin Results] Initiating results fetch for poll ID: ${pollId}`);
   try {
-    const supabase = await createServerClient();
+    const supabase = createAdminClient(); 
     const { data: poll, error: pollError } = await supabase.from("polls").select("vote_type").eq("id", pollId).single();
 
     if (pollError) {
