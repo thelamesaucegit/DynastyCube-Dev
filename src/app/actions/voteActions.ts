@@ -1139,7 +1139,7 @@ export async function initiatePostseasonTeamVotes(): Promise<{ success: boolean;
 }
 
 export async function getBlessingClientData(pollId: string) {
-    const supabase = createAdminClient();
+    const supabase = createAdminClient(); // Bypasses RLS to count all team votes securely
     const authClient = await createServerClient();
     
     const { data: { user } } = await authClient.auth.getUser();
@@ -1151,7 +1151,8 @@ export async function getBlessingClientData(pollId: string) {
     }
 
     try {
-        const teamVotes: Record<string, number> = {};
+        // 1. Fetch active team yes-votes for the current user's team (to maintain state of checkboxes)
+        let teamVotes: Record<string, number> = {};
         if (teamId) {
             const { data: allocations } = await supabase
                 .from('blessing_allocations')
@@ -1165,16 +1166,37 @@ export async function getBlessingClientData(pollId: string) {
             });
         }
 
+        // 2. Fetch the aggregate count of YES votes for EVERY team on EVERY option (to calculate live/final odds)
+        const { data: allAllocations } = await supabase
+            .from('blessing_allocations')
+            .select('team_id, option_id')
+            .eq('poll_id', pollId)
+            .eq('voted_yes', true);
+
+        // Map containing: { [option_id]: { [team_id]: vote_count } }
+        const globalAllocations: Record<string, Record<string, number>> = {};
+        allAllocations?.forEach(a => {
+            if (a.team_id && a.option_id) {
+                if (!globalAllocations[a.option_id]) globalAllocations[a.option_id] = {};
+                globalAllocations[a.option_id][a.team_id] = (globalAllocations[a.option_id][a.team_id] || 0) + 1;
+            }
+        });
+
+        // 3. Fetch the official resolution results (if they exist)
         const { data: results } = await supabase
             .from('blessing_results')
             .select(`
                 option_id,
                 winning_team_id,
+                roll_value,
+                team_odds,
                 teams ( id, name, emoji )
             `)
             .eq('poll_id', pollId);
 
         const winners: Record<string, { id: string, name: string, emoji: string } | null> = {};
+        const resolvedOdds: Record<string, { roll: number, odds: Record<string, number> }> = {};
+        
         results?.forEach(r => {
             const team = Array.isArray(r.teams) ? r.teams[0] : r.teams;
             winners[r.option_id] = r.winning_team_id ? {
@@ -1182,13 +1204,25 @@ export async function getBlessingClientData(pollId: string) {
                 name: team?.name || "Unknown",
                 emoji: team?.emoji || "❓"
             } : null;
+
+            resolvedOdds[r.option_id] = {
+                roll: r.roll_value,
+                odds: r.team_odds as Record<string, number>
+            };
         });
 
         const isResolved = results !== null && results.length > 0;
 
-        return { success: true, teamVotes, winners, isResolved };
+        return { 
+            success: true, 
+            teamVotes, 
+            globalAllocations, 
+            winners, 
+            resolvedOdds, 
+            isResolved 
+        };
     } catch (error) {
         console.error("Error getting blessing client data:", error);
-        return { success: false, teamVotes: {}, winners: {}, isResolved: false };
+        return { success: false, teamVotes: {}, globalAllocations: {}, winners: {}, resolvedOdds: {}, isResolved: false };
     }
 }
