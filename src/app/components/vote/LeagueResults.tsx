@@ -14,6 +14,8 @@ interface LeagueResultsProps {
   leagueResult: LeaguePollResult | null;
   teamResults: TeamPollResult[];
   allOptions: OptionWithTeams[];
+    isMultipleWinner?: boolean;
+
 }
 
 export function LeagueResults({ leagueResult, teamResults, allOptions }: LeagueResultsProps) {
@@ -31,29 +33,36 @@ export function LeagueResults({ leagueResult, teamResults, allOptions }: LeagueR
   });
 
   const totalTeamsVoting = teamResults.filter((t) => t.winning_option_id).length;
+    const winners = leagueResult?.winning_options || [];
+
 
   return (
-    <div className="space-y-6">
+     <div className="space-y-6">
       {/* League Winner Banner */}
-      {leagueResult && leagueResult.winning_option_text && (
+      {winners.length > 0 ? (
         <div className="bg-gradient-to-r from-orange-100 to-yellow-100 dark:from-orange-900/30 dark:to-yellow-900/30 border-2 border-orange-300 dark:border-orange-600 rounded-xl p-6 text-center">
           <div className="text-4xl mb-2">🏆</div>
           <p className="text-sm text-orange-700 dark:text-orange-400 font-semibold mb-2">
-            League Decision
+            League Decision{winners.length > 1 ? 's' : ''}
           </p>
-          <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            {leagueResult.winning_option_text}
-          </h3>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-            Chosen by {getTeamCountForOption(leagueResult.winning_option_id || "")} of {totalTeamsVoting} teams
-          </p>
+          {/* THE FIX: Map over the array of winners */}
+          <div className="flex flex-col gap-2">
+            {winners.map(winner => (
+              <h3 key={winner.id} className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                {winner.text}
+              </h3>
+            ))}
+          </div>
+          {isMultipleWinner && (
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
+                All options with a majority consensus were enacted.
+            </p>
+          )}
         </div>
-      )}
-
-      {!leagueResult?.winning_option_text && (
+      ) : (
         <div className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-xl p-6 text-center">
           <p className="text-gray-600 dark:text-gray-400">
-            No league decision yet. Teams are still voting.
+            No league decision yet. Teams are still voting or no option reached a majority.
           </p>
         </div>
       )}
