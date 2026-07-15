@@ -50,7 +50,6 @@ export function BlessingsAllocator({ poll, userId, onVoteSubmit }: BlessingsAllo
     }
 
     if (blessingRes.success) {
-      setTeamVotes(blessingRes.teamVotes || {});
       setGlobalAllocations(blessingRes.globalAllocations || {});
       setWinners(blessingRes.winners || {});
       setResolvedOdds(blessingRes.resolvedOdds || {});
