@@ -30,7 +30,6 @@ export function BlessingsAllocator({ poll, userId, onVoteSubmit }: BlessingsAllo
   
   // States for live and resolved data
   const [teams, setTeams] = useState<TeamInfo[]>([]);
-  const [teamVotes, setTeamVotes] = useState<Record<string, number>>({});
   const [globalAllocations, setGlobalAllocations] = useState<Record<string, Record<string, number>>>({});
   const [winners, setWinners] = useState<Record<string, { id: string, name: string, emoji: string } | null>>({});
   const [resolvedOdds, setResolvedOdds] = useState<Record<string, { roll: number, odds: Record<string, number> }>>({});
@@ -47,7 +46,7 @@ export function BlessingsAllocator({ poll, userId, onVoteSubmit }: BlessingsAllo
     ]);
 
     if (teamsRes.teams) {
-      setTeams(teamsRes.teams.map((t: any) => ({ id: t.id, name: t.name, emoji: t.emoji })));
+      setTeams(teamsRes.teams.map((t: TeamWithDetails) => ({ id: t.id, name: t.name, emoji: t.emoji })));
     }
 
     if (blessingRes.success) {
@@ -264,7 +263,7 @@ export function BlessingsAllocator({ poll, userId, onVoteSubmit }: BlessingsAllo
           // ===================================================================
           <div className="space-y-6">
             <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-3 text-sm text-purple-800 dark:text-purple-200 mb-4">
-              <strong>How it works:</strong> Vote &quot;Yes&quot; for the blessings your team wants. Each vote increases your team's odds! final odds will be displayed here as soon as voting concludes.
+              <strong>How it works:</strong> Vote &quot;Yes&quot; for the blessings your Team wants. Each vote increases your Team&apos;s odds! Final odds will be displayed here as soon as voting concludes.
             </div>
             
             <div className="space-y-3">
