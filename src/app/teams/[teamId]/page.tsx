@@ -693,7 +693,7 @@ const oracleText = pick.oracle_text || '';
                                     {isUndrafting ? "..." : "Cut"}
                                   </button>
                                 )}
-                                {seasonPhase === "playoffs" && (
+                                {(seasonPhase === "playoffs" || seasonPhase === "postseason") && (
                                   <button onClick={(e) => { e.preventDefault(); handleToggleKeeper(pick); }} disabled={isToggling || !!undrafting} className={`absolute bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-xs font-bold shadow-lg opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 z-10 whitespace-nowrap pointer-events-auto ${isKeeper ? 'bg-gray-700 hover:bg-gray-800 text-white' : 'bg-green-600 hover:bg-green-500 text-white'}`} >
                                     {isToggling ? "Saving..." : isKeeper ? "Remove Keeper" : "Designate Keeper"}
                                   </button>
