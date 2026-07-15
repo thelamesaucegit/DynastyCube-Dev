@@ -1151,7 +1151,7 @@ export async function getBlessingClientData(pollId: string) {
     }
 
     try {
-        let teamVotes: Record<string, number> = {};
+        const teamVotes: Record<string, number> = {};
         if (teamId) {
             const { data: allocations } = await supabase
                 .from('blessing_allocations')
