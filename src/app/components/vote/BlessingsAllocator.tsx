@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/ca
 import { Badge } from "@/app/components/ui/badge";
 import { Button } from "@/app/components/ui/button";
 import { castVote, getBlessingClientData } from "@/app/actions/voteActions";
-import { getTeamsWithDetails } from "@/app/actions/teamActions";
+import { getTeamsWithDetails, type TeamWithDetails } from "@/app/actions/teamActions"; 
 import type { PollWithOptions } from "@/app/actions/voteActions";
 import { Clock, Check, X, Loader2, AlertCircle, Dices, Trophy, CheckCircle2 } from "lucide-react";
 
