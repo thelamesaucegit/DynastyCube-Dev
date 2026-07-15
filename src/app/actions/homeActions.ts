@@ -509,11 +509,16 @@ export async function getHomepageActivePolls(): Promise<{ polls: HomepagePoll[];
       if (teamMember) userTeamId = teamMember.team_id;
     }
 
+  const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const cutoffIso = sevenDaysAgo.toISOString();
+
     const { data: polls, error } = await supabase
       .from('polls')
-      .select('id, title, vote_type, team_id')
-      .eq('is_active', true)
+      .select('id, title, vote_type, team_id, ends_at, is_active') 
+      .or(`is_active.eq.true,ends_at.gte.${cutoffIso}`) 
       .order('created_at', { ascending: false });
+
 
     if (error) return { polls: [], error: error.message };
 
@@ -529,6 +534,8 @@ export async function getHomepageActivePolls(): Promise<{ polls: HomepagePoll[];
         id: poll.id,
         title: poll.title,
         vote_type: poll.vote_type,
+        ends_at: poll.ends_at, 
+        is_active: poll.is_active
       }));
 
     return { polls: activePolls };
