@@ -1,4 +1,5 @@
 // src/app/components/vote/LeagueResults.tsx
+
 "use client";
 
 import React from "react";
@@ -14,30 +15,30 @@ interface LeagueResultsProps {
   leagueResult: LeaguePollResult | null;
   teamResults: TeamPollResult[];
   allOptions: OptionWithTeams[];
-    isMultipleWinner?: boolean;
-
 }
 
-export function LeagueResults({ leagueResult, teamResults, allOptions, isMultipleWinner }: LeagueResultsProps) {
-  // Count teams voting for each option
+export function LeagueResults({ leagueResult, teamResults, allOptions }: LeagueResultsProps) {
+  
   const getTeamCountForOption = (optionId: string) => {
     const option = allOptions.find((o) => o.option_id === optionId);
     return option?.teams_voting?.length || 0;
   };
 
-  // Sort options by team count
   const sortedOptions = [...allOptions].sort((a, b) => {
     const countA = a.teams_voting?.length || 0;
     const countB = b.teams_voting?.length || 0;
     return countB - countA;
   });
 
-  const totalTeamsVoting = teamResults.filter((t) => t.winning_option_id).length;
-    const winners = leagueResult?.winning_options || [];
-
+  // Calculate the total number of teams that actually participated in the vote
+  const totalTeamsVoting = teamResults.length;
+  
+  // Safely extract the array of winning options
+  const winners = leagueResult?.winning_options || [];
 
   return (
-     <div className="space-y-6">
+    <div className="space-y-6">
+      
       {/* League Winner Banner */}
       {winners.length > 0 ? (
         <div className="bg-gradient-to-r from-orange-100 to-yellow-100 dark:from-orange-900/30 dark:to-yellow-900/30 border-2 border-orange-300 dark:border-orange-600 rounded-xl p-6 text-center">
@@ -45,24 +46,21 @@ export function LeagueResults({ leagueResult, teamResults, allOptions, isMultipl
           <p className="text-sm text-orange-700 dark:text-orange-400 font-semibold mb-2">
             League Decision{winners.length > 1 ? 's' : ''}
           </p>
-          {/* THE FIX: Map over the array of winners */}
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             {winners.map(winner => (
               <h3 key={winner.id} className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {winner.text}
               </h3>
             ))}
           </div>
-          {isMultipleWinner && (
-            <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
-                All options with a majority consensus were enacted.
-            </p>
-          )}
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-4 border-t border-orange-200 dark:border-orange-800/50 pt-3">
+            These options received a majority consensus ({Math.ceil(totalTeamsVoting / 2.0)} or more) from the {totalTeamsVoting} participating teams.
+          </p>
         </div>
       ) : (
         <div className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-xl p-6 text-center">
           <p className="text-gray-600 dark:text-gray-400">
-            No league decision yet. Teams are still voting or no option reached a majority.
+            No options reached the required majority consensus, or no teams have voted yet.
           </p>
         </div>
       )}
@@ -73,15 +71,14 @@ export function LeagueResults({ leagueResult, teamResults, allOptions, isMultipl
           Vote Distribution
         </h4>
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-          Each team counts as one vote toward the league decision.
+          Each team counts as one vote toward the league decision. Options require 50% or more to pass.
         </p>
-
         <div className="space-y-4">
           {sortedOptions.map((option) => {
-            const teamCount = option.teams_voting?.length || 0;
+            const teamCount = getTeamCountForOption(option.option_id);
             const percentage = totalTeamsVoting > 0 ? (teamCount / totalTeamsVoting) * 100 : 0;
-            const isWinner = leagueResult?.winning_option_id === option.option_id;
-
+            const isWinner = winners.some(w => w.id === option.option_id);
+            
             return (
               <div
                 key={option.option_id}
@@ -89,7 +86,7 @@ export function LeagueResults({ leagueResult, teamResults, allOptions, isMultipl
                   border rounded-lg p-4 transition-all
                   ${
                     isWinner
-                      ? "bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-600"
+                      ? "bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-600 shadow-sm"
                       : "bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700"
                   }
                 `}
@@ -105,7 +102,6 @@ export function LeagueResults({ leagueResult, teamResults, allOptions, isMultipl
                     {teamCount} team{teamCount !== 1 ? "s" : ""} ({percentage.toFixed(0)}%)
                   </span>
                 </div>
-
                 {/* Progress bar */}
                 <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-3">
                   <div
@@ -115,7 +111,6 @@ export function LeagueResults({ leagueResult, teamResults, allOptions, isMultipl
                     style={{ width: `${percentage}%` }}
                   ></div>
                 </div>
-
                 {/* Teams that voted for this option */}
                 {option.teams_voting && option.teams_voting.length > 0 && (
                   <div className="flex flex-wrap gap-2">
@@ -143,9 +138,8 @@ export function LeagueResults({ leagueResult, teamResults, allOptions, isMultipl
             Team Voting Details
           </h4>
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            Each team&apos;s internal vote was weighted by member roles (Captain: 3x, Pilot/Broker: 2x, Others: 1x).
+            A team casts a &quot;Yes&quot; for an option if it receives &ge;50% of the team&apos;s participating vote weight.
           </p>
-
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {teamResults.map((teamResult) => (
               <div
@@ -159,22 +153,24 @@ export function LeagueResults({ leagueResult, teamResults, allOptions, isMultipl
                       {teamResult.team_name}
                     </h5>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {teamResult.total_weighted_votes} weighted votes
+                      {teamResult.total_weighted_votes} participating vote weight
                     </p>
                   </div>
                 </div>
-
                 <div className="border-t border-gray-200 dark:border-gray-700 pt-2 mt-2">
                   {teamResult.winning_option_text ? (
                     <p className="text-sm">
-                      <span className="text-gray-500 dark:text-gray-400">Voted for: </span>
-                      <span className="font-semibold text-gray-900 dark:text-gray-100">
-                        {teamResult.winning_option_text}
+                      <span className="text-gray-500 dark:text-gray-400 block mb-1">Team Consensus Reached For: </span>
+                      <span className="font-semibold text-gray-900 dark:text-gray-100 block">
+                        {/* If they passed multiple, they are returned comma-separated from the SQL function */}
+                        {teamResult.winning_option_text.split(', ').map((opt, i) => (
+                           <span key={i} className="block">• {opt}</span>
+                        ))}
                       </span>
                     </p>
                   ) : (
                     <p className="text-sm text-gray-500 dark:text-gray-400 italic">
-                      No votes yet
+                      Failed to reach 50% consensus on any option.
                     </p>
                   )}
                 </div>
