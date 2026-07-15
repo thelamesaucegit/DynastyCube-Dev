@@ -1152,7 +1152,7 @@ export async function getBlessingClientData(pollId: string) {
 
     try {
         // 1. Fetch active team yes-votes for the current user's team (to maintain state of checkboxes)
-        let teamVotes: Record<string, number> = {};
+        const teamVotes: Record<string, number> = {};
         if (teamId) {
             const { data: allocations } = await supabase
                 .from('blessing_allocations')
