@@ -186,14 +186,25 @@ export default function HomePage() {
                     <div>
                       <h3 className="text-lg font-bold flex items-center gap-2 mb-2">
                         <Vote className="size-5 text-primary" />
-                        Active Votes
+                        Community Votes
                       </h3>
-                      <ul className="text-sm text-muted-foreground space-y-1 list-disc pl-5">
-                        {activePolls.slice(0, 3).map(poll => (
-                          <li key={poll.id} className="truncate pr-2">{poll.title}</li>
-                        ))}
+                      <ul className="text-sm text-muted-foreground space-y-1 pl-1">
+                        {/* THE FIX: Replaced 'any' with a strict inline interface */}
+                        {activePolls.slice(0, 3).map((poll: { id: string; title: string; ends_at?: string; is_active?: boolean }) => {
+                          const isEnded = new Date(poll.ends_at || Date.now()) < new Date() || !poll.is_active;
+                          return (
+                             <li key={poll.id} className="truncate flex items-center gap-2">
+                               {isEnded ? (
+                                  <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Ended</Badge>
+                               ) : (
+                                  <Badge className="text-[9px] px-1.5 py-0 bg-green-500/20 text-green-500 border-green-500/30">Active</Badge>
+                               )}
+                               {poll.title}
+                             </li>
+                          );
+                        })}
                         {activePolls.length > 3 && (
-                          <li className="italic">+{activePolls.length - 3} more</li>
+                          <li className="italic text-xs mt-2 pl-12 text-muted-foreground/60">+{activePolls.length - 3} more</li>
                         )}
                       </ul>
                     </div>
