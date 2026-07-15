@@ -198,3 +198,35 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
         return { success: false, error: message };
     }
 }
+
+// Add to the bottom of /src/app/actions/tesseractSessionActions.ts
+
+export async function getTesseractLobbyInfo(sessionId: string): Promise<{
+    success: boolean;
+    name?: string;
+    requiresPasscode?: boolean;
+    status?: string;
+    error?: string;
+}> {
+    const adminSupabase = createAdminClient(); 
+    try {
+        const { data, error } = await adminSupabase
+            .from('tesseract_draft_sessions')
+            .select('name, passcode, status')
+            .eq('id', sessionId)
+            .single();
+            
+        if (error || !data) return { success: false, error: "Lobby not found." };
+        
+        return {
+            success: true,
+            name: data.name,
+            requiresPasscode: !!data.passcode,
+            status: data.status
+        };
+    } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : "An unexpected error occurred.";
+        return { success: false, error: message };
+    }
+}
+
