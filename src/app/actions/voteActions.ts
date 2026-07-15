@@ -139,6 +139,10 @@ export interface PollWithOptions extends Poll {
 export async function getActivePolls(userId?: string) {
   try {
     const supabase = await createServerClient();
+   const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const cutoffIso = sevenDaysAgo.toISOString();
+
     const { data, error } = await supabase
       .from("polls")
       .select(`
@@ -146,8 +150,10 @@ export async function getActivePolls(userId?: string) {
         allow_multiple_votes, show_results_before_end, vote_type, total_votes,
         created_at, updated_at, team_id,
         options:poll_options ( id, poll_id, option_text, option_order, vote_count, created_at ) 
-      `) // <-- FIXED: Added created_at to the poll_options fetch!
-      .eq("is_active", true)
+      `) 
+      //  Fetch polls that are EITHER active OR ended within the last 7 days
+      // and ensure they are global polls (team_id is null)
+      .or(`is_active.eq.true,ends_at.gte.${cutoffIso}`)
       .is("team_id", null)
       .order("created_at", { ascending: false });
 
@@ -158,7 +164,14 @@ export async function getActivePolls(userId?: string) {
 
     const pollsWithOptions: PollWithOptions[] = polls.map((poll) => {
       const sortedOptions = poll.options.sort((a, b) => a.option_order - b.option_order);
-      return { ...poll, options: sortedOptions };
+const now = new Date();
+      const startsAt = new Date(poll.starts_at);
+      const endsAt = new Date(poll.ends_at);
+      let status: "active" | "ended" | "upcoming" = "active";
+      if (!poll.is_active || endsAt < now) status = "ended";
+      else if (startsAt > now) status = "upcoming";
+
+      return { ...poll, options: sortedOptions, status };
     });
 
     if (userId) {
