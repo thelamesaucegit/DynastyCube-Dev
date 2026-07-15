@@ -1137,3 +1137,58 @@ export async function initiatePostseasonTeamVotes(): Promise<{ success: boolean;
         return { success: false, error: String(error) };
     }
 }
+
+export async function getBlessingClientData(pollId: string) {
+    const supabase = createAdminClient();
+    const authClient = await createServerClient();
+    
+    const { data: { user } } = await authClient.auth.getUser();
+    let teamId: string | null = null;
+    
+    if (user) {
+        const { data: teamData } = await authClient.rpc("get_user_team_for_voting", { p_user_id: user.id });
+        teamId = teamData || null;
+    }
+
+    try {
+        let teamVotes: Record<string, number> = {};
+        if (teamId) {
+            const { data: allocations } = await supabase
+                .from('blessing_allocations')
+                .select('option_id')
+                .eq('poll_id', pollId)
+                .eq('team_id', teamId)
+                .eq('voted_yes', true);
+            
+            allocations?.forEach(a => {
+                teamVotes[a.option_id] = (teamVotes[a.option_id] || 0) + 1;
+            });
+        }
+
+        const { data: results } = await supabase
+            .from('blessing_results')
+            .select(`
+                option_id,
+                winning_team_id,
+                teams ( id, name, emoji )
+            `)
+            .eq('poll_id', pollId);
+
+        const winners: Record<string, { id: string, name: string, emoji: string } | null> = {};
+        results?.forEach(r => {
+            const team = Array.isArray(r.teams) ? r.teams[0] : r.teams;
+            winners[r.option_id] = r.winning_team_id ? {
+                id: team?.id || r.winning_team_id,
+                name: team?.name || "Unknown",
+                emoji: team?.emoji || "❓"
+            } : null;
+        });
+
+        const isResolved = results !== null && results.length > 0;
+
+        return { success: true, teamVotes, winners, isResolved };
+    } catch (error) {
+        console.error("Error getting blessing client data:", error);
+        return { success: false, teamVotes: {}, winners: {}, isResolved: false };
+    }
+}
