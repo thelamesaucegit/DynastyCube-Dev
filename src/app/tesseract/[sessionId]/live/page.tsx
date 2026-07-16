@@ -128,7 +128,7 @@ export default function TesseractLiveDraftPage({ params }: { params: Promise<{ s
                 return;
             }
             setMe(userRes.participant);
-            if (userRes.participant.draftPosition === 1) { 
+            if (userRes.participant.draft_position === 1) { 
                 setIsCreator(true);
             }
             await loadData(userRes.participant);
