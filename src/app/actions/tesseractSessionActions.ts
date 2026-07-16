@@ -10,7 +10,8 @@ export interface CreateTesseractParams {
     draftFormat: 'snake' | 'linear';
     totalRounds: number;
     hoursPerPick: number;
-    startTime: string; // ISO format
+    maxPlayers: number; // <-- ADDED
+    startTime: string; 
     csvData: string;
 }
 
@@ -23,10 +24,6 @@ export interface ParsedCubeCard {
     card_type: string | null;
 }
 
-/**
- * Robust CSV parser tailored for Cube Cobra exports.
- * Properly handles commas inside quoted strings (e.g., "Jace, the Mind Sculptor").
- */
 function parseCubeCobraCSV(csvText: string): ParsedCubeCard[] {
     const lines = csvText.split(/\r?\n/).filter(l => l.trim() !== "");
     if (lines.length < 2) throw new Error("CSV appears to be empty or missing data.");
@@ -47,13 +44,11 @@ function parseCubeCobraCSV(csvText: string): ParsedCubeCard[] {
             }
         }
         result.push(current.trim());
-        // Strip wrapping quotes
         return result.map(s => s.replace(/^"|"$/g, '').trim());
     };
 
     const headers = parseRow(lines[0]).map(h => h.toLowerCase());
     
-    // Standard Cube Cobra Headers
     const nameIdx = headers.indexOf('name');
     const setIdx = headers.indexOf('set');
     const imgIdx = headers.indexOf('image url');
@@ -69,12 +64,10 @@ function parseCubeCobraCSV(csvText: string): ParsedCubeCard[] {
     
     for (let i = 1; i < lines.length; i++) {
         const row = parseRow(lines[i]);
-        if (!row[nameIdx]) continue; // Skip empty rows
+        if (!row[nameIdx]) continue; 
 
         let colorsArray: string[] = [];
         if (colorIdx !== -1 && row[colorIdx]) {
-            // CubeCobra formats colors like "WUB" or "W, U, B". 
-            // We strip non-WUBRG characters and split into a clean array.
             const rawColor = row[colorIdx].toUpperCase().replace(/[^WUBRG]/g, '');
             colorsArray = rawColor.split('').filter(Boolean);
         }
@@ -92,21 +85,16 @@ function parseCubeCobraCSV(csvText: string): ParsedCubeCard[] {
     return cards;
 }
 
-/**
- * Creates a new Tesseract Draft Session, ensuring overlap rules and inserting the parsed CSV.
- */
 export async function createTesseractDraft(params: CreateTesseractParams): Promise<{ success: boolean; sessionId?: string; error?: string }> {
     const authClient = await createServerClient();
     const adminSupabase = createAdminClient(); 
 
     try {
-        // 1. Authenticate Creator
         const { data: { user } } = await authClient.auth.getUser();
         if (!user) {
             return { success: false, error: "You must be signed in to create a Tesseract draft." };
         }
 
-        // 2. Parse CSV (Fail early if invalid)
         let parsedCards: ParsedCubeCard[] = [];
         try {
             parsedCards = parseCubeCobraCSV(params.csvData);
@@ -115,13 +103,11 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
             return { success: false, error: csvErr instanceof Error ? csvErr.message : "Failed to parse CSV." };
         }
 
-        // 3. Enforce Overlap & Duration Rules
         const newStart = new Date(params.startTime).getTime();
-        const maxDurationMs = 7 * 24 * 60 * 60 * 1000; // 1 week
+        const maxDurationMs = 7 * 24 * 60 * 60 * 1000; 
         const newEnd = newStart + maxDurationMs;
         const newEndISO = new Date(newEnd).toISOString();
 
-        // Fetch all non-completed sessions to check for overlaps
         const { data: existingSessions, error: fetchErr } = await adminSupabase
             .from('tesseract_draft_sessions')
             .select('start_time, end_time')
@@ -132,10 +118,8 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
         let overlapCount = 0;
         existingSessions?.forEach(session => {
             const estStart = new Date(session.start_time).getTime();
-            // If an end_time isn't explicitly set, assume the 1-week maximum
             const estEnd = session.end_time ? new Date(session.end_time).getTime() : estStart + maxDurationMs;
             
-            // Overlap logic: (StartA < EndB) AND (EndA > StartB)
             if (newStart < estEnd && newEnd > estStart) {
                 overlapCount++;
             }
@@ -145,7 +129,6 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
             return { success: false, error: "Cannot schedule draft: A maximum of 2 overlapping Tesseract drafts are allowed at any given time." };
         }
 
-        // 4. Create Draft Session
         const { data: session, error: sessionErr } = await adminSupabase
             .from('tesseract_draft_sessions')
             .insert({
@@ -155,9 +138,10 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
                 draft_format: params.draftFormat,
                 total_rounds: params.totalRounds,
                 hours_per_pick: params.hoursPerPick,
+                max_players: params.maxPlayers, // <-- ADDED
                 start_time: params.startTime,
                 end_time: newEndISO, 
-                expires_at: new Date(newEnd + (3 * 24 * 60 * 60 * 1000)).toISOString() // Expires 3 days after max end time for cleanup
+                expires_at: new Date(newEnd + (3 * 24 * 60 * 60 * 1000)).toISOString() 
             })
             .select('id')
             .single();
@@ -166,8 +150,6 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
             throw new Error(`Failed to create session: ${sessionErr?.message}`);
         }
 
-        // 5. Bulk Insert Cards into Isolated Pool
-        // Map the parsed cards to include the generated session_id
         const cardPayload = parsedCards.map(card => ({
             draft_session_id: session.id,
             card_name: card.card_name,
@@ -179,12 +161,10 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
             is_drafted: false
         }));
 
-        // Insert in batches of 500 to ensure we don't hit payload limits on massive cubes
         for (let i = 0; i < cardPayload.length; i += 500) {
             const batch = cardPayload.slice(i, i + 500);
             const { error: insertErr } = await adminSupabase.from('tesseract_card_pools').insert(batch);
             if (insertErr) {
-                // If a batch fails, attempt to rollback the session to avoid orphan data
                 await adminSupabase.from('tesseract_draft_sessions').delete().eq('id', session.id);
                 throw new Error(`Failed to insert cards into the pool: ${insertErr.message}`);
             }
@@ -198,8 +178,6 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
         return { success: false, error: message };
     }
 }
-
-// Add to the bottom of /src/app/actions/tesseractSessionActions.ts
 
 export async function getTesseractLobbyInfo(sessionId: string): Promise<{
     success: boolean;
@@ -229,4 +207,3 @@ export async function getTesseractLobbyInfo(sessionId: string): Promise<{
         return { success: false, error: message };
     }
 }
-

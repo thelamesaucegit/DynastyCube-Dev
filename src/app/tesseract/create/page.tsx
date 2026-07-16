@@ -12,8 +12,9 @@ export default function CreateTesseractDraftPage() {
     const [name, setName] = useState("");
     const [passcode, setPasscode] = useState("");
     const [draftFormat, setDraftFormat] = useState<"snake" | "linear">("snake");
-    const [totalRounds, setTotalRounds] = useState<number>(3);
-    const [hoursPerPick, setHoursPerPick] = useState<number>(24);
+    const [totalRounds, setTotalRounds] = useState<number>(40);
+    const [hoursPerPick, setHoursPerPick] = useState<number>(1);
+    const [maxPlayers, setMaxPlayers] = useState<number>(8);
     const [startDate, setStartDate] = useState("");
     const [startTime, setStartTime] = useState("");
     const [csvData, setCsvData] = useState<string>("");
@@ -49,6 +50,7 @@ export default function CreateTesseractDraftPage() {
         if (!csvData) return setError("Please upload a Cube Cobra CSV file.");
         if (totalRounds < 1) return setError("Total rounds must be at least 1.");
         if (hoursPerPick <= 0) return setError("Hours per pick must be greater than 0.");
+        if (maxPlayers < 2) return setError("Draft must have at least 2 players.");
 
         setLoading(true);
 
@@ -61,12 +63,12 @@ export default function CreateTesseractDraftPage() {
                 draftFormat,
                 totalRounds,
                 hoursPerPick,
+                maxPlayers,
                 startTime: startISO,
                 csvData
             });
 
             if (result.success && result.sessionId) {
-                // Redirect to the join/lobby page upon success
                 router.push(`/tesseract/${result.sessionId}/join`);
             } else {
                 setError(result.error || "Failed to create draft session.");
@@ -125,7 +127,7 @@ export default function CreateTesseractDraftPage() {
                 <div className="space-y-4 pt-4 border-t border-gray-300 dark:border-gray-700">
                     <h2 className="text-xl font-bold">Draft Rules</h2>
                     
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div>
                             <label className="block font-bold mb-1">Format *</label>
                             <select 
@@ -136,6 +138,18 @@ export default function CreateTesseractDraftPage() {
                                 <option value="snake">Snake</option>
                                 <option value="linear">Linear</option>
                             </select>
+                        </div>
+                        <div>
+                            <label className="block font-bold mb-1">Max Players *</label>
+                            <input 
+                                type="number" 
+                                min="2"
+                                max="32"
+                                value={maxPlayers} 
+                                onChange={(e) => setMaxPlayers(Number(e.target.value))} 
+                                className="w-full border border-gray-400 p-2 bg-transparent"
+                                required
+                            />
                         </div>
                         <div>
                             <label className="block font-bold mb-1">Total Rounds *</label>
@@ -153,7 +167,7 @@ export default function CreateTesseractDraftPage() {
                             <input 
                                 type="number" 
                                 step="0.5"
-                                min="0.1"
+                                min="0.5"
                                 value={hoursPerPick} 
                                 onChange={(e) => setHoursPerPick(Number(e.target.value))} 
                                 className="w-full border border-gray-400 p-2 bg-transparent"

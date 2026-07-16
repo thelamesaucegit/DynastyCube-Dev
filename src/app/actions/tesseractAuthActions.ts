@@ -2,7 +2,7 @@
 
 "use server";
 
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, createAdminClient } from "@/lib/supabase"; 
 import { cookies } from "next/headers";
 import crypto from "crypto";
 
@@ -14,36 +14,13 @@ export interface TesseractParticipant {
     draft_position: number;
 }
 
-async function createClient() {
-    const cookieStore = await cookies();
-    return createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-            cookies: {
-                getAll() { return cookieStore.getAll(); },
-                setAll(cookiesToSet) {
-                    try {
-                        cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
-                    } catch {
-                        // Ignore errors in Server Components
-                    }
-                },
-            },
-        }
-    );
-}
-
-/**
- * Validates the lobby passcode and joins the participant to the Tesseract draft.
- * Drops an HTTP-only cookie to maintain the session.
- */
 export async function joinTesseractLobby(
     sessionId: string, 
     displayName: string, 
     passcode?: string
 ): Promise<{ success: boolean; participant?: TesseractParticipant; error?: string }> {
-    const supabase = await createClient();
+    const authClient = await createServerClient();
+    const adminSupabase = createAdminClient(); 
     
     try {
         const trimmedName = displayName.trim();
@@ -51,10 +28,9 @@ export async function joinTesseractLobby(
             return { success: false, error: "Display name must be at least 2 characters." };
         }
 
-        // 1. Fetch Session & Validate Passcode
-        const { data: session, error: sessionErr } = await supabase
+        const { data: session, error: sessionErr } = await adminSupabase
             .from('tesseract_draft_sessions')
-            .select('id, passcode, status')
+            .select('id, passcode, status, max_players') // <-- ADDED max_players
             .eq('id', sessionId)
             .single();
 
@@ -64,23 +40,24 @@ export async function joinTesseractLobby(
             return { success: false, error: "Incorrect lobby passcode." };
         }
 
-        // 2. Check if user is logged into the main site
-        const { data: { user } } = await supabase.auth.getUser();
-
-        // 3. Generate a secure guest token
+        const { data: { user } } = await authClient.auth.getUser();
         const sessionToken = crypto.randomBytes(32).toString('hex');
 
-        // 4. Determine next draft position (count current participants + 1)
-        const { count, error: countErr } = await supabase
+        const { count, error: countErr } = await adminSupabase
             .from('tesseract_participants')
             .select('*', { count: 'exact', head: true })
             .eq('draft_session_id', sessionId);
 
         if (countErr) return { success: false, error: "Database error checking lobby size." };
+        
+        // THE FIX: Enforce Lobby Limit!
+        if (session.max_players && count !== null && count >= session.max_players) {
+             return { success: false, error: "This draft lobby is already full." };
+        }
+        
         const nextPosition = (count || 0) + 1;
 
-        // 5. Insert Participant
-        const { data: participant, error: insertErr } = await supabase
+        const { data: participant, error: insertErr } = await adminSupabase
             .from('tesseract_participants')
             .insert({
                 draft_session_id: sessionId,
@@ -93,19 +70,18 @@ export async function joinTesseractLobby(
             .single();
 
         if (insertErr) {
-            if (insertErr.code === '23505') { // Unique constraint violation
+            if (insertErr.code === '23505') { 
                 return { success: false, error: "That display name is already taken in this lobby." };
             }
             throw insertErr;
         }
 
-        // 6. Set the secure cookie
         const cookieStore = await cookies();
         cookieStore.set(`tesseract_token_${sessionId}`, sessionToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',
-            maxAge: 60 * 60 * 24 * 14, // 14 days
+            maxAge: 60 * 60 * 24 * 14, 
             path: '/'
         });
 
@@ -117,9 +93,6 @@ export async function joinTesseractLobby(
     }
 }
 
-/**
- * Retrieves the current participant for the given session based on their cookie.
- */
 export async function getTesseractSessionUser(sessionId: string): Promise<{
     participant: TesseractParticipant | null;
     error?: string;
@@ -130,8 +103,8 @@ export async function getTesseractSessionUser(sessionId: string): Promise<{
 
         if (!token) return { participant: null };
 
-        const supabase = await createClient();
-        const { data, error } = await supabase
+        const adminSupabase = createAdminClient();
+        const { data, error } = await adminSupabase
             .from('tesseract_participants')
             .select('id, draft_session_id, user_id, display_name, draft_position')
             .eq('session_token', token)
