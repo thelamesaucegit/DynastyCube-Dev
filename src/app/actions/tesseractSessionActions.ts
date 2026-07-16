@@ -229,3 +229,77 @@ export async function getTesseractLobbyInfo(sessionId: string): Promise<{
         return { success: false, error: message };
     }
 }
+
+/**
+ * Checks if the current authenticated user is the creator of the Tesseract Draft.
+ */
+async function verifyTesseractCreator(sessionId: string): Promise<boolean> {
+    const authClient = await createServerClient();
+    const { data: { user } } = await authClient.auth.getUser();
+    if (!user) return false;
+
+    const adminSupabase = createAdminClient();
+    const { data } = await adminSupabase
+        .from('tesseract_draft_sessions')
+        .select('created_by')
+        .eq('id', sessionId)
+        .single();
+
+    return data?.created_by === user.id;
+}
+
+export async function startTesseractDraft(sessionId: string): Promise<{ success: boolean; error?: string }> {
+    const isCreator = await verifyTesseractCreator(sessionId);
+    if (!isCreator) return { success: false, error: "Only the creator can start the draft." };
+
+    const adminSupabase = createAdminClient();
+    try {
+        const { data: session } = await adminSupabase.from('tesseract_draft_sessions').select('*').eq('id', sessionId).single();
+        if (!session) return { success: false, error: "Session not found." };
+        if (session.status === 'completed') return { success: false, error: "Draft is already completed." };
+
+        // Identify who is picking next (to start the clock)
+        const { count } = await adminSupabase.from('tesseract_card_pools').select('id', { count: 'exact', head: true }).eq('draft_session_id', sessionId).eq('is_drafted', true);
+        const nextPickGlobalIndex = count || 0;
+        
+        // We will finalize the specific participant turn logic when we rebuild the Draft Engine!
+        
+        const newDeadline = new Date(Date.now() + (session.hours_per_pick * 60 * 60 * 1000)).toISOString();
+
+        await adminSupabase.from('tesseract_draft_sessions').update({
+            status: 'active',
+            current_pick_deadline: newDeadline
+            // current_on_clock_participant_id will be set by the draft engine
+        }).eq('id', sessionId);
+
+        return { success: true };
+    } catch (e: unknown) {
+        return { success: false, error: String(e) };
+    }
+}
+
+export async function pauseTesseractDraft(sessionId: string): Promise<{ success: boolean; error?: string }> {
+    const isCreator = await verifyTesseractCreator(sessionId);
+    if (!isCreator) return { success: false, error: "Only the creator can pause the draft." };
+
+    const adminSupabase = createAdminClient();
+    try {
+        await adminSupabase.from('tesseract_draft_sessions').update({ status: 'paused' }).eq('id', sessionId);
+        return { success: true };
+    } catch (e: unknown) {
+        return { success: false, error: String(e) };
+    }
+}
+
+export async function updateTesseractSettings(sessionId: string, maxPlayers: number): Promise<{ success: boolean; error?: string }> {
+    const isCreator = await verifyTesseractCreator(sessionId);
+    if (!isCreator) return { success: false, error: "Only the creator can edit settings." };
+
+    const adminSupabase = createAdminClient();
+    try {
+        await adminSupabase.from('tesseract_draft_sessions').update({ max_players: maxPlayers }).eq('id', sessionId);
+        return { success: true };
+    } catch (e: unknown) {
+        return { success: false, error: String(e) };
+    }
+}
