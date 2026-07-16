@@ -45,20 +45,28 @@ async function computeTesseractPick(participantId: string, sessionId: string, ex
         .eq('is_drafted', false)
         .not('id', 'in', `(${excludedIds.join(',')})`)
         .not('cubecobra_elo', 'is', null)
-        .limit(500); // Analyze a sufficiently large batch
+        .limit(500);
 
     if (availableErr) { console.error(availableErr); return null; }
     if (!available || available.length === 0) return null;
 
-    // 3. Simple Color Affinity Calculation (no budget, no history)
+    // 3. Simple Color Affinity Calculation
     const colorCounts: Record<string, number> = { W: 0, U: 0, B: 0, R: 0, G: 0 };
-    (picks || []).forEach(p => (p.colors || []).forEach(c => { colorCounts[c] = (colorCounts[c] || 0) + 1; }));
+    
+    // THE FIX: Explicitly type the parameters in the loops
+    (picks || []).forEach((p: { colors?: string[] | null }) => {
+        (p.colors || []).forEach((c: string) => {
+            if (colorCounts[c] !== undefined) {
+                colorCounts[c]++;
+            }
+        });
+    });
 
     const sorted = available.map(card => {
         const elo = card.cubecobra_elo || 1000;
         let affinity = 1.0;
         if (card.colors && card.colors.length > 0) {
-            affinity = 1 + card.colors.reduce((sum, color) => sum + (colorCounts[color] || 0), 0) * 0.05;
+            affinity = 1 + card.colors.reduce((sum: number, color: string) => sum + (colorCounts[color] || 0), 0) * 0.05;
         }
         return { ...card, effective_elo: elo * affinity };
     }).sort((a, b) => b.effective_elo - a.effective_elo);
