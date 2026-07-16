@@ -55,7 +55,7 @@ async function computeTesseractPick(participantId: string, sessionId: string, ex
     (picks || []).forEach(p => (p.colors || []).forEach(c => { colorCounts[c] = (colorCounts[c] || 0) + 1; }));
 
     const sorted = available.map(card => {
-        let elo = card.cubecobra_elo || 1000;
+        const elo = card.cubecobra_elo || 1000;
         let affinity = 1.0;
         if (card.colors && card.colors.length > 0) {
             affinity = 1 + card.colors.reduce((sum, color) => sum + (colorCounts[color] || 0), 0) * 0.05;
