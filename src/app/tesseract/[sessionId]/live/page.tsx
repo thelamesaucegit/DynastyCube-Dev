@@ -4,61 +4,79 @@
 
 import React, { useState, useEffect, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
+import { DndContext, DragOverlay, closestCenter, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
 import { getTesseractSessionUser, type TesseractParticipant } from "@/app/actions/tesseractAuthActions";
-import { 
-    getTesseractDraftStatus, 
-    getTesseractCards, 
-    makeTesseractPick,
-    type TesseractDraftStatus,
-    type TesseractCard 
-} from "@/app/actions/tesseractDraftActions";
+import { startTesseractDraft, pauseTesseractDraft } from "@/app/actions/tesseractSessionActions";
+import { getTesseractDraftStatus, getTesseractCards, makeTesseractPick, type TesseractDraftStatus, type TesseractCard } from "@/app/actions/tesseractDraftActions";
+import { getTesseractDraftQueue, setTesseractDraftQueue, type TesseractQueueEntry, executeTesseractAutoDraft } from "@/app/actions/tesseractAutoDraftActions";
+import { CardPreview } from "@/app/components/CardPreview";
 
-export default function TesseractLiveDraftPage({ params }: { params: Promise<{ sessionId: string }> }) {
-    const { sessionId } = use(params);
+// Main Page Component
+export default function TesseractLiveDraftPage({ params }: { params: { sessionId: string } }) {
+    const { sessionId } = params;
     const router = useRouter();
-
-    // State
+    
+    // Authenticated user state
     const [me, setMe] = useState<TesseractParticipant | null>(null);
+    const [isCreator, setIsCreator] = useState(false);
+
+    // Draft & Card State
     const [status, setStatus] = useState<TesseractDraftStatus | null>(null);
     const [availableCards, setAvailableCards] = useState<TesseractCard[]>([]);
     const [draftedCards, setDraftedCards] = useState<TesseractCard[]>([]);
-    
+    const [queue, setQueue] = useState<TesseractQueueEntry[]>([]);
+    const [autoDraftPreview, setAutoDraftPreview] = useState<any>(null);
+
     // UI State
     const [loading, setLoading] = useState(true);
-    const [drafting, setDrafting] = useState<string | null>(null);
+    const [actionInProgress, setActionInProgress] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [search, setSearch] = useState("");
-    const [timeRemaining, setTimeRemaining] = useState<string>("--:--:--");
+    const [timeRemaining, setTimeRemaining] = useState("--:--:--");
 
-    const loadData = useCallback(async () => {
-        // Fetch status and cards concurrently
-        const [statusRes, cardsRes] = await Promise.all([
+    // D&D State
+    const [activeDragId, setActiveDragId] = useState<string | null>(null);
+    const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+    const loadData = useCallback(async (currentUser: TesseractParticipant) => {
+        const [statusRes, cardsRes, queueRes] = await Promise.all([
             getTesseractDraftStatus(sessionId),
-            getTesseractCards(sessionId)
+            getTesseractCards(sessionId),
+            getTesseractDraftQueue(currentUser.id),
         ]);
 
-        if (statusRes.error) {
-            setError(statusRes.error);
-        } else if (statusRes.status) {
-            setStatus(statusRes.status);
-        }
-
+        if (statusRes.status) setStatus(statusRes.status);
         if (cardsRes.available) setAvailableCards(cardsRes.available);
         if (cardsRes.drafted) setDraftedCards(cardsRes.drafted);
+        if (queueRes.queue) setQueue(queueRes.queue);
         
+        // Only fetch auto-draft preview if it's your turn
+        if (statusRes.status?.onTheClock?.id === currentUser.id) {
+            const preview = await executeTesseractAutoDraft(sessionId, currentUser.id);
+            setAutoDraftPreview(preview.card || null);
+        } else {
+            setAutoDraftPreview(null);
+        }
+
         setLoading(false);
     }, [sessionId]);
 
-    // Initial Auth Check & Data Load
     useEffect(() => {
         const init = async () => {
-            const userRes = await getTesseractSessionUser(sessionId);
-            if (!userRes.participant) {
+            const { participant } = await getTesseractSessionUser(sessionId);
+            if (!participant) {
                 router.push(`/tesseract/${sessionId}/join`);
                 return;
             }
-            setMe(userRes.participant);
-            await loadData();
+            setMe(participant);
+            // This is a simplified check. A robust solution might involve a dedicated server action.
+            if (participant.draftPosition === 1) { 
+                setIsCreator(true);
+            }
+            await loadData(participant);
         };
         init();
     }, [sessionId, router, loadData]);
@@ -98,6 +116,14 @@ export default function TesseractLiveDraftPage({ params }: { params: Promise<{ s
         return () => clearInterval(timerInterval);
     }, [status]);
 
+       const handleAdminAction = async (action: 'start' | 'pause') => {
+        setActionInProgress(action);
+        const res = action === 'start' ? await startTesseractDraft(sessionId) : await pauseTesseractDraft(sessionId);
+        if (!res.success) setError(res.error || `Failed to ${action} draft.`);
+        await loadData(me!);
+        setActionInProgress(null);
+    };
+
     const handleDraft = async (cardPoolId: string) => {
         if (!window.confirm("Are you sure you want to draft this card?")) return;
         
@@ -113,8 +139,8 @@ export default function TesseractLiveDraftPage({ params }: { params: Promise<{ s
         setDrafting(null);
     };
 
-    if (loading || !me) {
-        return <div className="p-8 text-xl">Loading Draft Board...</div>;
+     if (loading || !me || !status) return <div>Loading...</div>;
+
     }
 
     if (!status) {
@@ -123,10 +149,8 @@ export default function TesseractLiveDraftPage({ params }: { params: Promise<{ s
 
     const isMyTurn = status.onTheClock?.id === me.id;
     
-    const filteredCards = availableCards.filter(c => 
-        c.card_name.toLowerCase().includes(search.toLowerCase()) || 
-        (c.card_type && c.card_type.toLowerCase().includes(search.toLowerCase()))
-    );
+        const filteredCards = availableCards.filter(c => c.card_name.toLowerCase().includes(search.toLowerCase()) || (c.oracle_text && c.oracle_text.toLowerCase().includes(search.toLowerCase())));
+
 
     return (
         <div className="max-w-7xl mx-auto p-4 font-sans text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-950 min-h-screen">
