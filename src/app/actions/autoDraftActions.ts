@@ -616,8 +616,9 @@ export async function executeAutoDraft(
         baseCost = await applyHatModifier(teamId, baseCost, supabase);
     }
     
-    const effectiveCost = (preview.source === "manual_queue" && balance <= 0) ? 0 : baseCost;
-    
+const effectiveCost = baseCost;
+
+      
     const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
         p_team_id: teamId, p_draft_session_id: draftSessionId, p_card_pool_id: cardToAttempt.id,
         p_card_id: cardToAttempt.card_id, p_card_name: cardToAttempt.card_name,
@@ -721,7 +722,7 @@ export async function captainForcePick(teamId: string, cardPoolId: string, draft
     if (pickNumber === 1) {
         baseCost = await applyHatModifier(teamId, baseCost);
     }
-    const effectiveCost = balance >= baseCost ? baseCost : 0;
+const effectiveCost = baseCost;
     // ------------------------------
 
     const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
