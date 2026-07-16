@@ -78,13 +78,31 @@ async function computeTesseractPick(participantId: string, sessionId: string, ex
 // Functions to manage the queue
 export async function getTesseractDraftQueue(participantId: string): Promise<{ queue: TesseractQueueEntry[] }> {
     const supabase = createAdminClient();
-    const { data } = await supabase
+    const { data, error } = await supabase
         .from('tesseract_draft_queues')
         .select('card_pool_id, position, tesseract_card_pools(card_name)')
         .eq('participant_id', participantId)
         .order('position', { ascending: true });
 
-    return { queue: (data || []).map(q => ({ cardPoolId: q.card_pool_id, position: q.position, cardName: q.tesseract_card_pools?.card_name || 'Unknown' })) };
+    if (error) {
+        console.error("Error fetching Tesseract draft queue:", error);
+        return { queue: [] };
+    }
+
+    // THE FIX: Handle the possibility that the joined data is an array.
+    const mappedQueue = (data || []).map(q => {
+        const cardPool = Array.isArray(q.tesseract_card_pools) 
+            ? q.tesseract_card_pools[0] 
+            : q.tesseract_card_pools;
+
+        return {
+            cardPoolId: q.card_pool_id,
+            position: q.position,
+            cardName: cardPool?.card_name || 'Unknown'
+        };
+    });
+
+    return { queue: mappedQueue };
 }
 
 export async function setTesseractDraftQueue(participantId: string, entries: { cardPoolId: string, position: number }[]): Promise<{ success: boolean }> {
