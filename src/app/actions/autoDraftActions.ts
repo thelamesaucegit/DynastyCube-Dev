@@ -388,27 +388,56 @@ export async function getAutoDraftPreview(
 ): Promise<AutoDraftPreviewResult> {
   try {
     const supabase = adminClient ?? createServiceClient(); 
-    const { data: queueEntries } = await supabase.from("team_draft_queue").select("*").eq("team_id", teamId).order("position", { ascending: true });
     
-    if (queueEntries && queueEntries.length > 0) {
-      const { cards: availableCards } = await getAvailableCardsForDraft("draft", adminClient);
-      const availableInstanceIds = new Set(availableCards.map(c => c.id));
+    // 1. Fetch the team's manual queue entries ordered by position
+    const { data: queueEntries, error: queueErr } = await supabase
+      .from("team_draft_queue")
+      .select("*")
+      .eq("team_id", teamId)
+      .order("position", { ascending: true });
 
+    if (queueErr) throw queueErr;
+
+    if (queueEntries && queueEntries.length > 0) {
+      // 2. Fetch the actual available cards for the ACTIVE draft pool
+      const { cards: availableCards, error: cardsErr } = await getAvailableCardsForDraft("draft", adminClient);
+      if (cardsErr) throw cardsErr;
+
+      const availableInstanceIds = new Set(availableCards.map(c => c.id));
+      
+      // 3. Find the first card in the queue that is still active and available
       for (const entry of queueEntries) {
-        if (entry.card_pool_id && availableInstanceIds.has(entry.card_pool_id) && !excludedCardPoolIds.includes(entry.card_pool_id)) {
+        if (
+          entry.card_pool_id && 
+          availableInstanceIds.has(entry.card_pool_id) && 
+          !excludedCardPoolIds.includes(entry.card_pool_id)
+        ) {
           const card = availableCards.find(c => c.id === entry.card_pool_id) || null;
           const memberCount = await getTeamMemberCount(teamId, adminClient);
-          return { nextPick: card, source: "manual_queue", queueDepth: queueEntries.length, votes: entry.votes || [], voteThreshold: calculateVoteThreshold(memberCount) };
+          
+          return { 
+            nextPick: card, 
+            source: "manual_queue", 
+            queueDepth: queueEntries.length, 
+            votes: entry.votes || [], 
+            voteThreshold: calculateVoteThreshold(memberCount) 
+          };
         }
       }
     }
 
-    const { recommendation, algorithmDetails, error } = await computeAutoDraftPick(teamId, draftSessionId, adminClient, excludedCardPoolIds);
+    // 4. Fallback to algorithm prediction if queue is empty or exhausted
+    const { recommendation, algorithmDetails, error } = await computeAutoDraftPick(
+      teamId, 
+      draftSessionId, 
+      adminClient, 
+      excludedCardPoolIds
+    );
     
     return { 
       nextPick: recommendation, 
       source: recommendation ? "algorithm" : "skipped", 
-      queueDepth: 0, 
+      queueDepth: queueEntries ? queueEntries.length : 0, 
       algorithmDetails: algorithmDetails || undefined, 
       error: error 
     };

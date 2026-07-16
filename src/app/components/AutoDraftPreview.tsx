@@ -39,7 +39,7 @@ export function AutoDraftPreview({
   const [loading, setLoading] = useState(true);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
-  useEffect(() => {
+ useEffect(() => {
     loadPreview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId, refreshKey]);
@@ -47,13 +47,13 @@ export function AutoDraftPreview({
   const loadPreview = async () => {
     setLoading(true);
     try {
-      // First, get the active draft session to find its ID
-      const { session } = await getActiveDraftSession();
-      if (!session) {
+      const { session, error: sessionErr } = await getActiveDraftSession();
+      if (sessionErr || !session) {
         setPreview(null);
+        setLoading(false);
         return;
       }
-      // Now, call getAutoDraftPreview with both the teamId and the fetched sessionId
+      
       const result = await getAutoDraftPreview(teamId, session.id);
       setPreview(result);
     } catch (error) {
