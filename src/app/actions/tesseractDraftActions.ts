@@ -34,6 +34,8 @@ export interface TesseractCard {
     card_name: string;
     card_set: string | null;
     image_url: string | null;
+    oracle_text: string | null; 
+    cubecobra_elo: number | null; 
     colors: string[];
     cmc: number;
     card_type: string | null;
