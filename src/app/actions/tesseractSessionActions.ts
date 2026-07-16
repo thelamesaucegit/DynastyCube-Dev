@@ -12,7 +12,7 @@ export interface CreateTesseractParams {
     draftFormat: 'snake' | 'linear';
     totalRounds: number;
     hoursPerPick: number;
-    maxPlayers: number; // <-- ADDED
+    maxPlayers: number;
     startTime: string; 
     csvData: string;
 }
@@ -21,14 +21,17 @@ export interface ParsedCubeCard {
     card_name: string;
     card_set: string | null;
     image_url: string | null;
+    oracle_text: string | null; // <-- ADDED
+    cubecobra_elo: number | null; // <-- ADDED
     colors: string[];
     cmc: number;
     card_type: string | null;
 }
 
-function parseCubeCobraCSV(csvText: string): ParsedCubeCard[] {
+function parseCubeCobraCSV(csvText: string): Omit<ParsedCubeCard, 'cubecobra_elo'>[] {
     const lines = csvText.split(/\r?\n/).filter(l => l.trim() !== "");
-    if (lines.length < 2) throw new Error("CSV appears to be empty or missing data.");
+    if (lines.length < 2) throw new Error("CSV is empty or invalid.");
+
 
     const parseRow = (row: string): string[] => {
         const result: string[] = [];
@@ -54,6 +57,7 @@ function parseCubeCobraCSV(csvText: string): ParsedCubeCard[] {
     const nameIdx = headers.indexOf('name');
     const setIdx = headers.indexOf('set');
     const imgIdx = headers.indexOf('image url');
+        const oracleIdx = headers.indexOf('oracle text');
     const colorIdx = headers.indexOf('color');
     const cmcIdx = headers.indexOf('cmc');
     const typeIdx = headers.indexOf('type');
@@ -62,30 +66,29 @@ function parseCubeCobraCSV(csvText: string): ParsedCubeCard[] {
         throw new Error("Invalid CSV format: Missing 'Name' column.");
     }
 
-    const cards: ParsedCubeCard[] = [];
-    
+    const cards: Omit<ParsedCubeCard, 'cubecobra_elo'>[] = [];
     for (let i = 1; i < lines.length; i++) {
         const row = parseRow(lines[i]);
-        if (!row[nameIdx]) continue; 
+        if (!row[nameIdx]) continue;
 
         let colorsArray: string[] = [];
         if (colorIdx !== -1 && row[colorIdx]) {
-            const rawColor = row[colorIdx].toUpperCase().replace(/[^WUBRG]/g, '');
-            colorsArray = rawColor.split('').filter(Boolean);
+            colorsArray = row[colorIdx].toUpperCase().replace(/[^WUBRG]/g, '').split('');
         }
 
         cards.push({
             card_name: row[nameIdx],
             card_set: setIdx !== -1 ? row[setIdx] : null,
             image_url: imgIdx !== -1 ? row[imgIdx] : null,
+            oracle_text: oracleIdx !== -1 ? row[oracleIdx] : null, 
             colors: colorsArray,
             cmc: cmcIdx !== -1 ? parseInt(row[cmcIdx], 10) || 0 : 0,
             card_type: typeIdx !== -1 ? row[typeIdx] : null,
         });
     }
-
     return cards;
 }
+
 
 export async function createTesseractDraft(params: CreateTesseractParams): Promise<{ success: boolean; sessionId?: string; error?: string }> {
     const authClient = await createServerClient();
@@ -93,32 +96,27 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
 
     try {
         const { data: { user } } = await authClient.auth.getUser();
-        if (!user) {
-            return { success: false, error: "You must be signed in to create a Tesseract draft." };
-        }
-        
-        // Also fetch the user's display name to use in the lobby
+        if (!user) return { success: false, error: "You must be signed in." };
+
         const { data: userProfile } = await adminSupabase.from('users').select('display_name').eq('id', user.id).single();
         const creatorDisplayName = userProfile?.display_name || "Draft Creator";
+        
+        const parsedCards = parseCubeCobraCSV(params.csvData);
+        if (parsedCards.length === 0) throw new Error("No valid cards found in CSV.");
 
-        let parsedCards: ParsedCubeCard[] = [];
-        try {
-            parsedCards = parseCubeCobraCSV(params.csvData);
-            if (parsedCards.length === 0) throw new Error("No valid cards found in CSV.");
-        } catch (csvErr) {
-            return { success: false, error: csvErr instanceof Error ? csvErr.message : "Failed to parse CSV." };
-        }
+        const eloMap = await fetchEloMapFromS3();
+
+        const finalCardsWithElo: ParsedCubeCard[] = parsedCards.map(card => ({
+            ...card,
+            cubecobra_elo: eloMap.get(card.card_name.toLowerCase()) || null
+        }));
 
         const newStart = new Date(params.startTime).getTime();
-        const maxDurationMs = 7 * 24 * 60 * 60 * 1000; 
+        const maxDurationMs = 7 * 24 * 60 * 60 * 1000;
         const newEnd = newStart + maxDurationMs;
         const newEndISO = new Date(newEnd).toISOString();
 
-        const { data: existingSessions, error: fetchErr } = await adminSupabase
-            .from('tesseract_draft_sessions')
-            .select('start_time, end_time')
-            .neq('status', 'completed');
-
+        const { data: existingSessions, error: fetchErr } = await adminSupabase.from('tesseract_draft_sessions').select('start_time, end_time').neq('status', 'completed');
         if (fetchErr) throw fetchErr;
 
         let overlapCount = 0;
@@ -135,28 +133,23 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
         const { data: session, error: sessionErr } = await adminSupabase
             .from('tesseract_draft_sessions')
             .insert({
-                created_by: user.id,
-                name: params.name,
-                passcode: params.passcode || null,
-                draft_format: params.draftFormat,
-                total_rounds: params.totalRounds,
-                hours_per_pick: params.hoursPerPick,
-                max_players: params.maxPlayers, 
-                start_time: params.startTime,
-                end_time: newEndISO, 
-                expires_at: new Date(newEnd + (3 * 24 * 60 * 60 * 1000)).toISOString() 
-            })
-            .select('id')
-            .single();
+                created_by: user.id, name: params.name, passcode: params.passcode || null,
+                draft_format: params.draftFormat, total_rounds: params.totalRounds,
+                hours_per_pick: params.hoursPerPick, max_players: params.maxPlayers,
+                start_time: params.startTime, end_time: newEndISO,
+                expires_at: new Date(newEnd + (3 * 24 * 60 * 60 * 1000)).toISOString()
+            }).select('id').single();
 
         if (sessionErr || !session) throw new Error(`Failed to create session: ${sessionErr?.message}`);
 
-        // BULK INSERT CARDS
-        const cardPayload = parsedCards.map(card => ({
+        // Iterate over 'finalCardsWithElo' not 'parsedCards'
+        const cardPayload = finalCardsWithElo.map(card => ({
             draft_session_id: session.id,
             card_name: card.card_name,
             card_set: card.card_set,
             image_url: card.image_url,
+            oracle_text: card.oracle_text,
+            cubecobra_elo: card.cubecobra_elo,
             colors: card.colors,
             cmc: card.cmc,
             card_type: card.card_type,
@@ -171,29 +164,20 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
                 throw new Error(`Failed to insert cards into the pool: ${insertErr.message}`);
             }
         }
-
-        // --- THE FIX: AUTO-JOIN THE CREATOR ---
-        const sessionToken = crypto.randomBytes(32).toString('hex');
         
+        const sessionToken = crypto.randomBytes(32).toString('hex');
         await adminSupabase.from('tesseract_participants').insert({
-            draft_session_id: session.id,
-            user_id: user.id,
-            display_name: creatorDisplayName,
-            session_token: sessionToken,
-            draft_position: 1 // Creator gets seat #1 automatically
+            draft_session_id: session.id, user_id: user.id, display_name: creatorDisplayName,
+            session_token: sessionToken, draft_position: 1
         });
 
-        const cookieStore = await cookies();
+        const cookieStore = cookies();
         cookieStore.set(`tesseract_token_${session.id}`, sessionToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            maxAge: 60 * 60 * 24 * 14, 
-            path: '/'
+            httpOnly: true, secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax', maxAge: 60 * 60 * 24 * 14, path: '/'
         });
 
         return { success: true, sessionId: session.id };
-
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : "An unexpected error occurred.";
         console.error("Error creating Tesseract draft:", message);
