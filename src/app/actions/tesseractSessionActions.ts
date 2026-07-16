@@ -5,6 +5,7 @@
 import { createServerClient, createAdminClient } from "@/lib/supabase";
 import { cookies } from "next/headers";
 import crypto from "crypto";
+import { fetchAllCards } from "@/lib/scryfall-client";
 import { fetchEloMapFromS3 } from "@/app/actions/cardRatingActions"; 
 
 export interface CreateTesseractParams {
@@ -95,63 +96,72 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
 
     try {
         const { data: { user } } = await authClient.auth.getUser();
-        if (!user) return { success: false, error: "You must be signed in." };
+        if (!user) return { success: false, error: "You must be signed in to create a Tesseract draft." };
 
         const { data: userProfile } = await adminSupabase.from('users').select('display_name').eq('id', user.id).single();
         const creatorDisplayName = userProfile?.display_name || "Draft Creator";
         
-        const parsedCards = parseCubeCobraCSV(params.csvData);
-        if (parsedCards.length === 0) throw new Error("No valid cards found in CSV.");
+        // Step 1: Parse only the card names from the CSV
+        const cardNames = parseCardNamesFromCSV(params.csvData);
+        if (cardNames.length === 0) throw new Error("No valid card names found in the uploaded CSV.");
 
-        const eloMap = await fetchEloMapFromS3();
+        // Step 2: Enrich card data with Scryfall and CubeCobra ELO
+        const [scryfallData, eloMap] = await Promise.all([
+            fetchAllCards(cardNames),
+            fetchEloMapFromS3()
+        ]);
+        
+        if (scryfallData.errors.length > 0) {
+            console.warn("Scryfall fetch encountered errors:", scryfallData.errors);
+        }
 
-        const finalCardsWithElo: ParsedCubeCard[] = parsedCards.map(card => ({
-            ...card,
-            cubecobra_elo: eloMap.get(card.card_name.toLowerCase()) || null
+        const finalCards = scryfallData.cards.map(card => ({
+            card_name: card.name,
+            card_set: card.set_name,
+            image_url: card.image_uris?.normal || card.image_uris?.small || null,
+            oracle_text: card.oracle_text || (card.card_faces && card.card_faces[0]?.oracle_text) || null,
+            cubecobra_elo: eloMap.get(card.name.toLowerCase()) || null,
+            colors: card.colors || [],
+            cmc: card.cmc || 0,
+            card_type: card.type_line,
         }));
 
+        if (finalCards.length === 0) {
+            return { success: false, error: "Could not find any valid card data for the names provided in the list." };
+        }
+
+        // 3. Enforce Overlap & Duration Rules (No changes needed here)
         const newStart = new Date(params.startTime).getTime();
         const maxDurationMs = 7 * 24 * 60 * 60 * 1000;
         const newEnd = newStart + maxDurationMs;
         const newEndISO = new Date(newEnd).toISOString();
 
-        const { data: existingSessions, error: fetchErr } = await adminSupabase.from('tesseract_draft_sessions').select('start_time, end_time').neq('status', 'completed');
-        if (fetchErr) throw fetchErr;
-
+        const { data: existingSessions } = await adminSupabase.from('tesseract_draft_sessions').select('start_time, end_time').neq('status', 'completed');
         let overlapCount = 0;
-        existingSessions?.forEach(session => {
-            const estStart = new Date(session.start_time).getTime();
-            const estEnd = session.end_time ? new Date(session.end_time).getTime() : estStart + maxDurationMs;
+        existingSessions?.forEach(s => {
+            const estStart = new Date(s.start_time).getTime();
+            const estEnd = s.end_time ? new Date(s.end_time).getTime() : estStart + maxDurationMs;
             if (newStart < estEnd && newEnd > estStart) overlapCount++;
         });
-
-        if (overlapCount >= 2) {
-            return { success: false, error: "Cannot schedule draft: A maximum of 2 overlapping Tesseract drafts are allowed at any given time." };
-        }
-
+        if (overlapCount >= 2) return { success: false, error: "Cannot schedule draft: A maximum of 2 overlapping Tesseract drafts are allowed." };
+        
+        // 4. Create Draft Session
         const { data: session, error: sessionErr } = await adminSupabase
             .from('tesseract_draft_sessions')
             .insert({
                 created_by: user.id, name: params.name, passcode: params.passcode || null,
                 draft_format: params.draftFormat, total_rounds: params.totalRounds,
-                hours_per_pick: params.hoursPerPick, max_players: params.maxPlayers,
+                hours_per_pick: params.hoursPerPick, max_players: params.maxPlayers, 
                 start_time: params.startTime, end_time: newEndISO,
                 expires_at: new Date(newEnd + (3 * 24 * 60 * 60 * 1000)).toISOString()
             }).select('id').single();
 
-        if (sessionErr || !session) throw new Error(`Failed to create session: ${sessionErr?.message}`);
+        if (sessionErr) throw new Error(`Failed to create session: ${sessionErr.message}`);
 
-        const cardPayload = finalCardsWithElo.map(card => ({
+        // 5. Bulk Insert Fully Enriched Card Data
+        const cardPayload = finalCards.map(card => ({
             draft_session_id: session.id,
-            card_name: card.card_name,
-            card_set: card.card_set,
-            image_url: card.image_url,
-            oracle_text: card.oracle_text,
-            cubecobra_elo: card.cubecobra_elo,
-            colors: card.colors,
-            cmc: card.cmc,
-            card_type: card.card_type,
-            is_drafted: false
+            ...card
         }));
 
         for (let i = 0; i < cardPayload.length; i += 500) {
@@ -159,18 +169,18 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
             const { error: insertErr } = await adminSupabase.from('tesseract_card_pools').insert(batch);
             if (insertErr) {
                 await adminSupabase.from('tesseract_draft_sessions').delete().eq('id', session.id);
-                throw new Error(`Failed to insert cards into the pool: ${insertErr.message}`);
+                throw new Error(`Failed to insert cards: ${insertErr.message}`);
             }
         }
         
+        // 6. Auto-Join Creator and set cookie
         const sessionToken = crypto.randomBytes(32).toString('hex');
         await adminSupabase.from('tesseract_participants').insert({
             draft_session_id: session.id, user_id: user.id, display_name: creatorDisplayName,
             session_token: sessionToken, draft_position: 1
         });
 
-        // THE FIX: Added "await" to cookies()
-        const cookieStore = await cookies();
+        const cookieStore = cookies();
         cookieStore.set(`tesseract_token_${session.id}`, sessionToken, {
             httpOnly: true, secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax', maxAge: 60 * 60 * 24 * 14, path: '/'
@@ -179,9 +189,18 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
         return { success: true, sessionId: session.id };
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : "An unexpected error occurred.";
-        console.error("Error creating Tesseract draft:", message);
+        console.error("Error in createTesseractDraft:", message);
         return { success: false, error: message };
     }
+}
+
+function parseCardNamesFromCSV(csvText: string): string[] {
+    const lines = csvText.split(/\r?\n/).slice(1); // Skip header
+    return lines.map(line => {
+        // This simple split is okay if we only need the first column.
+        const name = line.split(',')[0].trim().replace(/"/g, '');
+        return name;
+    }).filter(Boolean);
 }
 
 export async function getTesseractLobbyInfo(sessionId: string): Promise<{
