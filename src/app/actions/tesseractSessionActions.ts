@@ -5,6 +5,8 @@
 import { createServerClient, createAdminClient } from "@/lib/supabase";
 import { cookies } from "next/headers";
 import crypto from "crypto";
+import { fetchEloMapFromS3 } from "@/app/actions/cardRatingActions";
+
 
 export interface CreateTesseractParams {
     name: string;
