@@ -180,7 +180,7 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
             session_token: sessionToken, draft_position: 1
         });
 
-        const cookieStore = cookies();
+           const cookieStore = await cookies();
         cookieStore.set(`tesseract_token_${session.id}`, sessionToken, {
             httpOnly: true, secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax', maxAge: 60 * 60 * 24 * 14, path: '/'
@@ -189,7 +189,7 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
         return { success: true, sessionId: session.id };
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : "An unexpected error occurred.";
-        console.error("Error in createTesseractDraft:", message);
+        console.error("Error creating Tesseract draft:", message);
         return { success: false, error: message };
     }
 }
