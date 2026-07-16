@@ -3,6 +3,8 @@
 "use server";
 
 import { createServerClient, createAdminClient } from "@/lib/supabase";
+import { cookies } from "next/headers";
+import crypto from "crypto";
 
 export interface CreateTesseractParams {
     name: string;
@@ -94,6 +96,10 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
         if (!user) {
             return { success: false, error: "You must be signed in to create a Tesseract draft." };
         }
+        
+        // Also fetch the user's display name to use in the lobby
+        const { data: userProfile } = await adminSupabase.from('users').select('display_name').eq('id', user.id).single();
+        const creatorDisplayName = userProfile?.display_name || "Draft Creator";
 
         let parsedCards: ParsedCubeCard[] = [];
         try {
@@ -119,10 +125,7 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
         existingSessions?.forEach(session => {
             const estStart = new Date(session.start_time).getTime();
             const estEnd = session.end_time ? new Date(session.end_time).getTime() : estStart + maxDurationMs;
-            
-            if (newStart < estEnd && newEnd > estStart) {
-                overlapCount++;
-            }
+            if (newStart < estEnd && newEnd > estStart) overlapCount++;
         });
 
         if (overlapCount >= 2) {
@@ -138,7 +141,7 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
                 draft_format: params.draftFormat,
                 total_rounds: params.totalRounds,
                 hours_per_pick: params.hoursPerPick,
-                max_players: params.maxPlayers, // <-- ADDED
+                max_players: params.maxPlayers, 
                 start_time: params.startTime,
                 end_time: newEndISO, 
                 expires_at: new Date(newEnd + (3 * 24 * 60 * 60 * 1000)).toISOString() 
@@ -146,10 +149,9 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
             .select('id')
             .single();
 
-        if (sessionErr || !session) {
-            throw new Error(`Failed to create session: ${sessionErr?.message}`);
-        }
+        if (sessionErr || !session) throw new Error(`Failed to create session: ${sessionErr?.message}`);
 
+        // BULK INSERT CARDS
         const cardPayload = parsedCards.map(card => ({
             draft_session_id: session.id,
             card_name: card.card_name,
@@ -169,6 +171,26 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
                 throw new Error(`Failed to insert cards into the pool: ${insertErr.message}`);
             }
         }
+
+        // --- THE FIX: AUTO-JOIN THE CREATOR ---
+        const sessionToken = crypto.randomBytes(32).toString('hex');
+        
+        await adminSupabase.from('tesseract_participants').insert({
+            draft_session_id: session.id,
+            user_id: user.id,
+            display_name: creatorDisplayName,
+            session_token: sessionToken,
+            draft_position: 1 // Creator gets seat #1 automatically
+        });
+
+        const cookieStore = await cookies();
+        cookieStore.set(`tesseract_token_${session.id}`, sessionToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 60 * 60 * 24 * 14, 
+            path: '/'
+        });
 
         return { success: true, sessionId: session.id };
 
