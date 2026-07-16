@@ -5,8 +5,7 @@
 import { createServerClient, createAdminClient } from "@/lib/supabase";
 import { cookies } from "next/headers";
 import crypto from "crypto";
-import { fetchEloMapFromS3 } from "@/app/actions/cardRatingActions";
-
+import { fetchEloMapFromS3 } from "@/app/actions/cardRatingActions"; 
 
 export interface CreateTesseractParams {
     name: string;
@@ -23,8 +22,8 @@ export interface ParsedCubeCard {
     card_name: string;
     card_set: string | null;
     image_url: string | null;
-    oracle_text: string | null; // <-- ADDED
-    cubecobra_elo: number | null; // <-- ADDED
+    oracle_text: string | null; 
+    cubecobra_elo: number | null; 
     colors: string[];
     cmc: number;
     card_type: string | null;
@@ -33,7 +32,6 @@ export interface ParsedCubeCard {
 function parseCubeCobraCSV(csvText: string): Omit<ParsedCubeCard, 'cubecobra_elo'>[] {
     const lines = csvText.split(/\r?\n/).filter(l => l.trim() !== "");
     if (lines.length < 2) throw new Error("CSV is empty or invalid.");
-
 
     const parseRow = (row: string): string[] => {
         const result: string[] = [];
@@ -53,13 +51,13 @@ function parseCubeCobraCSV(csvText: string): Omit<ParsedCubeCard, 'cubecobra_elo
         result.push(current.trim());
         return result.map(s => s.replace(/^"|"$/g, '').trim());
     };
-
+    
     const headers = parseRow(lines[0]).map(h => h.toLowerCase());
     
     const nameIdx = headers.indexOf('name');
     const setIdx = headers.indexOf('set');
     const imgIdx = headers.indexOf('image url');
-        const oracleIdx = headers.indexOf('oracle text');
+    const oracleIdx = headers.indexOf('oracle text');
     const colorIdx = headers.indexOf('color');
     const cmcIdx = headers.indexOf('cmc');
     const typeIdx = headers.indexOf('type');
@@ -82,7 +80,7 @@ function parseCubeCobraCSV(csvText: string): Omit<ParsedCubeCard, 'cubecobra_elo
             card_name: row[nameIdx],
             card_set: setIdx !== -1 ? row[setIdx] : null,
             image_url: imgIdx !== -1 ? row[imgIdx] : null,
-            oracle_text: oracleIdx !== -1 ? row[oracleIdx] : null, 
+            oracle_text: oracleIdx !== -1 ? row[oracleIdx] : null,
             colors: colorsArray,
             cmc: cmcIdx !== -1 ? parseInt(row[cmcIdx], 10) || 0 : 0,
             card_type: typeIdx !== -1 ? row[typeIdx] : null,
@@ -90,7 +88,6 @@ function parseCubeCobraCSV(csvText: string): Omit<ParsedCubeCard, 'cubecobra_elo
     }
     return cards;
 }
-
 
 export async function createTesseractDraft(params: CreateTesseractParams): Promise<{ success: boolean; sessionId?: string; error?: string }> {
     const authClient = await createServerClient();
@@ -144,7 +141,6 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
 
         if (sessionErr || !session) throw new Error(`Failed to create session: ${sessionErr?.message}`);
 
-        // Iterate over 'finalCardsWithElo' not 'parsedCards'
         const cardPayload = finalCardsWithElo.map(card => ({
             draft_session_id: session.id,
             card_name: card.card_name,
@@ -173,7 +169,8 @@ export async function createTesseractDraft(params: CreateTesseractParams): Promi
             session_token: sessionToken, draft_position: 1
         });
 
-        const cookieStore = cookies();
+        // THE FIX: Added "await" to cookies()
+        const cookieStore = await cookies();
         cookieStore.set(`tesseract_token_${session.id}`, sessionToken, {
             httpOnly: true, secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax', maxAge: 60 * 60 * 24 * 14, path: '/'
@@ -244,18 +241,14 @@ export async function startTesseractDraft(sessionId: string): Promise<{ success:
         if (!session) return { success: false, error: "Session not found." };
         if (session.status === 'completed') return { success: false, error: "Draft is already completed." };
 
-        // Identify who is picking next (to start the clock)
         const { count } = await adminSupabase.from('tesseract_card_pools').select('id', { count: 'exact', head: true }).eq('draft_session_id', sessionId).eq('is_drafted', true);
         const nextPickGlobalIndex = count || 0;
-        
-        // We will finalize the specific participant turn logic when we rebuild the Draft Engine!
         
         const newDeadline = new Date(Date.now() + (session.hours_per_pick * 60 * 60 * 1000)).toISOString();
 
         await adminSupabase.from('tesseract_draft_sessions').update({
             status: 'active',
             current_pick_deadline: newDeadline
-            // current_on_clock_participant_id will be set by the draft engine
         }).eq('id', sessionId);
 
         return { success: true };
