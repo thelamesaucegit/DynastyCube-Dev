@@ -34,6 +34,8 @@ export interface TesseractCard {
     card_name: string;
     card_set: string | null;
     image_url: string | null;
+    oracle_text: string | null; 
+    cubecobra_elo: number | null; 
     colors: string[];
     cmc: number;
     card_type: string | null;
@@ -174,6 +176,8 @@ export async function getTesseractCards(sessionId: string): Promise<{
                 card_name: row.card_name,
                 card_set: row.card_set,
                 image_url: row.image_url,
+                oracle_text: row.oracle_text, // <-- THE FIX: Added missing property
+                cubecobra_elo: row.cubecobra_elo != null ? Number(row.cubecobra_elo) : null, // <-- THE FIX: Added missing property and casted
                 colors: row.colors || [],
                 cmc: row.cmc,
                 card_type: row.card_type,
@@ -188,6 +192,7 @@ export async function getTesseractCards(sessionId: string): Promise<{
         const drafted = allCards.filter(c => c.is_drafted).sort((a, b) => (b.pick_number || 0) - (a.pick_number || 0));
 
         return { available, drafted };
+
     } catch (e: unknown) {
         return { available: [], drafted: [], error: e instanceof Error ? e.message : "Unknown error." };
     }

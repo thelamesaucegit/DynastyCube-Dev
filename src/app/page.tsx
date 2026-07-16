@@ -169,13 +169,16 @@ export default function HomePage() {
             </div>
           </div>
         </section>
+ {countdownTimer && ( <CountdownTimer title={countdownTimer.title} endTime={countdownTimer.end_time} linkUrl={countdownTimer.link_url} linkText={countdownTimer.link_text}/>)}
 
         {isPlayActive && liveMatch && <LiveStreamWidget initialMatch={liveMatch} onStreamEnd={loadPageData} />}
         
         {(currentPhase === 'playoffs' || currentPhase === 'postseason') && season && (
           <PlayoffBracket seasonId={season.id} seasonName={season.season_name} />
         )}
-
+        
+        {currentPhase === 'draft' && (<DraftStatusWidget variant="full" />)}
+        
         {/* --- NOTIFICATIONS ROW (Frosted Glass Effect) --- */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {activePolls.length > 0 && (
@@ -292,9 +295,7 @@ export default function HomePage() {
           )}
         </section>
 
-        {countdownTimer && ( <CountdownTimer title={countdownTimer.title} endTime={countdownTimer.end_time} linkUrl={countdownTimer.link_url} linkText={countdownTimer.link_text}/>)}
-        
-        {currentPhase === 'draft' && (<DraftStatusWidget variant="full" />)}
+       
         
        {/* --- LATEST ACQUISITIONS (Frosted Glass Effect) --- */}
        <section className="max-w-5xl mx-auto w-full space-y-4">

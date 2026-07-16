@@ -88,6 +88,7 @@ export default function TesseractLiveDraftPage({ params }: { params: Promise<{ s
     const [error, setError] = useState<string | null>(null);
     const [search, setSearch] = useState("");
     const [timeRemaining, setTimeRemaining] = useState("--:--:--");
+    const [drafting, setDrafting] = useState<string | null>(null);
 
     // D&D State
     const [activeDragId, setActiveDragId] = useState<string | null>(null);
@@ -110,6 +111,7 @@ export default function TesseractLiveDraftPage({ params }: { params: Promise<{ s
         if (cardsRes.drafted) setDraftedCards(cardsRes.drafted);
         if (queueRes.queue) setQueue(queueRes.queue);
         
+        // Only fetch auto-draft preview if it's your turn
         if (statusRes.status?.onTheClock?.id === currentUser.id) {
             const preview = await executeTesseractAutoDraft(sessionId, currentUser.id);
             setAutoDraftPreview(preview.card || null);
@@ -128,7 +130,7 @@ export default function TesseractLiveDraftPage({ params }: { params: Promise<{ s
                 return;
             }
             setMe(userRes.participant);
-            if (userRes.participant.draftPosition === 1) { 
+            if (userRes.participant.draft_position === 1) { 
                 setIsCreator(true);
             }
             await loadData(userRes.participant);
@@ -179,7 +181,7 @@ export default function TesseractLiveDraftPage({ params }: { params: Promise<{ s
             if (!res.success) setError(res.error || "Failed to pause draft.");
         } else if (action === 'end') {
             if (window.confirm("WARNING: Forcing the draft to end early will lock the roster and delete the lobby within 3 days. Proceed?")) {
-                 const res = await updateTesseractSettings(sessionId, 0); // Hacky way to force completion if needed
+                 const res = await updateTesseractSettings(sessionId, 0); 
                  if (!res.success) setError(res.error || "Failed to end draft.");
             }
         }
@@ -189,8 +191,10 @@ export default function TesseractLiveDraftPage({ params }: { params: Promise<{ s
 
     const handleDraft = async (cardPoolId: string) => {
         if (!me || !window.confirm("Are you sure you want to draft this card?")) return;
+        
         setDrafting(cardPoolId);
         setError(null);
+        
         const result = await makeTesseractPick(sessionId, cardPoolId);
         if (result.success) {
             await loadData(me);
@@ -245,7 +249,13 @@ export default function TesseractLiveDraftPage({ params }: { params: Promise<{ s
     }
 
     const isMyTurn = status.onTheClock?.id === me.id;
-    const filteredCards = availableCards.filter(c => c.card_name.toLowerCase().includes(search.toLowerCase()) || (c.oracle_text && c.oracle_text.toLowerCase().includes(search.toLowerCase())));
+    
+    const filteredCards = availableCards.filter(c => 
+        c.card_name.toLowerCase().includes(search.toLowerCase()) || 
+        (c.card_type && c.card_type.toLowerCase().includes(search.toLowerCase())) ||
+        (c.oracle_text && c.oracle_text.toLowerCase().includes(search.toLowerCase()))
+    );
+
     const activeDragEntry = activeDragId ? queue.find((e) => e.cardPoolId === activeDragId) : null;
 
     return (
@@ -270,8 +280,9 @@ export default function TesseractLiveDraftPage({ params }: { params: Promise<{ s
             {isCreator && (
                 <div className="border-2 border-blue-600 bg-blue-50 dark:bg-blue-900/20 p-4 mb-6 flex gap-4 items-center">
                     <h2 className="font-bold uppercase tracking-wider">Creator Controls:</h2>
-                    <button onClick={() => handleAdminAction('start')} disabled={status.status === 'active'} className="border border-blue-600 px-4 py-1 font-bold hover:bg-blue-600 hover:text-white disabled:opacity-50">START</button>
-                    <button onClick={() => handleAdminAction('pause')} disabled={status.status !== 'active'} className="border border-blue-600 px-4 py-1 font-bold hover:bg-blue-600 hover:text-white disabled:opacity-50">PAUSE</button>
+                    <button onClick={() => handleAdminAction('start')} disabled={status.status === 'active' || actionInProgress === 'start'} className="border border-blue-600 px-4 py-1 font-bold hover:bg-blue-600 hover:text-white disabled:opacity-50">START</button>
+                    <button onClick={() => handleAdminAction('pause')} disabled={status.status !== 'active' || actionInProgress === 'pause'} className="border border-blue-600 px-4 py-1 font-bold hover:bg-blue-600 hover:text-white disabled:opacity-50">PAUSE</button>
+                    <button onClick={() => handleAdminAction('end')} disabled={status.isComplete || actionInProgress === 'end'} className="border border-red-600 text-red-600 px-4 py-1 font-bold hover:bg-red-600 hover:text-white disabled:opacity-50">END EARLY</button>
                 </div>
             )}
 
@@ -341,7 +352,9 @@ export default function TesseractLiveDraftPage({ params }: { params: Promise<{ s
                             <h3 className="font-bold uppercase text-gray-500 text-sm mb-2">Algorithm Target</h3>
                             {autoDraftPreview ? (
                                 <div className="font-bold text-blue-700 dark:text-blue-400 border border-blue-400 p-2">
-                                    {autoDraftPreview.card_name}
+                                    <CardPreview card={{ card_name: autoDraftPreview.card_name }} className="hover:underline">
+                                        {autoDraftPreview.card_name}
+                                    </CardPreview>
                                 </div>
                             ) : (
                                 <div className="text-gray-500 italic">Calculating...</div>
@@ -362,7 +375,7 @@ export default function TesseractLiveDraftPage({ params }: { params: Promise<{ s
                     </div>
                 </div>
 
-                {/* Right Area (Available Cards) */}
+                {/* Right Area (Available Cards & History) */}
                 <div className="lg:w-2/3 flex flex-col gap-6">
                     
                     <div className="border-2 border-gray-400 p-4 flex flex-col h-[600px]">
@@ -379,7 +392,7 @@ export default function TesseractLiveDraftPage({ params }: { params: Promise<{ s
                         
                         <div className="overflow-y-auto flex-1 border border-gray-300 pr-2">
                             <table className="w-full text-left text-sm border-collapse">
-                                <thead className="sticky top-0 bg-gray-200 dark:bg-gray-800 border-b-2 border-gray-400 uppercase tracking-wider text-xs">
+                                <thead className="sticky top-0 bg-gray-200 dark:bg-gray-800 border-b-2 border-gray-400 uppercase tracking-wider text-xs z-10">
                                     <tr>
                                         <th className="p-2 border-r border-gray-400">Card Name</th>
                                         <th className="p-2 border-r border-gray-400 text-center">CMC</th>
@@ -394,7 +407,6 @@ export default function TesseractLiveDraftPage({ params }: { params: Promise<{ s
                                         filteredCards.map(card => (
                                             <tr key={card.id} className="border-b border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900">
                                                 <td className="p-2 border-r border-gray-300 dark:border-gray-700 font-bold whitespace-nowrap">
-                                                    {/* THE FIX: Re-integrated CardPreview hover */}
                                                     <CardPreview card={card} className="hover:underline hover:text-blue-600">
                                                         {card.card_name}
                                                     </CardPreview>
@@ -406,12 +418,12 @@ export default function TesseractLiveDraftPage({ params }: { params: Promise<{ s
                                                     {card.card_type}
                                                 </td>
                                                 <td className="p-1 text-center w-20">
-                                                    <button onClick={() => handleDraft(card.id)} disabled={!isMyTurn || status.status !== 'active' || drafting === card.id} className="bg-black dark:bg-white text-white dark:text-black hover:bg-gray-800 disabled:bg-gray-300 disabled:text-gray-500 font-bold py-1 px-3 text-xs w-full uppercase transition-none">
+                                                    <button onClick={() => handleDraft(card.id)} disabled={!isMyTurn || status.status !== 'active' || drafting === card.id} className="bg-black dark:bg-white text-white dark:text-black hover:bg-gray-800 disabled:bg-gray-300 disabled:text-gray-500 font-bold py-1 px-3 text-xs w-full uppercase transition-none cursor-pointer">
                                                         {drafting === card.id ? "..." : "Pick"}
                                                     </button>
                                                 </td>
                                                 <td className="p-1 text-center w-20">
-                                                    <button onClick={() => handleAddToQueue(card.id, card.card_name)} disabled={queue.some(q => q.cardPoolId === card.id)} className="border border-black dark:border-white hover:bg-gray-200 dark:hover:bg-gray-800 disabled:border-gray-300 disabled:text-gray-400 font-bold py-1 px-3 text-xs w-full uppercase transition-none">
+                                                    <button onClick={() => handleAddToQueue(card.id, card.card_name)} disabled={queue.some(q => q.cardPoolId === card.id)} className="border border-black dark:border-white hover:bg-gray-200 dark:hover:bg-gray-800 disabled:border-gray-300 disabled:text-gray-400 font-bold py-1 px-3 text-xs w-full uppercase transition-none cursor-pointer">
                                                         {queue.some(q => q.cardPoolId === card.id) ? "Queued" : "Queue"}
                                                     </button>
                                                 </td>
@@ -428,7 +440,7 @@ export default function TesseractLiveDraftPage({ params }: { params: Promise<{ s
                         <h2 className="text-xl font-bold uppercase tracking-wider border-b-2 border-gray-400 pb-2 mb-4">Draft Log</h2>
                         <div className="max-h-64 overflow-y-auto border border-gray-300 pr-2">
                             <table className="w-full text-left text-sm border-collapse">
-                                <thead className="sticky top-0 bg-gray-200 dark:bg-gray-800 border-b-2 border-gray-400 uppercase tracking-wider text-xs">
+                                <thead className="sticky top-0 bg-gray-200 dark:bg-gray-800 border-b-2 border-gray-400 uppercase tracking-wider text-xs z-10">
                                     <tr>
                                         <th className="p-2 border-r border-gray-400 w-12 text-center">Pick</th>
                                         <th className="p-2 border-r border-gray-400">Player</th>
@@ -440,7 +452,7 @@ export default function TesseractLiveDraftPage({ params }: { params: Promise<{ s
                                         <tr><td colSpan={3} className="py-4 text-center font-bold text-gray-500 uppercase">Awaiting First Pick</td></tr>
                                     ) : (
                                         draftedCards.map(card => (
-                                            <tr key={card.id} className="border-b border-gray-300 dark:border-gray-700">
+                                            <tr key={card.id} className="border-b border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900">
                                                 <td className="p-2 border-r border-gray-300 dark:border-gray-700 text-center font-bold">{card.pick_number}</td>
                                                 <td className="p-2 border-r border-gray-300 dark:border-gray-700 uppercase font-bold">{card.drafted_by_name}</td>
                                                 <td className="p-2 font-bold text-blue-700 dark:text-blue-400">
