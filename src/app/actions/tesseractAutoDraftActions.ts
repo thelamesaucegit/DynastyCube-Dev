@@ -3,8 +3,6 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase";
-import { getTesseractDraftStatus } from "@/app/actions/tesseractDraftActions";
-import { getTesseractSessionUser } from "@/app/actions/tesseractAuthActions";
 
 // Simplified interfaces for Tesseract
 export interface TesseractQueueEntry {
@@ -23,37 +21,41 @@ export interface TesseractCardForAlgo {
 
 /**
  * Stripped-down ELO and color affinity calculator for public drafts.
+ * This version is simplified to only use ELO and basic color affinity.
  */
 async function computeTesseractPick(participantId: string, sessionId: string, excludedIds: string[] = []): Promise<TesseractCardForAlgo | null> {
     const supabase = createAdminClient();
 
-    // 1. Get participant's current draft picks to establish color profile
+    // 1. Get participant's current draft picks to establish a color profile
     const { data: picks, error: picksErr } = await supabase
         .from('tesseract_card_pools')
-        .select('colors, card_type')
+        .select('colors')
         .eq('draft_session_id', sessionId)
-        .eq('drafted_by', participantId)
-        .eq('is_drafted', true);
+        .eq('drafted_by', participantId);
 
-    if (picksErr) { console.error(picksErr); return null; }
+    if (picksErr) {
+        console.error("Error fetching participant's picks for color profile:", picksErr);
+        return null;
+    }
 
-    // 2. Fetch available cards
+    // 2. Fetch all available cards that have an ELO score
     const { data: available, error: availableErr } = await supabase
         .from('tesseract_card_pools')
         .select('id, card_name, colors, card_type, cubecobra_elo')
         .eq('draft_session_id', sessionId)
         .eq('is_drafted', false)
-        .not('id', 'in', `(${excludedIds.join(',')})`)
+        .not('id', 'in', `(${excludedIds.length > 0 ? excludedIds.join(',') : ''})`)
         .not('cubecobra_elo', 'is', null)
-        .limit(500);
+        .limit(50); // Analyze a sufficiently large batch
 
-    if (availableErr) { console.error(availableErr); return null; }
+    if (availableErr) {
+        console.error("Error fetching available cards for auto-draft:", availableErr);
+        return null;
+    }
     if (!available || available.length === 0) return null;
 
     // 3. Simple Color Affinity Calculation
     const colorCounts: Record<string, number> = { W: 0, U: 0, B: 0, R: 0, G: 0 };
-    
-    // THE FIX: Explicitly type the parameters in the loops
     (picks || []).forEach((p: { colors?: string[] | null }) => {
         (p.colors || []).forEach((c: string) => {
             if (colorCounts[c] !== undefined) {
@@ -66,6 +68,7 @@ async function computeTesseractPick(participantId: string, sessionId: string, ex
         const elo = card.cubecobra_elo || 1000;
         let affinity = 1.0;
         if (card.colors && card.colors.length > 0) {
+            // Add a small bonus for each drafted card of the same color
             affinity = 1 + card.colors.reduce((sum: number, color: string) => sum + (colorCounts[color] || 0), 0) * 0.05;
         }
         return { ...card, effective_elo: elo * affinity };
@@ -85,16 +88,12 @@ export async function getTesseractDraftQueue(participantId: string): Promise<{ q
         .order('position', { ascending: true });
 
     if (error) {
-        console.error("Error fetching Tesseract draft queue:", error);
+        console.error("Error fetching tesseract draft queue:", error);
         return { queue: [] };
     }
 
-    // THE FIX: Handle the possibility that the joined data is an array.
     const mappedQueue = (data || []).map(q => {
-        const cardPool = Array.isArray(q.tesseract_card_pools) 
-            ? q.tesseract_card_pools[0] 
-            : q.tesseract_card_pools;
-
+        const cardPool = Array.isArray(q.tesseract_card_pools) ? q.tesseract_card_pools[0] : q.tesseract_card_pools;
         return {
             cardPoolId: q.card_pool_id,
             position: q.position,
@@ -118,6 +117,7 @@ export async function setTesseractDraftQueue(participantId: string, entries: { c
 // Main auto-draft execution logic
 export async function executeTesseractAutoDraft(sessionId: string, participantId: string, excludedIds: string[] = []): Promise<{ success: boolean; card?: TesseractCardForAlgo }> {
     const supabase = createAdminClient();
+    
     // 1. Check the manual queue first
     const { queue } = await getTesseractDraftQueue(participantId);
     const { data: cards } = await supabase.from('tesseract_card_pools').select('id').eq('draft_session_id', sessionId).eq('is_drafted', false);
@@ -125,12 +125,12 @@ export async function executeTesseractAutoDraft(sessionId: string, participantId
 
     for (const entry of queue) {
         if (availableIds.has(entry.cardPoolId) && !excludedIds.includes(entry.cardPoolId)) {
-            // Found a valid pick in the queue
+            // Found a valid pick in the queue, return it
             return { success: true, card: { id: entry.cardPoolId, card_name: entry.cardName, colors: [], card_type: '', cubecobra_elo: 0 } };
         }
     }
 
-    // 2. Fallback to algorithm
+    // 2. Fallback to algorithm if the queue is empty or all queued cards are taken
     const card = await computeTesseractPick(participantId, sessionId, excludedIds);
     if (!card) return { success: false };
 

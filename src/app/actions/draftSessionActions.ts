@@ -969,248 +969,216 @@ export async function checkDraftTimer(
   error?: string;
 }> {
   const supabase = adminClient ?? createServiceClient();
+  
   try {
-    const { data: session, error: sessionError } = await supabase
+    // 1. Initial Quick Fetch (No Locks yet)
+    const { data: initialSession, error: sessionError } = await supabase
       .from("draft_sessions")
-      // THE FIX: Added current_pick_deadline to the select query!
-      .select("id, status, start_time, hours_per_pick, consecutive_skipped_picks, locked_at, enforce_day_night_drafting, night_start_hour, night_end_hour, season_id, current_pick_deadline")
+      .select("id, status, start_time, locked_at")
       .in("status", ["active", "scheduled"])
       .single();
 
-    if (sessionError || !session) {
+    if (sessionError || !initialSession) {
       return { action: "none", message: "No active or scheduled draft session found." };
     }
 
-    if (session.status === "scheduled") {
+    // 2. Scheduled Activation Logic
+    if (initialSession.status === "scheduled") {
         const now = new Date();
-        const startTime = new Date(session.start_time);
-        
+        const startTime = new Date(initialSession.start_time);
         if (now >= startTime) {
-            console.log(`[DraftTimer] Scheduled draft start time reached. Activating session ${session.id}.`);
-            const activateResult = await activateDraft(session.id, supabase);
-            
+            console.log(`[DraftTimer] Scheduled draft start time reached. Activating session ${initialSession.id}.`);
+            const activateResult = await activateDraft(initialSession.id, supabase);
             if (activateResult.success) {
-                await logSystemEvent("DraftTimer", "info", `Automatically activated scheduled draft ${session.id}.`);
+                await logSystemEvent("DraftTimer", "info", `Automatically activated scheduled draft ${initialSession.id}.`);
                 return { action: "completed", message: "Draft successfully activated." };
             } else {
-                await logSystemEvent("DraftTimer", "error", `Failed to automatically activate draft ${session.id}.`, { error: activateResult.error });
+                await logSystemEvent("DraftTimer", "error", `Failed to automatically activate draft ${initialSession.id}.`, { error: activateResult.error });
                 return { action: "error", error: `Failed to activate draft: ${activateResult.error}` };
             }
         }
-        
         return { action: "none", message: "Draft is scheduled but start time has not been reached." };
     }
 
-    if (session.locked_at) {
-        const lockTime = new Date(session.locked_at).getTime();
+    // 3. Stale Lock Detection
+    if (initialSession.locked_at) {
+        const lockTime = new Date(initialSession.locked_at).getTime();
         const now = Date.now();
-        if (now - lockTime < 30000) {
-            console.log(`[DraftTimer] Session ${session.id} is currently locked by another process. Yielding.`);
+        // Give the lock 15 seconds to resolve before assuming it crashed
+        if (now - lockTime < 15000) {
+            console.log(`[DraftTimer] Session ${initialSession.id} is currently locked by another process. Yielding.`);
             return { action: "none", message: "Draft is currently locked by another process." };
         }
-        console.warn(`[DraftTimer] Stale lock detected on session ${session.id}. Clearing lock and proceeding.`);
+        console.warn(`[DraftTimer] Stale lock detected on session ${initialSession.id}. Clearing lock and proceeding.`);
     }
 
-    const { status: draftStatus, error: statusError } = await getDraftStatus(session.id, supabase);
-    if (statusError || !draftStatus) {
-      return { action: "none", message: "Draft appears complete or status unavailable." };
+    // =========================================================================
+    // THE FIX: ATTEMPT TO ACQUIRE THE LOCK *BEFORE* EVALUATING THE DEADLINE
+    // =========================================================================
+    const { data: lockedSession, error: lockError } = await supabase
+        .from("draft_sessions")
+        .update({ locked_at: new Date().toISOString() })
+        .eq("id", initialSession.id)
+        .is("locked_at", initialSession.locked_at) // Optimistic concurrency check!
+        .select("id, hours_per_pick, consecutive_skipped_picks, enforce_day_night_drafting, night_start_hour, night_end_hour, season_id, current_pick_deadline")
+        .single();
+
+    if (lockError || !lockedSession) {
+        console.log(`[DraftTimer] Failed to acquire lock for session ${initialSession.id}. Another thread beat us. Yielding.`);
+        return { action: "none", message: "Lost race for the lock." };
     }
 
-    const { data: picks, error: picksError } = await supabase
-      .from("team_draft_picks")
-      .select("drafted_at")
-      .eq("draft_session_id", session.id)
-      .order("pick_number", { ascending: false })
-      .limit(1);
-
-    if (picksError) return { action: "error", error: "Failed to fetch last pick time." };
-
-    let timerStartTime = new Date(session.start_time);
-    if (picks && picks.length > 0 && picks[0].drafted_at) {
-      timerStartTime = new Date(picks[0].drafted_at);
-    }
-
-    const now = new Date();
-    const msPerPick = session.hours_per_pick * 60 * 60 * 1000;
-    const deadline = new Date(timerStartTime.getTime() + msPerPick);
-
-    // --- DAY/NIGHT SCALING ENGINE ---
-    if (session.enforce_day_night_drafting && session.current_pick_deadline) {
-        const currentDeadline = new Date(session.current_pick_deadline);
-        const currentDurationMs = currentDeadline.getTime() - timerStartTime.getTime();
-        const originalDurationMs = session.hours_per_pick * 60 * 60 * 1000;
-        const isScaledForNight = currentDurationMs > originalDurationMs * 2;
-
-        const currentHourStr = new Date().toLocaleString("en-US", { timeZone: "America/Chicago", hour: "numeric", hour12: false });
-        const currentHour = parseInt(currentHourStr, 10);
-        
-        // Use type assertions if the generated types still see these as potentially null
-        const startHour = session.night_start_hour as number;
-        const endHour = session.night_end_hour as number;
-        
-        let isCurrentlyNight = false;
-        if (startHour > endHour) {
-            isCurrentlyNight = currentHour >= startHour || currentHour < endHour;
-        } else {
-            isCurrentlyNight = currentHour >= startHour && currentHour < endHour;
+    // WE NOW OWN THE LOCK. From here down, we MUST use a try/finally block.
+    try {
+        const { status: draftStatus, error: statusError } = await getDraftStatus(lockedSession.id, supabase);
+        if (statusError || !draftStatus) {
+             return { action: "none", message: "Draft appears complete or status unavailable." };
         }
 
-        if (isCurrentlyNight && !isScaledForNight) {
-            console.log(`[DraftTimer] 🌙 Transition to Night! Scaling team ${draftStatus.onTheClock.teamId}'s remaining time by 4x.`);
-            const remainingMs = currentDeadline.getTime() - now.getTime();
-            const newDeadline = new Date(now.getTime() + (remainingMs * 4));
-            await supabase.from("draft_sessions").update({ current_pick_deadline: newDeadline.toISOString() }).eq("id", session.id);
-            return { action: "none", message: "Draft clock scaled 4x for night hours." };
-        } 
-        else if (!isCurrentlyNight && isScaledForNight) {
-            console.log(`[DraftTimer] ☀️ Transition to Day! Scaling team ${draftStatus.onTheClock.teamId}'s remaining time by 0.25x.`);
-            const remainingMs = currentDeadline.getTime() - now.getTime();
-            const newDeadline = new Date(now.getTime() + (remainingMs * 0.25));
+        const { data: picks, error: picksError } = await supabase
+            .from("team_draft_picks")
+            .select("drafted_at")
+            .eq("draft_session_id", lockedSession.id)
+            .order("pick_number", { ascending: false })
+            .limit(1);
+            
+        if (picksError) return { action: "error", error: "Failed to fetch last pick time." };
 
-            if (newDeadline <= now) {
-                console.log(`[DraftTimer] ⏰ Daybreak caused immediate timeout for team ${draftStatus.onTheClock.teamId}!`);
+        let timerStartTime = new Date(initialSession.start_time);
+        if (picks && picks.length > 0 && picks[0].drafted_at) {
+            timerStartTime = new Date(picks[0].drafted_at);
+        }
+
+        const now = new Date();
+        const msPerPick = lockedSession.hours_per_pick * 60 * 60 * 1000;
+        const deadline = new Date(timerStartTime.getTime() + msPerPick);
+
+        // --- DAY/NIGHT SCALING ENGINE ---
+        if (lockedSession.enforce_day_night_drafting && lockedSession.current_pick_deadline) {
+            const currentDeadline = new Date(lockedSession.current_pick_deadline);
+            const currentDurationMs = currentDeadline.getTime() - timerStartTime.getTime();
+            const originalDurationMs = lockedSession.hours_per_pick * 60 * 60 * 1000;
+            const isScaledForNight = currentDurationMs > originalDurationMs * 2;
+            const currentHourStr = new Date().toLocaleString("en-US", { timeZone: "America/Chicago", hour: "numeric", hour12: false });
+            const currentHour = parseInt(currentHourStr, 10);
+            
+            const startHour = lockedSession.night_start_hour as number;
+            const endHour = lockedSession.night_end_hour as number;
+            
+            let isCurrentlyNight = false;
+            if (startHour > endHour) {
+                isCurrentlyNight = currentHour >= startHour || currentHour < endHour;
             } else {
-                await supabase.from("draft_sessions").update({ current_pick_deadline: newDeadline.toISOString() }).eq("id", session.id);
-                return { action: "none", message: "Draft clock scaled 0.25x for daylight hours." };
+                isCurrentlyNight = currentHour >= startHour && currentHour < endHour;
+            }
+
+            if (isCurrentlyNight && !isScaledForNight) {
+                console.log(`[DraftTimer] 🌙 Transition to Night! Scaling team ${draftStatus.onTheClock.teamId}'s remaining time by 4x.`);
+                const remainingMs = currentDeadline.getTime() - now.getTime();
+                const newDeadline = new Date(now.getTime() + (remainingMs * 4));
+                await supabase.from("draft_sessions").update({ current_pick_deadline: newDeadline.toISOString() }).eq("id", lockedSession.id);
+                return { action: "none", message: "Draft clock scaled 4x for night hours." };
+            } 
+            else if (!isCurrentlyNight && isScaledForNight) {
+                console.log(`[DraftTimer] ☀️ Transition to Day! Scaling team ${draftStatus.onTheClock.teamId}'s remaining time by 0.25x.`);
+                const remainingMs = currentDeadline.getTime() - now.getTime();
+                const newDeadline = new Date(now.getTime() + (remainingMs * 0.25));
+                if (newDeadline <= now) {
+                    console.log(`[DraftTimer] ⏰ Daybreak caused immediate timeout for team ${draftStatus.onTheClock.teamId}!`);
+                } else {
+                    await supabase.from("draft_sessions").update({ current_pick_deadline: newDeadline.toISOString() }).eq("id", lockedSession.id);
+                    return { action: "none", message: "Draft clock scaled 0.25x for daylight hours." };
+                }
             }
         }
-    }
-    // --- END DAY/NIGHT SCALING ENGINE ---
+        // --- END DAY/NIGHT SCALING ENGINE ---
 
-    if (now >= deadline) {
-      console.log(`Deadline passed for session ${session.id}. Executing auto-pick logic.`);
-      const teamId = draftStatus.onTheClock.teamId;
+        if (now >= deadline) {
+            console.log(`[DraftTimer] Deadline passed for session ${lockedSession.id}. Executing auto-pick logic.`);
+            const teamId = draftStatus.onTheClock.teamId;
 
-      const { data: lockResult, error: lockError } = await supabase
-          .from("draft_sessions")
-          .update({ locked_at: new Date().toISOString() })
-          .eq("id", session.id)
-          .is("locked_at", null) 
-          .select("id")
-          .single();
-
-      if (lockError || !lockResult) {
-          console.log(`[DraftTimer] Failed to acquire lock for session ${session.id}. Another thread beat us. Yielding.`);
-          return { action: "none", message: "Lost race for the lock." };
-      }
-
-      let actionResult: {
-        action: "none" | "auto_drafted" | "completed" | "error";
-        message?: string;
-        error?: string;
-      } = { action: "error", error: "Unknown execution state." };
-
-      try {
-          const autoDraftResult = await executeAutoDraft(teamId, session.id, supabase);
-
-          if (!autoDraftResult.success) {
-            console.error(`Auto-draft system error for ${teamId}: ${autoDraftResult.error}`);
-            await supabase.from("draft_sessions").update({ status: "paused" }).eq("id", session.id);
-            await logSystemEvent("AutoDraft", "error", `System error during auto-draft for team ${teamId}. Draft automatically paused.`, { error: autoDraftResult.error });
+            const autoDraftResult = await executeAutoDraft(teamId, lockedSession.id, supabase);
             
-            await supabase.rpc("notify_all_users_draft", {
-              p_notification_type: "draft_paused",
-              p_message: `The draft has been paused due to a system error on team ${draftStatus.onTheClock.teamName}'s pick.`
-            });
-            actionResult = { action: "error", error: `Auto-draft failed: ${autoDraftResult.error}` };
-          } 
-          else if (autoDraftResult.source === 'skipped') {
-            const newSkipCount = (session.consecutive_skipped_picks || 0) + 1;
-            
-            if (newSkipCount >= draftStatus.totalTeams) {
-              console.log(`[Draft Failsafe] Maximum consecutive skips reached. Evaluating auto-completion...`);
-              
-              const { data: activeTeams, error: teamsErr } = await supabase
-                  .from('teams')
-                  .select('id, cubucks_balance')
-                  .eq('is_hidden', false);
+            if (!autoDraftResult.success) {
+                console.error(`Auto-draft system error for ${teamId}: ${autoDraftResult.error}`);
+                await supabase.from("draft_sessions").update({ status: "paused" }).eq("id", lockedSession.id);
+                await logSystemEvent("AutoDraft", "error", `System error during auto-draft for team ${teamId}. Draft automatically paused.`, { error: autoDraftResult.error });
+                await supabase.rpc("notify_all_users_draft", { p_notification_type: "draft_paused", p_message: `The draft has been paused due to a system error on team ${draftStatus.onTheClock.teamName}'s pick.` });
+                
+                return { action: "error", error: `Auto-draft failed: ${autoDraftResult.error}` };
+            } 
+            else if (autoDraftResult.source === 'skipped') {
+                const newSkipCount = (lockedSession.consecutive_skipped_picks || 0) + 1;
+                
+                if (newSkipCount >= draftStatus.totalTeams) {
+                    console.log(`[Draft Failsafe] Maximum consecutive skips reached. Evaluating auto-completion...`);
+                    const { data: activeTeams, error: teamsErr } = await supabase.from('teams').select('id, cubucks_balance').eq('is_hidden', false);
+                    if (teamsErr || !activeTeams) throw new Error("Failsafe could not fetch teams to verify balances.");
 
-              if (teamsErr || !activeTeams) {
-                  throw new Error("Failsafe could not fetch teams to verify balances.");
-              }
+                    const { data: rosterCounts, error: countErr } = await supabase.from('team_draft_picks').select('team_id');
+                    if (countErr) throw new Error("Failsafe could not fetch rosters to verify card counts.");
 
-              const { data: rosterCounts, error: countErr } = await supabase
-                  .from('team_draft_picks')
-                  .select('team_id');
+                    const cardsPerTeam = new Map<string, number>();
+                    rosterCounts?.forEach(pick => cardsPerTeam.set(pick.team_id, (cardsPerTeam.get(pick.team_id) || 0) + 1));
 
-              if (countErr) {
-                  throw new Error("Failsafe could not fetch rosters to verify card counts.");
-              }
+                    let readyToComplete = true;
+                    let failingReason = "";
+                    for (const team of activeTeams) {
+                        const balance = team.cubucks_balance || 0;
+                        const totalCards = cardsPerTeam.get(team.id) || 0;
+                        if (balance > 0) {
+                            readyToComplete = false;
+                            failingReason = `Team ${team.id} still has ${balance} Cubucks.`;
+                            break;
+                        }
+                        if (totalCards < 25) {
+                            readyToComplete = false;
+                            failingReason = `Team ${team.id} only has ${totalCards} cards (needs 25).`;
+                            break;
+                        }
+                    }
 
-              const cardsPerTeam = new Map<string, number>();
-              rosterCounts?.forEach(pick => {
-                  cardsPerTeam.set(pick.team_id, (cardsPerTeam.get(pick.team_id) || 0) + 1);
-              });
-
-              let readyToComplete = true;
-              let failingReason = "";
-
-              for (const team of activeTeams) {
-                  const balance = team.cubucks_balance || 0;
-                  const totalCards = cardsPerTeam.get(team.id) || 0;
-
-                  if (balance > 0) {
-                      readyToComplete = false;
-                      failingReason = `Team ${team.id} still has ${balance} Cubucks.`;
-                      break;
-                  }
-                  if (totalCards < 25) {
-                      readyToComplete = false;
-                      failingReason = `Team ${team.id} only has ${totalCards} cards (needs 25).`;
-                      break;
-                  }
-              }
-
-              if (readyToComplete) {
-                  console.log("[Draft Failsafe] ✅ All teams broke with 25+ cards. Auto-completing draft!");
-                  await completeDraft(session.id, supabase);
-                  await logSystemEvent("AutoDraftFailsafe", "info", `Draft auto-completed successfully as all teams ran out of funds.`);
-                  actionResult = { action: "completed", message: "Draft auto-completed because all teams ran out of funds." };
-              } else {
-                  console.log(`[Draft Failsafe] ⏸️ Pausing draft. Criteria not met: ${failingReason}`);
-                  await supabase.from("draft_sessions").update({ 
-                      status: "paused", 
-                      consecutive_skipped_picks: newSkipCount 
-                  }).eq("id", session.id);
-                  
-                  await logSystemEvent("AutoDraftStall", "error", `Draft paused: All teams ran out of funds or valid cards, but completion criteria not met (${failingReason}).`);
-                  await supabase.rpc("notify_all_users_draft", {
-                    p_notification_type: "draft_paused",
-                    p_message: "The draft has been automatically PAUSED because all teams have run out of funds."
-                  });
-                  
-                  actionResult = { action: "completed", message: `Draft paused due to all teams running out of funds.` };
-              }
-            } else {
-              console.log(`Team ${teamId} skipped. Consecutive skips: ${newSkipCount}.`);
-              await supabase.from("draft_sessions").update({ consecutive_skipped_picks: newSkipCount }).eq("id", session.id);
-              
-              const advanceResult = await advanceDraft(supabase);
-              if (!advanceResult.success) {
-                  actionResult = { action: "error", error: `Draft could not be advanced after skip: ${advanceResult.error}` };
-              } else {
-                  actionResult = { action: "auto_drafted", message: `Team ${teamId}'s pick was skipped. Consecutive skips: ${newSkipCount}.` };
-              }
+                    if (readyToComplete) {
+                        console.log("[Draft Failsafe] ✅ All teams broke with 25+ cards. Auto-completing draft!");
+                        await completeDraft(lockedSession.id, supabase);
+                        await logSystemEvent("AutoDraftFailsafe", "info", `Draft auto-completed successfully as all teams ran out of funds.`);
+                        return { action: "completed", message: "Draft auto-completed because all teams ran out of funds." };
+                    } else {
+                        console.log(`[Draft Failsafe] ⏸️ Pausing draft. Criteria not met: ${failingReason}`);
+                        await supabase.from("draft_sessions").update({ status: "paused", consecutive_skipped_picks: newSkipCount }).eq("id", lockedSession.id);
+                        await logSystemEvent("AutoDraftStall", "error", `Draft paused: All teams ran out of funds or valid cards, but completion criteria not met (${failingReason}).`);
+                        await supabase.rpc("notify_all_users_draft", { p_notification_type: "draft_paused", p_message: "The draft has been automatically PAUSED because all teams have run out of funds." });
+                        return { action: "completed", message: `Draft paused due to all teams running out of funds.` };
+                    }
+                } else {
+                    console.log(`[DraftTimer] Team ${teamId} skipped. Consecutive skips: ${newSkipCount}.`);
+                    await supabase.from("draft_sessions").update({ consecutive_skipped_picks: newSkipCount }).eq("id", lockedSession.id);
+                    
+                    const advanceResult = await advanceDraft(supabase);
+                    if (!advanceResult.success) {
+                        return { action: "error", error: `Draft could not be advanced after skip: ${advanceResult.error}` };
+                    }
+                    return { action: "auto_drafted", message: `Team ${teamId}'s pick was skipped. Consecutive skips: ${newSkipCount}.` };
+                }
+            } 
+            else {
+                console.log(`[DraftTimer] auto_drafted: Auto-drafted ${autoDraftResult.pick?.cardName || "a card"} for team ${teamId}.`);
+                await resetSkipCounter(lockedSession.id, supabase);
+                await advanceDraft(supabase);
+                return { action: "auto_drafted", message: `Auto-drafted ${autoDraftResult.pick?.cardName || "a card"} for team ${teamId}.` };
             }
-           } 
-          else {
-            actionResult = {
-              action: "auto_drafted",
-              message: `Auto-drafted ${autoDraftResult.pick?.cardName || "a card"} for team ${teamId}.`
-            };
-            console.log(`[DraftTimer] auto_drafted: ${actionResult.message}`);
-            
-            await resetSkipCounter(session.id, supabase);
-            await advanceDraft(supabase);
-          }
-      } finally {
-          await supabase.from("draft_sessions").update({ locked_at: null }).eq("id", session.id);
-      }
+        }
 
-      return actionResult;
+        return { action: "none", message: "Active session found, but no action required at this time." };
+
+    } finally {
+        // =========================================================================
+        // THE FIX: ALWAYS RELEASE THE LOCK WHEN FINISHED
+        // =========================================================================
+        console.log(`[DraftTimer] Releasing lock for session ${lockedSession.id}...`);
+        await supabase.from("draft_sessions").update({ locked_at: null }).eq("id", lockedSession.id);
     }
-
-    return { action: "none", message: "Active session found, but no action required at this time." };
+    
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error in draft timer check";
     await logSystemEvent("DraftTimer", "error", errorMessage);

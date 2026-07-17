@@ -118,15 +118,8 @@ export default function HomePage() {
         {/* --- HERO SECTION (The Full-Opacity "Window") --- */}
         <section className="relative overflow-hidden rounded-2xl min-h-[200px] flex flex-col justify-center border border-border/50 shadow-2xl">
           {/* This image mimics the global background perfectly, but at full opacity */}
-          <Image
-              src="/images/logo/logo.jpg"
-              alt=""
-              fill
-              priority
-              quality={90}
-              className="object-cover opacity-100 animate-bg-pan-smooth"
-          />
-          <div className="absolute inset-0 bg-black/50" /> {/* Slight dimming for text readability */}
+          
+          <div className="absolute inset-0 bg-black/60" /> {/* Slight dimming for text readability */}
           
           <div className="relative px-6 py-8 md:px-10 md:py-10 z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
             <div className="max-w-2xl">

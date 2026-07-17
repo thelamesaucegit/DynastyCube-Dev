@@ -121,28 +121,84 @@ export function DraftStatusWidget({ variant, teamId }: DraftStatusWidgetProps) {
   return <TeamWidget status={status} session={session} teamId={teamId || ""} recentPick={recentPick} />;
 }
 
-function useCountdown(deadline: string | null | undefined): string {
-  const [display, setDisplay] = useState("");
+function useCountdown(
+  deadline: string | null | undefined, 
+  nightStartHour?: number, 
+  nightEndHour?: number
+) {
+  const [display, setDisplay] = useState({
+    time: "",
+    isNight: false,
+    transitionIn: "",
+    transitionTime: "",
+    convertedTime: "",
+  });
+
   useEffect(() => {
-    if (!deadline) {
-      setDisplay("");
+    if (!deadline || nightStartHour === undefined || nightEndHour === undefined) {
+      setDisplay({ time: "", isNight: false, transitionIn: "", transitionTime: "", convertedTime: "" });
       return;
     }
+
     const update = () => {
-      const diff = new Date(deadline).getTime() - Date.now();
+      const now = new Date();
+      const diff = new Date(deadline).getTime() - now.getTime();
+
+      // Timezone specific hour
+      const currentHour = parseInt(new Date().toLocaleString("en-US", { timeZone: "America/Chicago", hour: "numeric", hour12: false }), 10);
+      
+      let isCurrentlyNight = false;
+      if (nightStartHour > nightEndHour) {
+          isCurrentlyNight = currentHour >= nightStartHour || currentHour < nightEndHour;
+      } else {
+          isCurrentlyNight = currentHour >= nightStartHour && currentHour < nightEndHour;
+      }
+
+      const transitionHour = isCurrentlyNight ? nightEndHour : nightStartHour;
+      const transitionLabel = isCurrentlyNight ? "Daylight" : "Nightfall";
+
+      const transitionDate = new Date();
+      transitionDate.toLocaleString("en-US", { timeZone: "America/Chicago" });
+      if (currentHour >= transitionHour) {
+        transitionDate.setDate(transitionDate.getDate() + 1);
+      }
+      transitionDate.setHours(transitionHour, 0, 0, 0);
+      
+      const transitionDiff = transitionDate.getTime() - now.getTime();
+      const hoursToTransition = Math.floor(transitionDiff / (1000 * 60 * 60));
+      const minutesToTransition = Math.floor((transitionDiff % (1000 * 60 * 60)) / (1000 * 60));
+
+      let transitionIn = "";
+      if (hoursToTransition < 2) { // Show within 2 hours
+        transitionIn = `${hoursToTransition}h ${minutesToTransition}m`;
+      }
+      
+      let convertedTime = "";
+      if (hoursToTransition < 1) { // Show within 1 hour
+        const remainingNow = new Date(deadline).getTime() - now.getTime();
+        const converted = isCurrentlyNight ? remainingNow * 0.25 : remainingNow * 4;
+        const h = Math.floor(converted / (1000 * 60 * 60));
+        const m = Math.floor((converted % (1000 * 60 * 60)) / (1000 * 60));
+        const s = Math.floor((converted % (1000 * 60)) / 1000);
+        convertedTime = `~${h}h ${m}m ${s}s`;
+      }
+
       if (diff <= 0) {
-        setDisplay("Processing...");
+        setDisplay({ time: "Processing...", isNight: isCurrentlyNight, transitionIn, transitionTime: transitionLabel, convertedTime });
         return;
       }
+
       const h = Math.floor(diff / (1000 * 60 * 60));
       const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
       const s = Math.floor((diff % (1000 * 60)) / 1000);
-      setDisplay(`${h}h ${m}m ${s}s`);
+      setDisplay({ time: `${h}h ${m}m ${s}s`, isNight: isCurrentlyNight, transitionIn, transitionTime: transitionLabel, convertedTime });
     };
+
     update();
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
-  }, [deadline]);
+  }, [deadline, nightStartHour, nightEndHour]);
+
   return display;
 }
 
@@ -229,11 +285,17 @@ function CompletedWidget({ sessionId }: { sessionId: string }) {
 
 // FullWidget, CompactWidget, and TeamWidget remain the same
 function FullWidget({ status, session, recentPick }: { status: DraftStatus; session: DraftSession | null; recentPick: RecentPickData | null }) {
-  const pickCountdown = useCountdown(session?.current_pick_deadline);
+  const pickCountdown = useCountdown(
+    session?.current_pick_deadline,
+    session?.night_start_hour,
+    session?.night_end_hour
+  );
+
   const startCountdown = useStartCountdown(session?.status === "scheduled" ? session.start_time : null);
   const isScheduled = session?.status === "scheduled";
   const isActive = session?.status === "active";
   const isPaused = session?.status === "paused";
+
   return (
     <section>
       {recentPick && (
@@ -247,6 +309,7 @@ function FullWidget({ status, session, recentPick }: { status: DraftStatus; sess
           </CardContent>
         </Card>
       )}
+
       <Card className="border-2 border-amber-500/30 bg-gradient-to-r from-amber-500/5 via-orange-500/5 to-red-500/5">
         <CardContent className="p-6">
           <div className="flex items-center gap-2 mb-4">
@@ -256,7 +319,9 @@ function FullWidget({ status, session, recentPick }: { status: DraftStatus; sess
             {isScheduled && (<Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">Starts {startCountdown || "soon"}</Badge>)}
             <Badge variant="secondary" className="text-xs ml-auto">{status.seasonName}</Badge>
           </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+            {/* ON THE CLOCK */}
             <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
               <div className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase tracking-wide mb-2">On the Clock</div>
               <div className="flex items-center gap-3">
@@ -265,14 +330,30 @@ function FullWidget({ status, session, recentPick }: { status: DraftStatus; sess
                   <div className="text-xl font-bold">{status.onTheClock.teamName}</div>
                   <div className="text-sm text-muted-foreground">Pick #{status.onTheClock.pickPosition} &middot; Round {status.currentRound}{session?.total_rounds ? ` of ${session.total_rounds}` : ""}</div>
                 </div>
-                {isActive && pickCountdown && (
+                
+                {isActive && pickCountdown.time && (
                   <div className="text-right">
-                    <div className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400"><Timer className="size-3" /><span>Auto-draft</span></div>
-                    <div className="text-lg font-mono font-bold text-amber-600 dark:text-amber-400">{pickCountdown}</div>
+                    <div className="flex items-center justify-end gap-1 text-xs text-amber-600 dark:text-amber-400">
+                      <Timer className="size-3" />
+                      <span>Auto-draft</span>
+                    </div>
+                    <div className="text-lg font-mono font-bold text-amber-600 dark:text-amber-400">{pickCountdown.time}</div>
+                    
+                    {/* Display transition info */}
+                    {pickCountdown.transitionIn && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {pickCountdown.transitionTime} in {pickCountdown.transitionIn}
+                        {pickCountdown.convertedTime && (
+                          <span className="font-mono font-bold text-primary/80"> ({pickCountdown.convertedTime})</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            </div>
+            </div> {/* <-- THIS MISSING CLOSING TAG CAUSED THE CRASH! */}
+
+            {/* ON DECK */}
             <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
               <div className="text-xs font-semibold text-yellow-600 dark:text-yellow-400 uppercase tracking-wide mb-2">On Deck</div>
               <div className="flex items-center gap-3">
@@ -284,6 +365,7 @@ function FullWidget({ status, session, recentPick }: { status: DraftStatus; sess
               </div>
             </div>
           </div>
+
           <div className="mb-4">
             <div className="flex justify-between text-sm text-muted-foreground mb-1">
               <span>Round {status.currentRound}{session?.total_rounds ? ` of ${session.total_rounds}` : ""} Progress</span>
@@ -296,6 +378,7 @@ function FullWidget({ status, session, recentPick }: { status: DraftStatus; sess
               />
             </div>
           </div>
+
           <div className="flex flex-wrap gap-2">
             {status.draftOrder.map((team) => {
               const isOnClock = team.teamId === status.onTheClock.teamId;
@@ -318,11 +401,17 @@ function FullWidget({ status, session, recentPick }: { status: DraftStatus; sess
 }
 
 function CompactWidget({ status, session, recentPick }: { status: DraftStatus; session: DraftSession | null; recentPick: RecentPickData | null }) {
-  const pickCountdown = useCountdown(session?.current_pick_deadline);
+  const pickCountdown = useCountdown(
+    session?.current_pick_deadline,
+    session?.night_start_hour,
+    session?.night_end_hour
+  );
+
   return (
     <Card className="border-amber-500/30 bg-gradient-to-r from-amber-500/5 to-orange-500/5 mb-6">
       <CardContent className="py-3 px-4">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm min-h-[32px]">
+          
           {recentPick ? (
             <div className="flex items-center gap-2 text-green-600 dark:text-green-400 font-bold animate-in fade-in zoom-in duration-300 w-full md:w-auto">
               <PartyPopper className="size-4 animate-bounce" />
@@ -347,12 +436,34 @@ function CompactWidget({ status, session, recentPick }: { status: DraftStatus; s
               </div>
             </>
           )}
+
+          {/* Right side alignment wrapper */}
           <div className="flex items-center gap-2 ml-auto">
-            {pickCountdown && !recentPick && (
-              <Badge variant="outline" className="text-xs font-mono animate-in fade-in"><Timer className="size-3 mr-1" />{pickCountdown}</Badge>
+            
+            {pickCountdown.time && !recentPick && (
+              <div className="flex flex-col items-end">
+                <Badge variant="outline" className="text-xs font-mono animate-in fade-in">
+                  <Timer className="size-3 mr-1" />
+                  {pickCountdown.time}
+                </Badge>
+                
+                {/* Display compact transition info */}
+                {pickCountdown.transitionIn && (
+                  <div className="text-[10px] text-muted-foreground mt-0.5">
+                    {pickCountdown.transitionTime} in {pickCountdown.transitionIn}
+                    {pickCountdown.convertedTime && (
+                      <span className="font-mono"> ({pickCountdown.convertedTime})</span>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
-            <Badge variant="outline" className="text-xs">Round {status.currentRound}{session?.total_rounds ? `/${session.total_rounds}` : ""}</Badge>
+            
+            <Badge variant="outline" className="text-xs">
+              Round {status.currentRound}{session?.total_rounds ? `/${session.total_rounds}` : ""}
+            </Badge>
           </div>
+          
         </div>
       </CardContent>
     </Card>
