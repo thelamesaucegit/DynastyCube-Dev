@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getTesseractLobbyInfo, TesseractLobby } from "@/app/actions/tesseractSessionActions";
+import { getTesseractLobbies, type TesseractLobby } from "@/app/actions/tesseractSessionActions";
 import { Button } from "@/app/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
