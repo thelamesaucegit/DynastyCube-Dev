@@ -134,10 +134,7 @@ export const DraftInterface: React.FC<DraftInterfaceProps> = ({
     setSuccess(null);
     try {
       const cubucksResult = await spendCubucksOnDraft(teamId, card.card_id, card.card_name, cardCost, card.id);
-      if (!cubucksResult.success) {
-        setError(cubucksResult.error || "Failed to spend Çubucks");
-        return;
-      }
+      
       const pick: DraftPick = {
         team_id: teamId,
         card_pool_id: card.id,
