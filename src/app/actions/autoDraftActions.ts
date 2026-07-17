@@ -153,24 +153,29 @@ export async function toggleQueuePickVote(teamId: string, cardPoolId: string, dr
         const auth = await verifyTeamMembership(teamId);
         if (!auth.authorized || !auth.userId) return { success: false, pickExecuted: false, error: auth.error };
 
-        // THE FIX 1: Elevate privileges to the service role to completely bypass any RLS interference
-        const supabase = createServiceClient();
-        
-        // THE FIX 2: Check BOTH card_pool_id AND card_id in case the frontend passed the wrong identifier
+        const supabase = createServiceClient(); // Use service client to bypass RLS
+
+        // First, get the generic card_id from the unique card_pool_id that was passed in
+        const { data: card, error: cardError } = await supabase
+            .from('card_pools')
+            .select('card_id')
+            .eq('id', cardPoolId)
+            .single();
+
+        if (cardError || !card) return { success: false, pickExecuted: false, error: "Card not found in main pool." };
+
+        // THE FIX: Use the generic card_id for the queue lookup, as originally intended
         const { data: queueEntry, error: fetchError } = await supabase
             .from("team_draft_queue")
-            .select("id, votes, position, card_pool_id")
+            .select("id, votes, position")
             .eq("team_id", teamId)
-            .or(`card_pool_id.eq.${cardPoolId},card_id.eq.${cardPoolId}`)
+            .eq("card_id", card.card_id) // Query by the generic Scryfall ID
             .limit(1)
-            .maybeSingle(); 
+            .maybeSingle();
         
-        if (fetchError) {
-            console.error("Database error fetching queue entry:", fetchError);
-            return { success: false, pickExecuted: false, error: "Database error checking queue." };
-        }
-
-        if (!queueEntry) {
+        if (fetchError || !queueEntry) {
+            // This can happen if it's an algorithm-suggested card not yet in the queue.
+            // We can add it automatically here if needed, or return the error.
             return { success: false, pickExecuted: false, error: "Queue entry not found." };
         }
 
@@ -196,8 +201,8 @@ export async function toggleQueuePickVote(teamId: string, cardPoolId: string, dr
         if (currentVotes.length >= threshold && queueEntry.position === 1) {
             const { status: draftStatus } = await getDraftStatus(draftSessionId);
             if (draftStatus?.onTheClock?.teamId === teamId) {
-                // THE FIX 3: Pass the canonical card_pool_id from the database to guarantee execution
-                const pickResult = await executeConfirmedTeamPick(teamId, queueEntry.card_pool_id, draftSessionId, auth.userId);
+                // IMPORTANT: Pass the unique cardPoolId to the execution function
+                const pickResult = await executeConfirmedTeamPick(teamId, cardPoolId, draftSessionId, auth.userId);
                 if (!pickResult.success) return { success: true, pickExecuted: false, error: pickResult.error };
 
                 return { success: true, pickExecuted: true };
