@@ -149,42 +149,78 @@ function calculateVoteThreshold(memberCount: number): number {
 // ============================================================================
 
 export async function toggleQueuePickVote(teamId: string, cardPoolId: string, draftSessionId: string): Promise<{ success: boolean; pickExecuted: boolean; error?: string }> {
+    console.log(`\n[toggleQueuePickVote] START - Team: ${teamId} | Input cardPoolId: ${cardPoolId} | Session: ${draftSessionId}`);
     try {
         const auth = await verifyTeamMembership(teamId);
-        if (!auth.authorized || !auth.userId) return { success: false, pickExecuted: false, error: auth.error };
+        if (!auth.authorized || !auth.userId) {
+            console.error(`[toggleQueuePickVote] Auth failed:`, auth.error);
+            return { success: false, pickExecuted: false, error: auth.error };
+        }
+        console.log(`[toggleQueuePickVote] Auth Success - User: ${auth.userId}`);
 
         const supabase = createServiceClient(); // Use service client to bypass RLS
 
-        // First, get the generic card_id from the unique card_pool_id that was passed in
-        const { data: card, error: cardError } = await supabase
+        // 1. Get the generic card_id from the unique card_pool_id that was passed in
+        console.log(`[toggleQueuePickVote] Looking up card in card_pools by ID: ${cardPoolId}`);
+        let { data: card, error: cardError } = await supabase
             .from('card_pools')
-            .select('card_id')
+            .select('card_id, id, card_name')
             .eq('id', cardPoolId)
             .single();
 
-        if (cardError || !card) return { success: false, pickExecuted: false, error: "Card not found in main pool." };
+        // FALLBACK: If the frontend accidentally passed the Scryfall card_id instead of the primary key id
+        if (cardError || !card) {
+            console.warn(`[toggleQueuePickVote] Failed to find by primary key. Trying fallback lookup by card_id...`);
+            const { data: fallbackCard, error: fallbackError } = await supabase
+                .from('card_pools')
+                .select('card_id, id, card_name')
+                .eq('card_id', cardPoolId)
+                .limit(1)
+                .maybeSingle();
 
-        // THE FIX: Use the generic card_id for the queue lookup, as originally intended
+            if (fallbackError || !fallbackCard) {
+                console.error(`[toggleQueuePickVote] Fallback failed too. Card truly not found.`);
+                return { success: false, pickExecuted: false, error: "Card not found in main pool." };
+            }
+            console.log(`[toggleQueuePickVote] Fallback succeeded! Found card: ${fallbackCard.card_name}`);
+            card = fallbackCard;
+        }
+
+        const resolvedCardId = card.card_id;
+        console.log(`[toggleQueuePickVote] Resolved generic card_id: ${resolvedCardId} for ${card.card_name}`);
+
+        // 2. Look up the queue entry using the generic card_id
+        console.log(`[toggleQueuePickVote] Looking up team_draft_queue for Team: ${teamId} and card_id: ${resolvedCardId}`);
         const { data: queueEntry, error: fetchError } = await supabase
             .from("team_draft_queue")
-            .select("id, votes, position")
+            .select("id, votes, position, card_pool_id")
             .eq("team_id", teamId)
-            .eq("card_id", card.card_id) // Query by the generic Scryfall ID
+            .eq("card_id", resolvedCardId) // Query by the generic Scryfall ID
             .limit(1)
             .maybeSingle();
         
-        if (fetchError || !queueEntry) {
-            // This can happen if it's an algorithm-suggested card not yet in the queue.
-            // We can add it automatically here if needed, or return the error.
+        if (fetchError) {
+            console.error(`[toggleQueuePickVote] DB Error fetching queue entry:`, fetchError);
+            return { success: false, pickExecuted: false, error: "Database error checking queue." };
+        }
+
+        if (!queueEntry) {
+            console.error(`[toggleQueuePickVote] Queue entry not found! Doing a debug dump of this team's queue...`);
+            const { data: debugQueue } = await supabase.from("team_draft_queue").select("id, card_id, card_pool_id, card_name").eq("team_id", teamId);
+            console.log(`[toggleQueuePickVote] DEBUG DUMP:`, JSON.stringify(debugQueue, null, 2));
             return { success: false, pickExecuted: false, error: "Queue entry not found." };
         }
+
+        console.log(`[toggleQueuePickVote] Found Queue Entry! Position: ${queueEntry.position}, Current Votes:`, queueEntry.votes);
 
         let currentVotes: string[] = queueEntry.votes || [];
         const hasVoted = currentVotes.includes(auth.userId);
 
         if (hasVoted) {
+            console.log(`[toggleQueuePickVote] User already voted. Removing vote.`);
             currentVotes = currentVotes.filter(id => id !== auth.userId);
         } else {
+            console.log(`[toggleQueuePickVote] Adding user vote.`);
             currentVotes.push(auth.userId);
         }
 
@@ -193,25 +229,42 @@ export async function toggleQueuePickVote(teamId: string, cardPoolId: string, dr
             .update({ votes: currentVotes })
             .eq("id", queueEntry.id);
 
-        if (updateError) return { success: false, pickExecuted: false, error: "Failed to record vote." };
+        if (updateError) {
+            console.error(`[toggleQueuePickVote] Failed to update votes in DB:`, updateError);
+            return { success: false, pickExecuted: false, error: "Failed to record vote." };
+        }
 
         const memberCount = await getTeamMemberCount(teamId);
         const threshold = calculateVoteThreshold(memberCount);
+        
+        console.log(`[toggleQueuePickVote] Vote recorded. Target Threshold: ${threshold}, Current Votes: ${currentVotes.length}`);
 
+        // 3. Check for draft execution
         if (currentVotes.length >= threshold && queueEntry.position === 1) {
+            console.log(`[toggleQueuePickVote] Threshold reached for top card! Checking draft status...`);
             const { status: draftStatus } = await getDraftStatus(draftSessionId);
+            
             if (draftStatus?.onTheClock?.teamId === teamId) {
-                // IMPORTANT: Pass the unique cardPoolId to the execution function
-                const pickResult = await executeConfirmedTeamPick(teamId, cardPoolId, draftSessionId, auth.userId);
-                if (!pickResult.success) return { success: true, pickExecuted: false, error: pickResult.error };
+                console.log(`[toggleQueuePickVote] Team is on the clock. Executing atomic pick...`);
+                // IMPORTANT: Pass the queue's specific card_pool_id to the execution function
+                const pickResult = await executeConfirmedTeamPick(teamId, queueEntry.card_pool_id, draftSessionId, auth.userId);
+                
+                if (!pickResult.success) {
+                    console.error(`[toggleQueuePickVote] Execution failed:`, pickResult.error);
+                    return { success: true, pickExecuted: false, error: pickResult.error };
+                }
 
+                console.log(`[toggleQueuePickVote] Pick executed successfully!`);
                 return { success: true, pickExecuted: true };
+            } else {
+                console.log(`[toggleQueuePickVote] Execution skipped: Team is NOT on the clock.`);
             }
         }
 
+        console.log(`[toggleQueuePickVote] END - Success\n`);
         return { success: true, pickExecuted: false };
     } catch (error) {
-        console.error("Error toggling queue pick vote:", error);
+        console.error("[toggleQueuePickVote] FATAL CATCH BLOCK:", error);
         return { 
             success: false, 
             pickExecuted: false, 
@@ -219,6 +272,7 @@ export async function toggleQueuePickVote(teamId: string, cardPoolId: string, dr
         };
     }
 }
+
 
 
 async function executeConfirmedTeamPick(teamId: string, cardPoolId: string, draftSessionId: string, userId: string) {
