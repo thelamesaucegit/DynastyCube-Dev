@@ -230,6 +230,15 @@ export default function Navigation() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </NavigationMenuItem>
+
+                 <NavigationMenuItem>
+        <Link href="/tesseract" legacyBehavior passHref>
+            <NavigationMenuLink className={`${navigationMenuTriggerStyle()} bg-purple-500/10 text-purple-500 font-bold border border-purple-500/20 hover:bg-purple-500/20`}>
+                <Sparkles className="mr-1.5 size-4" />
+                Tesseract
+            </NavigationMenuLink>
+        </Link>
+    </NavigationMenuItem>
                 {/* Admin Dropdown */}
                 {user && isAdmin && (
                   <NavigationMenuItem>
@@ -299,7 +308,10 @@ export default function Navigation() {
                 <Link href="/" onClick={() => setMobileMenuOpen(false)} className={`px-4 py-2.5 rounded-md text-left transition-colors ${isActive("/") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>
                   Home
                 </Link>
-                
+                 {/* THE FIX: Add Tesseract Link for Mobile */}
+    <Link href="/tesseract" onClick={() => setMobileMenuOpen(false)} className={`px-4 py-2.5 rounded-md text-left transition-colors font-bold ${isActive("/tesseract") ? "bg-purple-500/20 text-purple-400" : "text-purple-500 hover:bg-purple-500/10"}`}>
+        Tesseract Drafts
+    </Link>
                 {/* DRAFTS */}
                 <button onClick={() => toggleMobileSection('drafts')} className="flex items-center justify-between w-full pt-4 pb-2 px-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase hover:text-foreground transition-colors outline-none">
                   <span>Drafts ({draftSessions.length})</span>
