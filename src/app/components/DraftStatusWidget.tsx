@@ -389,15 +389,17 @@ const pickCountdown = useCountdown(
 }
 
 function CompactWidget({ status, session, recentPick }: { status: DraftStatus; session: DraftSession | null; recentPick: RecentPickData | null }) {
-const pickCountdown = useCountdown(
+  const pickCountdown = useCountdown(
     session?.current_pick_deadline,
     session?.night_start_hour,
     session?.night_end_hour
   );
-        return (
+
+  return (
     <Card className="border-amber-500/30 bg-gradient-to-r from-amber-500/5 to-orange-500/5 mb-6">
       <CardContent className="py-3 px-4">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm min-h-[32px]">
+          
           {recentPick ? (
             <div className="flex items-center gap-2 text-green-600 dark:text-green-400 font-bold animate-in fade-in zoom-in duration-300 w-full md:w-auto">
               <PartyPopper className="size-4 animate-bounce" />
@@ -422,24 +424,35 @@ const pickCountdown = useCountdown(
               </div>
             </>
           )}
+
+          {/* Right side alignment wrapper */}
           <div className="flex items-center gap-2 ml-auto">
+            
             {pickCountdown.time && !recentPick && (
-        <div className="flex flex-col items-end">
-            <Badge variant="outline" className="text-xs font-mono animate-in fade-in">
-                <Timer className="size-3 mr-1" />
-                {pickCountdown.time}
-            </Badge>
-            {/* THE FIX: Display compact transition info */}
-            {pickCountdown.transitionIn && (
-                <div className="text-[10px] text-muted-foreground mt-0.5">
+              <div className="flex flex-col items-end">
+                <Badge variant="outline" className="text-xs font-mono animate-in fade-in">
+                  <Timer className="size-3 mr-1" />
+                  {pickCountdown.time}
+                </Badge>
+                
+                {/* Display compact transition info */}
+                {pickCountdown.transitionIn && (
+                  <div className="text-[10px] text-muted-foreground mt-0.5">
                     {pickCountdown.transitionTime} in {pickCountdown.transitionIn}
-                    {pickCountdown.convertedTime && <span className="font-mono"> ({pickCountdown.convertedTime})</span>}
-                </div>
+                    {pickCountdown.convertedTime && (
+                      <span className="font-mono"> ({pickCountdown.convertedTime})</span>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
+            
+            <Badge variant="outline" className="text-xs">
+              Round {status.currentRound}{session?.total_rounds ? `/${session.total_rounds}` : ""}
+            </Badge>
+          </div>
+          
         </div>
-      )}
-      <Badge variant="outline" className="text-xs">Round {status.currentRound}{session?.total_rounds ? `/${session.total_rounds}` : ""}</Badge>
-    </div>
       </CardContent>
     </Card>
   );
