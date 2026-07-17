@@ -89,12 +89,31 @@ export interface AutoDraftPreviewResult {
 // ============================================================================
 
 async function verifyTeamMembership(teamId: string): Promise<{ authorized: boolean; userId?: string; error?: string }> {
+    if (!teamId) return { authorized: false, error: "Team ID is missing." };
+
     const supabase = await createServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) return { authorized: false, error: "You must be logged in to perform this action" };
+    
+    if (authError || !user) return { authorized: false, error: "You must be logged in to perform this action." };
 
-    const { data: membership, error: membershipError } = await supabase.from("team_members").select("id").eq("team_id", teamId).eq("user_id", user.id).single();
-    if (membershipError || !membership) return { authorized: false, userId: user.id, error: "You must be a member of this team" };
+    // 1. Allow Admins to bypass the strict team membership check
+    const { data: userData } = await supabase.from("users").select("is_admin").eq("id", user.id).maybeSingle();
+    if (userData?.is_admin) {
+        return { authorized: true, userId: user.id };
+    }
+
+    // 2. Safely check standard team membership
+    const { data: membership, error: membershipError } = await supabase
+        .from("team_members")
+        .select("id")
+        .eq("team_id", teamId)
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle(); // THE FIX: Use maybeSingle() to prevent hard crashes
+
+    if (membershipError || !membership) {
+        return { authorized: false, userId: user.id, error: "You must be a member of this team." };
+    }
 
     return { authorized: true, userId: user.id };
 }
@@ -135,9 +154,17 @@ export async function toggleQueuePickVote(teamId: string, cardPoolId: string, dr
         if (!auth.authorized || !auth.userId) return { success: false, pickExecuted: false, error: auth.error };
 
         const supabase = await createServerClient();
-        const { data: queueEntry, error: fetchError } = await supabase.from("team_draft_queue").select("id, votes, position").eq("team_id", teamId).eq("card_pool_id", cardPoolId).single();
         
-        if (fetchError || !queueEntry) return { success: false, pickExecuted: false, error: "Queue entry not found" };
+        // THE FIX: Use maybeSingle() to prevent crash if queue entry isn't found
+        const { data: queueEntry, error: fetchError } = await supabase
+            .from("team_draft_queue")
+            .select("id, votes, position")
+            .eq("team_id", teamId)
+            .eq("card_pool_id", cardPoolId)
+            .limit(1)
+            .maybeSingle(); 
+        
+        if (fetchError || !queueEntry) return { success: false, pickExecuted: false, error: "Queue entry not found." };
 
         let currentVotes: string[] = queueEntry.votes || [];
         const hasVoted = currentVotes.includes(auth.userId);
@@ -148,8 +175,12 @@ export async function toggleQueuePickVote(teamId: string, cardPoolId: string, dr
             currentVotes.push(auth.userId);
         }
 
-        const { error: updateError } = await supabase.from("team_draft_queue").update({ votes: currentVotes }).eq("id", queueEntry.id);
-        if (updateError) return { success: false, pickExecuted: false, error: "Failed to record vote" };
+        const { error: updateError } = await supabase
+            .from("team_draft_queue")
+            .update({ votes: currentVotes })
+            .eq("id", queueEntry.id);
+
+        if (updateError) return { success: false, pickExecuted: false, error: "Failed to record vote." };
 
         const memberCount = await getTeamMemberCount(teamId);
         const threshold = calculateVoteThreshold(memberCount);
@@ -159,12 +190,19 @@ export async function toggleQueuePickVote(teamId: string, cardPoolId: string, dr
             if (draftStatus?.onTheClock?.teamId === teamId) {
                 const pickResult = await executeConfirmedTeamPick(teamId, cardPoolId, draftSessionId, auth.userId);
                 if (!pickResult.success) return { success: true, pickExecuted: false, error: pickResult.error };
+
                 return { success: true, pickExecuted: true };
             }
         }
+
         return { success: true, pickExecuted: false };
-    } catch (_error) {
-        return { success: false, pickExecuted: false, error: "An unexpected error occurred" };
+    } catch (error) {
+        console.error("Error toggling queue pick vote:", error);
+        return { 
+            success: false, 
+            pickExecuted: false, 
+            error: error instanceof Error ? error.message : "An unexpected error occurred" 
+        };
     }
 }
 
