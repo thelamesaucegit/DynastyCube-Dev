@@ -285,15 +285,17 @@ function CompletedWidget({ sessionId }: { sessionId: string }) {
 
 // FullWidget, CompactWidget, and TeamWidget remain the same
 function FullWidget({ status, session, recentPick }: { status: DraftStatus; session: DraftSession | null; recentPick: RecentPickData | null }) {
-const pickCountdown = useCountdown(
+  const pickCountdown = useCountdown(
     session?.current_pick_deadline,
     session?.night_start_hour,
     session?.night_end_hour
   );
+
   const startCountdown = useStartCountdown(session?.status === "scheduled" ? session.start_time : null);
   const isScheduled = session?.status === "scheduled";
   const isActive = session?.status === "active";
   const isPaused = session?.status === "paused";
+
   return (
     <section>
       {recentPick && (
@@ -307,6 +309,7 @@ const pickCountdown = useCountdown(
           </CardContent>
         </Card>
       )}
+
       <Card className="border-2 border-amber-500/30 bg-gradient-to-r from-amber-500/5 via-orange-500/5 to-red-500/5">
         <CardContent className="p-6">
           <div className="flex items-center gap-2 mb-4">
@@ -316,7 +319,9 @@ const pickCountdown = useCountdown(
             {isScheduled && (<Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">Starts {startCountdown || "soon"}</Badge>)}
             <Badge variant="secondary" className="text-xs ml-auto">{status.seasonName}</Badge>
           </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+            {/* ON THE CLOCK */}
             <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
               <div className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase tracking-wide mb-2">On the Clock</div>
               <div className="flex items-center gap-3">
@@ -325,25 +330,30 @@ const pickCountdown = useCountdown(
                   <div className="text-xl font-bold">{status.onTheClock.teamName}</div>
                   <div className="text-sm text-muted-foreground">Pick #{status.onTheClock.pickPosition} &middot; Round {status.currentRound}{session?.total_rounds ? ` of ${session.total_rounds}` : ""}</div>
                 </div>
-               {isActive && pickCountdown.time && (
-      <div className="text-right">
-        <div className="flex items-center justify-end gap-1 text-xs text-amber-600 dark:text-amber-400">
-          <Timer className="size-3" />
-          <span>Auto-draft</span>
-        </div>
-        <div className="text-lg font-mono font-bold text-amber-600 dark:text-amber-400">{pickCountdown.time}</div>
-        
-        {/* THE FIX: Display transition info */}
-        {pickCountdown.transitionIn && (
-          <div className="text-xs text-muted-foreground mt-1">
-            {pickCountdown.transitionTime} in {pickCountdown.transitionIn}
-            {pickCountdown.convertedTime && (
-              <span className="font-mono font-bold text-primary/80"> ({pickCountdown.convertedTime})</span>
-            )}
-          </div>
-        )}
-      </div>
-    )}
+                
+                {isActive && pickCountdown.time && (
+                  <div className="text-right">
+                    <div className="flex items-center justify-end gap-1 text-xs text-amber-600 dark:text-amber-400">
+                      <Timer className="size-3" />
+                      <span>Auto-draft</span>
+                    </div>
+                    <div className="text-lg font-mono font-bold text-amber-600 dark:text-amber-400">{pickCountdown.time}</div>
+                    
+                    {/* Display transition info */}
+                    {pickCountdown.transitionIn && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {pickCountdown.transitionTime} in {pickCountdown.transitionIn}
+                        {pickCountdown.convertedTime && (
+                          <span className="font-mono font-bold text-primary/80"> ({pickCountdown.convertedTime})</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div> {/* <-- THIS MISSING CLOSING TAG CAUSED THE CRASH! */}
+
+            {/* ON DECK */}
             <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
               <div className="text-xs font-semibold text-yellow-600 dark:text-yellow-400 uppercase tracking-wide mb-2">On Deck</div>
               <div className="flex items-center gap-3">
@@ -355,6 +365,7 @@ const pickCountdown = useCountdown(
               </div>
             </div>
           </div>
+
           <div className="mb-4">
             <div className="flex justify-between text-sm text-muted-foreground mb-1">
               <span>Round {status.currentRound}{session?.total_rounds ? ` of ${session.total_rounds}` : ""} Progress</span>
@@ -367,6 +378,7 @@ const pickCountdown = useCountdown(
               />
             </div>
           </div>
+
           <div className="flex flex-wrap gap-2">
             {status.draftOrder.map((team) => {
               const isOnClock = team.teamId === status.onTheClock.teamId;
