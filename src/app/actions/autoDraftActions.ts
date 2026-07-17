@@ -264,7 +264,7 @@ export async function toggleQueuePickVote(teamId: string, cardPoolId: string, dr
             console.log(`[toggleQueuePickVote] Threshold reached for top card! Checking draft status...`);
             const { status: draftStatus } = await getDraftStatus(draftSessionId);
             
-            if (draftStatus?.onTheClock?.teamId === teamId) {
+        if (draftStatus?.onTheClock?.teamId === trueTeamId) { // <-- Change this
                 console.log(`[toggleQueuePickVote] Team is on the clock. Executing atomic pick...`);
                 // IMPORTANT: Pass the queue's specific card_pool_id to the execution function
                 const pickResult = await executeConfirmedTeamPick(teamId, queueEntry.card_pool_id, draftSessionId, auth.userId);
