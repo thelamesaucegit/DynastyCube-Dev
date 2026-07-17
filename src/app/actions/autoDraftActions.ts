@@ -162,28 +162,32 @@ export async function toggleQueuePickVote(teamId: string, cardPoolId: string, dr
 
         // 1. Get the generic card_id from the unique card_pool_id that was passed in
         console.log(`[toggleQueuePickVote] Looking up card in card_pools by ID: ${cardPoolId}`);
-        let { data: card, error: cardError } = await supabase
+        
+        // THE FIX: Assign to a const first, then pull 'card' out into a let variable
+        const primaryLookup = await supabase
             .from('card_pools')
             .select('card_id, id, card_name')
             .eq('id', cardPoolId)
             .single();
 
+        let card = primaryLookup.data;
+
         // FALLBACK: If the frontend accidentally passed the Scryfall card_id instead of the primary key id
-        if (cardError || !card) {
+        if (primaryLookup.error || !card) {
             console.warn(`[toggleQueuePickVote] Failed to find by primary key. Trying fallback lookup by card_id...`);
-            const { data: fallbackCard, error: fallbackError } = await supabase
+            const fallbackLookup = await supabase
                 .from('card_pools')
                 .select('card_id, id, card_name')
                 .eq('card_id', cardPoolId)
                 .limit(1)
                 .maybeSingle();
 
-            if (fallbackError || !fallbackCard) {
+            if (fallbackLookup.error || !fallbackLookup.data) {
                 console.error(`[toggleQueuePickVote] Fallback failed too. Card truly not found.`);
                 return { success: false, pickExecuted: false, error: "Card not found in main pool." };
             }
-            console.log(`[toggleQueuePickVote] Fallback succeeded! Found card: ${fallbackCard.card_name}`);
-            card = fallbackCard;
+            console.log(`[toggleQueuePickVote] Fallback succeeded! Found card: ${fallbackLookup.data.card_name}`);
+            card = fallbackLookup.data;
         }
 
         const resolvedCardId = card.card_id;
