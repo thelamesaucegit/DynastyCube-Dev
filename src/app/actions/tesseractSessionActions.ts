@@ -30,6 +30,16 @@ export interface ParsedCubeCard {
     card_type: string | null;
 }
 
+export interface TesseractLobby {
+    id: string;
+    name: string;
+    draft_format: string;
+    status: string;
+    participant_count: number;
+    max_players: number;
+    has_passcode: boolean;
+}
+
 function parseCubeCobraCSV(csvText: string): Omit<ParsedCubeCard, 'cubecobra_elo'>[] {
     const lines = csvText.split(/\r?\n/).filter(l => l.trim() !== "");
     if (lines.length < 2) throw new Error("CSV is empty or invalid.");
@@ -88,6 +98,42 @@ function parseCubeCobraCSV(csvText: string): Omit<ParsedCubeCard, 'cubecobra_elo
         });
     }
     return cards;
+}
+
+export async function getTesseractLobbies(): Promise<{ lobbies: TesseractLobby[]; error?: string }> {
+    const adminSupabase = createAdminClient();
+    try {
+        const { data, error } = await adminSupabase
+            .from('tesseract_draft_sessions')
+            .select(`
+                id, 
+                name, 
+                draft_format, 
+                status, 
+                max_players, 
+                passcode,
+                tesseract_participants (id)
+            `)
+            .neq('status', 'completed')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        const lobbies: TesseractLobby[] = (data || []).map(row => ({
+            id: row.id,
+            name: row.name,
+            draft_format: row.draft_format,
+            status: row.status,
+            max_players: row.max_players,
+            participant_count: Array.isArray(row.tesseract_participants) ? row.tesseract_participants.length : 0,
+            has_passcode: !!row.passcode
+        }));
+
+        return { lobbies };
+    } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : "An unexpected error occurred.";
+        return { lobbies: [], error: message };
+    }
 }
 
 export async function createTesseractDraft(params: CreateTesseractParams): Promise<{ success: boolean; sessionId?: string; error?: string }> {
