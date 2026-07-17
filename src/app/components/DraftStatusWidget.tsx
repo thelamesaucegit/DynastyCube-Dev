@@ -474,8 +474,16 @@ function TeamWidget({ status, session, teamId, recentPick }: { status: DraftStat
   const isOnClock = status.onTheClock.teamId === teamId;
   const isOnDeck = status.onDeck.teamId === teamId;
   const teamEntry = status.draftOrder.find((t) => t.teamId === teamId);
-  const pickCountdown = useCountdown(session?.current_pick_deadline);
+  
+  // THE FIX: Pass day/night variables to the hook
+  const pickCountdown = useCountdown(
+    session?.current_pick_deadline,
+    session?.night_start_hour,
+    session?.night_end_hour
+  );
+
   if (!teamEntry) return null;
+
   return (
     <Card className={`mb-6 border-2 transition-colors ${isOnClock ? "border-green-500/40 bg-green-500/5" : isOnDeck ? "border-yellow-500/40 bg-yellow-500/5" : "border-border"}`}>
       <CardContent className="py-4 px-5">
@@ -501,13 +509,16 @@ function TeamWidget({ status, session, teamId, recentPick }: { status: DraftStat
               )}
             </div>
           )}
-          {isOnClock && pickCountdown && !recentPick && (
+          
+          {/* THE FIX: Use pickCountdown.time instead of the raw object */}
+          {isOnClock && pickCountdown.time && !recentPick && (
             <div className="flex items-center gap-1.5 text-sm w-full sm:w-auto">
               <Timer className="size-3.5 text-amber-500" />
-              <span className="font-mono font-bold text-amber-600 dark:text-amber-400">{pickCountdown}</span>
+              <span className="font-mono font-bold text-amber-600 dark:text-amber-400">{pickCountdown.time}</span>
               <span className="text-xs text-muted-foreground">until auto-draft</span>
             </div>
           )}
+          
           <div className="flex items-center gap-3 text-sm text-muted-foreground sm:ml-auto w-full sm:w-auto justify-between sm:justify-end">
             <span>Pick #{teamEntry.pickPosition}</span>
             <span className="text-muted-foreground/40 hidden sm:inline">|</span>
@@ -515,11 +526,15 @@ function TeamWidget({ status, session, teamId, recentPick }: { status: DraftStat
             <span className="text-muted-foreground/40 hidden sm:inline">|</span>
             <span>{teamEntry.picksMade} picks made</span>
           </div>
+          
           {!isOnClock && !recentPick && (
             <div className="w-full flex items-center gap-2 text-sm pt-2 sm:pt-1 border-t border-border/50 sm:mt-1 animate-in fade-in">
               <span className="text-muted-foreground">On the clock:</span>
               <span className="font-medium">{status.onTheClock.teamEmoji} {status.onTheClock.teamName}</span>
-              {pickCountdown && (<span className="text-xs text-muted-foreground font-mono">({pickCountdown})</span>)}
+              
+              {/* THE FIX: Use pickCountdown.time here too */}
+              {pickCountdown.time && (<span className="text-xs text-muted-foreground font-mono">({pickCountdown.time})</span>)}
+              
               {!isOnDeck && (
                 <>
                   <ChevronRight className="size-3 text-muted-foreground" />
