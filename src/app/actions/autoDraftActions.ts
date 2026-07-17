@@ -155,7 +155,7 @@ export async function toggleQueuePickVote(teamId: string, cardPoolId: string, dr
 
         const supabase = await createServerClient();
         
-        // THE FIX: Use maybeSingle() to prevent crash if queue entry isn't found
+        // Use maybeSingle() to prevent hard crashes
         const { data: queueEntry, error: fetchError } = await supabase
             .from("team_draft_queue")
             .select("id, votes, position")
@@ -164,28 +164,78 @@ export async function toggleQueuePickVote(teamId: string, cardPoolId: string, dr
             .limit(1)
             .maybeSingle(); 
         
-        if (fetchError || !queueEntry) return { success: false, pickExecuted: false, error: "Queue entry not found." };
-
-        let currentVotes: string[] = queueEntry.votes || [];
-        const hasVoted = currentVotes.includes(auth.userId);
-
-        if (hasVoted) {
-            currentVotes = currentVotes.filter(id => id !== auth.userId);
-        } else {
-            currentVotes.push(auth.userId);
+        if (fetchError) {
+            return { success: false, pickExecuted: false, error: "Database error checking queue." };
         }
 
-        const { error: updateError } = await supabase
-            .from("team_draft_queue")
-            .update({ votes: currentVotes })
-            .eq("id", queueEntry.id);
+        let currentVotes: string[] = [];
+        let currentPosition: number;
 
-        if (updateError) return { success: false, pickExecuted: false, error: "Failed to record vote." };
+        if (!queueEntry) {
+            // THE FIX: If the user votes on an algorithm-provided card, we automatically 
+            // convert it into a manual pinned queue entry!
+            
+            // 1. Determine the next available position at the bottom of the manual queue
+            const { data: maxEntry } = await supabase
+                .from("team_draft_queue")
+                .select("position")
+                .eq("team_id", teamId)
+                .order("position", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+                
+            currentPosition = maxEntry && typeof maxEntry.position === 'number' ? maxEntry.position + 1 : 1;
+
+            // 2. Fetch the basic card info needed for the queue table
+            const { data: cardData } = await supabase
+                .from("card_pools")
+                .select("card_id, card_name")
+                .eq("id", cardPoolId)
+                .single();
+
+            if (!cardData) return { success: false, pickExecuted: false, error: "Card is no longer available in the pool." };
+
+            currentVotes = [auth.userId];
+
+            // 3. Insert the new manual queue entry with the vote attached
+            const { error: insertErr } = await supabase.from("team_draft_queue").insert({
+                team_id: teamId,
+                card_pool_id: cardPoolId,
+                card_id: cardData.card_id,
+                card_name: cardData.card_name,
+                position: currentPosition,
+                pinned: true,
+                added_by: auth.userId,
+                votes: currentVotes
+            });
+
+            if (insertErr) return { success: false, pickExecuted: false, error: "Failed to add algorithm card to manual queue." };
+
+        } else {
+            // Existing logic for cards already in the manual queue
+            currentPosition = queueEntry.position;
+            currentVotes = queueEntry.votes || [];
+            
+            const hasVoted = currentVotes.includes(auth.userId);
+            if (hasVoted) {
+                currentVotes = currentVotes.filter(id => id !== auth.userId);
+            } else {
+                currentVotes.push(auth.userId);
+            }
+
+            const { error: updateError } = await supabase
+                .from("team_draft_queue")
+                .update({ votes: currentVotes })
+                .eq("id", queueEntry.id);
+
+            if (updateError) return { success: false, pickExecuted: false, error: "Failed to record vote." };
+        }
 
         const memberCount = await getTeamMemberCount(teamId);
         const threshold = calculateVoteThreshold(memberCount);
 
-        if (currentVotes.length >= threshold && queueEntry.position === 1) {
+        // If this card is at the top of the queue AND has reached majority consensus, draft it!
+        if (currentVotes.length >= threshold && currentPosition === 1) {
             const { status: draftStatus } = await getDraftStatus(draftSessionId);
             if (draftStatus?.onTheClock?.teamId === teamId) {
                 const pickResult = await executeConfirmedTeamPick(teamId, cardPoolId, draftSessionId, auth.userId);
