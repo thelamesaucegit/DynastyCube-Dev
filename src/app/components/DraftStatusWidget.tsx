@@ -154,8 +154,8 @@ function useCountdown(
           isCurrentlyNight = currentHour >= nightStartHour && currentHour < nightEndHour;
       }
 
-      let transitionHour = isCurrentlyNight ? nightEndHour : nightStartHour;
-      let transitionLabel = isCurrentlyNight ? "Daylight" : "Nightfall";
+      const transitionHour = isCurrentlyNight ? nightEndHour : nightStartHour;
+      const transitionLabel = isCurrentlyNight ? "Daylight" : "Nightfall";
 
       const transitionDate = new Date();
       transitionDate.toLocaleString("en-US", { timeZone: "America/Chicago" });
