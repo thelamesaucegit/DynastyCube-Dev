@@ -231,14 +231,16 @@ export default function Navigation() {
                   </DropdownMenu>
                 </NavigationMenuItem>
 
-                 <NavigationMenuItem>
-        <Link href="/tesseract" legacyBehavior passHref>
-            <NavigationMenuLink className={`${navigationMenuTriggerStyle()} bg-purple-500/10 text-purple-500 font-bold border border-purple-500/20 hover:bg-purple-500/20`}>
-                <Sparkles className="mr-1.5 size-4" />
-                Tesseract
-            </NavigationMenuLink>
-        </Link>
-    </NavigationMenuItem>
+                 {/* Tesseract Link  */}
+                <NavigationMenuItem>
+                  <Link href="/tesseract" legacyBehavior passHref>
+                    <NavigationMenuLink className={`${navigationMenuTriggerStyle()} bg-purple-500/10 text-purple-500 font-bold border border-purple-500/20 hover:bg-purple-500/20`}>
+                      <Sparkles className="mr-1.5 size-4" />
+                      Tesseract
+                    </NavigationMenuLink>
+                  </Link>
+                </NavigationMenuItem>
+                
                 {/* Admin Dropdown */}
                 {user && isAdmin && (
                   <NavigationMenuItem>
