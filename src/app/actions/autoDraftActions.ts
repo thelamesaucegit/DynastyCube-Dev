@@ -88,36 +88,49 @@ export interface AutoDraftPreviewResult {
 // HELPERS
 // ============================================================================
 
-async function verifyTeamMembership(teamId: string): Promise<{ authorized: boolean; userId?: string; error?: string }> {
-    if (!teamId) return { authorized: false, error: "Team ID is missing." };
+async function verifyTeamMembership(teamIdOrShortName: string): Promise<{ authorized: boolean; userId?: string; teamIdResolved?: string; error?: string }> {
+    if (!teamIdOrShortName) return { authorized: false, error: "Team ID is missing." };
 
     const supabase = await createServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
     if (authError || !user) return { authorized: false, error: "You must be logged in to perform this action." };
 
+    let resolvedTeamId = teamIdOrShortName;
+
+    // THE FIX: If the input is not a UUID (like "mimics"), resolve it to the UUID
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(teamIdOrShortName)) {
+        const { data: teamLookup } = await supabase
+            .from("teams")
+            .select("id")
+            .eq("short_name", teamIdOrShortName)
+            .maybeSingle();
+            
+        if (!teamLookup) return { authorized: false, error: "Invalid Team format." };
+        resolvedTeamId = teamLookup.id;
+    }
+
     // 1. Allow Admins to bypass the strict team membership check
     const { data: userData } = await supabase.from("users").select("is_admin").eq("id", user.id).maybeSingle();
     if (userData?.is_admin) {
-        return { authorized: true, userId: user.id };
+        return { authorized: true, userId: user.id, teamIdResolved: resolvedTeamId };
     }
 
-    // 2. Safely check standard team membership
+    // 2. Safely check standard team membership using the resolved UUID
     const { data: membership, error: membershipError } = await supabase
         .from("team_members")
         .select("id")
-        .eq("team_id", teamId)
+        .eq("team_id", resolvedTeamId)
         .eq("user_id", user.id)
         .limit(1)
-        .maybeSingle(); // THE FIX: Use maybeSingle() to prevent hard crashes
+        .maybeSingle(); 
 
     if (membershipError || !membership) {
         return { authorized: false, userId: user.id, error: "You must be a member of this team." };
     }
 
-    return { authorized: true, userId: user.id };
+    return { authorized: true, userId: user.id, teamIdResolved: resolvedTeamId };
 }
-
 function countDraftedColors(picks: Array<{ colors?: string[] }>): Record<string, number> {
     const counts: Record<string, number> = { W: 0, U: 0, B: 0, R: 0, G: 0 };
     for (const pick of picks) {
@@ -149,13 +162,16 @@ function calculateVoteThreshold(memberCount: number): number {
 // ============================================================================
 
 export async function toggleQueuePickVote(teamId: string, cardPoolId: string, draftSessionId: string): Promise<{ success: boolean; pickExecuted: boolean; error?: string }> {
-    console.log(`\n[toggleQueuePickVote] START - Team: ${teamId} | Input cardPoolId: ${cardPoolId} | Session: ${draftSessionId}`);
+    console.log(`\n[toggleQueuePickVote] START - Team Input: ${teamId} | Input cardPoolId: ${cardPoolId}`);
     try {
         const auth = await verifyTeamMembership(teamId);
-        if (!auth.authorized || !auth.userId) {
+        if (!auth.authorized || !auth.userId || !auth.teamIdResolved) {
             console.error(`[toggleQueuePickVote] Auth failed:`, auth.error);
             return { success: false, pickExecuted: false, error: auth.error };
         }
+        
+        // Use the resolved UUID going forward
+        const trueTeamId = auth.teamIdResolved; 
         console.log(`[toggleQueuePickVote] Auth Success - User: ${auth.userId}`);
 
         const supabase = createServiceClient(); // Use service client to bypass RLS
