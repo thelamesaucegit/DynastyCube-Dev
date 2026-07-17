@@ -162,7 +162,7 @@ export async function toggleQueuePickVote(teamId: string, cardPoolId: string, dr
 
         // 1. Get the generic card_id from the unique card_pool_id that was passed in
         console.log(`[toggleQueuePickVote] Looking up card in card_pools by ID: ${cardPoolId}`);
-        const { data: card, error: cardError } = await supabase
+        let { data: card, error: cardError } = await supabase
             .from('card_pools')
             .select('card_id, id, card_name')
             .eq('id', cardPoolId)
