@@ -46,7 +46,7 @@ async function computeTesseractPick(participantId: string, sessionId: string, ex
         .eq('is_drafted', false)
         .not('id', 'in', `(${excludedIds.length > 0 ? excludedIds.join(',') : ''})`)
         .not('cubecobra_elo', 'is', null)
-        .limit(500); // Analyze a sufficiently large batch
+        .limit(50); // Analyze a sufficiently large batch
 
     if (availableErr) {
         console.error("Error fetching available cards for auto-draft:", availableErr);
