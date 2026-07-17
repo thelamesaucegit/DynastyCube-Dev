@@ -214,7 +214,7 @@ export async function toggleQueuePickVote(teamId: string, cardPoolId: string, dr
         const { data: queueEntry, error: fetchError } = await supabase
             .from("team_draft_queue")
             .select("id, votes, position, card_pool_id")
-            .eq("team_id", teamId)
+            .eq("team_id", trueTeamId)  // <-- Change this
             .eq("card_id", resolvedCardId) // Query by the generic Scryfall ID
             .limit(1)
             .maybeSingle();
