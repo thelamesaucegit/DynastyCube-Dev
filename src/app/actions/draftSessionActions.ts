@@ -46,6 +46,9 @@ export interface DraftSession {
   updated_at: string;
   autodraft_next_pick_at: string;
   consecutive_skipped_picks?: number;
+      enforce_day_night_drafting?: boolean;
+  night_start_hour?: number;
+  night_end_hour?: number;
   locked_at?: string;
 }
 
