@@ -538,6 +538,23 @@ export async function advanceDraft(adminClient?: AnySupabaseClient): Promise<{
       await completeDraft(session.id, supabase);
       return { success: true, completed: true };
     }
+ const { data: skipStatus } = await supabase
+      .from("team_draft_skip_status")
+      .select("is_skipping")
+      .eq("team_id", draftStatus.onTheClock.teamId)
+      .eq("draft_session_id", session.id)
+      .maybeSingle();
+
+    if (skipStatus?.is_skipping) {
+      console.log(`[AdvanceDraft] Team ${draftStatus.onTheClock.teamId} is skipping all picks. Instantly advancing.`);
+      const { data: existingPicks } = await supabase.from("team_draft_picks").select("id").eq("team_id", draftStatus.onTheClock.teamId).eq("draft_session_id", session.id);
+      
+      const { addSkippedPick } = await import('@/app/actions/draftActions');
+      await addSkippedPick(draftStatus.onTheClock.teamId, (existingPicks?.length || 0) + 1, session.id, supabase);
+      
+      // Recursively advance to the next team
+      return advanceDraft(supabase);
+    }
 
     // Draft continues — set new deadline and notify next team
   const now = new Date();

@@ -11,6 +11,11 @@ function createServiceClient() {
     return createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 }
 
+export interface SkipStatus {
+    is_skipping: boolean;
+    votes: string[];
+}
+
 export interface DraftPick {
   id?: string;
   card_pool_id?: string;
@@ -201,6 +206,82 @@ export async function addSkippedPick(
   } catch {
     return { success: false, error: "An unexpected error occurred" };
   }
+}
+
+export async function getTeamSkipStatus(teamId: string, draftSessionId: string): Promise<SkipStatus> {
+    const supabase = await createServerClient();
+    const { data, error } = await supabase
+        .from("team_draft_skip_status")
+        .select("is_skipping, votes")
+        .eq("team_id", teamId)
+        .eq("draft_session_id", draftSessionId)
+        .maybeSingle();
+
+    if (error || !data) return { is_skipping: false, votes: [] };
+    return { is_skipping: data.is_skipping, votes: data.votes || [] };
+}
+
+export async function toggleSkipRemainingVote(teamId: string, draftSessionId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+        const supabase = await createServerClient();
+        const authCheck = await verifyTeamMembership(teamId, supabase);
+        if (!authCheck.authorized || !authCheck.userId) return { success: false, error: authCheck.error };
+
+        const { data: member } = await supabase.from('team_members').select('role').eq('team_id', teamId).eq('user_id', authCheck.userId).single();
+        const isCaptain = member?.role === 'captain' || member?.role === 'pilot';
+
+        const { data: currentStatus } = await supabase
+            .from("team_draft_skip_status")
+            .select("votes, is_skipping")
+            .eq("team_id", teamId)
+            .eq("draft_session_id", draftSessionId)
+            .maybeSingle();
+
+        let currentVotes: string[] = currentStatus?.votes || [];
+        const hasVoted = currentVotes.includes(authCheck.userId);
+
+        if (hasVoted) {
+            currentVotes = currentVotes.filter(id => id !== authCheck.userId);
+        } else {
+            currentVotes.push(authCheck.userId);
+        }
+
+        const { count: memberCount } = await supabase.from("team_members").select("*", { count: 'exact', head: true }).eq("team_id", teamId);
+        const threshold = Math.ceil((memberCount || 1) * 0.51);
+
+        // A captain instantly forces the skip to true, OR a majority vote triggers it.
+        // If retracting a vote drops it below threshold (and it wasn't captain forced), it turns off.
+        const shouldSkip = isCaptain ? !currentStatus?.is_skipping : currentVotes.length >= threshold;
+
+        const { error: upsertError } = await supabase
+            .from("team_draft_skip_status")
+            .upsert({
+                team_id: teamId,
+                draft_session_id: draftSessionId,
+                votes: currentVotes,
+                is_skipping: shouldSkip,
+                updated_at: new Date().toISOString()
+            }, { onConflict: "team_id, draft_session_id" });
+
+        if (upsertError) return { success: false, error: upsertError.message };
+
+        // If the team just activated skip mode, check if they are currently on the clock to skip them immediately!
+        if (shouldSkip && !currentStatus?.is_skipping) {
+            const { getDraftStatus } = await import('@/app/actions/draftOrderActions');
+            const { advanceDraft } = await import('@/app/actions/draftSessionActions');
+            
+            const { status } = await getDraftStatus(draftSessionId, supabase);
+            if (status?.onTheClock.teamId === teamId) {
+                const { picks } = await getTeamDraftPicks(teamId, draftSessionId, supabase);
+                await addSkippedPick(teamId, picks.length + 1, draftSessionId, supabase);
+                await advanceDraft(supabase);
+            }
+        }
+
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: "Unexpected error processing vote." };
+    }
 }
 
 export async function addDraftPick(pick: DraftPick): Promise<{ success: boolean; error?: string }> {
