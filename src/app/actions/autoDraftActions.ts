@@ -634,7 +634,7 @@ export async function executeAutoDraft(
         const effectiveCost = cardToAttempt.cubucks_cost || 1;
 
    
-    const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
+  const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
         p_team_id: teamId, p_draft_session_id: draftSessionId, p_card_pool_id: cardToAttempt.id,
         p_card_id: cardToAttempt.card_id, p_card_name: cardToAttempt.card_name,
         p_card_set: cardToAttempt.card_set, p_card_type: cardToAttempt.card_type,
@@ -643,7 +643,7 @@ export async function executeAutoDraft(
         p_image_url: cardToAttempt.image_url,
         p_oldest_image_url: cardToAttempt.oldest_image_url, p_mana_cost: cardToAttempt.mana_cost,
         p_cmc: cardToAttempt.cmc, p_pick_number: pickNumber, p_cost: effectiveCost,
-        p_is_manual_pick: preview.source === "manual_queue", p_user_id: null,
+        p_is_manual_pick: true, p_user_id: null, // <-- FIXED
     }).single();
 
         if (rpcError) {
