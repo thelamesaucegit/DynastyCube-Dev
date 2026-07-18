@@ -733,7 +733,7 @@ export async function executeAutoDraft(
       return { success: true, source: "skipped", pick: { cardId: "skipped-pick", cardName: "SKIPPED", cost: 0 }};
     }
     
-    const { team: teamBalance } = await getTeamBalance(teamId, supabase);
+   const { team: teamBalance } = await getTeamBalance(teamId, supabase);
     const balance = teamBalance?.cubucks_balance ?? 0;
     const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId, supabase);
     const pickNumber = existingPicks.length + 1;
@@ -743,8 +743,14 @@ export async function executeAutoDraft(
         baseCost = await applyHatModifier(teamId, baseCost, supabase);
     }
     
-const effectiveCost = baseCost;
+    const effectiveCost = baseCost;
 
+    // THE FIX: Catch insufficient funds for ALL auto-drafts (including manual_queue) to trigger SKIPPED gracefully
+    if (balance < effectiveCost) {
+        await logSystemEvent("ExecuteAutoDraft", "warn", `Team ${teamId} lacks funds (${balance}) for auto-drafted card cost (${effectiveCost}). Skipped.`);
+        await addSkippedPick(teamId, pickNumber, draftSessionId, supabase);
+        return { success: true, source: "skipped", pick: { cardId: "skipped-pick", cardName: "SKIPPED", cost: 0 }};
+    }
       
     const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
         p_team_id: teamId, p_draft_session_id: draftSessionId, p_card_pool_id: cardToAttempt.id,
