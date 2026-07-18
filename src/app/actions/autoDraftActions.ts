@@ -722,13 +722,14 @@ export async function executeAutoDraft(
         return { success: true, pick: { cardId: cardToAttempt.card_id, cardName: cardToAttempt.card_name, cost: effectiveCost }, source: "drained" };
     }
 
-    // =========================================================================
+       // =========================================================================
     // STANDARD AUTO-DRAFT LOGIC
     // =========================================================================
-
+    
+    // 1. Fetch the preview first so that the 'preview' variable is defined!
     const preview = await getAutoDraftPreview(teamId, draftSessionId, supabase, excludedCardPoolIds);
     const cardToAttempt = preview.nextPick;
-
+    
     if (!cardToAttempt) {
       await logSystemEvent("ExecuteAutoDraft", "warn", `No valid affordable card found for team ${teamId}. Pick will be skipped.`, { excludedCount: excludedCardPoolIds.length });
       
@@ -739,7 +740,7 @@ export async function executeAutoDraft(
       return { success: true, source: "skipped", pick: { cardId: "skipped-pick", cardName: "SKIPPED", cost: 0 }};
     }
     
-   const { team: teamBalance } = await getTeamBalance(teamId, supabase);
+    const { team: teamBalance } = await getTeamBalance(teamId, supabase);
     const balance = teamBalance?.cubucks_balance ?? 0;
     const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId, supabase);
     const pickNumber = existingPicks.length + 1;
@@ -751,13 +752,15 @@ export async function executeAutoDraft(
     
     const effectiveCost = baseCost;
 
-    // THE FIX: Catch insufficient funds for ALL auto-drafts (including manual_queue) to trigger SKIPPED gracefully
-    if (balance < effectiveCost) {
-        await logSystemEvent("ExecuteAutoDraft", "warn", `Team ${teamId} lacks funds (${balance}) for auto-drafted card cost (${effectiveCost}). Skipped.`);
+    // 2. Perform the poverty check securely using the declared 'preview' variable.
+    // This allows manual queue picks to bypass this block and go negative.
+    if (preview.source === "algorithm" && balance < effectiveCost) {
+        await logSystemEvent("ExecuteAutoDraft", "warn", `Team ${teamId} lacks funds (${balance}) for algorithm card cost (${effectiveCost}). Skipped.`);
         await addSkippedPick(teamId, pickNumber, draftSessionId, supabase);
         return { success: true, source: "skipped", pick: { cardId: "skipped-pick", cardName: "SKIPPED", cost: 0 }};
     }
       
+    // 3. Proceed with the atomic database pick.
     const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
         p_team_id: teamId, p_draft_session_id: draftSessionId, p_card_pool_id: cardToAttempt.id,
         p_card_id: cardToAttempt.card_id, p_card_name: cardToAttempt.card_name,
@@ -769,6 +772,7 @@ export async function executeAutoDraft(
         p_cmc: cardToAttempt.cmc, p_pick_number: pickNumber, p_cost: effectiveCost,
         p_is_manual_pick: preview.source === "manual_queue", p_user_id: null,
     }).single();
+
     
     if (rpcError) {
       const isAlreadyDrafted = 
