@@ -81,7 +81,7 @@ function createServiceClient() {
   );
 }
 
-export function isCurrentlyNight(nightStartHour: number, nightEndHour: number): boolean {
+export async function isCurrentlyNight(nightStartHour: number, nightEndHour: number): boolean {
     const currentHourStr = new Date().toLocaleString("en-US", { timeZone: "America/Chicago", hour: "numeric", hour12: false });
     let currentHour = parseInt(currentHourStr, 10);
     if (currentHour === 24) currentHour = 0; // Normalize midnight
