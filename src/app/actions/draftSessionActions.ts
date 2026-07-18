@@ -81,7 +81,7 @@ function createServiceClient() {
   );
 }
 
-export async function isCurrentlyNight(nightStartHour: number, nightEndHour: number): boolean {
+export async function isCurrentlyNight(nightStartHour: number, nightEndHour: number): Promise<boolean> {
     const currentHourStr = new Date().toLocaleString("en-US", { timeZone: "America/Chicago", hour: "numeric", hour12: false });
     let currentHour = parseInt(currentHourStr, 10);
     if (currentHour === 24) currentHour = 0; // Normalize midnight
@@ -433,9 +433,10 @@ export async function activateDraft(
 
   
 
-  const isNight = session.enforce_day_night_drafting 
-        ? isCurrentlyNight(session.night_start_hour ?? 22, session.night_end_hour ?? 8) 
-        : false;
+ const isNight = session.enforce_day_night_drafting 
+    ? await isCurrentlyNight(session.night_start_hour ?? 22, session.night_end_hour ?? 8) 
+    : false;
+      
     const multiplier = isNight ? 4 : 1;
 
     const now = new Date();
@@ -540,9 +541,10 @@ export async function advanceDraft(adminClient?: AnySupabaseClient): Promise<{
 
     // Draft continues — set new deadline and notify next team
   const now = new Date();
-    const isNight = session.enforce_day_night_drafting 
-        ? isCurrentlyNight(session.night_start_hour ?? 22, session.night_end_hour ?? 8) 
-        : false;
+   const isNight = session.enforce_day_night_drafting 
+    ? await isCurrentlyNight(session.night_start_hour ?? 22, session.night_end_hour ?? 8) 
+    : false;
+      
     const multiplier = isNight ? 4 : 1;
     const deadline = new Date(now.getTime() + session.hours_per_pick * 60 * 60 * 1000 * multiplier);
 
@@ -998,7 +1000,7 @@ export async function checkDraftTimer(
   error?: string;
 }> {
   const supabase = adminClient ?? createServiceClient();
-  
+
   try {
     // 1. Initial Quick Fetch (No Locks yet)
     const { data: initialSession, error: sessionError } = await supabase
@@ -1080,49 +1082,40 @@ export async function checkDraftTimer(
 
         const now = new Date();
         const msPerPick = lockedSession.hours_per_pick * 60 * 60 * 1000;
-        const deadline = new Date(timerStartTime.getTime() + msPerPick);
+       let activeDeadline = new Date(lockedSession.current_pick_deadline || timerStartTime.getTime() + (lockedSession.hours_per_pick * 60 * 60 * 1000));
 
-        // --- DAY/NIGHT SCALING ENGINE ---
+        // --- DAY/NIGHT SCALING ENGINE (STATEFUL & ROBUST) ---
         if (lockedSession.enforce_day_night_drafting && lockedSession.current_pick_deadline) {
-            const currentDeadline = new Date(lockedSession.current_pick_deadline);
-            const currentDurationMs = currentDeadline.getTime() - timerStartTime.getTime();
-            const originalDurationMs = lockedSession.hours_per_pick * 60 * 60 * 1000;
-            const isScaledForNight = currentDurationMs > originalDurationMs * 2;
-            const currentHourStr = new Date().toLocaleString("en-US", { timeZone: "America/Chicago", hour: "numeric", hour12: false });
-            const currentHour = parseInt(currentHourStr, 10);
-            
-            const startHour = lockedSession.night_start_hour as number;
-            const endHour = lockedSession.night_end_hour as number;
-            
-            let isCurrentlyNight = false;
-            if (startHour > endHour) {
-                isCurrentlyNight = currentHour >= startHour || currentHour < endHour;
-            } else {
-                isCurrentlyNight = currentHour >= startHour && currentHour < endHour;
-            }
+            const isNight = await isCurrentlyNight(lockedSession.night_start_hour as number, lockedSession.night_end_hour as number);
+            const isScaled = lockedSession.is_night_scaled ?? false;
 
-            if (isCurrentlyNight && !isScaledForNight) {
+            if (isNight && !isScaled) {
                 console.log(`[DraftTimer] 🌙 Transition to Night! Scaling team ${draftStatus.onTheClock.teamId}'s remaining time by 4x.`);
-                const remainingMs = currentDeadline.getTime() - now.getTime();
-                const newDeadline = new Date(now.getTime() + (remainingMs * 4));
-                await supabase.from("draft_sessions").update({ current_pick_deadline: newDeadline.toISOString() }).eq("id", lockedSession.id);
-                return { action: "none", message: "Draft clock scaled 4x for night hours." };
+                const remainingMs = activeDeadline.getTime() - now.getTime();
+                activeDeadline = new Date(now.getTime() + (remainingMs * 4));
+                await supabase.from("draft_sessions").update({ 
+                    current_pick_deadline: activeDeadline.toISOString(),
+                    is_night_scaled: true
+                }).eq("id", lockedSession.id);
             } 
-            else if (!isCurrentlyNight && isScaledForNight) {
+            else if (!isNight && isScaled) {
                 console.log(`[DraftTimer] ☀️ Transition to Day! Scaling team ${draftStatus.onTheClock.teamId}'s remaining time by 0.25x.`);
-                const remainingMs = currentDeadline.getTime() - now.getTime();
-                const newDeadline = new Date(now.getTime() + (remainingMs * 0.25));
-                if (newDeadline <= now) {
+                const remainingMs = activeDeadline.getTime() - now.getTime();
+                activeDeadline = new Date(now.getTime() + (remainingMs * 0.25));
+                if (activeDeadline <= now) {
                     console.log(`[DraftTimer] ⏰ Daybreak caused immediate timeout for team ${draftStatus.onTheClock.teamId}!`);
-                } else {
-                    await supabase.from("draft_sessions").update({ current_pick_deadline: newDeadline.toISOString() }).eq("id", lockedSession.id);
-                    return { action: "none", message: "Draft clock scaled 0.25x for daylight hours." };
                 }
+                
+                // Update it in the database regardless of if it expired immediately
+                await supabase.from("draft_sessions").update({ 
+                    current_pick_deadline: activeDeadline.toISOString(),
+                    is_night_scaled: false
+                }).eq("id", lockedSession.id);
             }
         }
         // --- END DAY/NIGHT SCALING ENGINE ---
 
-        if (now >= deadline) {
+        if (now >= activeDeadline) {
             console.log(`[DraftTimer] Deadline passed for session ${lockedSession.id}. Executing auto-pick logic.`);
             const teamId = draftStatus.onTheClock.teamId;
 
