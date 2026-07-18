@@ -1046,12 +1046,12 @@ export async function checkDraftTimer(
     // =========================================================================
     // THE FIX: ATTEMPT TO ACQUIRE THE LOCK *BEFORE* EVALUATING THE DEADLINE
     // =========================================================================
-    const { data: lockedSession, error: lockError } = await supabase
+       const { data: lockedSession, error: lockError } = await supabase
         .from("draft_sessions")
         .update({ locked_at: new Date().toISOString() })
         .eq("id", initialSession.id)
         .is("locked_at", initialSession.locked_at) // Optimistic concurrency check!
-        .select("id, hours_per_pick, consecutive_skipped_picks, enforce_day_night_drafting, night_start_hour, night_end_hour, season_id, current_pick_deadline")
+        .select("id, hours_per_pick, consecutive_skipped_picks, enforce_day_night_drafting, night_start_hour, night_end_hour, season_id, current_pick_deadline, is_night_scaled")
         .single();
 
     if (lockError || !lockedSession) {
