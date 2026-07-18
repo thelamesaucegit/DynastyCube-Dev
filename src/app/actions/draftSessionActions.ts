@@ -47,6 +47,7 @@ export interface DraftSession {
   autodraft_next_pick_at: string;
   consecutive_skipped_picks?: number;
       enforce_day_night_drafting?: boolean;
+    is_night_scaled?: boolean;
   night_start_hour?: number;
   night_end_hour?: number;
   locked_at?: string;
@@ -78,6 +79,18 @@ function createServiceClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_KEY!
   );
+}
+
+export function isCurrentlyNight(nightStartHour: number, nightEndHour: number): boolean {
+    const currentHourStr = new Date().toLocaleString("en-US", { timeZone: "America/Chicago", hour: "numeric", hour12: false });
+    let currentHour = parseInt(currentHourStr, 10);
+    if (currentHour === 24) currentHour = 0; // Normalize midnight
+
+    if (nightStartHour > nightEndHour) {
+        return currentHour >= nightStartHour || currentHour < nightEndHour;
+    } else {
+        return currentHour >= nightStartHour && currentHour < nightEndHour;
+    }
 }
 
 /**
@@ -418,8 +431,15 @@ export async function activateDraft(
       return { success: false, error: "Could not determine draft status. Ensure draft order is set." };
     }
 
+  
+
+  const isNight = session.enforce_day_night_drafting 
+        ? isCurrentlyNight(session.night_start_hour ?? 22, session.night_end_hour ?? 8) 
+        : false;
+    const multiplier = isNight ? 4 : 1;
+
     const now = new Date();
-    const deadline = new Date(now.getTime() + session.hours_per_pick * 60 * 60 * 1000);
+    const deadline = new Date(now.getTime() + session.hours_per_pick * 60 * 60 * 1000 * multiplier);
 
     const { error: updateError } = await supabase
       .from("draft_sessions")
@@ -427,6 +447,7 @@ export async function activateDraft(
         status: "active",
         current_pick_deadline: deadline.toISOString(),
         current_on_clock_team_id: draftStatus.onTheClock.teamId,
+        is_night_scaled: isNight, // Track state!
         updated_at: now.toISOString(),
       })
       .eq("id", sessionId);
@@ -518,14 +539,19 @@ export async function advanceDraft(adminClient?: AnySupabaseClient): Promise<{
     }
 
     // Draft continues — set new deadline and notify next team
-    const now = new Date();
-    const deadline = new Date(now.getTime() + session.hours_per_pick * 60 * 60 * 1000);
+  const now = new Date();
+    const isNight = session.enforce_day_night_drafting 
+        ? isCurrentlyNight(session.night_start_hour ?? 22, session.night_end_hour ?? 8) 
+        : false;
+    const multiplier = isNight ? 4 : 1;
+    const deadline = new Date(now.getTime() + session.hours_per_pick * 60 * 60 * 1000 * multiplier);
 
     await supabase
       .from("draft_sessions")
       .update({
         current_pick_deadline: deadline.toISOString(),
         current_on_clock_team_id: draftStatus.onTheClock.teamId,
+        is_night_scaled: isNight, // Initialize the state for the new team!
         updated_at: now.toISOString(),
       })
       .eq("id", session.id);
