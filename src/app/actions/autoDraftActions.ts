@@ -633,18 +633,24 @@ export async function executeAutoDraft(
         const pickNumber = existingPicks.length + 1;
         const effectiveCost = cardToAttempt.cubucks_cost || 1;
 
-        // 4. Force the pick execution
-        const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
-            p_team_id: teamId, p_draft_session_id: draftSessionId, p_card_pool_id: cardToAttempt.id,
-            p_card_id: cardToAttempt.card_id, p_card_name: cardToAttempt.card_name,
-            p_card_set: cardToAttempt.card_set, p_card_type: cardToAttempt.card_type,
-            p_rarity: cardToAttempt.rarity, p_colors: cardToAttempt.colors, 
-            p_color_identity: cardToAttempt.color_identity || cardToAttempt.colors || [], 
-            p_image_url: cardToAttempt.image_url,
-            p_oldest_image_url: cardToAttempt.oldest_image_url, p_mana_cost: cardToAttempt.mana_cost,
-            p_cmc: cardToAttempt.cmc, p_pick_number: pickNumber, p_cost: effectiveCost,
-            p_is_manual_pick: false, p_user_id: null,
-        }).single();
+    if (preview.source === "algorithm" && balance < effectiveCost) {
+        await logSystemEvent("ExecuteAutoDraft", "warn", `Team ${teamId} lacks funds (${balance}) for algorithm card cost (${effectiveCost}). Skipped.`);
+        
+        await addSkippedPick(teamId, pickNumber, draftSessionId, supabase);
+        return { success: true, source: "skipped", pick: { cardId: "skipped-pick", cardName: "SKIPPED", cost: 0 }};
+    }
+      
+    const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
+        p_team_id: teamId, p_draft_session_id: draftSessionId, p_card_pool_id: cardToAttempt.id,
+        p_card_id: cardToAttempt.card_id, p_card_name: cardToAttempt.card_name,
+        p_card_set: cardToAttempt.card_set, p_card_type: cardToAttempt.card_type,
+        p_rarity: cardToAttempt.rarity, p_colors: cardToAttempt.colors, 
+        p_color_identity: cardToAttempt.color_identity || cardToAttempt.colors || [],
+        p_image_url: cardToAttempt.image_url,
+        p_oldest_image_url: cardToAttempt.oldest_image_url, p_mana_cost: cardToAttempt.mana_cost,
+        p_cmc: cardToAttempt.cmc, p_pick_number: pickNumber, p_cost: effectiveCost,
+        p_is_manual_pick: preview.source === "manual_queue", p_user_id: null,
+    }).single();
 
         if (rpcError) {
              // Handle exclusions recursively if it was sniped by a race condition
