@@ -633,13 +633,7 @@ export async function executeAutoDraft(
         const pickNumber = existingPicks.length + 1;
         const effectiveCost = cardToAttempt.cubucks_cost || 1;
 
-    if (preview.source === "algorithm" && balance < effectiveCost) {
-        await logSystemEvent("ExecuteAutoDraft", "warn", `Team ${teamId} lacks funds (${balance}) for algorithm card cost (${effectiveCost}). Skipped.`);
-        
-        await addSkippedPick(teamId, pickNumber, draftSessionId, supabase);
-        return { success: true, source: "skipped", pick: { cardId: "skipped-pick", cardName: "SKIPPED", cost: 0 }};
-    }
-      
+   
     const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
         p_team_id: teamId, p_draft_session_id: draftSessionId, p_card_pool_id: cardToAttempt.id,
         p_card_id: cardToAttempt.card_id, p_card_name: cardToAttempt.card_name,
