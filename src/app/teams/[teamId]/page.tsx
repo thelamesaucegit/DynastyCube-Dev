@@ -683,7 +683,7 @@ const handleToggleSkipRemaining = async () => {
                       </div>
                     </CardContent>
                   </Card>
-                  )}
+                  
                   
                   <div>
                     <div className="mb-4">
