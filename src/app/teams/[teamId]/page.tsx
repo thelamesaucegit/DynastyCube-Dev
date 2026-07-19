@@ -14,10 +14,10 @@ import { TrophyCase } from "@/app/components/team/TrophyCase";
 import { TeamEssenceDisplay } from "@/app/components/team/TeamEssenceDisplay";
 import { getTeamByShortName } from "@/app/actions/teamActions";
 import { getTeamDraftPicks, getTeamDecks, toggleKeeperStatus, getTeamSkipStatus, toggleSkipRemainingVote, type SkipStatus } from "@/app/actions/draftActions";
+import { getAutoDraftPreview, toggleQueuePickVote, captainForcePick, type AutoDraftPreviewResult } from "@/app/actions/autoDraftActions";
 import { refundDraftPick } from "@/app/actions/cubucksActions";
 import { getCurrentSeason } from "@/app/actions/seasonPhaseActions";
 import { getActiveDraftSession } from "@/app/actions/draftSessionActions";
-import { getAutoDraftPreview, toggleQueuePickVote, type AutoDraftPreviewResult } from "@/app/actions/autoDraftActions";
 import { getCurrentUserRolesForTeam, getTeamMembersWithRoles, type TeamMemberWithRoles } from "@/app/actions/roleActions";
 import { getRoleEmoji, getRoleDisplayName } from "@/app/utils/roleUtils";
 import { getTeamHats } from "@/app/actions/hatActions";
@@ -86,6 +86,7 @@ export default function TeamPage() {
 
    const [skipStatus, setSkipStatus] = useState<SkipStatus>({ is_skipping: false, votes: [] });
   const [isTogglingSkip, setIsTogglingSkip] = useState(false);
+    const [isForcePicking, setIsForcePicking] = useState(false);
   const [team, setTeam] = useState<Team | null>(null);
   const [draftPicks, setDraftPicks] = useState<DraftPick[]>([]);
   const [decks, setDecks] = useState<Deck[]>([]);
@@ -151,7 +152,7 @@ export default function TeamPage() {
         Promise<{ members: TeamMemberWithRoles[], error?: string }>,
         Promise<AutoDraftPreviewResult | null>,
         Promise<TeamHatData[]>,
-        Promise<SkipStatus> // <-- Add this
+        Promise<SkipStatus> // <-- NEW
       ] = [
         getTeamDraftPicks(teamUUID, sessionId || undefined),
         getTeamDecks(teamUUID),
@@ -159,10 +160,10 @@ export default function TeamPage() {
         getTeamMembersWithRoles(teamUUID),
         sessionId ? getAutoDraftPreview(teamUUID, sessionId) : Promise.resolve(null),
         getTeamHats(teamUUID) as Promise<TeamHatData[]>,
-        sessionId ? getTeamSkipStatus(teamUUID, sessionId) : Promise.resolve({ is_skipping: false, votes: [] }) // <-- Add this
+        sessionId ? getTeamSkipStatus(teamUUID, sessionId) : Promise.resolve({ is_skipping: false, votes: [] }) // <-- NEW
       ];
 
-     const [picksResult, decksResult, rolesResult, membersResult, previewResult, hatsResult, skipResult] = await Promise.all(dataPromises)
+     const [picksResult, decksResult, rolesResult, membersResult, previewResult, hatsResult, skipResult] = await Promise.all(dataPromises);
 
       // THE FIX: Cast foundTeam to the local 'Team' interface so TS knows it can accept 'members'
       const baseTeam = foundTeam as unknown as Team;
@@ -186,6 +187,8 @@ export default function TeamPage() {
       setMembersWithRoles(membersResult.members);
       setDraftPreview(previewResult);
       setTeamHats(hatsResult);
+            setSkipStatus(skipResult);
+
 
       const isMember = teamWithMembers.members?.some((m) => m.user_id === user?.id) || rolesResult.roles.length > 0;
       let defaultTab: TabType = "picks";
@@ -210,7 +213,25 @@ export default function TeamPage() {
   useEffect(() => {
     loadTeamData();
   }, [loadTeamData]);
+
   
+  const handleCaptainForcePick = async () => {
+    if (!draftPreview?.nextPick?.id || !activeDraftSessionId || !team) return;
+    setIsForcePicking(true);
+    try {
+      const result = await captainForcePick(team.id, draftPreview.nextPick.id, activeDraftSessionId);
+      if (result.success) {
+        toast.success(`Captain forced pick: ${draftPreview.nextPick.card_name}!`);
+        await handleDraftComplete();
+      } else {
+        toast.error(result.error || "Failed to force pick.");
+      }
+    } catch (error) {
+      toast.error("Unexpected error forcing pick.");
+    } finally {
+      setIsForcePicking(false);
+    }
+  };
 const handleToggleSkipRemaining = async () => {
     if (!team || !activeDraftSessionId) return;
     setIsTogglingSkip(true);
@@ -564,15 +585,70 @@ const handleToggleSkipRemaining = async () => {
 
         <Card>
           <CardContent className="pt-6">
-            <TabsContent value="draft">
+             <TabsContent value="draft">
               {activeTab === "draft" && isUserTeamMember && (
                 <div className="space-y-8">
                   {draftPreview?.source === "manual_queue" && draftPreview.nextPick && (
-                   <Card className="border-destructive/30 bg-destructive/5 shadow-sm mt-4">
+                    <Card className="border-primary/50 bg-primary/5 shadow-sm">
+                      <CardContent className="pt-6">
+                        <div className="flex flex-col md:flex-row items-center gap-6">
+                          <div className="w-24 h-36 shrink-0 rounded-md overflow-hidden shadow-md bg-muted">
+                            {(() => {
+                              const imageUrl = getCardImageUrl(draftPreview.nextPick!, useOldestArt);
+                              return imageUrl && (
+                                <Image src={imageUrl} alt={draftPreview.nextPick!.card_name} width={96} height={144} className="w-full h-full object-cover" />
+                              );
+                            })()}
+                          </div>
+                          <div className="flex-1 text-center md:text-left">
+                            <Badge className="mb-2 bg-primary">Up Next in Queue</Badge>
+                            <h3 className="text-xl font-bold mb-2">{draftPreview.nextPick.card_name}</h3>
+                            <p className="text-sm text-muted-foreground mb-4 max-w-2xl">
+                              This card is at the top of your team&apos;s manual queue. Vote to confirm it for immediate submission. If the vote threshold is met while your team is on the clock, the pick will be processed instantly.
+                            </p>
+                            
+                            <div className="flex flex-wrap items-center gap-3 justify-center md:justify-start">
+                              {(() => {
+                                const currentVotes = draftPreview.votes?.length || 0;
+                                const threshold = draftPreview.voteThreshold || 1;
+                                const isVoted = user?.id ? draftPreview.votes?.includes(user.id) : false;
+                                return (
+                                  <Button onClick={handleToggleVote} disabled={isVoting || !activeDraftSessionId} className={isVoted ? "bg-green-600 hover:bg-green-700 text-white" : ""} >
+                                    {isVoting && <Loader2 className="size-4 animate-spin mr-2" />}
+                                    {!isVoting && <Vote className="size-4 mr-2" />}
+                                    {isVoted ? "Retract Vote" : "Confirm pick for immediate submission"}
+                                    <span className="ml-2 font-normal opacity-90">
+                                      ({currentVotes}/{threshold} votes in favor)
+                                    </span>
+                                  </Button>
+                                );
+                              })()}
+
+                              {/* CAPTAIN FORCE PICK UI */}
+                              {(userRoles.includes("captain") || userRoles.includes("pilot")) && (
+                                <Button onClick={handleCaptainForcePick} disabled={isForcePicking || !activeDraftSessionId} variant="destructive">
+                                  {isForcePicking && <Loader2 className="size-4 animate-spin mr-2" />}
+                                  {!isForcePicking && <Zap className="size-4 mr-2" />}
+                                  Captain: Force Pick Now
+                                </Button>
+                              )}
+                            </div>
+
+                            {!activeDraftSessionId && (
+                              <p className="text-xs text-destructive mt-2">Cannot vote: No active draft session found.</p>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                  
+                  {/* SKIP REMAINING PICKS PANEL */}
+                  <Card className="border-destructive/30 bg-destructive/5 shadow-sm mt-4">
                     <CardContent className="pt-6">
                       <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                         <div className="flex-1 text-center md:text-left">
-                          <h3 className="text-xl font-bold mb-2 flex items-center gap-2">
+                          <h3 className="text-xl font-bold mb-2 flex items-center gap-2 justify-center md:justify-start">
                             <AlertCircle className="size-5 text-destructive" />
                             Skip Remaining Picks
                           </h3>
@@ -607,45 +683,6 @@ const handleToggleSkipRemaining = async () => {
                       </div>
                     </CardContent>
                   </Card>
-                    <Card className="border-primary/50 bg-primary/5 shadow-sm">
-                      <CardContent className="pt-6">
-                        <div className="flex flex-col md:flex-row items-center gap-6">
-                          <div className="w-24 h-36 shrink-0 rounded-md overflow-hidden shadow-md bg-muted">
-                            {(() => {
-                              const imageUrl = getCardImageUrl(draftPreview.nextPick!, useOldestArt);
-                              return imageUrl && (
-                                <Image src={imageUrl} alt={draftPreview.nextPick!.card_name} width={96} height={144} className="w-full h-full object-cover" />
-                              );
-                            })()}
-                          </div>
-                          <div className="flex-1 text-center md:text-left">
-                            <Badge className="mb-2 bg-primary">Up Next in Queue</Badge>
-                            <h3 className="text-xl font-bold mb-2">{draftPreview.nextPick.card_name}</h3>
-                            <p className="text-sm text-muted-foreground mb-4 max-w-2xl">
-                              This card is at the top of your team&apos;s manual queue. Vote to confirm it for immediate submission. If the vote threshold is met while your team is on the clock, the pick will be processed instantly.
-                            </p>
-                            {(() => {
-                              const currentVotes = draftPreview.votes?.length || 0;
-                              const threshold = draftPreview.voteThreshold || 1;
-                              const isVoted = user?.id ? draftPreview.votes?.includes(user.id) : false;
-                              return (
-                                <Button onClick={handleToggleVote} disabled={isVoting || !activeDraftSessionId} className={isVoted ? "bg-green-600 hover:bg-green-700 text-white" : ""} >
-                                  {isVoting && <Loader2 className="size-4 animate-spin mr-2" />}
-                                  {!isVoting && <Vote className="size-4 mr-2" />}
-                                  {isVoted ? "Retract Vote" : "Confirm pick for immediate submission"}
-                                  <span className="ml-2 font-normal opacity-90">
-                                    ({currentVotes}/{threshold} votes in favor)
-                                  </span>
-                                </Button>
-                              );
-                            })()}
-                            {!activeDraftSessionId && (
-                              <p className="text-xs text-destructive mt-2">Cannot vote: No active draft session found.</p>
-                            )}
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
                   )}
                   
                   <div>
