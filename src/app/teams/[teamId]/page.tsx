@@ -39,7 +39,7 @@ import { Card, CardContent } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
 import { Button } from "@/app/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
-import { MoonStar, Sun, Target, Layers, BookOpen, ArrowLeftRight, Swords, Crown, Users, Loader2, AlertCircle, ExternalLink, CalendarDays, CheckCircle2, XCircle, Vote } from "lucide-react";
+import { MoonStar, Sun, Target, Layers, BookOpen, ArrowLeftRight, Swords, Crown, Users, Loader2, AlertCircle, ExternalLink, CalendarDays, CheckCircle2, XCircle, Vote, Zap } from "lucide-react";
 import { useSettings } from "@/contexts/SettingsContext";
 import { getCardImageUrl } from "@/app/utils/cardUtils";
 
@@ -628,7 +628,7 @@ const handleToggleSkipRemaining = async () => {
                               {(userRoles.includes("captain") || userRoles.includes("pilot")) && (
                                 <Button onClick={handleCaptainForcePick} disabled={isForcePicking || !activeDraftSessionId} variant="destructive">
                                   {isForcePicking && <Loader2 className="size-4 animate-spin mr-2" />}
-                                  {!isForcePicking && < className="size-4 mr-2" />}
+                                  {!isForcePicking && <Zap className="size-4 mr-2" />}
                                   Captain: Force Pick Now
                                 </Button>
                               )}
