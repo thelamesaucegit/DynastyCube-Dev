@@ -628,7 +628,7 @@ const handleToggleSkipRemaining = async () => {
                               {(userRoles.includes("captain") || userRoles.includes("pilot")) && (
                                 <Button onClick={handleCaptainForcePick} disabled={isForcePicking || !activeDraftSessionId} variant="destructive">
                                   {isForcePicking && <Loader2 className="size-4 animate-spin mr-2" />}
-                                  {!isForcePicking && <Zap className="size-4 mr-2" />}
+                                  {!isForcePicking && < className="size-4 mr-2" />}
                                   Captain: Force Pick Now
                                 </Button>
                               )}
