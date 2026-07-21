@@ -160,13 +160,15 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
     }
   }, [selectedDeck]);
 
-  const loadData = async () => {
+    const loadData = async () => {
     setLoading(true);
     try {
       const { picks } = await getTeamDraftPicks(teamId);
-      setDraftPicks(picks);
+      
+      //  Filter out skipped picks so they don't pollute the draggable card pool
+      setDraftPicks(picks.filter(p => p.pick_source !== 'skipped'));
+      
       const { decks: teamDecks } = await getTeamDecks(teamId);
-      setDecks(teamDecks);
       
       if (teamDecks.length > 0 && !selectedDeck) setSelectedDeck(teamDecks[0]);
       if (!isUserTeamMember && teamDecks.length > 0) setSelectedDeck(teamDecks[0]);

@@ -352,6 +352,8 @@ const handleToggleSkipRemaining = async () => {
   };
 
   const currentKeepersCount = draftPicks.filter(p => p.is_keeper).length;
+    const validDraftPicks = draftPicks.filter(p => p.pick_source !== 'skipped');
+
 
   const handleToggleKeeper = async (pick: DraftPick) => {
     if (!pick.id) return;
@@ -378,7 +380,7 @@ const handleToggleSkipRemaining = async () => {
 
   const tabs: { id: TabType; label: string; icon: React.ReactNode; count?: number, disabled?: boolean }[] = [
     ...(isUserTeamMember ? [{ id: "draft" as TabType, label: "Draft & Free Agency", icon: <Target className="size-4" />, count: undefined, disabled: false }] : []),
-    { id: "picks" as TabType, label: "Team Pool", icon: <Layers className="size-4" />, count: draftPicks.length },
+    { id: "picks" as TabType, label: "Team Pool", icon: <Layers className="size-4" />, count: validDraftPicks.length }, 
     { id: "decks" as TabType, label: "Decks", icon: <BookOpen className="size-4" />, count: decks.length },
     { id: "trades" as TabType, label: "Trades", icon: <ArrowLeftRight className="size-4" />, count: undefined },
     { id: "matches" as TabType, label: "Matches", icon: <Swords className="size-4" />, count: undefined },
@@ -729,7 +731,7 @@ const handleToggleSkipRemaining = async () => {
                     </div>
                   )}
 
-                  {draftPicks.length === 0 ? (
+                  {validDraftPicks.length.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground">
                       <Layers className="size-10 mx-auto mb-3 opacity-50" />
                       <p className="text-lg mb-1">No cards drafted yet</p>
@@ -737,7 +739,7 @@ const handleToggleSkipRemaining = async () => {
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                      {draftPicks.map((pick) => {
+                      {validDraftPicks.length.map((pick) => {
                         const isUndrafting = undrafting === pick.id;
                         const isToggling = togglingKeeper === pick.id;
                         const isKeeper = pick.is_keeper;
