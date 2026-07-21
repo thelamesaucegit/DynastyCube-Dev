@@ -739,7 +739,7 @@ const handleToggleSkipRemaining = async () => {
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                      {validDraftPicks.length.map((pick) => {
+                      {validDraftPicks.map((pick) => {
                         const isUndrafting = undrafting === pick.id;
                         const isToggling = togglingKeeper === pick.id;
                         const isKeeper = pick.is_keeper;
