@@ -731,7 +731,7 @@ const handleToggleSkipRemaining = async () => {
                     </div>
                   )}
 
-                  {validDraftPicks.length.length === 0 ? (
+                  {validDraftPicks.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground">
                       <Layers className="size-10 mx-auto mb-3 opacity-50" />
                       <p className="text-lg mb-1">No cards drafted yet</p>
