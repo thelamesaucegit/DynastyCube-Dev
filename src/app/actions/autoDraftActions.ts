@@ -834,8 +834,16 @@ export async function captainForcePick(teamId: string, cardPoolId: string, draft
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) return { success: false, error: "Not authenticated" };
 
-    const { data: roleData } = await supabase.from("team_members").select("role").eq("team_id", teamId).eq("user_id", user.id).maybeSingle();
-    if (!roleData || !["captain", "pilot"].includes(roleData.role ?? "")) {
+    // FIX: Query the view and check the array
+    const { data: roleData } = await supabase
+      .from("team_members_with_roles")
+      .select("roles")
+      .eq("team_id", teamId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    const memberRoles: string[] = roleData?.roles || [];
+    if (!memberRoles.includes("captain") && !memberRoles.includes("pilot")) {
       return { success: false, error: "Only Captains and Pilots can force a pick." };
     }
 
@@ -850,7 +858,6 @@ export async function captainForcePick(teamId: string, cardPoolId: string, draft
 
     const { picks: existingPicks } = await getTeamDraftPicks(teamId, draftSessionId);
     const pickNumber = existingPicks.length + 1;
-
     const { team: teamBalance } = await getTeamBalance(teamId);
     const balance = teamBalance?.cubucks_balance ?? 0;
 
@@ -859,14 +866,14 @@ export async function captainForcePick(teamId: string, cardPoolId: string, draft
     if (pickNumber === 1) {
         baseCost = await applyHatModifier(teamId, baseCost);
     }
-const effectiveCost = baseCost;
+    const effectiveCost = baseCost;
     // ------------------------------
 
     const { data, error: rpcError } = await supabase.rpc("execute_atomic_draft_pick", {
         p_team_id: teamId, p_draft_session_id: draftSessionId, p_card_pool_id: card.id,
         p_card_id: card.card_id, p_card_name: card.card_name, p_card_set: card.card_set,
         p_card_type: card.card_type, p_rarity: card.rarity, p_colors: card.colors,
-        p_color_identity: card.color_identity || card.colors || [], // <-- ADD THIS LINE
+        p_color_identity: card.color_identity || card.colors || [], 
         p_image_url: card.image_url, p_oldest_image_url: card.oldest_image_url,
         p_mana_cost: card.mana_cost, p_cmc: card.cmc, p_pick_number: pickNumber,
         p_cost: effectiveCost, p_is_manual_pick: true, p_user_id: user.id,
@@ -880,9 +887,10 @@ const effectiveCost = baseCost;
     if (newPick.id) {
       await supabase.from("team_draft_picks").update({ pick_source: "captain_force" }).eq("id", newPick.id);
     }
-    await conditionallyCleanupDraftQueues(card.card_id);
 
+    await conditionallyCleanupDraftQueues(card.card_id);
     const { data: teamData } = await supabase.from('teams').select('name').eq('id', teamId).single();
+
     supabase.channel(`draft-updates-${draftSessionId}`).send({
       type: 'broadcast', event: 'new_pick',
       payload: { ...newPick, team_name: teamData?.name || 'Unknown' },

@@ -221,15 +221,24 @@ export async function getTeamSkipStatus(teamId: string, draftSessionId: string):
     return { is_skipping: data.is_skipping, votes: data.votes || [] };
 }
 
-export async function toggleSkipRemainingVote(teamId: string, draftSessionId: string): Promise<{ success: boolean; error?: string }> {
+export async function toggleSkipRemainingVote(teamId: string, draftSessionId: string): Promise<{ success: boolean; message?: string; error?: string }> {
     try {
         const supabase = await createServerClient();
         const authCheck = await verifyTeamMembership(teamId, supabase);
         if (!authCheck.authorized || !authCheck.userId) return { success: false, error: authCheck.error };
 
-        const { data: member } = await supabase.from('team_members').select('role').eq('team_id', teamId).eq('user_id', authCheck.userId).single();
-        const isCaptain = member?.role === 'captain' || member?.role === 'pilot';
+        // 1. Fetch roles from the correct view
+        const { data: memberData } = await supabase
+            .from('team_members_with_roles')
+            .select('roles')
+            .eq('team_id', teamId)
+            .eq('user_id', authCheck.userId)
+            .maybeSingle();
+            
+        const memberRoles: string[] = memberData?.roles || [];
+        const isCaptain = memberRoles.includes('captain') || memberRoles.includes('pilot');
 
+        // 2. Fetch current status
         const { data: currentStatus } = await supabase
             .from("team_draft_skip_status")
             .select("votes, is_skipping")
@@ -240,32 +249,67 @@ export async function toggleSkipRemainingVote(teamId: string, draftSessionId: st
         let currentVotes: string[] = currentStatus?.votes || [];
         const hasVoted = currentVotes.includes(authCheck.userId);
 
-        if (hasVoted) {
-            currentVotes = currentVotes.filter(id => id !== authCheck.userId);
-        } else {
-            currentVotes.push(authCheck.userId);
-        }
-
         const { count: memberCount } = await supabase.from("team_members").select("*", { count: 'exact', head: true }).eq("team_id", teamId);
         const threshold = Math.ceil((memberCount || 1) * 0.51);
 
-        // A captain instantly forces the skip to true, OR a majority vote triggers it.
-        // If retracting a vote drops it below threshold (and it wasn't captain forced), it turns off.
-        const shouldSkip = isCaptain ? !currentStatus?.is_skipping : currentVotes.length >= threshold;
+        let shouldSkip = currentStatus?.is_skipping || false;
+        let actionMessage = "";
 
-        const { error: upsertError } = await supabase
-            .from("team_draft_skip_status")
-            .upsert({
-                team_id: teamId,
-                draft_session_id: draftSessionId,
-                votes: currentVotes,
-                is_skipping: shouldSkip,
-                updated_at: new Date().toISOString()
-            }, { onConflict: "team_id, draft_session_id" });
+        // 3. Determine Action based on actual role array
+        if (isCaptain) {
+            shouldSkip = !currentStatus?.is_skipping;
+            if (shouldSkip) {
+                actionMessage = "Captain forced Skip Mode ON.";
+            } else {
+                actionMessage = "Captain forced Skip Mode OFF.";
+                currentVotes = []; 
+            }
+        } else {
+            if (hasVoted) {
+                currentVotes = currentVotes.filter(id => id !== authCheck.userId);
+                actionMessage = `Vote retracted. (${currentVotes.length}/${threshold} needed)`;
+            } else {
+                currentVotes.push(authCheck.userId);
+                actionMessage = `Vote cast! (${currentVotes.length}/${threshold} needed)`;
+            }
+            shouldSkip = currentVotes.length >= threshold;
+            
+            if (shouldSkip && !currentStatus?.is_skipping) {
+                actionMessage = "Threshold reached! Skip Mode ON.";
+            } else if (!shouldSkip && currentStatus?.is_skipping) {
+                actionMessage = "Votes dropped below threshold. Skip Mode OFF.";
+            }
+        }
 
-        if (upsertError) return { success: false, error: upsertError.message };
+        // 4. Save State
+        if (currentStatus) {
+             const { error: updateError } = await supabase
+                .from("team_draft_skip_status")
+                .update({
+                    votes: currentVotes,
+                    is_skipping: shouldSkip,
+                    updated_at: new Date().toISOString()
+                })
+                .eq("team_id", teamId)
+                .eq("draft_session_id", draftSessionId);
+             if (updateError) return { success: false, error: updateError.message };
+        } else {
+             const { error: insertError } = await supabase
+                .from("team_draft_skip_status")
+                .insert({
+                    team_id: teamId,
+                    draft_session_id: draftSessionId,
+                    votes: currentVotes,
+                    is_skipping: shouldSkip,
+                    updated_at: new Date().toISOString()
+                });
+             if (insertError) return { success: false, error: insertError.message };
+        }
 
-        // If the team just activated skip mode, check if they are currently on the clock to skip them immediately!
+        // 5. Log the action
+        await logSystemEvent("DraftSkipToggle", "info", `User ${authCheck.userId} triggered skip toggle for team ${teamId}. Result: ${actionMessage}`);
+
+        // 6. Immediate skip enforcement
         if (shouldSkip && !currentStatus?.is_skipping) {
             const { getDraftStatus } = await import('@/app/actions/draftOrderActions');
             const { advanceDraft } = await import('@/app/actions/draftSessionActions');
@@ -274,15 +318,17 @@ export async function toggleSkipRemainingVote(teamId: string, draftSessionId: st
             if (status?.onTheClock.teamId === teamId) {
                 const { picks } = await getTeamDraftPicks(teamId, draftSessionId, supabase);
                 await addSkippedPick(teamId, picks.length + 1, draftSessionId, supabase);
+                await logSystemEvent("DraftSkipExecuted", "info", `Team ${teamId} automatically skipped their pick due to Skip Mode being activated while on the clock.`);
                 await advanceDraft(supabase);
             }
         }
 
-        return { success: true };
+        return { success: true, message: actionMessage };
     } catch (error) {
         return { success: false, error: "Unexpected error processing vote." };
     }
 }
+
 
 export async function addDraftPick(pick: DraftPick): Promise<{ success: boolean; error?: string }> {
   console.log("=== addDraftPick LOGGING ===");
