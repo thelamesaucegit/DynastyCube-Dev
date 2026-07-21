@@ -230,6 +230,7 @@ export async function toggleSkipRemainingVote(teamId: string, draftSessionId: st
         const { data: member } = await supabase.from('team_members').select('role').eq('team_id', teamId).eq('user_id', authCheck.userId).single();
         const isCaptain = member?.role === 'captain' || member?.role === 'pilot';
 
+        // 1. Fetch current status
         const { data: currentStatus } = await supabase
             .from("team_draft_skip_status")
             .select("votes, is_skipping")
@@ -240,6 +241,7 @@ export async function toggleSkipRemainingVote(teamId: string, draftSessionId: st
         let currentVotes: string[] = currentStatus?.votes || [];
         const hasVoted = currentVotes.includes(authCheck.userId);
 
+        // 2. Adjust votes based on current state
         if (hasVoted) {
             currentVotes = currentVotes.filter(id => id !== authCheck.userId);
         } else {
@@ -249,23 +251,46 @@ export async function toggleSkipRemainingVote(teamId: string, draftSessionId: st
         const { count: memberCount } = await supabase.from("team_members").select("*", { count: 'exact', head: true }).eq("team_id", teamId);
         const threshold = Math.ceil((memberCount || 1) * 0.51);
 
-        // A captain instantly forces the skip to true, OR a majority vote triggers it.
-        // If retracting a vote drops it below threshold (and it wasn't captain forced), it turns off.
-        const shouldSkip = isCaptain ? !currentStatus?.is_skipping : currentVotes.length >= threshold;
+        // 3. Determine new boolean state explicitly
+        // If captain forced it previously, standard unvoting won't turn it off. 
+        // Only a captain un-forcing it, or dropping below threshold, will turn it off.
+        let shouldSkip = false;
+        if (isCaptain) {
+             shouldSkip = !currentStatus?.is_skipping;
+             // If a captain turns it off, we should also clear the votes so it resets cleanly
+             if (!shouldSkip) currentVotes = []; 
+        } else {
+             shouldSkip = currentVotes.length >= threshold;
+        }
 
-        const { error: upsertError } = await supabase
-            .from("team_draft_skip_status")
-            .upsert({
-                team_id: teamId,
-                draft_session_id: draftSessionId,
-                votes: currentVotes,
-                is_skipping: shouldSkip,
-                updated_at: new Date().toISOString()
-            }, { onConflict: "team_id, draft_session_id" });
+        // 4. Safely Update or Insert with explicit boolean setting
+        if (currentStatus) {
+             const { error: updateError } = await supabase
+                .from("team_draft_skip_status")
+                .update({
+                    votes: currentVotes,
+                    is_skipping: shouldSkip,
+                    updated_at: new Date().toISOString()
+                })
+                .eq("team_id", teamId)
+                .eq("draft_session_id", draftSessionId);
+                
+             if (updateError) return { success: false, error: updateError.message };
+        } else {
+             const { error: insertError } = await supabase
+                .from("team_draft_skip_status")
+                .insert({
+                    team_id: teamId,
+                    draft_session_id: draftSessionId,
+                    votes: currentVotes,
+                    is_skipping: shouldSkip,
+                    updated_at: new Date().toISOString()
+                });
+                
+             if (insertError) return { success: false, error: insertError.message };
+        }
 
-        if (upsertError) return { success: false, error: upsertError.message };
-
-        // If the team just activated skip mode, check if they are currently on the clock to skip them immediately!
+        // 5. If the team just activated skip mode, trigger the auto-skip immediately!
         if (shouldSkip && !currentStatus?.is_skipping) {
             const { getDraftStatus } = await import('@/app/actions/draftOrderActions');
             const { advanceDraft } = await import('@/app/actions/draftSessionActions');
@@ -283,6 +308,7 @@ export async function toggleSkipRemainingVote(teamId: string, draftSessionId: st
         return { success: false, error: "Unexpected error processing vote." };
     }
 }
+
 
 export async function addDraftPick(pick: DraftPick): Promise<{ success: boolean; error?: string }> {
   console.log("=== addDraftPick LOGGING ===");
