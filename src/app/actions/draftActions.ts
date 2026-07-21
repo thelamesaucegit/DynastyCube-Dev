@@ -190,6 +190,7 @@ export async function addSkippedPick(
           color_identity: [],
         pick_number: pickNumber,
         drafted_by: null,
+          cubucks_cost: 0, 
         pick_source: "skipped",    
       })
       .select()
