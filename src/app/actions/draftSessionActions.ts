@@ -706,7 +706,14 @@ export async function completeDraft(
       await logSystemEvent("CompleteDraft", "error", `Failed to update draft session status`, { error: error.message });
       return { success: false, error: error.message };
     }
-
+      // Purge all skipped picks before archiving
+ console.log(`[Draft Complete] Purging skipped picks for session ${sessionId}...`);
+    await supabase
+        .from('team_draft_picks')
+        .delete()
+        .eq('draft_session_id', sessionId)
+        .eq('pick_source', 'skipped');
+      
     // --- ARCHIVE DRAFT PICKS ---
     console.log(`[Draft Complete] Archiving picks for session ${sessionId}...`);
     try {
