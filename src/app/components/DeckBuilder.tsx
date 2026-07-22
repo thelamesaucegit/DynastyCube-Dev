@@ -166,7 +166,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
       const { picks } = await getTeamDraftPicks(teamId);
       
       //  Filter out skipped picks so they don't pollute the draggable card pool
-      setDraftPicks(picks.filter(p => p.pick_source !== 'skipped'));
+      setDraftPicks(picks.filter(p => p.card_id !== 'skipped-pick'));
       
       const { decks: teamDecks } = await getTeamDecks(teamId);
       
