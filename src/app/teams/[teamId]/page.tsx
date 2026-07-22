@@ -352,7 +352,7 @@ const handleToggleSkipRemaining = async () => {
   };
 
   const currentKeepersCount = draftPicks.filter(p => p.is_keeper).length;
-    const validDraftPicks = draftPicks.filter(p => p.pick_source !== 'skipped');
+  const validDraftPicks = draftPicks.filter(p => p.card_id !== 'skipped-pick');
 
 
   const handleToggleKeeper = async (pick: DraftPick) => {
