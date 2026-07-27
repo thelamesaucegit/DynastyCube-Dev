@@ -188,28 +188,75 @@ export async function addSkippedPick(
         draft_session_id: draftSessionId,
         card_id: "skipped-pick",
         card_name: "SKIPPED",
-          color_identity: [],
+        color_identity: [],
         pick_number: pickNumber,
         drafted_by: null,
-          cubucks_cost: 0, 
         pick_source: "skipped",    
+        cubucks_cost: 0 
       })
       .select()
       .single();
+
     if (error) {
         // Log database insertion failures
         await logSystemEvent("AddSkippedPick", "error", `Failed to insert skipped pick for team ${teamId}`, { error: error.message });
         return { success: false, error: error.message };
     }
 
-    // Log the successful skip action
+    // =========================================================================
+    // AUTOMATIC SKIP MODE: Check for 2 Consecutive Skips
+    // =========================================================================
+    if (pickNumber > 1) {
+        const { data: prevPick } = await supabase
+            .from("team_draft_picks")
+            .select("card_id")
+            .eq("team_id", teamId)
+            .eq("draft_session_id", draftSessionId)
+            .eq("pick_number", pickNumber - 1)
+            .maybeSingle();
+
+        if (prevPick?.card_id === "skipped-pick") {
+            // Two skips in a row detected. Check current status table.
+            const { data: currentStatus } = await supabase
+                .from("team_draft_skip_status")
+                .select("votes")
+                .eq("team_id", teamId)
+                .eq("draft_session_id", draftSessionId)
+                .maybeSingle();
+
+            if (currentStatus) {
+                 await supabase
+                    .from("team_draft_skip_status")
+                    .update({ is_skipping: true, updated_at: new Date().toISOString() })
+                    .eq("team_id", teamId)
+                    .eq("draft_session_id", draftSessionId);
+            } else {
+                 await supabase
+                    .from("team_draft_skip_status")
+                    .insert({
+                        team_id: teamId,
+                        draft_session_id: draftSessionId,
+                        is_skipping: true,
+                        votes: [],
+                        updated_at: new Date().toISOString()
+                    });
+            }
+            
+            await logSystemEvent(
+              "AutoSkipMode", 
+              "info", 
+              `Team ${teamId} skipped two consecutive picks (Picks ${pickNumber - 1} and ${pickNumber}). Skip Mode automatically turned ON.`
+            );
+        }
+    }
+    // =========================================================================
 
     return { success: true, pick: newPick };
-  } catch {
-    return { success: false, error: "An unexpected error occurred" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return { success: false, error: "An unexpected error occurred: " + message };
   }
 }
-
 export async function getTeamSkipStatus(teamId: string, draftSessionId: string): Promise<SkipStatus> {
     const supabase = await createServerClient();
     const { data, error } = await supabase
