@@ -88,12 +88,17 @@ export const FullSeasonScheduler: React.FC<FullSeasonSchedulerProps> = ({
     setMessage(null);
     startTransition(async () => {
       // Use the config from the component's state, not from props.
+      // If Rivals Week is included, the mathematical regular season rounds 
+      // are total_weeks - 1. Week 6 is generated as rivals week.
+      const adjustedRegWeeks = config.includeRivalsWeek 
+        ? Math.max(1, config.regularSeasonWeeks - 1) 
+        : config.regularSeasonWeeks;
+
       const result = await generateFullSeasonSchedule(
         seasonId,
-        config.regularSeasonWeeks,
+        adjustedRegWeeks,
         config.includeRivalsWeek
       );
-
       if (result.success) {
         setMessage({
           type: "success",
