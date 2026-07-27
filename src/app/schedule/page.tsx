@@ -194,8 +194,18 @@ export default function SchedulePage() {
   };
 
   const toggleWeek = (weekId: string) => setOpenWeeks(prev => ({ ...prev, [weekId]: !prev[weekId] }));
-  const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  const formatDeadline = (dateString: string) => new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+ const formatWeekDate = (dateString: string) => {
+    return parseCentralTime(dateString).toLocaleDateString("en-US", { 
+      month: "short", day: "numeric", year: "numeric", timeZone: timezone 
+    });
+  };
+
+  const formatDeadlineTime = (dateString: string) => {
+    return parseCentralTime(dateString).toLocaleString("en-US", { 
+      month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: timezone 
+    });
+  };
+  
   const seasonHasPlayoffs = weeks.some(w => w.is_playoff_week);
 
   if (loading) {
@@ -269,10 +279,11 @@ export default function SchedulePage() {
         </Card>
       ) : (
         <div className="space-y-6">
-          {weeks.map((week) => {
-            const status = getWeekStatus(week);
-            const deckDeadlinePassed = new Date(week.deck_submission_deadline) < new Date();
-            const isOpen = openWeeks[week.id] || false;
+                {weeks.map((week) => {
+        const status = getWeekStatus(week);
+        const deckDeadlinePassed = parseCentralTime(week.deck_submission_deadline) < new Date();
+        const isOpen = openWeeks[week.id] || false;
+
 
             return (
               <Card
@@ -298,7 +309,7 @@ export default function SchedulePage() {
                         </div>
                         <p className="text-sm text-muted-foreground flex items-center gap-1.5">
                           <Calendar className="h-3.5 w-3.5" />
-                          {formatDate(week.start_date)} - {formatDate(week.end_date)}
+{formatWeekDate(week.start_date)} - {formatWeekDate(week.end_date)}
                         </p>
                       </div>
                       
@@ -308,7 +319,7 @@ export default function SchedulePage() {
                             <Clock className="h-3.5 w-3.5" /> Deck Submission Deadline
                           </p>
                           <p className={`text-lg font-bold ${deckDeadlinePassed ? "text-destructive" : ""}`}>
-                            {formatDeadline(week.deck_submission_deadline)}
+                           {formatDeadlineTime(week.deck_submission_deadline)}
                             {deckDeadlinePassed && " (Passed)"}
                           </p>
                         </div>
