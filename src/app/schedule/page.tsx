@@ -37,10 +37,27 @@ interface WeekWithMatches extends ScheduleWeek {
   matches: StreamMatchUI[];
 }
 
+// HELPER: Safely force the DB timestamp into US Central Time before parsing
+const parseCentralTime = (dateString: string | number) => {
+  if (!dateString) return new Date();
+  if (typeof dateString === 'number') return new Date(dateString);
+  
+  // Remove 'Z' or '+00:00' if Supabase incorrectly returned it as UTC
+  let clean = dateString.replace('Z', '').replace(/\+00:?00$/, '');
+  if (clean.includes(' ')) clean = clean.replace(' ', 'T');
+  
+  // If it doesn't already have an offset, force it to US Central (-05:00)
+  if (!/[-+]\d{2}:?\d{2}$/.test(clean)) {
+    clean += '-05:00';
+  }
+  return new Date(clean);
+};
+
 const getWeekStatus = (week: ScheduleWeek) => {
   const now = new Date();
-  const startDate = new Date(week.start_date);
-  const logicalEndDate = new Date(new Date(week.end_date).getTime() - (10 * 60000));
+  const startDate = parseCentralTime(week.start_date);
+  const logicalEndDate = new Date(parseCentralTime(week.end_date).getTime() - (10 * 60000));
+
   if (now < startDate) return "upcoming";
   if (now > logicalEndDate) return "completed";
   return "current";
@@ -48,7 +65,11 @@ const getWeekStatus = (week: ScheduleWeek) => {
 
 // HELPER: Attach Broadcast Timings to matches!
 function enhanceMatchWithStreamTiming(match: UnifiedMatch): StreamMatchUI {
-    const baseTime = new Date(match.scheduled_for || Date.now()).getTime();
+    // Safely parse the scheduled time as Central Time
+    // (Using 'any' cast inline just to safely handle both scheduled_for and match_date schemas)
+    const timeString = (match as any).scheduled_for || match.match_date || new Date().toISOString();
+    const baseTime = parseCentralTime(timeString).getTime();
+    
     const broadcastStartTime = baseTime + (30 * 60000);
     const steps = match.total_steps || 300; 
     const broadcastEndTime = broadcastStartTime + (steps * 2000);
@@ -66,6 +87,7 @@ function enhanceMatchWithStreamTiming(match: UnifiedMatch): StreamMatchUI {
         streamStatus
     };
 }
+
 
 export default function SchedulePage() {
   const { timezone } = useUserTimezone();
