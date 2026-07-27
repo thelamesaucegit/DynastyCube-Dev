@@ -147,13 +147,22 @@ export async function generateFullSeasonSchedule(
 ): Promise<{ success: boolean; error?: string; scheduledGamesCount?: number }> {
   const supabase = adminClient ?? await createServerClient();
   try {
-    const { data: teams } = await supabase.from('teams').select('id').not('is_hidden', 'is', true);
+    const { data: teams } = await supabase
+        .from('teams')
+        .select('id, name, short_name, rival_short_name')
+        .not('is_hidden', 'is', true);
+
     if (!teams || teams.length < 2) {
       return { success: false, error: "Not enough active teams to generate a schedule." };
     }
     
-    const teamIds = teams.map(t => t.id);
-    const allMatchups = await generateSeasonMatchups(teamIds, totalRegularSeasonWeeks, hasRivalsWeek);
+    // THE FIX: Pass the array of full team objects, not just strings
+    const allMatchups = await generateSeasonMatchups(
+        teams as TeamWithDetails[], 
+        totalRegularSeasonWeeks, 
+        hasRivalsWeek
+    );
+    
     const { data: weeks } = await supabase.from('schedule_weeks').select('*').eq('season_id', seasonId);
     
     if (!weeks || weeks.length === 0) {
