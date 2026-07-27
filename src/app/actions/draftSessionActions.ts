@@ -911,9 +911,58 @@ export async function completeDraft(
                      }
                      await logSystemEvent("TestScheduleGen", "info", `[6] Schedule Complete! ${totalMatchups} matchups, ${totalGames} games.`);
                  }
-              } else {
-                 const regWeeks = weeks.filter((w: { is_playoff_week: boolean; is_championship_week: boolean }) => !w.is_playoff_week && !w.is_championship_week).length;
-                 await logSystemEvent("ScheduleGenTrace", "info", `[3] Normal season. Generating for ${regWeeks} weeks.`);
+            } else {
+                 let regWeeks = weeks.filter((w: { is_playoff_week: boolean; is_championship_week: boolean }) => !w.is_playoff_week && !w.is_championship_week).length;
+                 
+                 // Dynamically generate schedule weeks if they don't exist yet (e.g. from an automated season rollover)
+                 if (regWeeks === 0) {
+                     await logSystemEvent("ScheduleGenTrace", "info", `[3a] No weeks found. Generating standard 6-week schedule skeleton based on draft completion time.`);
+                     
+                     // 1. Calculate Preseason End (Minimum 5 days, ends on the next Wednesday)
+                     const draftEnd = new Date();
+                     const minPreSeasonEndDate = new Date(draftEnd);
+                     minPreSeasonEndDate.setDate(minPreSeasonEndDate.getDate() + 5);
+                     
+                     const preSeasonEndDate = new Date(minPreSeasonEndDate);
+                     const daysUntilWednesday = (3 - preSeasonEndDate.getUTCDay() + 7) % 7;
+                     preSeasonEndDate.setUTCDate(preSeasonEndDate.getUTCDate() + daysUntilWednesday);
+                     preSeasonEndDate.setUTCHours(23, 59, 59, 999); // Ends at the very end of Wednesday
+                     
+                     // 2. Calculate Regular Season Start (Thursday)
+                     const regularSeasonStart = new Date(preSeasonEndDate);
+                     regularSeasonStart.setUTCDate(regularSeasonStart.getUTCDate() + 1);
+                     regularSeasonStart.setUTCHours(0, 0, 0, 0);
+                     
+                     // 3. Insert the 6 weeks into the database
+                     regWeeks = 6;
+                     for (let i = 0; i < regWeeks; i++) {
+                         const weekStart = new Date(regularSeasonStart);
+                         weekStart.setDate(weekStart.getDate() + (i * 7));
+                         
+                         const weekEnd = new Date(weekStart);
+                         weekEnd.setDate(weekStart.getDate() + 6);
+                         weekEnd.setHours(23, 59, 59); // Week ends Tuesday night
+                         
+                         const deckDeadline = new Date(weekStart);
+                         deckDeadline.setDate(weekStart.getDate() - 1);
+                         deckDeadline.setHours(21, 59, 59); // Decks due Wednesday at 9:59 PM
+                         
+                         await supabase.from("schedule_weeks").insert({
+                             season_id: sessionData.season_id,
+                             season_number: season.season_number,
+                             week_number: i + 1,
+                             start_date: weekStart.toISOString(),
+                             end_date: weekEnd.toISOString(),
+                             deck_submission_deadline: deckDeadline.toISOString(),
+                             match_completion_deadline: weekEnd.toISOString(),
+                             is_playoff_week: false,
+                             is_championship_week: false,
+                             notes: `Regular Season Week ${i + 1}`,
+                         });
+                     }
+                 }
+
+                 await logSystemEvent("ScheduleGenTrace", "info", `[3b] Normal season. Generating matches for ${regWeeks} weeks.`);
                 
                  const schedResult = await generateFullSeasonSchedule(sessionData.season_id, regWeeks, season.has_rivals_week);
                  if (!schedResult.success) await logSystemEvent("CompleteDraft", "error", `Normal gen failed: ${schedResult.error}`);
