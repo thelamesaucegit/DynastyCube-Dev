@@ -64,10 +64,12 @@ const getWeekStatus = (week: ScheduleWeek) => {
 };
 
 // HELPER: Attach Broadcast Timings to matches!
+// HELPER: Attach Broadcast Timings to matches!
 function enhanceMatchWithStreamTiming(match: UnifiedMatch): StreamMatchUI {
-    // Safely parse the scheduled time as Central Time
-    // (Using 'any' cast inline just to safely handle both scheduled_for and match_date schemas)
-    const timeString = (match as any).scheduled_for || match.match_date || new Date().toISOString();
+    // Safely cast using an intersection type to avoid 'any'
+    const matchData = match as UnifiedMatch & { scheduled_for?: string };
+    const timeString = matchData.scheduled_for || matchData.match_date || new Date().toISOString();
+    
     const baseTime = parseCentralTime(timeString).getTime();
     
     const broadcastStartTime = baseTime + (30 * 60000);
@@ -87,6 +89,7 @@ function enhanceMatchWithStreamTiming(match: UnifiedMatch): StreamMatchUI {
         streamStatus
     };
 }
+
 
 
 export default function SchedulePage() {
