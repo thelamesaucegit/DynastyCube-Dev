@@ -146,7 +146,6 @@ export async function generateFullSeasonSchedule(
   adminClient?: AnySupabaseClient
 ): Promise<{ success: boolean; error?: string; scheduledGamesCount?: number }> {
   const supabase = adminClient ?? await createServerClient();
-
   try {
     const { data: teams } = await supabase.from('teams').select('id').not('is_hidden', 'is', true);
     if (!teams || teams.length < 2) {
@@ -160,17 +159,15 @@ export async function generateFullSeasonSchedule(
     if (!weeks || weeks.length === 0) {
         return { success: false, error: "No weeks found for this season to schedule matches into." };
     }
-
     const { data: seasonData } = await supabase.from('seasons').select('season_name, season_number').eq('id', seasonId).single();
     const isTestSeason = seasonData?.season_name.toUpperCase().includes("TEST");
-
     let gamesCreated = 0;
 
     for (const weekInfo of weeks) {
         const weekMatchups = allMatchups.filter(m => m.week === weekInfo.week_number);
         if (weekMatchups.length === 0) continue;
-
         const matchupRecords = [];
+
         for (const matchup of weekMatchups) {
             const { data: matchupRecord, error: mError } = await supabase.from('weekly_matchups').insert({
                 season_id: seasonId,
@@ -180,12 +177,14 @@ export async function generateFullSeasonSchedule(
                 is_playoff: false
             }).select('id').single();
 
-            if (!mError && matchupRecord) {
+            // DIAGNOSTIC LOG ADDED HERE
+            if (mError) {
+                console.error(`[DB ERROR] Failed to insert weekly_matchup for week ${matchup.week}:`, JSON.stringify(mError));
+            } else if (matchupRecord) {
                 matchupRecords.push({ ...matchup, recordId: matchupRecord.id });
             }
         }
 
-        // THE FIX: Updated to 9 games per week
         const requiredGames = 9; 
         const weekTotalGames = matchupRecords.length * requiredGames;
         
@@ -193,10 +192,8 @@ export async function generateFullSeasonSchedule(
         let streamCursor: Date;
 
         if (isTestSeason) {
-            // For tests: Simulation starts immediately at Week Start. Stream starts 10 mins later.
             simCursor = new Date(weekInfo.start_date);
             streamCursor = new Date(simCursor.getTime() + (10 * 60000));
-
             for (const matchup of matchupRecords) {
                 for (let i = 0; i < requiredGames; i++) {
                     const { error: gError } = await supabase.from('schedule').insert({
@@ -205,28 +202,27 @@ export async function generateFullSeasonSchedule(
                         match_date: simCursor.toISOString(), status: 'scheduled',
                         team1_ai_profile: 'default', team2_ai_profile: 'default'
                     });
-                    if (!gError) gamesCreated++;
-
+                    
+                    // DIAGNOSTIC LOG ADDED HERE
+                    if (gError) {
+                        console.error(`[DB ERROR] Failed to insert schedule game for week ${weekInfo.week_number}:`, JSON.stringify(gError));
+                    } else {
+                        gamesCreated++;
+                    }
                     simCursor = new Date(simCursor.getTime() + (10 * 60000));
                     streamCursor = new Date(streamCursor.getTime() + (10 * 60000));
                 }
             }
-
             await supabase.from("schedule_weeks").update({
                 end_date: streamCursor.toISOString(),
                 match_completion_deadline: streamCursor.toISOString()
             }).eq('id', weekInfo.id);
-
         } else {
-            // THE FIX: Use custom valid slots (Thursday to Tuesday)
             const availableDateSlots = getValidWeekSlots(new Date(weekInfo.start_date));
-            
-            // Randomly shuffle the date slots predictably based on the week number
             const shuffledDateSlots = seededShuffle(availableDateSlots, weekInfo.week_number)
                 .slice(0, weekTotalGames)
-                .sort((a, b) => a.getTime() - b.getTime()); // Chronological order
+                .sort((a, b) => a.getTime() - b.getTime()); 
             
-            // Generate the match sequence ensuring NO consecutive games for the same matchup
             const finalSchedule: typeof matchupRecords = [];
             const counts = new Map();
             matchupRecords.forEach(m => counts.set(m.recordId, requiredGames));
@@ -234,15 +230,10 @@ export async function generateFullSeasonSchedule(
             let lastRecordId: string | null = null;
             
             for (let i = 0; i < weekTotalGames; i++) {
-                // Find all matchups that still need games scheduled, EXCLUDING the one that just played
                 let available = matchupRecords.filter(m => counts.get(m.recordId) > 0 && m.recordId !== lastRecordId);
-                
-                // Failsafe: If the ONLY remaining games belong to the last team that played, we have no choice but to break the rule.
                 if (available.length === 0) {
                     available = matchupRecords.filter(m => counts.get(m.recordId) > 0);
                 }
-
-                // Randomly pick one of the available matchups
                 const chosen = available[Math.floor(Math.random() * available.length)];
                 
                 counts.set(chosen.recordId, counts.get(chosen.recordId) - 1);
@@ -250,12 +241,9 @@ export async function generateFullSeasonSchedule(
                 finalSchedule.push(chosen);
             }
             
-            // Final Database Insertion
             for (let i = 0; i < weekTotalGames; i++) {
                 const matchup = finalSchedule[i];
                 const streamTime = shuffledDateSlots[i];
-                
-                // Simulation occurs exactly 30 minutes PRIOR to the stream broadcast
                 const simTime = new Date(streamTime.getTime() - 30 * 60000); 
                 
                 const { error: gError } = await supabase.from('schedule').insert({
@@ -264,11 +252,16 @@ export async function generateFullSeasonSchedule(
                     match_date: simTime.toISOString(), status: 'scheduled',
                     team1_ai_profile: 'default', team2_ai_profile: 'default'
                 });
-                if (!gError) gamesCreated++;
+
+                // DIAGNOSTIC LOG ADDED HERE
+                if (gError) {
+                    console.error(`[DB ERROR] Failed to insert schedule game for week ${weekInfo.week_number}:`, JSON.stringify(gError));
+                } else {
+                    gamesCreated++;
+                }
             }
         }
     }
-
     return { success: true, scheduledGamesCount: gamesCreated };
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error in full schedule generation.";

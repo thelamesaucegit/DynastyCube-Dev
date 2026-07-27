@@ -933,9 +933,14 @@ export async function completeDraft(
                      regularSeasonStart.setUTCDate(regularSeasonStart.getUTCDate() + 1);
                      regularSeasonStart.setUTCHours(0, 0, 0, 0);
                      
-                     // 3. Insert the 6 weeks into the database
-                     regWeeks = 6;
-                     for (let i = 0; i < regWeeks; i++) {
+                       // 3. Calculate true regular weeks vs total weeks
+                     const trueRegWeeks = season.has_rivals_week ? 5 : 6;
+                     const totalWeeksToGenerate = trueRegWeeks + (season.has_rivals_week ? 1 : 0);
+                     
+                     // 4. Insert the weeks into the database
+                     for (let i = 0; i < totalWeeksToGenerate; i++) {
+                         const weekNum = i + 1;
+                         const isRivalWeek = season.has_rivals_week && weekNum === totalWeeksToGenerate;
                          const weekStart = new Date(regularSeasonStart);
                          weekStart.setDate(weekStart.getDate() + (i * 7));
                          
@@ -950,17 +955,21 @@ export async function completeDraft(
                          await supabase.from("schedule_weeks").insert({
                              season_id: sessionData.season_id,
                              season_number: season.season_number,
-                             week_number: i + 1,
+                             week_number: weekNum,
                              start_date: weekStart.toISOString(),
                              end_date: weekEnd.toISOString(),
                              deck_submission_deadline: deckDeadline.toISOString(),
                              match_completion_deadline: weekEnd.toISOString(),
                              is_playoff_week: false,
                              is_championship_week: false,
-                             notes: `Regular Season Week ${i + 1}`,
+                             notes: isRivalWeek ? `Rivals Week` : `Regular Season Week ${weekNum}`,
                          });
                      }
+                     
+                     // 5. Update regWeeks to reflect only the normal schedule for the generator!
+                     regWeeks = trueRegWeeks;
                  }
+
 
                  await logSystemEvent("ScheduleGenTrace", "info", `[3b] Normal season. Generating matches for ${regWeeks} weeks.`);
                 
