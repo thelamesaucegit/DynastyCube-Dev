@@ -104,10 +104,10 @@ export default function SupportPage() {
           </div>
           <div>
             <p className="text-lg leading-relaxed text-card-foreground">
-              The Dynasty Cube is a 2-person dev team. I — THE COMMISSIONER — am happy to operate at a loss, as this is my passion project. However, my friend and partner <strong>Amonte (itstoxicqt)</strong> has more than earned what I can afford to pay him for his work.
+              The Dynasty Cube is a 2-person dev team. I — THE COMMISSIONER — am happy to operate at a loss, as this is my passion project. However, my friend and partner <strong>(itstoxicqt)</strong> has more than earned what I can afford to pay him for his work.
             </p>
             <p className="text-lg leading-relaxed text-card-foreground mt-4">
-              Every cent you donate to The Dynasty Cube <strong>FIRST</strong> goes to Amonte to cover any outstanding balance for the hours he&apos;s worked. Then, it goes towards the historic hosting costs of this site. Anything we raise after that will be split evenly between Amonte and I, and everything will always be visible right here.
+              Every cent you donate to The Dynasty Cube <strong>FIRST</strong> goes to itstoxicqt to cover any outstanding balance for the hours he&apos;s worked. Then, it goes towards the historic hosting costs of this site. Anything we raise after that will be split evenly between itstoxicqt and I, and everything will always be visible right here.
             </p>
           </div>
         </CardContent>
@@ -187,7 +187,7 @@ export default function SupportPage() {
                     {/* Dev Payouts */}
                     <div>
                       <h4 className="font-bold border-b pb-2 mb-4 flex justify-between">
-                        <span>👨‍💻 Amonte&apos;s Labor</span>
+                        <span>👨‍💻 itstoxicqt&apos;s Labor</span>
                         <span className="text-muted-foreground">{formatCurrency(yearStat.devOwed)}</span>
                       </h4>
                       <div className="flex justify-between items-center text-sm mb-2">
