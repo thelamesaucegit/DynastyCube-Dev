@@ -123,7 +123,7 @@ export default function SupportPage() {
           const isYearExpanded = expandedYears[yearStat.year];
           return (
             <Card key={yearStat.year} className="overflow-hidden">
-              <div 
+                            <div 
                 className="bg-muted/50 p-4 cursor-pointer hover:bg-muted transition-colors flex justify-between items-center"
                 onClick={() => toggleYear(yearStat.year)}
               >
@@ -134,12 +134,21 @@ export default function SupportPage() {
                   </Badge>
                 </div>
                 <div className="flex items-center gap-4 text-sm font-medium">
-                  <span className="hidden sm:inline text-muted-foreground">
-                    Cost: {formatCurrency(yearStat.totalCost)}
-                  </span>
+                  <div className="hidden sm:flex flex-col items-end">
+                    <span className="text-muted-foreground">
+                      Cost: {formatCurrency(yearStat.totalCost)}
+                    </span>
+                    {/*  Show the remaining unpaid dev balance for the year */}
+                    {yearStat.devOwed - yearStat.devPaid > 0 && (
+                      <span className="text-xs text-destructive">
+                        Dev Deficit: {formatCurrency(yearStat.devOwed - yearStat.devPaid)}
+                      </span>
+                    )}
+                  </div>
                   {isYearExpanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
                 </div>
               </div>
+
               
               {isYearExpanded && (
                 <CardContent className="p-4 sm:p-6">
