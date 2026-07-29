@@ -227,8 +227,7 @@ export default function Navigation() {
                        <DropdownMenuItem asChild><Link href="/history">History</Link></DropdownMenuItem>
                        <DropdownMenuItem asChild><Link href="/news">News</Link></DropdownMenuItem>
                        <DropdownMenuItem asChild><Link href="/glossary">Glossary</Link></DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                       <DropdownMenuItem asChild><Link href="/support" className="text-emerald-600 dark:text-emerald-400 font-bold">Support</Link></DropdownMenuItem>
+                      <DropdownMenuItem asChild><Link href="/support" >Support</Link></DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </NavigationMenuItem>
