@@ -1,4 +1,3 @@
-// src/app/actions/devExpenseActions.ts
 "use server";
 
 import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
@@ -14,6 +13,9 @@ export interface DevExpense {
   dev_hours: number;
   hourly_rate: number;
   hosting_cost: number;
+  dev_paid: number;          
+  raised_amount: number;     
+  site_revenue: number;      
   custom_costs: CustomCost[];
   created_at?: string;
   updated_at?: string;
@@ -50,6 +52,9 @@ export async function getDevExpenses(): Promise<{ expenses: DevExpense[]; error?
       dev_hours: Number(row.dev_hours),
       hourly_rate: Number(row.hourly_rate),
       hosting_cost: Number(row.hosting_cost),
+      dev_paid: Number(row.dev_paid),             
+      raised_amount: Number(row.raised_amount), 
+      site_revenue: Number(row.site_revenue),    
       custom_costs: (row.custom_costs as CustomCost[]) || [],
       created_at: row.created_at,
       updated_at: row.updated_at,
@@ -70,7 +75,6 @@ export async function upsertDevExpense(
     const admin = await verifyAdmin(supabase);
     if (!admin.authorized) return { success: false, error: admin.error };
 
-    // Format to YYYY-MM-01 to ensure consistency
     const dateObj = new Date(expenseMonth);
     const monthString = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-01`;
 
@@ -81,6 +85,9 @@ export async function upsertDevExpense(
         ...(updates.dev_hours !== undefined && { dev_hours: updates.dev_hours }),
         ...(updates.hourly_rate !== undefined && { hourly_rate: updates.hourly_rate }),
         ...(updates.hosting_cost !== undefined && { hosting_cost: updates.hosting_cost }),
+        ...(updates.dev_paid !== undefined && { dev_paid: updates.dev_paid }),                
+        ...(updates.raised_amount !== undefined && { raised_amount: updates.raised_amount }), 
+        ...(updates.site_revenue !== undefined && { site_revenue: updates.site_revenue }),    
         ...(updates.custom_costs !== undefined && { custom_costs: updates.custom_costs }),
         updated_at: new Date().toISOString(),
       }, { onConflict: "expense_month" });
