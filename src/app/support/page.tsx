@@ -67,7 +67,7 @@ export default function SupportPage() {
           <CardContent className="pt-6 text-center">
             <p className="text-sm text-blue-800 dark:text-blue-300 font-bold uppercase tracking-wider mb-2">Total Operating Cost</p>
             <p className="text-4xl font-black text-blue-950 dark:text-blue-100">{formatCurrency(stats.grandTotalCost)}</p>
-            <p className="text-xs text-muted-foreground mt-2">Hosting & Dev Labor</p>
+            <p className="text-xs text-muted-foreground mt-2">Hosting & Dev Hours</p>
           </CardContent>
         </Card>
         
@@ -143,7 +143,7 @@ export default function SupportPage() {
                     {/* Dev Payouts */}
                     <div>
                       <h4 className="font-bold border-b pb-2 mb-4 flex justify-between">
-                        <span>👨‍💻 itstoxicqt&apos;s Labor</span>
+                        <span>👨‍💻 itstoxicqt&apos;s Hours</span>
                         <span className="text-muted-foreground">{formatCurrency(yearStat.devOwed)}</span>
                       </h4>
                       <div className="flex justify-between items-center text-sm mb-2">
@@ -159,7 +159,7 @@ export default function SupportPage() {
                     {/* Overall Funding */}
                     <div>
                       <h4 className="font-bold border-b pb-2 mb-4 flex justify-between">
-                        <span>💰 Year Funding</span>
+                        <span>💰 Site Hosting Costs</span>
                         <span className="text-muted-foreground">{formatCurrency(yearStat.totalCost)}</span>
                       </h4>
                       <div className="flex justify-between items-center text-sm mb-2">
