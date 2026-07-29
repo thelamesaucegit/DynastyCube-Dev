@@ -3,6 +3,8 @@
 
 import React, { useState, useEffect } from "react";
 import { getPublicExpenseStats, type PublicExpenseSummary } from "@/app/actions/devExpenseActions";
+import { Badge } from "@/app/components/ui/badge";
+import { Button } from "@/app/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
 import { Loader2, Heart, DollarSign, ChevronDown, ChevronUp, ExternalLink, Code } from "lucide-react";
 import { TargetedGlitchedText } from '@/app/components/lore/TargetedGlitchedText';
