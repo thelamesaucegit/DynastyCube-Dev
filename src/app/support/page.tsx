@@ -39,7 +39,7 @@ export default function SupportPage() {
     return (
       <div className="container max-w-4xl mx-auto px-4 py-16 text-center">
         <Loader2 className="animate-spin h-10 w-10 mx-auto mb-4 text-blue-600" />
-        <p className="text-muted-foreground">Loading transparency report...</p>
+        <p className="text-muted-foreground">Loading report...</p>
       </div>
     );
   }
