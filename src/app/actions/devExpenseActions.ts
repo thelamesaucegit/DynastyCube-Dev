@@ -3,6 +3,7 @@
 "use server";
 
 import { createServerClient, type AnySupabaseClient } from "@/lib/supabase";
+import { unstable_noStore as noStore } from "next/cache"; 
 
 export interface CustomCost {
   id: string;
@@ -134,6 +135,7 @@ export async function upsertDevExpense(
  * Explicitly strips out dev_hours and hourly_rate.
  */
 export async function getPublicExpenseStats(): Promise<{ stats: PublicExpenseSummary | null; error?: string }> {
+  noStore(); 
   try {
     const supabase = await createServerClient();
     const { data, error } = await supabase
