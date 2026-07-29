@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from "react";
 import { getPublicExpenseStats, type PublicExpenseSummary } from "@/app/actions/devExpenseActions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
-import { Loader2, Heart, DollarSign, ChevronDown, ChevronUp, ExternalLink, Code } from "lucide-react";
+import { Loader2, Heart, DollarSign, ChevronDown, ChevronUp, ExternalLink, Button, Badge, Code } from "lucide-react";
 import { TargetedGlitchedText } from '@/app/components/lore/TargetedGlitchedText';
 
 export default function SupportPage() {
