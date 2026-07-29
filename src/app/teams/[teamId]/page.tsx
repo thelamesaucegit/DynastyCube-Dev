@@ -1,6 +1,6 @@
 // src/app/teams/[teamId]/page.tsx
-"use client";
 
+"use client";
 import React, { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { useParams } from "next/navigation";
@@ -9,11 +9,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { CorruptedImage } from '@/app/components/lore/CorruptedImage';
 import { TargetedGlitchedText } from '@/app/components/lore/TargetedGlitchedText';
 import { toast } from "sonner";
-
 import { TrophyCase } from "@/app/components/team/TrophyCase";
 import { TeamEssenceDisplay } from "@/app/components/team/TeamEssenceDisplay";
 import { getTeamByShortName } from "@/app/actions/teamActions";
-import { getTeamDraftPicks, getTeamDecks, toggleKeeperStatus, getTeamSkipStatus, toggleSkipRemainingVote, type SkipStatus } from "@/app/actions/draftActions";
+import { getTeamDraftPicks, getTeamDecks, toggleKeeperStatus, getTeamSkipStatus, type SkipStatus } from "@/app/actions/draftActions";
 import { getAutoDraftPreview, toggleQueuePickVote, captainForcePick, type AutoDraftPreviewResult } from "@/app/actions/autoDraftActions";
 import { refundDraftPick } from "@/app/actions/cubucksActions";
 import { getCurrentSeason } from "@/app/actions/seasonPhaseActions";
@@ -22,7 +21,6 @@ import { getCurrentUserRolesForTeam, getTeamMembersWithRoles, type TeamMemberWit
 import { getRoleEmoji, getRoleDisplayName } from "@/app/utils/roleUtils";
 import { getTeamHats } from "@/app/actions/hatActions";
 import { createIdentitySwapPoll, createTeamPoll } from "@/app/actions/voteActions";
-
 import { DraftInterface } from "@/app/components/DraftInterface";
 import { DeckBuilder } from "@/app/components/DeckBuilder";
 import { TeamRoles } from "@/app/components/TeamRoles";
@@ -32,16 +30,18 @@ import { MatchSchedulingWidget } from "@/app/components/team/MatchSchedulingWidg
 import { TeamVoting } from "@/app/components/team/TeamVoting";
 import { DraftStatusWidget } from "@/app/components/DraftStatusWidget";
 import { DraftQueueManager } from "@/app/components/DraftQueueManager";
-import CockatriceUploader from "@/app/components/CockatriceUploader"; // THE FIX: Imported the new uploader!
-
+import CockatriceUploader from "@/app/components/CockatriceUploader";
 import type { DraftPick, Deck } from "@/app/actions/draftActions";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
 import { Button } from "@/app/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
+import { Label } from "@/app/components/ui/label"; 
+import { Switch } from "@/app/components/ui/switch"; 
 import { MoonStar, Sun, Target, Layers, BookOpen, ArrowLeftRight, Swords, Crown, Users, Loader2, AlertCircle, ExternalLink, CalendarDays, CheckCircle2, XCircle, Vote, Zap } from "lucide-react";
 import { useSettings } from "@/contexts/SettingsContext";
 import { getCardImageUrl } from "@/app/utils/cardUtils";
+
 
 interface TeamMember {
   id: string;
@@ -83,7 +83,6 @@ export default function TeamPage() {
   const teamShortName = params?.teamId as string;
   const { user } = useAuth();
   const { useOldestArt } = useSettings();
-
    const [skipStatus, setSkipStatus] = useState<SkipStatus>({ is_skipping: false, votes: [] });
   const [isTogglingSkip, setIsTogglingSkip] = useState(false);
     const [isForcePicking, setIsForcePicking] = useState(false);
@@ -95,26 +94,26 @@ export default function TeamPage() {
   const [teamHats, setTeamHats] = useState<TeamHatData[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>("picks");
-
   const [undrafting, setUndrafting] = useState<string | null>(null);
   const [undraftMessage, setUndraftMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [cubucksRefreshKey, setCubucksRefreshKey] = useState(0);
-
   const [seasonPhase, setSeasonPhase] = useState<string | null>(null);
   const [togglingKeeper, setTogglingKeeper] = useState<string | null>(null);
   const isFreeAgencyActive = seasonPhase === "season";
-
   const [draftPreview, setDraftPreview] = useState<AutoDraftPreviewResult | null>(null);
   const [activeDraftSessionId, setActiveDraftSessionId] = useState<string | null>(null);
   const [isVoting, setIsVoting] = useState(false);
 
+  // NEW: State for mobile cut mode
+  const [isCutMode, setIsCutMode] = useState(false);
+
   const isUserTeamMember = team?.members?.some((member) => member.user_id === user?.id) || userRoles.length > 0;
   const hasMatchPermissions = userRoles.includes("captain") || userRoles.includes("pilot");
-
+  
+  // All data loading functions (loadTeamData, useEffect) remain the same...
   const loadTeamData = useCallback(async () => {
     if (!teamShortName) { return; }
     setLoading(true);
-
      try {
       // THE FIX: Accept the redirectPath
       const { team: foundTeam, error: teamError, redirectPath } = await getTeamByShortName(teamShortName);
@@ -124,19 +123,14 @@ export default function TeamPage() {
           window.location.replace(redirectPath);
           return;
       }
-
       if (teamError || !foundTeam) {
         throw new Error(teamError || "Team not found.");
       }
-
-
       const seasonResult = await getCurrentSeason();
       const currentPhase = seasonResult.season?.phase || null;
       setSeasonPhase(currentPhase);
-
       const teamUUID = foundTeam.id;
       let sessionId: string | null = null;
-
       if (currentPhase === 'draft') {
         const { session: activeSession } = await getActiveDraftSession();
         sessionId = activeSession?.id || null;
@@ -144,7 +138,6 @@ export default function TeamPage() {
       } else {
         setActiveDraftSessionId(null);
       }
-
       const dataPromises: [
         Promise<{ picks: DraftPick[], error?: string }>,
         Promise<{ decks: Deck[], error?: string }>,
@@ -162,9 +155,7 @@ export default function TeamPage() {
         getTeamHats(teamUUID) as Promise<TeamHatData[]>,
         sessionId ? getTeamSkipStatus(teamUUID, sessionId) : Promise.resolve({ is_skipping: false, votes: [] }) // <-- NEW
       ];
-
      const [picksResult, decksResult, rolesResult, membersResult, previewResult, hatsResult, skipResult] = await Promise.all(dataPromises);
-
       // THE FIX: Cast foundTeam to the local 'Team' interface so TS knows it can accept 'members'
       const baseTeam = foundTeam as unknown as Team;
       
@@ -179,7 +170,6 @@ export default function TeamPage() {
           joined_at: m.joined_at,
         })),
       };
-
       setTeam(teamWithMembers);
       setDraftPicks(picksResult.picks);
       setDecks(decksResult.decks);
@@ -188,11 +178,8 @@ export default function TeamPage() {
       setDraftPreview(previewResult);
       setTeamHats(hatsResult);
             setSkipStatus(skipResult);
-
-
       const isMember = teamWithMembers.members?.some((m) => m.user_id === user?.id) || rolesResult.roles.length > 0;
       let defaultTab: TabType = "picks";
-
       if (currentPhase === "preseason" || currentPhase === "draft") {
         defaultTab = isMember ? "draft" : "picks";
       } else if (currentPhase === "season" || currentPhase === "playoffs") {
@@ -200,7 +187,6 @@ export default function TeamPage() {
       } else if (currentPhase === "postseason") {
         defaultTab = isMember ? "votes" : "picks";
       }
-
       setActiveTab(defaultTab);
     } catch (error) {
       console.error("[TeamPage] Critical error loading team data:", error);
@@ -211,8 +197,9 @@ export default function TeamPage() {
   }, [teamShortName, user?.id]);
 
   useEffect(() => {
-    loadTeamData();
+    loadData();
   }, [loadTeamData]);
+  
 
   
   const handleCaptainForcePick = async () => {
@@ -290,16 +277,12 @@ const handleToggleSkipRemaining = async () => {
       return;
     }
     if (!pick.id || undrafting || !team || !user) return;
-
     const hasCutPermission = userRoles.includes("captain") || userRoles.includes("pilot") || userRoles.includes("broker");
-
     if (hasCutPermission) {
         const confirmed = window.confirm(`Are you sure you want to cut "${pick.card_name}"? The Çubucks spent will be refunded to the team.`);
         if (!confirmed) return;
-
         setUndrafting(pick.id);
         setUndraftMessage(null);
-
         try {
           const result = await refundDraftPick(team.id, pick.id, pick.card_id, pick.card_name);
           if (result.success) {
@@ -318,10 +301,8 @@ const handleToggleSkipRemaining = async () => {
         }
         return;
     }
-
     const confirmed = window.confirm(`You do not have direct permission to cut cards. Would you like to initiate a team vote to cut "${pick.card_name}"?`);
     if (!confirmed) return;
-
     setUndrafting(pick.id);
     try {
         const endsAt = new Date();
@@ -337,7 +318,6 @@ const handleToggleSkipRemaining = async () => {
             [`Cut ${pick.card_name}`, "Keep it"],
             user.id
         );
-
         if (result.success) {
             setUndraftMessage({ type: "success", text: `A 12-hour team vote to cut ${pick.card_name} has been initiated! Check the Votes tab.` });
         } else {
@@ -350,6 +330,7 @@ const handleToggleSkipRemaining = async () => {
         setTimeout(() => setUndraftMessage(null), 5000);
     }
   };
+
 
   const currentKeepersCount = draftPicks.filter(p => p.is_keeper).length;
   const validDraftPicks = draftPicks.filter(p => p.card_id !== 'skipped-pick');
@@ -412,7 +393,7 @@ const handleToggleSkipRemaining = async () => {
     );
   }
 
-  return (
+   return (
     <div className="container max-w-7xl mx-auto px-4 py-8">
       {/* Dynamic Aurora Stylesheet Injection */}
       <style jsx global>{`
@@ -482,7 +463,7 @@ const handleToggleSkipRemaining = async () => {
                 </div>
               )}
             </div>
-                       <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-4 w-full">
                 {/*  Replaced 'truncate' with fluid typography 'clamp' sizing,
                     allowing the text to dynamically shrink on narrow displays rather than cutting off! */}
@@ -507,7 +488,6 @@ const handleToggleSkipRemaining = async () => {
                 </Button>
               </div>
               <div className="flex gap-4 mt-4 text-sm text-muted-foreground">
-
                 <span><strong className="text-foreground">{draftPicks.length}</strong> cards</span>
                 <span className="text-muted-foreground/50">|</span>
                 <span><strong className="text-foreground">{decks.length}</strong> decks</span>
@@ -520,7 +500,7 @@ const handleToggleSkipRemaining = async () => {
       </Card>
       
       <DraftStatusWidget variant="team" teamId={team.id} />
-
+      
       {isUserTeamMember && (team.short_name === 'changelings' || team.short_name === 'mimics') && seasonPhase !== 'draft' && (
         <Card className="mb-6 aurora-card-bg">
           <div className="aurora-stream" />
@@ -531,28 +511,24 @@ const handleToggleSkipRemaining = async () => {
                 The Great Aurora
               </h3>
               <p className="text-sm text-zinc-300 font-medium">
-                            <TargetedGlitchedText text="As long as the cosmos remain neutral, any team member may initiate a 12-hour vote to transform the team's identity." />
+                <TargetedGlitchedText text="As long as the cosmos remain neutral, any team member may initiate a 12-hour vote to transform the team's identity." />
               </p>
             </div>
-           <Button 
+            <Button 
               onClick={async () => {
                 if (!user?.id) return;
                 const activeIdentity = team.short_name === 'changelings' ? 'changelings' : 'mimics';
                 const result = await createIdentitySwapPoll(team.id, user.id, activeIdentity);
-
-                //  Check for the new isExisting flag
                 if (result.isExisting) {
-                    toast.info(result.error); // Show the "already in progress" message
-                    setActiveTab('votes');   // Redirect user to the votes tab
+                    toast.info(result.error); 
+                    setActiveTab('votes');   
                 } else if (result.success) {
                     toast.success(result.message);
-                    window.location.reload(); // Or just switch to votes tab
+                    window.location.reload(); 
                 } else {
                     toast.error(result.error);
                 }
               }} 
-                
-               
               className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-[0_0_15px_rgba(16,185,129,0.4)] hover:shadow-[0_0_22px_rgba(16,185,129,0.65)] transition-all duration-200 border border-emerald-400/30"
             >
               Initiate Transformation Vote
@@ -560,7 +536,7 @@ const handleToggleSkipRemaining = async () => {
           </CardContent>
         </Card>
       )}
-
+      
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 items-start">
         <div className="w-full">
           <TeamCubucksDisplay teamId={team.id} showTransactions={true} refreshKey={cubucksRefreshKey} isUserTeamMember={isUserTeamMember} />
@@ -569,7 +545,7 @@ const handleToggleSkipRemaining = async () => {
           <TeamEssenceDisplay teamId={team.id} isUserTeamMember={isUserTeamMember} />
         </div>
       </div>
-
+      
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabType)}>
         <TabsList className="flex-wrap h-auto gap-1 mb-6">
           {tabs.map((tab) => (
@@ -584,7 +560,7 @@ const handleToggleSkipRemaining = async () => {
             </TabsTrigger>
           ))}
         </TabsList>
-
+        
         <Card>
           <CardContent className="pt-6">
              <TabsContent value="draft">
@@ -625,7 +601,6 @@ const handleToggleSkipRemaining = async () => {
                                   </Button>
                                 );
                               })()}
-
                               {/* CAPTAIN FORCE PICK UI */}
                               {(userRoles.includes("captain") || userRoles.includes("pilot")) && (
                                 <Button onClick={handleCaptainForcePick} disabled={isForcePicking || !activeDraftSessionId} variant="destructive">
@@ -635,7 +610,6 @@ const handleToggleSkipRemaining = async () => {
                                 </Button>
                               )}
                             </div>
-
                             {!activeDraftSessionId && (
                               <p className="text-xs text-destructive mt-2">Cannot vote: No active draft session found.</p>
                             )}
@@ -686,7 +660,6 @@ const handleToggleSkipRemaining = async () => {
                     </CardContent>
                   </Card>
                   
-                  
                   <div>
                     <div className="mb-4">
                       <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">Draft Priority Queue</h2>
@@ -715,13 +688,30 @@ const handleToggleSkipRemaining = async () => {
             <TabsContent value="picks">
               {activeTab === "picks" && (
                 <div>
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
                     <h2 className="text-xl font-semibold flex items-center gap-2">
                       <Layers className="size-5" /> Team Pool
                     </h2>
-{(seasonPhase === "playoffs" || seasonPhase === "postseason") && (
-                      <Badge variant="outline" className="bg-primary/5"> Keepers: {currentKeepersCount} / 8 </Badge>
-                    )}
+
+                    <div className="flex items-center gap-4">
+                      {(seasonPhase === "playoffs" || seasonPhase === "postseason") && (
+                        <Badge variant="outline" className="bg-primary/5"> Keepers: {currentKeepersCount} / 8 </Badge>
+                      )}
+                      
+                      {/* --- NEW CUT MODE TOGGLE FOR MOBILE --- */}
+                      {isUserTeamMember && (
+                          <div className="flex items-center gap-2 md:hidden">
+                            <Label htmlFor="cut-mode-toggle" className={`font-bold transition-colors ${isCutMode ? 'text-destructive' : 'text-muted-foreground'}`}>
+                                Cut Mode
+                            </Label>
+                            <Switch
+                                id="cut-mode-toggle"
+                                checked={isCutMode}
+                                onCheckedChange={setIsCutMode}
+                            />
+                          </div>
+                      )}
+                    </div>
                   </div>
 
                   {undraftMessage && (
@@ -744,27 +734,26 @@ const handleToggleSkipRemaining = async () => {
                         const isToggling = togglingKeeper === pick.id;
                         const isKeeper = pick.is_keeper;
                         const imageUrl = getCardImageUrl(pick, useOldestArt);
-                      const cardName = pick.card_name || '';
-const oracleText = pick.oracle_text || '';
-
-                      const isCorruptible = /\b(time|clock|hour|minute|era|age|aeon|eon|moment|turn)s?\b/gi.test(cardName + ' ' + oracleText);
-
+                        const cardName = pick.card_name || '';
+                        const oracleText = pick.oracle_text || '';
+                        const isCorruptible = /\b(time|clock|hour|minute|era|age|aeon|eon|moment|turn)s?\b/gi.test(cardName + ' ' + oracleText);
 
                         return (
-                          <div key={pick.id} className={`group relative bg-muted rounded-lg overflow-hidden border transition-all hover:shadow-md ${isKeeper && isUserTeamMember ? 'ring-2 ring-green-500 shadow-[0_0_15px_rgba(34,197,94,0.3)] border-green-500' : 'hover:border-primary/50'}`}>
-                            
-                            
-                            
+                          // --- ADDED ONCLICK FOR CUT MODE ---
+                          <div 
+                            key={pick.id} 
+                            onClick={() => {
+                                if (isCutMode && !isKeeper) handleUndraftCard(pick);
+                            }}
+                            className={`group relative bg-muted rounded-lg overflow-hidden border transition-all ${isCutMode && !isKeeper ? 'cursor-pointer ring-2 ring-destructive/80 animate-pulse' : 'hover:shadow-md'} ${isKeeper && isUserTeamMember ? 'ring-2 ring-green-500 shadow-[0_0_15px_rgba(34,197,94,0.3)] border-green-500' : 'hover:border-primary/50'}`}
+                          >
                             {imageUrl && (
                               <div className="relative h-80 bg-zinc-950/40 border-b border-border/10">
-                               
-                                
-<CorruptedImage
-                    src={imageUrl}
-                    alt={cardName}
-                    isCorruptible={isCorruptible} // Pass the flag
-                />                             
-                              
+                                <CorruptedImage
+                                  src={imageUrl}
+                                  alt={cardName}
+                                  isCorruptible={isCorruptible}
+                                />
                               </div>
                             )}
                             <div className="p-2">
@@ -785,17 +774,18 @@ const oracleText = pick.oracle_text || '';
                                 <Badge className="mt-1.5 bg-green-600 hover:bg-green-600 text-[10px] uppercase font-bold tracking-wider"> KEEPER </Badge>
                               )}
                             </div>
-
-                            {isUserTeamMember && (
+                            
+                            {/* --- HIDE DESKTOP BUTTON WHEN IN CUT MODE --- */}
+                            {isUserTeamMember && !isCutMode && (
                               <>
                                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
                                 {!isKeeper && (
-                                  <button onClick={(e) => { e.preventDefault(); handleUndraftCard(pick); }} disabled={isUndrafting || !!undrafting || !!togglingKeeper} className="absolute top-2 right-2 bg-destructive hover:bg-destructive/90 text-white text-xs font-bold px-2.5 py-1.5 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 z-10 pointer-events-auto" title="Cut and Refund" >
+                                  <button onClick={(e) => { e.stopPropagation(); handleUndraftCard(pick); }} disabled={isUndrafting || !!undrafting || !!togglingKeeper} className="absolute top-2 right-2 bg-destructive hover:bg-destructive/90 text-white text-xs font-bold px-2.5 py-1.5 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 z-10 pointer-events-auto" title="Cut and Refund" >
                                     {isUndrafting ? "..." : "Cut"}
                                   </button>
                                 )}
                                 {(seasonPhase === "playoffs" || seasonPhase === "postseason") && (
-                                  <button onClick={(e) => { e.preventDefault(); handleToggleKeeper(pick); }} disabled={isToggling || !!undrafting} className={`absolute bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-xs font-bold shadow-lg opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 z-10 whitespace-nowrap pointer-events-auto ${isKeeper ? 'bg-gray-700 hover:bg-gray-800 text-white' : 'bg-green-600 hover:bg-green-500 text-white'}`} >
+                                  <button onClick={(e) => { e.stopPropagation(); handleToggleKeeper(pick); }} disabled={isToggling || !!undrafting} className={`absolute bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-xs font-bold shadow-lg opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 z-10 whitespace-nowrap pointer-events-auto ${isKeeper ? 'bg-gray-700 hover:bg-gray-800 text-white' : 'bg-green-600 hover:bg-green-500 text-white'}`} >
                                     {isToggling ? "Saving..." : isKeeper ? "Remove Keeper" : "Designate Keeper"}
                                   </button>
                                 )}
@@ -818,7 +808,7 @@ const oracleText = pick.oracle_text || '';
                       <BookOpen className="size-5" /> Deck Builder
                     </h2>
                     <p className="text-sm text-muted-foreground">
-                      {isUserTeamMember ? "Create and manage decks from your drafted cards" : `View and manage ${team.name}&apos;s decks`}
+                      {isUserTeamMember ? "Create and manage decks from your drafted cards" : `View and manage ${team.name}'s decks`}
                     </p>
                   </div>
                   <DeckBuilder teamId={team.id} teamName={team.name} isUserTeamMember={isUserTeamMember} />
@@ -856,14 +846,11 @@ const oracleText = pick.oracle_text || '';
                     </h2>
                     <p className="text-sm text-muted-foreground">Schedule match times and record results</p>
                   </div>
-
                   <MatchSchedulingWidget teamId={team.id} userRoles={userRoles} />
-
                   <div>
                     <h3 className="text-lg font-semibold mb-4">Record Match Results</h3>
                     <MatchRecording teamId={team.id} />
                   </div>
-
                   {/* THE FIX: COCKATRICE UPLOADER SECTION */}
                   {isUserTeamMember && hasMatchPermissions && (
                     <div className="pt-6 border-t border-border/50 mt-6">
@@ -873,7 +860,6 @@ const oracleText = pick.oracle_text || '';
                       <CockatriceUploader />
                     </div>
                   )}
-
                 </div>
               )}
             </TabsContent>
@@ -935,7 +921,6 @@ const oracleText = pick.oracle_text || '';
                       </div>
                     )}
                   </div>
-
                   {isUserTeamMember && (
                     <div className="border-t border-gray-200 dark:border-gray-700 pt-8">
                       <div className="mb-6">
@@ -962,10 +947,10 @@ const oracleText = pick.oracle_text || '';
                 <TrophyCase teamId={team.id} />
               </div>
             )}
-
           </CardContent>
         </Card>
       </Tabs>
     </div>
   );
 }
+
