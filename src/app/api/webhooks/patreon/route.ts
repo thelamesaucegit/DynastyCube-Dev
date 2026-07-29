@@ -33,11 +33,16 @@ export async function POST(request: Request) {
       process.env.SUPABASE_SERVICE_KEY!
     );
 
-    const memberData = payload.data;
-    const email = memberData?.attributes?.email;
-    const amountCents = memberData?.attributes?.pledge_amount_cents || 0;
+    // --- CORRECTED DATA EXTRACTION ---
+    const pledgeData = payload.data;
+    const patronId = pledgeData.relationships.patron.data.id;
+    const patronObject = payload.included.find((item: { type: string, id: string }) => item.type === 'user' && item.id === patronId);
+
+    const email = patronObject?.attributes?.email;
+    const fullName = patronObject?.attributes?.full_name;
+    const amountCents = pledgeData.attributes.amount_cents || 0; // <-- THE FIX
     const amount = amountCents / 100;
-    const fullName = memberData?.attributes?.full_name;
+    // --- END CORRECTION ---
 
     console.log(`[Patreon Webhook] Parsed Pledge - Name: ${fullName}, Email: ${email}, Amount: $${amount}`);
 
@@ -67,12 +72,12 @@ export async function POST(request: Request) {
       }
     }
 
-    console.log(`[Patreon Webhook] Checking idempotency for Patreon ID: ${memberData.id}...`);
+    console.log(`[Patreon Webhook] Checking idempotency for Patreon Pledge ID: ${pledgeData.id}...`);
     const { data: existing } = await supabase
       .from('donations')
       .select('id')
       .eq('source', 'patreon')
-      .eq('payload->data->>id', memberData.id)
+      .eq('payload->data->>id', pledgeData.id)
       .maybeSingle();
 
     if (!existing) {
