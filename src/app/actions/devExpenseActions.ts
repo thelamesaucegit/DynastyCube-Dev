@@ -100,3 +100,83 @@ export async function upsertDevExpense(
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
+
+export interface PublicYearlyExpense {
+  year: string;
+  totalCost: number;     // Hosting + Custom + Dev Owed
+  devOwed: number;       // The total $ value of the work done
+  devPaid: number;
+  raisedAmount: number;
+}
+
+export interface PublicExpenseSummary {
+  grandTotalCost: number;
+  grandTotalDevOwed: number;
+  grandTotalDevPaid: number;
+  grandTotalRaised: number;
+  yearlyBreakdown: PublicYearlyExpense[];
+}
+
+/**
+ * Public action to get expense summaries. 
+ * Explicitly strips out dev_hours and hourly_rate.
+ */
+export async function getPublicExpenseStats(): Promise<{ stats: PublicExpenseSummary | null; error?: string }> {
+  try {
+    const supabase = await createServerClient();
+    const { data, error } = await supabase
+      .from("dev_expenses")
+      .select("*")
+      .order("expense_month", { ascending: false });
+
+    if (error) return { stats: null, error: error.message };
+
+    let grandTotalCost = 0;
+    let grandTotalDevOwed = 0;
+    let grandTotalDevPaid = 0;
+    let grandTotalRaised = 0;
+
+    const yearlyMap = new Map<string, PublicYearlyExpense>();
+
+    (data || []).forEach(row => {
+      const year = new Date(row.expense_month).getUTCFullYear().toString();
+      
+      const devOwedForMonth = Number(row.dev_hours) * Number(row.hourly_rate);
+      const customTotal = (row.custom_costs as CustomCost[] || []).reduce((sum, c) => sum + Number(c.amount), 0);
+      const monthlyTotalCost = devOwedForMonth + Number(row.hosting_cost) + customTotal;
+      
+      const devPaid = Number(row.dev_paid);
+      const raised = Number(row.raised_amount) + Number(row.site_revenue);
+
+      // Add to Grand Totals
+      grandTotalCost += monthlyTotalCost;
+      grandTotalDevOwed += devOwedForMonth;
+      grandTotalDevPaid += devPaid;
+      grandTotalRaised += raised;
+
+      // Add to Yearly Map
+      if (!yearlyMap.has(year)) {
+        yearlyMap.set(year, { year, totalCost: 0, devOwed: 0, devPaid: 0, raisedAmount: 0 });
+      }
+      const yearStats = yearlyMap.get(year)!;
+      yearStats.totalCost += monthlyTotalCost;
+      yearStats.devOwed += devOwedForMonth;
+      yearStats.devPaid += devPaid;
+      yearStats.raisedAmount += raised;
+    });
+
+    const yearlyBreakdown = Array.from(yearlyMap.values()).sort((a, b) => Number(b.year) - Number(a.year));
+
+    return {
+      stats: {
+        grandTotalCost,
+        grandTotalDevOwed,
+        grandTotalDevPaid,
+        grandTotalRaised,
+        yearlyBreakdown
+      }
+    };
+  } catch (error) {
+    return { stats: null, error: error instanceof Error ? error.message : String(error) };
+  }
+}
