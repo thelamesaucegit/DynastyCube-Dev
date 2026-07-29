@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { getPublicExpenseStats, type PublicExpenseSummary } from "@/app/actions/devExpenseActions";
+import { getPublicExpenseStats, type PublicExpenseSummary, type PublicMonthlyExpense } from "@/app/actions/devExpenseActions";
 import { Badge } from "@/app/components/ui/badge";
 import { Button } from "@/app/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
@@ -13,15 +13,21 @@ export default function SupportPage() {
   const [stats, setStats] = useState<PublicExpenseSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedYears, setExpandedYears] = useState<Record<string, boolean>>({});
+  const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>({}); 
 
-  useEffect(() => {
+
+   useEffect(() => {
     async function load() {
       const { stats: fetchedStats } = await getPublicExpenseStats();
       if (fetchedStats) {
         setStats(fetchedStats);
-        // Auto-expand the most recent year
         if (fetchedStats.yearlyBreakdown.length > 0) {
-          setExpandedYears({ [fetchedStats.yearlyBreakdown[0].year]: true });
+          const latestYear = fetchedStats.yearlyBreakdown[0];
+          setExpandedYears({ [latestYear.year]: true });
+          if (latestYear.monthlyBreakdown.length > 0) {
+            // Auto-expand the most recent month of the most recent year
+            setExpandedMonths({ [latestYear.monthlyBreakdown[0].month]: true });
+          }
         }
       }
       setLoading(false);
@@ -29,9 +35,8 @@ export default function SupportPage() {
     load();
   }, []);
 
-  const toggleYear = (year: string) => {
-    setExpandedYears(prev => ({ ...prev, [year]: !prev[year] }));
-  };
+   const toggleYear = (year: string) => setExpandedYears(prev => ({ ...prev, [year]: !prev[year] }));
+  const toggleMonth = (month: string) => setExpandedMonths(prev => ({ ...prev, [month]: !prev[month] })); 
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
 
@@ -115,7 +120,7 @@ export default function SupportPage() {
       <h2 className="text-2xl font-black text-center mb-6">Historical Ledger</h2>
       <div className="space-y-4">
         {stats.yearlyBreakdown.map((yearStat) => {
-          const isExpanded = expandedYears[yearStat.year];
+          const isYearExpanded = expandedYears[yearStat.year];
           return (
             <Card key={yearStat.year} className="overflow-hidden">
               <div 
@@ -132,46 +137,56 @@ export default function SupportPage() {
                   <span className="hidden sm:inline text-muted-foreground">
                     Cost: {formatCurrency(yearStat.totalCost)}
                   </span>
-                  {isExpanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
+                  {isYearExpanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
                 </div>
               </div>
               
-              {isExpanded && (
-                <CardContent className="pt-6">
-                  <div className="grid sm:grid-cols-2 gap-8">
-                    
-                    {/* Dev Payouts */}
-                    <div>
-                      <h4 className="font-bold border-b pb-2 mb-4 flex justify-between">
-                        <span>👨‍💻 itstoxicqt&apos;s Hours</span>
-                        <span className="text-muted-foreground">{formatCurrency(yearStat.devOwed)}</span>
-                      </h4>
-                      <div className="flex justify-between items-center text-sm mb-2">
-                        <span>Compensated</span>
-                        <span className="text-emerald-600 font-bold">{formatCurrency(yearStat.devPaid)}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span>Remaining Balance</span>
-                        <span className="text-destructive font-bold">{formatCurrency(Math.max(0, yearStat.devOwed - yearStat.devPaid))}</span>
-                      </div>
-                    </div>
+              {isYearExpanded && (
+                <CardContent className="p-4 sm:p-6">
+                  {/* Monthly Breakdown */}
+                  <div className="space-y-2">
+                    {yearStat.monthlyBreakdown.map((monthStat) => {
+                      const isMonthExpanded = expandedMonths[monthStat.month];
+                      return (
+                        <div key={monthStat.month} className="border rounded-lg overflow-hidden">
+                          <div
+                            className="flex justify-between items-center p-3 bg-background cursor-pointer hover:bg-muted/50"
+                            onClick={() => toggleMonth(monthStat.month)}
+                          >
+                            <span className="font-semibold">{monthStat.monthLabel}</span>
+                            <div className="flex items-center gap-4">
+                              <span className="text-sm text-muted-foreground">{formatCurrency(monthStat.totalCost)}</span>
+                              {isMonthExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                            </div>
+                          </div>
 
-                    {/* Overall Funding */}
-                    <div>
-                      <h4 className="font-bold border-b pb-2 mb-4 flex justify-between">
-                        <span>💰 Site Hosting Costs</span>
-                        <span className="text-muted-foreground">{formatCurrency(yearStat.totalCost)}</span>
-                      </h4>
-                      <div className="flex justify-between items-center text-sm mb-2">
-                        <span>Raised (Community)</span>
-                        <span className="text-emerald-600 font-bold">{formatCurrency(yearStat.raisedAmount)}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span>Deficit (Out of Pocket)</span>
-                        <span className="text-destructive font-bold">{formatCurrency(Math.max(0, yearStat.totalCost - yearStat.raisedAmount))}</span>
-                      </div>
-                    </div>
+                          {isMonthExpanded && (
+                            <div className="p-4 border-t bg-muted/20">
+                              <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                                <span className="text-muted-foreground">Dev Labor Cost:</span>
+                                <span className="text-right font-medium">{formatCurrency(monthStat.devOwed)}</span>
 
+                                <span className="text-muted-foreground">Dev Paid:</span>
+                                <span className="text-right font-medium text-emerald-600">{formatCurrency(monthStat.devPaid)}</span>
+                                
+                                <span className="text-muted-foreground">Hosting Cost:</span>
+                                <span className="text-right font-medium">{formatCurrency(monthStat.hostingCost)}</span>
+                                
+                                {monthStat.customCosts.map(c => (
+                                  <React.Fragment key={c.id}>
+                                    <span className="text-muted-foreground">{c.description}:</span>
+                                    <span className="text-right font-medium">{formatCurrency(c.amount)}</span>
+                                  </React.Fragment>
+                                ))}
+
+                                <span className="text-muted-foreground border-t pt-2 mt-2">Total Raised:</span>
+                                <span className="text-right font-bold text-emerald-600 border-t pt-2 mt-2">{formatCurrency(monthStat.raisedAmount)}</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </CardContent>
               )}
