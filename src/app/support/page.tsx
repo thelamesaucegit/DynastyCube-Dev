@@ -92,9 +92,7 @@ export default function SupportPage() {
 
       {/* THE PITCH */}
       <Card className="mb-12 border-primary shadow-lg relative overflow-hidden">
-        <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-bl-lg">
-          Our Promise
-        </div>
+        
         <CardContent className="pt-8 text-center sm:text-left sm:flex gap-8 items-center">
           <div className="shrink-0 mb-6 sm:mb-0 hidden sm:block">
             <div className="w-24 h-24 bg-muted rounded-full flex items-center justify-center border-4 border-background shadow-xl">
