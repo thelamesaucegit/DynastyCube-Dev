@@ -110,48 +110,7 @@ export default function SupportPage() {
         </CardContent>
       </Card>
 
-      {/* DONATION WIDGETS */}
-      <h2 className="text-2xl font-black text-center mb-6">Support The Dynasty Cube!</h2>
-      <div className="grid sm:grid-cols-2 gap-6 mb-16">
-        
-        {/* PATREON */}
-        <Card className="hover:shadow-lg transition-shadow border-orange-200 dark:border-orange-900/50">
-          <CardContent className="pt-6 flex flex-col items-center text-center">
-            <div className="w-16 h-16 bg-[#FF424D] rounded-full flex items-center justify-center mb-4 shadow-md">
-              <svg viewBox="0 0 24 24" className="w-8 h-8 text-white" fill="currentColor">
-                <path d="M22.957 7.21c-.004-3.064-2.391-5.576-5.191-6.482-3.478-1.125-8.064-.962-11.384.604-3.13 1.48-4.71 4.28-4.303 7.82.359 3.126 2.754 5.372 5.56 6.3 1.745.576 3.59.882 5.433.916 3.65.068 7.375-.205 9.873-2.617 1.83-1.768 2.025-4.332 2.012-6.541zM2.87 23.998c0-3.328-.016-6.657.009-9.985.006-.826.353-1.258 1.107-1.391.758-.135 1.54-.035 2.308.066.906.12 1.25.565 1.256 1.472.014 2.872.008 5.744.004 8.616-.002.825-.333 1.286-1.11 1.408-.755.12-1.54.02-2.306-.067-.933-.105-1.257-.591-1.26-1.517-.006-2.868-.008-5.736-.008-8.602z"/>
-              </svg>
-            </div>
-            <h3 className="font-bold text-lg mb-2">Become a Patron</h3>
-            <p className="text-sm text-muted-foreground mb-6">Join the community on Patreon to get exclusive rewards and support continuous development.</p>
-            <Button asChild className="w-full bg-[#FF424D] hover:bg-[#E63946] text-white">
-              <a href="https://patreon.com/TheDynastyCube" target="_blank" rel="noopener noreferrer">
-                Support on Patreon <ExternalLink className="size-4 ml-2" />
-              </a>
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* KO-FI */}
-        <Card className="hover:shadow-lg transition-shadow border-blue-200 dark:border-blue-900/50">
-          <CardContent className="pt-6 flex flex-col items-center text-center">
-            <div className="w-16 h-16 bg-[#29abe0] rounded-full flex items-center justify-center mb-4 shadow-md">
-              <svg viewBox="0 0 24 24" className="w-10 h-10 text-white" fill="currentColor">
-                <path d="M23.881 8.948c-.773-4.085-4.859-4.593-4.859-4.593H.723c-.604 0-.679.798-.679.798s-.082 7.324-.022 11.822c.164 2.424 2.586 2.672 2.586 2.672s8.267-.023 11.966-.049c2.438-.426 2.683-2.566 2.658-3.734 4.352.24 7.422-2.831 6.649-6.916zm-11.062 3.511c-1.246 1.453-4.011 3.976-4.011 3.976s-.121.119-.31.023c-.076-.057-.108-.09-.108-.09-.443-.441-3.368-3.049-4.034-3.954-.709-.965-1.041-2.46-.091-3.71.951-1.252 2.805-1.086 4.053.078.077.071.127.143.178.21.05-.067.1-.139.178-.209 1.248-1.164 3.103-1.33 4.053-.078.95 1.25.618 2.745-.091 3.71h.001zM20.936 9.87c-.15 1.63-1.42 2.308-2.613 2.493V7.753c1.077.013 2.561.47 2.732 1.488l-.119.629z"/>
-              </svg>
-            </div>
-            <h3 className="font-bold text-lg mb-2">Buy Us a Coffee</h3>
-            <p className="text-sm text-muted-foreground mb-6">Make a one-time donation easily through Ko-fi to help chip away at the deficit!</p>
-            <Button asChild className="w-full bg-[#29abe0] hover:bg-[#2088b3] text-white">
-              <a href="https://ko-fi.com/dynastycube" target="_blank" rel="noopener noreferrer">
-                Support on Ko-fi <ExternalLink className="size-4 ml-2" />
-              </a>
-            </Button>
-          </CardContent>
-        </Card>
-
-      </div>
-
+     
       {/* YEARLY BREAKDOWN */}
       <h2 className="text-2xl font-black text-center mb-6">Historical Ledger</h2>
       <div className="space-y-4">
@@ -220,6 +179,49 @@ export default function SupportPage() {
           );
         })}
       </div>
+
+       {/* DONATION WIDGETS */}
+      <h2 className="text-2xl font-black text-center mb-6">Support The Dynasty Cube!</h2>
+      <div className="grid sm:grid-cols-2 gap-6 mb-16">
+        
+        {/* PATREON */}
+        <Card className="hover:shadow-lg transition-shadow border-orange-200 dark:border-orange-900/50">
+          <CardContent className="pt-6 flex flex-col items-center text-center">
+            <div className="w-16 h-16 bg-[#FF424D] rounded-full flex items-center justify-center mb-4 shadow-md">
+              <svg viewBox="0 0 24 24" className="w-8 h-8 text-white" fill="currentColor">
+                <path d="M22.957 7.21c-.004-3.064-2.391-5.576-5.191-6.482-3.478-1.125-8.064-.962-11.384.604-3.13 1.48-4.71 4.28-4.303 7.82.359 3.126 2.754 5.372 5.56 6.3 1.745.576 3.59.882 5.433.916 3.65.068 7.375-.205 9.873-2.617 1.83-1.768 2.025-4.332 2.012-6.541zM2.87 23.998c0-3.328-.016-6.657.009-9.985.006-.826.353-1.258 1.107-1.391.758-.135 1.54-.035 2.308.066.906.12 1.25.565 1.256 1.472.014 2.872.008 5.744.004 8.616-.002.825-.333 1.286-1.11 1.408-.755.12-1.54.02-2.306-.067-.933-.105-1.257-.591-1.26-1.517-.006-2.868-.008-5.736-.008-8.602z"/>
+              </svg>
+            </div>
+            <h3 className="font-bold text-lg mb-2">Become a Patron</h3>
+            <p className="text-sm text-muted-foreground mb-6">Join the community on Patreon to get exclusive rewards and support continuous development.</p>
+            <Button asChild className="w-full bg-[#FF424D] hover:bg-[#E63946] text-white">
+              <a href="https://patreon.com/TheDynastyCube" target="_blank" rel="noopener noreferrer">
+                Support on Patreon <ExternalLink className="size-4 ml-2" />
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* KO-FI */}
+        <Card className="hover:shadow-lg transition-shadow border-blue-200 dark:border-blue-900/50">
+          <CardContent className="pt-6 flex flex-col items-center text-center">
+            <div className="w-16 h-16 bg-[#29abe0] rounded-full flex items-center justify-center mb-4 shadow-md">
+              <svg viewBox="0 0 24 24" className="w-10 h-10 text-white" fill="currentColor">
+                <path d="M23.881 8.948c-.773-4.085-4.859-4.593-4.859-4.593H.723c-.604 0-.679.798-.679.798s-.082 7.324-.022 11.822c.164 2.424 2.586 2.672 2.586 2.672s8.267-.023 11.966-.049c2.438-.426 2.683-2.566 2.658-3.734 4.352.24 7.422-2.831 6.649-6.916zm-11.062 3.511c-1.246 1.453-4.011 3.976-4.011 3.976s-.121.119-.31.023c-.076-.057-.108-.09-.108-.09-.443-.441-3.368-3.049-4.034-3.954-.709-.965-1.041-2.46-.091-3.71.951-1.252 2.805-1.086 4.053.078.077.071.127.143.178.21.05-.067.1-.139.178-.209 1.248-1.164 3.103-1.33 4.053-.078.95 1.25.618 2.745-.091 3.71h.001zM20.936 9.87c-.15 1.63-1.42 2.308-2.613 2.493V7.753c1.077.013 2.561.47 2.732 1.488l-.119.629z"/>
+              </svg>
+            </div>
+            <h3 className="font-bold text-lg mb-2">Buy Us a Coffee</h3>
+            <p className="text-sm text-muted-foreground mb-6">Make a one-time donation easily through Ko-fi to help chip away at the deficit!</p>
+            <Button asChild className="w-full bg-[#29abe0] hover:bg-[#2088b3] text-white">
+              <a href="https://ko-fi.com/dynastycube" target="_blank" rel="noopener noreferrer">
+                Support on Ko-fi <ExternalLink className="size-4 ml-2" />
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+
+      </div>
+
     </div>
   );
 }
