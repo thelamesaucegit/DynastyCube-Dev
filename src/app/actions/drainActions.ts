@@ -392,7 +392,7 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
     // =========================================================================
     const { data: pick } = await supabaseAdmin
         .from('team_draft_picks')
-        .select('id, card_id, card_name, card_set, cubucks_cost, card_pool_id')
+        .select('id, card_id, card_name, card_set, cubucks_cost, card_pool_id, card_type')
         .eq('team_id', teamId)
         .ilike('card_name', cleanOffer)
         .eq('is_keeper', false)
@@ -400,11 +400,37 @@ export async function offerToTheDrain(offer: string): Promise<{ success: boolean
         .maybeSingle();
 
     if (pick) {
+        // LAYER 1: Deck Size Safety Check
+        const { validateCardRemovalFromDecks } = await import("./draftActions");
+        const deckValidation = await validateCardRemovalFromDecks(teamId, pick.id);
+        if (!deckValidation.allowed) {
+            return { success: true, message: `THE MAW SPITS IT BACK. ${deckValidation.error}`, type: "rejected" };
+        }
+
+        // LAYER 2: Total Roster Size Check (At least 25 non-lands)
+        const { data: rosterPicks } = await supabaseAdmin
+            .from('team_draft_picks')
+            .select('card_type')
+            .eq('team_id', teamId);
+
+        const currentNonLands = (rosterPicks || []).filter(
+            p => !(p.card_type || "").toLowerCase().includes("land")
+        ).length;
+
+        const isTargetNonLand = !(pick.card_type || "").toLowerCase().includes("land");
+
+        if (isTargetNonLand && currentNonLands - 1 < 25) {
+            return {
+                success: true,
+                message: "THE MAW SPITS YOUR TRIBUTE BACK. SACRIFICING THIS MAGIC WOULD LEAVE YOUR ROSTER WITH FEWER THAN 25 NON-LAND CARDS. THE CUBE DEMANDS A MINIMUM ROSTER TO CONGEST THE DRAIN.",
+                type: "rejected"
+            };
+        }
+
         const { data: prevDrain } = await supabaseAdmin.from('the_drain').select('id').eq('card_id', pick.card_id).limit(1).maybeSingle();
         
         const cardCost = pick.cubucks_cost || 1;
         const essenceReward = cardCost * 5; 
-
         await supabaseAdmin.from('team_draft_picks').update({ team_id: DRAINLINGS_TEAM_ID, acquisition_method: 'drained', scars: ['drained'] }).eq('id', pick.id);
 
         if (pick.card_pool_id) {
