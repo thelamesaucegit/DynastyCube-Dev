@@ -88,6 +88,8 @@ export default function AdminPage() {
     { id: "seasons", label: "Seasons & Matches", icon: <CalendarDays className="size-4" /> },
     { id: "draft", label: "Draft & Economy", icon: <Play className="size-4" /> },
     { id: "community", label: "Community Tools", icon: <Megaphone className="size-4" /> },
+        { id: "expenses", label: "Dev Expenses", icon: <DollarSign className="size-4" /> }, // <-- THE FIX
+
   ];
 
   const statCards = [

@@ -2,24 +2,32 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { getPublicExpenseStats, type PublicExpenseSummary } from "@/app/actions/devExpenseActions";
+import { getPublicExpenseStats, type PublicExpenseSummary, type PublicMonthlyExpense } from "@/app/actions/devExpenseActions";
+import { Badge } from "@/app/components/ui/badge";
+import { Button } from "@/app/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
-import { Loader2, Heart, DollarSign, ChevronDown, ChevronUp, ExternalLink, Code } from "lucide-react";
+import { Loader2, DollarSign, ChevronDown, ChevronUp, ExternalLink, Code } from "lucide-react";
 import { TargetedGlitchedText } from '@/app/components/lore/TargetedGlitchedText';
 
 export default function SupportPage() {
   const [stats, setStats] = useState<PublicExpenseSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedYears, setExpandedYears] = useState<Record<string, boolean>>({});
+  const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>({}); 
 
-  useEffect(() => {
+
+   useEffect(() => {
     async function load() {
       const { stats: fetchedStats } = await getPublicExpenseStats();
       if (fetchedStats) {
         setStats(fetchedStats);
-        // Auto-expand the most recent year
         if (fetchedStats.yearlyBreakdown.length > 0) {
-          setExpandedYears({ [fetchedStats.yearlyBreakdown[0].year]: true });
+          const latestYear = fetchedStats.yearlyBreakdown[0];
+          setExpandedYears({ [latestYear.year]: true });
+          if (latestYear.monthlyBreakdown.length > 0) {
+            // Auto-expand the most recent month of the most recent year
+            setExpandedMonths({ [latestYear.monthlyBreakdown[0].month]: true });
+          }
         }
       }
       setLoading(false);
@@ -27,9 +35,8 @@ export default function SupportPage() {
     load();
   }, []);
 
-  const toggleYear = (year: string) => {
-    setExpandedYears(prev => ({ ...prev, [year]: !prev[year] }));
-  };
+   const toggleYear = (year: string) => setExpandedYears(prev => ({ ...prev, [year]: !prev[year] }));
+  const toggleMonth = (month: string) => setExpandedMonths(prev => ({ ...prev, [month]: !prev[month] })); 
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
 
@@ -37,7 +44,7 @@ export default function SupportPage() {
     return (
       <div className="container max-w-4xl mx-auto px-4 py-16 text-center">
         <Loader2 className="animate-spin h-10 w-10 mx-auto mb-4 text-blue-600" />
-        <p className="text-muted-foreground">Loading transparency report...</p>
+        <p className="text-muted-foreground">Loading report...</p>
       </div>
     );
   }
@@ -51,7 +58,6 @@ export default function SupportPage() {
   return (
     <div className="container max-w-4xl mx-auto px-4 py-12">
       <div className="text-center mb-12">
-        <Heart className="size-12 mx-auto text-red-500 mb-4 animate-pulse" />
         <h1 className="text-4xl font-black tracking-tight mb-4">
           <TargetedGlitchedText>Support The Dynasty Cube</TargetedGlitchedText>
         </h1>
@@ -66,7 +72,7 @@ export default function SupportPage() {
           <CardContent className="pt-6 text-center">
             <p className="text-sm text-blue-800 dark:text-blue-300 font-bold uppercase tracking-wider mb-2">Total Operating Cost</p>
             <p className="text-4xl font-black text-blue-950 dark:text-blue-100">{formatCurrency(stats.grandTotalCost)}</p>
-            <p className="text-xs text-muted-foreground mt-2">Hosting & Dev Labor</p>
+            <p className="text-xs text-muted-foreground mt-2">Hosting & Dev Hours</p>
           </CardContent>
         </Card>
         
@@ -91,9 +97,7 @@ export default function SupportPage() {
 
       {/* THE PITCH */}
       <Card className="mb-12 border-primary shadow-lg relative overflow-hidden">
-        <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-bl-lg">
-          Our Promise
-        </div>
+        
         <CardContent className="pt-8 text-center sm:text-left sm:flex gap-8 items-center">
           <div className="shrink-0 mb-6 sm:mb-0 hidden sm:block">
             <div className="w-24 h-24 bg-muted rounded-full flex items-center justify-center border-4 border-background shadow-xl">
@@ -102,16 +106,105 @@ export default function SupportPage() {
           </div>
           <div>
             <p className="text-lg leading-relaxed text-card-foreground">
-              The Dynasty Cube is a 2-person dev team. I — THE COMMISSIONER — am happy to operate at a loss, as this is my passion project. However, my friend and partner <strong>Amonte (itstoxicqt)</strong> has more than earned what I can afford to pay him for his work.
+              The Dynasty Cube is a 2-person dev team. I — THE COMMISSIONER — am happy to operate at a loss, as this is my passion project. However, my friend and dev partner <strong>(itstoxicqt)</strong> has more than earned what I can afford to pay him for his work.
             </p>
             <p className="text-lg leading-relaxed text-card-foreground mt-4">
-              Every cent you donate to The Dynasty Cube <strong>FIRST</strong> goes to Amonte to cover any outstanding balance for the hours he&apos;s worked. Then, it goes towards the historic hosting costs of this site. Anything we raise after that will be split evenly between Amonte and I, and everything will always be visible right here.
+              Every cent you donate to The Dynasty Cube <strong>FIRST</strong> goes to itstoxicqt to cover any outstanding balance for the hours he&apos;s worked. Then, it goes towards the historic hosting costs of this site. Anything we raise after that will be split evenly between itstoxicqt and I, and everything will always be visible right here.
             </p>
           </div>
         </CardContent>
       </Card>
 
-      {/* DONATION WIDGETS */}
+     
+      {/* YEARLY BREAKDOWN */}
+      <h2 className="text-2xl font-black text-center mb-6">Historical Ledger</h2>
+      <div className="space-y-4">
+        {stats.yearlyBreakdown.map((yearStat) => {
+          const isYearExpanded = expandedYears[yearStat.year];
+          return (
+            <Card key={yearStat.year} className="overflow-hidden">
+                            <div 
+                className="bg-muted/50 p-4 cursor-pointer hover:bg-muted transition-colors flex justify-between items-center"
+                onClick={() => toggleYear(yearStat.year)}
+              >
+                <div className="flex items-center gap-4">
+                  <h3 className="text-xl font-bold">{yearStat.year}</h3>
+                  <Badge variant={yearStat.totalCost <= yearStat.raisedAmount ? "default" : "secondary"}>
+                    {yearStat.totalCost <= yearStat.raisedAmount ? "Fully Funded" : "Deficit"}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-4 text-sm font-medium">
+                  <div className="hidden sm:flex flex-col items-end">
+                    <span className="text-muted-foreground">
+                      Cost: {formatCurrency(yearStat.totalCost)}
+                    </span>
+                    {/*  Show the remaining unpaid dev balance for the year */}
+                    {yearStat.devOwed - yearStat.devPaid > 0 && (
+                      <span className="text-xs text-destructive">
+                        Dev Deficit: {formatCurrency(yearStat.devOwed - yearStat.devPaid)}
+                      </span>
+                    )}
+                  </div>
+                  {isYearExpanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
+                </div>
+              </div>
+
+              
+              {isYearExpanded && (
+                <CardContent className="p-4 sm:p-6">
+                  {/* Monthly Breakdown */}
+                  <div className="space-y-2">
+                    {yearStat.monthlyBreakdown.map((monthStat) => {
+                      const isMonthExpanded = expandedMonths[monthStat.month];
+                      return (
+                        <div key={monthStat.month} className="border rounded-lg overflow-hidden">
+                          <div
+                            className="flex justify-between items-center p-3 bg-background cursor-pointer hover:bg-muted/50"
+                            onClick={() => toggleMonth(monthStat.month)}
+                          >
+                            <span className="font-semibold">{monthStat.monthLabel}</span>
+                            <div className="flex items-center gap-4">
+                              <span className="text-sm text-muted-foreground">{formatCurrency(monthStat.totalCost)}</span>
+                              {isMonthExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                            </div>
+                          </div>
+
+                          {isMonthExpanded && (
+                            <div className="p-4 border-t bg-muted/20">
+                              <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                                <span className="text-muted-foreground">Dev Labor Cost:</span>
+                                <span className="text-right font-medium">{formatCurrency(monthStat.devOwed)}</span>
+
+                                <span className="text-muted-foreground">Dev Paid:</span>
+                                <span className="text-right font-medium text-emerald-600">{formatCurrency(monthStat.devPaid)}</span>
+                                
+                                <span className="text-muted-foreground">Hosting Cost:</span>
+                                <span className="text-right font-medium">{formatCurrency(monthStat.hostingCost)}</span>
+                                
+                                {monthStat.customCosts.map(c => (
+                                  <React.Fragment key={c.id}>
+                                    <span className="text-muted-foreground">{c.description}:</span>
+                                    <span className="text-right font-medium">{formatCurrency(c.amount)}</span>
+                                  </React.Fragment>
+                                ))}
+
+                                <span className="text-muted-foreground border-t pt-2 mt-2">Total Raised:</span>
+                                <span className="text-right font-bold text-emerald-600 border-t pt-2 mt-2">{formatCurrency(monthStat.raisedAmount)}</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+          );
+        })}
+      </div>
+
+       {/* DONATION WIDGETS */}
       <h2 className="text-2xl font-black text-center mb-6">Support The Dynasty Cube!</h2>
       <div className="grid sm:grid-cols-2 gap-6 mb-16">
         
@@ -153,74 +246,6 @@ export default function SupportPage() {
 
       </div>
 
-      {/* YEARLY BREAKDOWN */}
-      <h2 className="text-2xl font-black text-center mb-6">Historical Ledger</h2>
-      <div className="space-y-4">
-        {stats.yearlyBreakdown.map((yearStat) => {
-          const isExpanded = expandedYears[yearStat.year];
-          return (
-            <Card key={yearStat.year} className="overflow-hidden">
-              <div 
-                className="bg-muted/50 p-4 cursor-pointer hover:bg-muted transition-colors flex justify-between items-center"
-                onClick={() => toggleYear(yearStat.year)}
-              >
-                <div className="flex items-center gap-4">
-                  <h3 className="text-xl font-bold">{yearStat.year}</h3>
-                  <Badge variant={yearStat.totalCost <= yearStat.raisedAmount ? "default" : "secondary"}>
-                    {yearStat.totalCost <= yearStat.raisedAmount ? "Fully Funded" : "Deficit"}
-                  </Badge>
-                </div>
-                <div className="flex items-center gap-4 text-sm font-medium">
-                  <span className="hidden sm:inline text-muted-foreground">
-                    Cost: {formatCurrency(yearStat.totalCost)}
-                  </span>
-                  {isExpanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
-                </div>
-              </div>
-              
-              {isExpanded && (
-                <CardContent className="pt-6">
-                  <div className="grid sm:grid-cols-2 gap-8">
-                    
-                    {/* Dev Payouts */}
-                    <div>
-                      <h4 className="font-bold border-b pb-2 mb-4 flex justify-between">
-                        <span>👨‍💻 Amonte&apos;s Labor</span>
-                        <span className="text-muted-foreground">{formatCurrency(yearStat.devOwed)}</span>
-                      </h4>
-                      <div className="flex justify-between items-center text-sm mb-2">
-                        <span>Compensated</span>
-                        <span className="text-emerald-600 font-bold">{formatCurrency(yearStat.devPaid)}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span>Remaining Balance</span>
-                        <span className="text-destructive font-bold">{formatCurrency(Math.max(0, yearStat.devOwed - yearStat.devPaid))}</span>
-                      </div>
-                    </div>
-
-                    {/* Overall Funding */}
-                    <div>
-                      <h4 className="font-bold border-b pb-2 mb-4 flex justify-between">
-                        <span>💰 Year Funding</span>
-                        <span className="text-muted-foreground">{formatCurrency(yearStat.totalCost)}</span>
-                      </h4>
-                      <div className="flex justify-between items-center text-sm mb-2">
-                        <span>Raised (Community)</span>
-                        <span className="text-emerald-600 font-bold">{formatCurrency(yearStat.raisedAmount)}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span>Deficit (Out of Pocket)</span>
-                        <span className="text-destructive font-bold">{formatCurrency(Math.max(0, yearStat.totalCost - yearStat.raisedAmount))}</span>
-                      </div>
-                    </div>
-
-                  </div>
-                </CardContent>
-              )}
-            </Card>
-          );
-        })}
-      </div>
     </div>
   );
 }

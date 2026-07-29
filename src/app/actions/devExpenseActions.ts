@@ -23,6 +23,34 @@ export interface DevExpense {
   updated_at?: string;
 }
 
+export interface PublicMonthlyExpense {
+  month: string; // "YYYY-MM-01"
+  monthLabel: string; // "May 2025"
+  totalCost: number;
+  devOwed: number;
+  devPaid: number;
+  hostingCost: number;
+  raisedAmount: number;
+  customCosts: CustomCost[];
+}
+
+export interface PublicYearlyExpense {
+  year: string;
+  totalCost: number;
+  devOwed: number;
+  devPaid: number;
+  raisedAmount: number;
+  monthlyBreakdown: PublicMonthlyExpense[];
+}
+
+export interface PublicExpenseSummary {
+  grandTotalCost: number;
+  grandTotalDevOwed: number;
+  grandTotalDevPaid: number;
+  grandTotalRaised: number;
+  yearlyBreakdown: PublicYearlyExpense[];
+}
+
 async function verifyAdmin(supabase: AnySupabaseClient): Promise<{ authorized: boolean; userId?: string; error?: string }> {
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return { authorized: false, error: "Not authenticated" };
@@ -101,22 +129,6 @@ export async function upsertDevExpense(
   }
 }
 
-export interface PublicYearlyExpense {
-  year: string;
-  totalCost: number;     // Hosting + Custom + Dev Owed
-  devOwed: number;       // The total $ value of the work done
-  devPaid: number;
-  raisedAmount: number;
-}
-
-export interface PublicExpenseSummary {
-  grandTotalCost: number;
-  grandTotalDevOwed: number;
-  grandTotalDevPaid: number;
-  grandTotalRaised: number;
-  yearlyBreakdown: PublicYearlyExpense[];
-}
-
 /**
  * Public action to get expense summaries. 
  * Explicitly strips out dev_hours and hourly_rate.
@@ -139,8 +151,10 @@ export async function getPublicExpenseStats(): Promise<{ stats: PublicExpenseSum
     const yearlyMap = new Map<string, PublicYearlyExpense>();
 
     (data || []).forEach(row => {
-      const year = new Date(row.expense_month).getUTCFullYear().toString();
-      
+      const dateObj = new Date(row.expense_month);
+      const year = dateObj.getUTCFullYear().toString();
+      const monthLabel = dateObj.toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' });
+
       const devOwedForMonth = Number(row.dev_hours) * Number(row.hourly_rate);
       const customTotal = (row.custom_costs as CustomCost[] || []).reduce((sum, c) => sum + Number(c.amount), 0);
       const monthlyTotalCost = devOwedForMonth + Number(row.hosting_cost) + customTotal;
@@ -154,15 +168,30 @@ export async function getPublicExpenseStats(): Promise<{ stats: PublicExpenseSum
       grandTotalDevPaid += devPaid;
       grandTotalRaised += raised;
 
-      // Add to Yearly Map
+      // Ensure year entry exists in the map
       if (!yearlyMap.has(year)) {
-        yearlyMap.set(year, { year, totalCost: 0, devOwed: 0, devPaid: 0, raisedAmount: 0 });
+        yearlyMap.set(year, { year, totalCost: 0, devOwed: 0, devPaid: 0, raisedAmount: 0, monthlyBreakdown: [] });
       }
+      
       const yearStats = yearlyMap.get(year)!;
+      
+      // Aggregate yearly totals
       yearStats.totalCost += monthlyTotalCost;
       yearStats.devOwed += devOwedForMonth;
       yearStats.devPaid += devPaid;
       yearStats.raisedAmount += raised;
+
+      // Add the detailed monthly breakdown
+      yearStats.monthlyBreakdown.push({
+        month: row.expense_month,
+        monthLabel: monthLabel,
+        totalCost: monthlyTotalCost,
+        devOwed: devOwedForMonth,
+        devPaid: devPaid,
+        hostingCost: Number(row.hosting_cost),
+        raisedAmount: raised,
+        customCosts: (row.custom_costs as CustomCost[]) || [],
+      });
     });
 
     const yearlyBreakdown = Array.from(yearlyMap.values()).sort((a, b) => Number(b.year) - Number(a.year));
