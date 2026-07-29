@@ -580,8 +580,15 @@ export async function removeDraftPick(pickId: string): Promise<{ success: boolea
       return { success: false, error: "Draft pick not found." };
     }
 
+    //  Check active deck validation before allowing the cut
+    const validation = await validateCardRemovalFromDecks(pick.team_id, pick.id);
+    if (!validation.allowed) {
+      return { success: false, error: validation.error };
+    }
+
     const authCheck = await verifyTeamMembership(pick.team_id, supabase);
     if (!authCheck.authorized) return { success: false, error: authCheck.error };
+    
 
     // =========================================================================
     // STRICT ETERNAL CUT BLOCKER
@@ -816,3 +823,56 @@ export async function toggleKeeperStatus(pickId: string, isKeeper: boolean): Pro
     return { success: false, error: errorMessage };
   }
 }
+
+/**
+ * Validates whether removing a card from the team pool would leave the active decks invalid
+ * Returns { allowed: true } or an error message if blocked.
+ */
+export async function validateCardRemovalFromDecks(
+  teamId: string,
+  draftPickId: string
+): Promise<{ allowed: boolean; error?: string }> {
+  const supabase = await createServerClient();
+  
+  // 1. Fetch all decks containing this card
+  const { data: deckCards, error: cardError } = await supabase
+    .from("deck_cards")
+    .select("deck_id, category")
+    .eq("draft_pick_id", draftPickId);
+
+  if (cardError || !deckCards || deckCards.length === 0) {
+    return { allowed: true }; // Not used in any decks
+  }
+
+  // We only care about mainboard listings
+  const affectedDecks = deckCards.filter(dc => dc.category === "mainboard");
+  if (affectedDecks.length === 0) {
+    return { allowed: true };
+  }
+
+  // Check the sizes of those affected decks
+  for (const dc of affectedDecks) {
+    const deckId = dc.deck_id;
+    if (!deckId) continue;
+
+    // Count current mainboard cards for this deck
+    const { data: mainCards } = await supabase
+      .from("deck_cards")
+      .select("quantity")
+      .eq("deck_id", deckId)
+      .eq("category", "mainboard");
+
+    const currentSize = (mainCards || []).reduce((sum, c) => sum + (c.quantity || 1), 0);
+
+    // If removing this card drops the deck below 40
+    if (currentSize - 1 < 40) {
+      return {
+        allowed: false,
+        error: `Removing this card would drop your active deck below the 40-card minimum. Please adjust your deck in the Deck Builder first, or add a basic land.`
+      };
+    }
+  }
+
+  return { allowed: true };
+}
+

@@ -6,6 +6,7 @@ import { type AnySupabaseClient } from "@/lib/supabase";
 import { createClient } from "@supabase/supabase-js";
 import { submitDeckForWeek } from "./deckGenerationActions";
 import { logSystemEvent } from "@/lib/systemLogger";
+import { getTeamDraftPicks } from "./draftActions";
 
 
 function createServiceClient() {
@@ -41,6 +42,54 @@ interface PollSummary {
     ends_at: string;
     poll_options: PollOptionSummaryRow[];
 }
+
+/**
+ * Identifies the most prominent basic land type currently in a deck to use as a replacement.
+ */
+async function getProminentBasicLandType(deckId: string): Promise<string> {
+    const supabase = createServiceClient();
+    const { data: cards } = await supabase
+        .from('deck_cards')
+        .select('card_name, quantity')
+        .eq('deck_id', deckId)
+        .eq('category', 'mainboard');
+
+    const landCounts: Record<string, number> = { Forest: 0, Island: 0, Mountain: 0, Plains: 0, Swamp: 0 };
+    (cards || []).forEach(c => {
+        if (c.card_name in landCounts) {
+            landCounts[c.card_name] += (c.quantity || 1);
+        }
+    });
+
+    // Sort by count descending, then alphabetically descending on ties
+    const sorted = Object.entries(landCounts).sort((a, b) => {
+        if (b[1] !== a[1]) return b[1] - a[1];
+        return a[0].localeCompare(b[0]); // Alphabetical tie-breaker
+    });
+
+    // If deck has some lands, return the top one
+    if (sorted[0][1] > 0) return sorted[0][0];
+
+    // Fallback: Check non-land color pips to find dominant color
+    const nonLands = (cards || []).filter(c => !(c.card_name in landCounts));
+    const pipCounts: Record<string, number> = { W: 0, U: 0, B: 0, R: 0, G: 0 };
+    
+    nonLands.forEach(c => {
+        // Standard matching for color initials in card name or mock analysis
+        const name = c.card_name.toUpperCase();
+        if (name.includes("WHITE")) pipCounts.W++;
+        if (name.includes("BLUE")) pipCounts.U++;
+        if (name.includes("BLACK")) pipCounts.B++;
+        if (name.includes("RED")) pipCounts.R++;
+        if (name.includes("GREEN")) pipCounts.G++;
+    });
+
+    const topColor = Object.entries(pipCounts).sort((a, b) => b[1] - a[1])[0][0];
+    const COLOR_MAP: Record<string, string> = { W: 'Plains', U: 'Island', B: 'Swamp', R: 'Mountain', G: 'Forest' };
+    
+    return COLOR_MAP[topColor] || 'Plains';
+}
+
 /**
  * Create a deck vote poll for a team for a given week.
  * Poll options are the team's current decks.
@@ -221,7 +270,7 @@ export async function resolveDeckVotePoll(
 ): Promise<{ success: boolean; winningDeckId?: string; submissionId?: string; error?: string }> {
     const supabase = createServiceClient();
     try {
-        // 1. Fetch poll with options and vote counts
+        // 1. Fetch poll with options
         const { data: rawPoll, error: pollError } = await supabase
             .from('polls')
             .select(`
@@ -239,31 +288,65 @@ export async function resolveDeckVotePoll(
             .single();
 
         const poll = rawPoll as unknown as PollWithOptions;
+        if (pollError || !poll) return { success: false, error: 'Poll not found' };
+        if (!poll.team_id) return { success: false, error: 'Poll is not associated with a team' };
 
-        if (pollError || !poll) {
-            return { success: false, error: 'Poll not found' };
-        }
-
-        if (!poll.team_id) {
-            return { success: false, error: 'Poll is not associated with a team' };
-        }
-
-        const options: PollOptionRow[] = poll.poll_options;
-        if (!options || options.length === 0) {
-            return { success: false, error: 'Poll has no options' };
-        }
-
-        // 2. Find winner — highest vote count
+        const options = poll.poll_options;
         const sorted = [...options].sort((a, b) => {
             if (b.vote_count !== a.vote_count) return b.vote_count - a.vote_count;
             if (a.option_order !== b.option_order) return a.option_order - b.option_order;
             return a.option_text.localeCompare(b.option_text);
         });
-
         const winner = sorted[0];
-        if (!winner.deck_id) {
-            return { success: false, error: 'Winning option has no associated deck' };
+        if (!winner.deck_id) return { success: false, error: 'Winning option has no associated deck' };
+
+        // =====================================================================
+        // NEW AUTO-BACKFILL SUB-PIPELINE: Ownership & Deck legality sweep
+        // =====================================================================
+        const { picks: teamPicks } = await getTeamDraftPicks(poll.team_id, undefined, supabase);
+        const ownedPickIds = new Set(teamPicks.map(p => p.id).filter(Boolean));
+
+        const { data: deckCards } = await supabase
+            .from('deck_cards')
+            .select('*')
+            .eq('deck_id', winner.deck_id)
+            .eq('category', 'mainboard');
+
+        const unownedCards = (deckCards || []).filter(dc => dc.draft_pick_id && !ownedPickIds.has(dc.draft_pick_id));
+        
+        if (unownedCards.length > 0) {
+            console.log(`[DeckVoteResolve] Detected ${unownedCards.length} unowned cards in winning deck. Backfilling with prominent basic land...`);
+            
+            const prominentLand = await getProminentBasicLandType(winner.deck_id);
+            const deleteIds = unownedCards.map(c => c.id);
+
+            // Clean unowned cards from database
+            await supabase.from('deck_cards').delete().in('id', deleteIds);
+
+            // Find existing prominent land slot to increment or insert fresh
+            const existingLand = (deckCards || []).find(dc => dc.card_name === prominentLand);
+            if (existingLand) {
+                await supabase
+                    .from('deck_cards')
+                    .update({ quantity: (existingLand.quantity || 1) + unownedCards.length })
+                    .eq('id', existingLand.id);
+            } else {
+                await supabase
+                    .from('deck_cards')
+                    .insert({
+                        deck_id: winner.deck_id,
+                        draft_pick_id: null,
+                        card_id: `basic-${prominentLand.toLowerCase()}`,
+                        card_name: prominentLand,
+                        quantity: unownedCards.length,
+                        is_commander: false,
+                        category: 'mainboard'
+                    });
+            }
+
+            await logSystemEvent("DeckResolveAutoCorrect", "info", `Automatically backfilled winning deck ${winner.deck_id} with ${unownedCards.length} copies of ${prominentLand} due to ownership changes.`);
         }
+        // =====================================================================
 
         // 3. Mark poll as inactive
         await supabase.from('polls').update({ is_active: false }).eq('id', pollId);
@@ -282,7 +365,8 @@ export async function resolveDeckVotePoll(
         const { success, submissionId, error } = await submitDeckForWeek(
             winner.deck_id,
             poll.team_id,
-            weekId
+            weekId,
+            supabase
         );
 
         if (!success) {
