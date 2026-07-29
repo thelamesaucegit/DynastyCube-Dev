@@ -1,4 +1,3 @@
-// src/app/components/admin/DevExpenseManagement.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -37,6 +36,9 @@ export const DevExpenseManagement: React.FC = () => {
       dev_hours: 0,
       hourly_rate: 15.00,
       hosting_cost: 39.10,
+      dev_paid: 0,
+      raised_amount: 0,
+      site_revenue: 0,
       custom_costs: []
     });
 
@@ -59,6 +61,9 @@ export const DevExpenseManagement: React.FC = () => {
       dev_hours: expense.dev_hours,
       hourly_rate: expense.hourly_rate,
       hosting_cost: expense.hosting_cost,
+      dev_paid: expense.dev_paid,
+      raised_amount: expense.raised_amount,
+      site_revenue: expense.site_revenue,
       custom_costs: expense.custom_costs,
     });
 
@@ -114,7 +119,7 @@ export const DevExpenseManagement: React.FC = () => {
           <h2 className="text-xl font-semibold flex items-center gap-2 mb-1">
             <Calculator className="size-5" /> Dev Expenses & Running Costs
           </h2>
-          <p className="text-sm text-muted-foreground">Track monthly development hours, hosting fees, and one-off costs.</p>
+          <p className="text-sm text-muted-foreground">Track monthly development hours, hosting fees, and fundraising.</p>
         </div>
         <div className="flex gap-2">
           <Input 
@@ -145,34 +150,59 @@ export const DevExpenseManagement: React.FC = () => {
             const monthLabel = dateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
             
             const customTotal = expense.custom_costs.reduce((sum, cost) => sum + Number(cost.amount), 0);
-            const devTotal = expense.dev_hours * expense.hourly_rate;
-            const grandTotal = devTotal + expense.hosting_cost + customTotal;
+            const devTotalOwed = expense.dev_hours * expense.hourly_rate;
+            const devRemainingBalance = devTotalOwed - expense.dev_paid;
+            const grandTotal = devTotalOwed + expense.hosting_cost + customTotal;
 
             return (
-              <Card key={expense.expense_month} className="border-border">
+              <Card key={expense.expense_month} className="border-border shadow-md">
                 <CardHeader className="bg-muted/50 pb-4 border-b">
                   <div className="flex justify-between items-center">
                     <CardTitle className="text-xl">{monthLabel}</CardTitle>
                     <div className="text-right">
-                      <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Total Monthly Cost</p>
+                      <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Total Monthly Burden</p>
                       <p className="text-2xl font-black text-blue-600 dark:text-blue-400">{formatCurrency(grandTotal)}</p>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-6">
-                  {/* Base Costs */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-muted-foreground mb-1">Dev Hours</label>
-                      <Input type="number" min="0" step="0.5" value={expense.dev_hours} onChange={(e) => handleUpdateField(expense.expense_month, "dev_hours", parseFloat(e.target.value) || 0)} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-muted-foreground mb-1">Rate ($/hr)</label>
-                      <Input type="number" min="0" step="1" value={expense.hourly_rate} onChange={(e) => handleUpdateField(expense.expense_month, "hourly_rate", parseFloat(e.target.value) || 0)} />
-                    </div>
-                    <div className="col-span-2 sm:col-span-1">
-                      <label className="block text-xs font-semibold text-muted-foreground mb-1">Hosting Cost ($)</label>
+                  
+                  {/* Row 1: Site Expenses & Revenue */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="col-span-1">
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1">Hosting ($)</label>
                       <Input type="number" min="0" step="0.01" value={expense.hosting_cost} onChange={(e) => handleUpdateField(expense.expense_month, "hosting_cost", parseFloat(e.target.value) || 0)} />
+                    </div>
+                    <div className="col-span-1">
+                      <label className="block text-xs font-semibold text-emerald-600 mb-1">Site Revenue ($)</label>
+                      <Input type="number" min="0" step="0.01" value={expense.site_revenue} onChange={(e) => handleUpdateField(expense.expense_month, "site_revenue", parseFloat(e.target.value) || 0)} />
+                    </div>
+                    <div className="col-span-1">
+                      <label className="block text-xs font-semibold text-emerald-600 mb-1">Patreon/Kofi ($)</label>
+                      <Input type="number" min="0" step="0.01" value={expense.raised_amount} onChange={(e) => handleUpdateField(expense.expense_month, "raised_amount", parseFloat(e.target.value) || 0)} />
+                    </div>
+                  </div>
+
+                  {/* Row 2: Dev Ledger */}
+                  <div className="p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-900/50 rounded-lg">
+                    <h4 className="text-sm font-bold text-blue-900 dark:text-blue-200 mb-3">Amonte&apos;s Dev Ledger</h4>
+                    <div className="grid grid-cols-3 gap-4 mb-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-muted-foreground mb-1">Hours Logged</label>
+                        <Input type="number" min="0" step="0.5" value={expense.dev_hours} onChange={(e) => handleUpdateField(expense.expense_month, "dev_hours", parseFloat(e.target.value) || 0)} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-muted-foreground mb-1">Rate ($/hr)</label>
+                        <Input type="number" min="0" step="1" value={expense.hourly_rate} onChange={(e) => handleUpdateField(expense.expense_month, "hourly_rate", parseFloat(e.target.value) || 0)} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-emerald-600 mb-1">Dev Paid ($)</label>
+                        <Input type="number" min="0" step="0.01" value={expense.dev_paid} onChange={(e) => handleUpdateField(expense.expense_month, "dev_paid", parseFloat(e.target.value) || 0)} />
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center text-sm pt-3 border-t border-blue-200 dark:border-blue-800">
+                      <span className="text-blue-800 dark:text-blue-300 font-medium">Unpaid Dev Balance (This Month):</span>
+                      <span className={`font-bold ${devRemainingBalance > 0 ? 'text-destructive' : 'text-emerald-600'}`}>{formatCurrency(devRemainingBalance)}</span>
                     </div>
                   </div>
 
