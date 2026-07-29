@@ -227,6 +227,8 @@ export default function Navigation() {
                        <DropdownMenuItem asChild><Link href="/history">History</Link></DropdownMenuItem>
                        <DropdownMenuItem asChild><Link href="/news">News</Link></DropdownMenuItem>
                        <DropdownMenuItem asChild><Link href="/glossary">Glossary</Link></DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                       <DropdownMenuItem asChild><Link href="/support" className="text-emerald-600 dark:text-emerald-400 font-bold">Support</Link></DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </NavigationMenuItem>
@@ -386,6 +388,8 @@ export default function Navigation() {
                     <Link href="/history" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/history") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>History</Link>
                     <Link href="/news" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/news") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>News</Link>
                     <Link href="/glossary" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors ${isActive("/glossary") ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-accent/50"}`}>Glossary</Link>
+                                     <Link href="/support" onClick={() => setMobileMenuOpen(false)} className={`mx-2 px-4 py-2 rounded-md text-left transition-colors font-bold text-emerald-600 dark:text-emerald-400 ${isActive("/support") ? "bg-emerald-500/10" : "hover:bg-accent/50"}`}>Support</Link>
+
                   </div>
                 )}
                                {/*  Add Tesseract Link for Mobile */}
