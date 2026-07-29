@@ -1,5 +1,4 @@
-//// src/app/components/admin/DevExpenseManagement.tsx
-
+// src/app/components/admin/DevExpenseManagement.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -7,7 +6,7 @@ import { getDevExpenses, upsertDevExpense, type DevExpense, type CustomCost } fr
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
-import { Loader2, Plus, Trash2, Save, Calculator } from "lucide-react";
+import { Loader2, Plus, Trash2, Save, Calculator, Lock, Unlock } from "lucide-react";
 
 export const DevExpenseManagement: React.FC = () => {
   const [expenses, setExpenses] = useState<DevExpense[]>([]);
@@ -16,6 +15,9 @@ export const DevExpenseManagement: React.FC = () => {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   
   const [newMonthStr, setNewMonthStr] = useState("");
+  
+  //  State to track which archived months are manually unlocked
+  const [unlockedMonths, setUnlockedMonths] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const now = new Date();
@@ -26,9 +28,24 @@ export const DevExpenseManagement: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     const { expenses: data, error } = await getDevExpenses();
-    if (error) setMessage({ type: "error", text: error });
-    else setExpenses(data);
+    if (error) {
+      setMessage({ type: "error", text: error });
+    } else {
+      setExpenses(data);
+    }
     setLoading(false);
+  };
+
+  const toggleLock = (month: string) => {
+    setUnlockedMonths(prev => {
+      const next = new Set(prev);
+      if (next.has(month)) {
+        next.delete(month);
+      } else {
+        next.add(month);
+      }
+      return next;
+    });
   };
 
   const handleCreateMonth = async () => {
@@ -114,6 +131,10 @@ export const DevExpenseManagement: React.FC = () => {
     );
   }
 
+  const now = new Date();
+  const currentMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const prevMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
@@ -148,98 +169,114 @@ export const DevExpenseManagement: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           {expenses.map((expense) => {
-            const dateObj = new Date(expense.expense_month);
-            const monthLabel = dateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+            const expenseDate = new Date(expense.expense_month);
+            const monthLabel = expenseDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
             
+            const isRecent = expenseDate.getTime() >= prevMonthStart.getTime();
+            const isLocked = !isRecent && !unlockedMonths.has(expense.expense_month);
+
             const customTotal = expense.custom_costs.reduce((sum, cost) => sum + Number(cost.amount), 0);
             const devTotalOwed = expense.dev_hours * expense.hourly_rate;
             const devRemainingBalance = devTotalOwed - expense.dev_paid;
             const grandTotal = devTotalOwed + expense.hosting_cost + customTotal;
 
             return (
-              <Card key={expense.expense_month} className="border-border shadow-md">
+              <Card key={expense.expense_month} className={`border-border shadow-md transition-all ${isLocked ? 'bg-muted/30' : ''}`}>
                 <CardHeader className="bg-muted/50 pb-4 border-b">
                   <div className="flex justify-between items-center">
                     <CardTitle className="text-xl">{monthLabel}</CardTitle>
-                    <div className="text-right">
-                      <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Total Monthly Burden</p>
-                      <p className="text-2xl font-black text-blue-600 dark:text-blue-400">{formatCurrency(grandTotal)}</p>
+                    <div className="flex items-center gap-3">
+                        <div className="text-right">
+                            <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Total Monthly Burden</p>
+                            <p className="text-2xl font-black text-blue-600 dark:text-blue-400">{formatCurrency(grandTotal)}</p>
+                        </div>
+                        {!isRecent && (
+                            <Button variant="ghost" size="icon" onClick={() => toggleLock(expense.expense_month)} className="text-muted-foreground hover:text-foreground">
+                                {isLocked ? <Lock className="size-4" /> : <Unlock className="size-4" />}
+                            </Button>
+                        )}
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="pt-6 space-y-6">
-                  
-                  {/* Row 1: Site Expenses & Revenue */}
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="col-span-1">
-                      <label className="block text-xs font-semibold text-muted-foreground mb-1">Hosting ($)</label>
-                      <Input type="number" min="0" step="0.01" value={expense.hosting_cost} onChange={(e) => handleUpdateField(expense.expense_month, "hosting_cost", parseFloat(e.target.value) || 0)} />
+                
+                {isLocked ? (
+                    <CardContent className="pt-6 text-center">
+                        <p className="text-sm text-muted-foreground">This month is archived. Unlock to make changes.</p>
+                    </CardContent>
+                ) : (
+                  <CardContent className="pt-6 space-y-6">
+                    {/* Row 1: Site Expenses & Revenue */}
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="col-span-1">
+                        <label className="block text-xs font-semibold text-muted-foreground mb-1">Hosting ($)</label>
+                        <Input type="number" min="0" step="0.01" value={expense.hosting_cost} onChange={(e) => handleUpdateField(expense.expense_month, "hosting_cost", parseFloat(e.target.value) || 0)} />
+                      </div>
+                      <div className="col-span-1">
+                        <label className="block text-xs font-semibold text-emerald-600 mb-1">Site Revenue ($)</label>
+                        <Input type="number" min="0" step="0.01" value={expense.site_revenue} onChange={(e) => handleUpdateField(expense.expense_month, "site_revenue", parseFloat(e.target.value) || 0)} />
+                      </div>
+                      <div className="col-span-1">
+                        <label className="block text-xs font-semibold text-emerald-600 mb-1">Patreon/Kofi ($)</label>
+                        <Input type="number" min="0" step="0.01" value={expense.raised_amount} onChange={(e) => handleUpdateField(expense.expense_month, "raised_amount", parseFloat(e.target.value) || 0)} />
+                      </div>
                     </div>
-                    <div className="col-span-1">
-                      <label className="block text-xs font-semibold text-emerald-600 mb-1">Site Revenue ($)</label>
-                      <Input type="number" min="0" step="0.01" value={expense.site_revenue} onChange={(e) => handleUpdateField(expense.expense_month, "site_revenue", parseFloat(e.target.value) || 0)} />
-                    </div>
-                    <div className="col-span-1">
-                      <label className="block text-xs font-semibold text-emerald-600 mb-1">Patreon/Kofi ($)</label>
-                      <Input type="number" min="0" step="0.01" value={expense.raised_amount} onChange={(e) => handleUpdateField(expense.expense_month, "raised_amount", parseFloat(e.target.value) || 0)} />
-                    </div>
-                  </div>
 
-                  {/* Row 2: Dev Ledger */}
-                  <div className="p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-900/50 rounded-lg">
-                    <h4 className="text-sm font-bold text-blue-900 dark:text-blue-200 mb-3">Amonte&apos;s Dev Ledger</h4>
-                    <div className="grid grid-cols-3 gap-4 mb-3">
-                      <div>
-                        <label className="block text-xs font-semibold text-muted-foreground mb-1">Hours Logged</label>
-                        <Input type="number" min="0" step="0.5" value={expense.dev_hours} onChange={(e) => handleUpdateField(expense.expense_month, "dev_hours", parseFloat(e.target.value) || 0)} />
+                    {/* Row 2: Dev Ledger */}
+                    <div className="p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-900/50 rounded-lg">
+                      <h4 className="text-sm font-bold text-blue-900 dark:text-blue-200 mb-3">Amonte&apos;s Dev Ledger</h4>
+                      <div className="grid grid-cols-3 gap-4 mb-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-muted-foreground mb-1">Hours Logged</label>
+                          <Input type="number" min="0" step="0.5" value={expense.dev_hours} onChange={(e) => handleUpdateField(expense.expense_month, "dev_hours", parseFloat(e.target.value) || 0)} />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-muted-foreground mb-1">Rate ($/hr)</label>
+                          <Input type="number" min="0" step="1" value={expense.hourly_rate} onChange={(e) => handleUpdateField(expense.expense_month, "hourly_rate", parseFloat(e.target.value) || 0)} />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-emerald-600 mb-1">Dev Paid ($)</label>
+                          <Input type="number" min="0" step="0.01" value={expense.dev_paid} onChange={(e) => handleUpdateField(expense.expense_month, "dev_paid", parseFloat(e.target.value) || 0)} />
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-muted-foreground mb-1">Rate ($/hr)</label>
-                        <Input type="number" min="0" step="1" value={expense.hourly_rate} onChange={(e) => handleUpdateField(expense.expense_month, "hourly_rate", parseFloat(e.target.value) || 0)} />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-emerald-600 mb-1">Dev Paid ($)</label>
-                        <Input type="number" min="0" step="0.01" value={expense.dev_paid} onChange={(e) => handleUpdateField(expense.expense_month, "dev_paid", parseFloat(e.target.value) || 0)} />
+                      <div className="flex justify-between items-center text-sm pt-3 border-t border-blue-200 dark:border-blue-800">
+                        <span className="text-blue-800 dark:text-blue-300 font-medium">Unpaid Dev Balance (This Month):</span>
+                        <span className={`font-bold ${devRemainingBalance > 0 ? 'text-destructive' : 'text-emerald-600'}`}>{formatCurrency(devRemainingBalance)}</span>
                       </div>
                     </div>
-                    <div className="flex justify-between items-center text-sm pt-3 border-t border-blue-200 dark:border-blue-800">
-                      <span className="text-blue-800 dark:text-blue-300 font-medium">Unpaid Dev Balance (This Month):</span>
-                      <span className={`font-bold ${devRemainingBalance > 0 ? 'text-destructive' : 'text-emerald-600'}`}>{formatCurrency(devRemainingBalance)}</span>
-                    </div>
-                  </div>
 
-                  {/* Custom Costs */}
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <label className="block text-sm font-semibold">Custom / One-Time Costs</label>
-                      <Button variant="outline" size="sm" onClick={() => addCustomCost(expense.expense_month)}>
-                        <Plus className="size-3 mr-1" /> Add Cost
+                    {/* Custom Costs */}
+                    <div>
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="block text-sm font-semibold">Custom / One-Time Costs</label>
+                        <Button variant="outline" size="sm" onClick={() => addCustomCost(expense.expense_month)}>
+                          <Plus className="size-3 mr-1" /> Add Cost
+                        </Button>
+                      </div>
+                      {expense.custom_costs.length === 0 ? (
+                        <p className="text-sm text-muted-foreground italic py-2">No custom costs for this month.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {expense.custom_costs.map((cost) => (
+                            <div key={cost.id} className="flex items-center gap-2">
+                              <Input placeholder="Description (e.g. Domain Renewal)" value={cost.description} onChange={(e) => updateCustomCost(expense.expense_month, cost.id, "description", e.target.value)} className="flex-1" />
+                              <Input type="number" placeholder="Amount" value={cost.amount} onChange={(e) => updateCustomCost(expense.expense_month, cost.id, "amount", parseFloat(e.target.value) || 0)} className="w-28" />
+                              <Button variant="ghost" size="icon" className="text-destructive" onClick={() => removeCustomCost(expense.expense_month, cost.id)}>
+                                <Trash2 className="size-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-4 border-t border-border flex justify-end">
+                      <Button onClick={() => handleSaveMonth(expense)} disabled={saving === expense.expense_month} className="w-full sm:w-auto">
+                        {saving === expense.expense_month ? <Loader2 className="size-4 animate-spin mr-2" /> : <Save className="size-4 mr-2" />}
+                        Save {monthLabel}
                       </Button>
                     </div>
-                    {expense.custom_costs.length === 0 ? (
-                      <p className="text-sm text-muted-foreground italic py-2">No custom costs for this month.</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {expense.custom_costs.map((cost) => (
-                          <div key={cost.id} className="flex items-center gap-2">
-                            <Input placeholder="Description (e.g. Domain Renewal)" value={cost.description} onChange={(e) => updateCustomCost(expense.expense_month, cost.id, "description", e.target.value)} className="flex-1" />
-                            <Input type="number" placeholder="Amount" value={cost.amount} onChange={(e) => updateCustomCost(expense.expense_month, cost.id, "amount", parseFloat(e.target.value) || 0)} className="w-28" />
-                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => removeCustomCost(expense.expense_month, cost.id)}>
-                              <Trash2 className="size-4" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="pt-4 border-t border-border flex justify-end">
-                    <Button onClick={() => handleSaveMonth(expense)} disabled={saving === expense.expense_month} className="w-full sm:w-auto">
-                      {saving === expense.expense_month ? <Loader2 className="size-4 animate-spin mr-2" /> : <Save className="size-4 mr-2" />}
-                      Save {monthLabel}
-                    </Button>
-                  </div>
-                </CardContent>
+                  </CardContent>
+                )}
               </Card>
             );
           })}
