@@ -37,10 +37,27 @@ interface WeekWithMatches extends ScheduleWeek {
   matches: StreamMatchUI[];
 }
 
+// HELPER: Safely force the DB timestamp into US Central Time before parsing
+const parseCentralTime = (dateString: string | number) => {
+  if (!dateString) return new Date();
+  if (typeof dateString === 'number') return new Date(dateString);
+  
+  // Remove 'Z' or '+00:00' if Supabase incorrectly returned it as UTC
+  let clean = dateString.replace('Z', '').replace(/\+00:?00$/, '');
+  if (clean.includes(' ')) clean = clean.replace(' ', 'T');
+  
+  // If it doesn't already have an offset, force it to US Central (-05:00)
+  if (!/[-+]\d{2}:?\d{2}$/.test(clean)) {
+    clean += '-05:00';
+  }
+  return new Date(clean);
+};
+
 const getWeekStatus = (week: ScheduleWeek) => {
   const now = new Date();
-  const startDate = new Date(week.start_date);
-  const logicalEndDate = new Date(new Date(week.end_date).getTime() - (10 * 60000));
+  const startDate = parseCentralTime(week.start_date);
+  const logicalEndDate = new Date(parseCentralTime(week.end_date).getTime() - (10 * 60000));
+
   if (now < startDate) return "upcoming";
   if (now > logicalEndDate) return "completed";
   return "current";
@@ -48,7 +65,15 @@ const getWeekStatus = (week: ScheduleWeek) => {
 
 // HELPER: Attach Broadcast Timings to matches!
 function enhanceMatchWithStreamTiming(match: UnifiedMatch): StreamMatchUI {
-    const baseTime = new Date(match.scheduled_for || Date.now()).getTime();
+    // Safely cast using an intersection type to declare both potential date fields
+    const matchData = match as UnifiedMatch & { 
+        scheduled_for?: string; 
+        match_date?: string; 
+    };
+    
+    const timeString = matchData.scheduled_for || matchData.match_date || new Date().toISOString();
+    const baseTime = parseCentralTime(timeString).getTime();
+    
     const broadcastStartTime = baseTime + (30 * 60000);
     const steps = match.total_steps || 300; 
     const broadcastEndTime = broadcastStartTime + (steps * 2000);
@@ -66,6 +91,9 @@ function enhanceMatchWithStreamTiming(match: UnifiedMatch): StreamMatchUI {
         streamStatus
     };
 }
+
+
+
 
 export default function SchedulePage() {
   const { timezone } = useUserTimezone();
@@ -172,8 +200,18 @@ export default function SchedulePage() {
   };
 
   const toggleWeek = (weekId: string) => setOpenWeeks(prev => ({ ...prev, [weekId]: !prev[weekId] }));
-  const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  const formatDeadline = (dateString: string) => new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+ const formatWeekDate = (dateString: string) => {
+    return parseCentralTime(dateString).toLocaleDateString("en-US", { 
+      month: "short", day: "numeric", year: "numeric", timeZone: timezone 
+    });
+  };
+
+  const formatDeadlineTime = (dateString: string) => {
+    return parseCentralTime(dateString).toLocaleString("en-US", { 
+      month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: timezone 
+    });
+  };
+  
   const seasonHasPlayoffs = weeks.some(w => w.is_playoff_week);
 
   if (loading) {
@@ -247,10 +285,11 @@ export default function SchedulePage() {
         </Card>
       ) : (
         <div className="space-y-6">
-          {weeks.map((week) => {
-            const status = getWeekStatus(week);
-            const deckDeadlinePassed = new Date(week.deck_submission_deadline) < new Date();
-            const isOpen = openWeeks[week.id] || false;
+                {weeks.map((week) => {
+        const status = getWeekStatus(week);
+        const deckDeadlinePassed = parseCentralTime(week.deck_submission_deadline) < new Date();
+        const isOpen = openWeeks[week.id] || false;
+
 
             return (
               <Card
@@ -276,7 +315,7 @@ export default function SchedulePage() {
                         </div>
                         <p className="text-sm text-muted-foreground flex items-center gap-1.5">
                           <Calendar className="h-3.5 w-3.5" />
-                          {formatDate(week.start_date)} - {formatDate(week.end_date)}
+{formatWeekDate(week.start_date)} - {formatWeekDate(week.end_date)}
                         </p>
                       </div>
                       
@@ -286,7 +325,7 @@ export default function SchedulePage() {
                             <Clock className="h-3.5 w-3.5" /> Deck Submission Deadline
                           </p>
                           <p className={`text-lg font-bold ${deckDeadlinePassed ? "text-destructive" : ""}`}>
-                            {formatDeadline(week.deck_submission_deadline)}
+                           {formatDeadlineTime(week.deck_submission_deadline)}
                             {deckDeadlinePassed && " (Passed)"}
                           </p>
                         </div>

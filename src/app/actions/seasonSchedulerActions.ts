@@ -59,11 +59,10 @@ function getTargetDateCT(baseDate: Date, addDays: number, targetHourCT: number):
 function getValidWeekSlots(weekStartDate: Date): Date[] {
     const validSlots: Date[] = [];
     
-    // We assume weekStartDate is a Wednesday (based on the original setup gap).
-    // If week start is Wednesday at 00:00, Thursday is day 1, Tuesday is day 6.
-    // We will generate 24 hours of slots for each valid day (Thu, Fri, Sat, Sun, Mon, Tue)
-    // Total slots: 6 days * 24 hours = 144 valid slots.
-    const validDayOffsets = [1, 2, 3, 4, 5, 6]; // 1=Thu, 6=Tue. (0=Wed is skipped)
+    // The weekStartDate is explicitly Thursday at 00:00:00.
+    // We want to generate slots for Thursday (0), Friday (1), Saturday (2), Sunday (3), Monday (4), and Tuesday (5).
+    // Wednesday (6) is explicitly excluded.
+    const validDayOffsets = [0, 1, 2, 3, 4, 5]; 
     
     for (const dayOffset of validDayOffsets) {
         // Generate slots from 12:00 AM (0) to 11:00 PM (23) CT for each valid day
@@ -71,6 +70,7 @@ function getValidWeekSlots(weekStartDate: Date): Date[] {
             validSlots.push(getTargetDateCT(weekStartDate, dayOffset, hourCT));
         }
     }
+    
     return validSlots;
 }
 
