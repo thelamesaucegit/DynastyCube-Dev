@@ -31,14 +31,16 @@ import { PvpReplayList } from "@/app/components/admin/PvpReplayList";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
+import { DevExpenseManagement } from "../components/admin/DevExpenseManagement";
+
 import {
   Users, Trophy, Layers, Coins, CalendarDays, Swords, 
-  Megaphone, Vote, Timer, AlertTriangle, ScrollText, 
+  Megaphone, Vote, Timer, AlertTriangle, ScrollText, DollarSign,
   Settings, Shield, Sparkles, Play, Key, ArrowRight, ListOrdered, Crown
 } from "lucide-react";
 
 // The 6 Consolidated Tab Types
-type TabType = "dashboard" | "teams" | "content" | "seasons" | "draft" | "community";
+type TabType = "dashboard" | "teams" | "content" | "seasons" | "draft" | "community" | "expenses";
 
 interface Stats {
   totalUsers: number;
@@ -281,6 +283,12 @@ export default function AdminPage() {
                   <HistoryRequestManagement />
                 </div>
             </div>
+          </div>
+        );
+        case "expenses":
+        return (
+          <div className="space-y-8">
+            <DevExpenseManagement />
           </div>
         );
         
