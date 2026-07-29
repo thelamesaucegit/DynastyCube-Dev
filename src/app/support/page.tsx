@@ -6,7 +6,7 @@ import { getPublicExpenseStats, type PublicExpenseSummary } from "@/app/actions/
 import { Badge } from "@/app/components/ui/badge";
 import { Button } from "@/app/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
-import { Loader2, Heart, DollarSign, ChevronDown, ChevronUp, ExternalLink, Code } from "lucide-react";
+import { Loader2, DollarSign, ChevronDown, ChevronUp, ExternalLink, Code } from "lucide-react";
 import { TargetedGlitchedText } from '@/app/components/lore/TargetedGlitchedText';
 
 export default function SupportPage() {
@@ -53,7 +53,6 @@ export default function SupportPage() {
   return (
     <div className="container max-w-4xl mx-auto px-4 py-12">
       <div className="text-center mb-12">
-        <Heart className="size-12 mx-auto text-red-500 mb-4 animate-pulse" />
         <h1 className="text-4xl font-black tracking-tight mb-4">
           <TargetedGlitchedText>Support The Dynasty Cube</TargetedGlitchedText>
         </h1>
