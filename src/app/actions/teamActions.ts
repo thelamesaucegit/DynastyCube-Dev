@@ -78,11 +78,41 @@ export interface TeamWithDetails {
   } | null;
 }
 
+export interface GameLogRecord {
+  game_id: string;
+  week_number: number;
+  winner_team_id: string | null;
+  loser_team_id: string | null;
+  winner_name: string | null;
+  winner_emoji: string | null;
+}
+
 function createServiceClient() {
   return createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_KEY!
   );
+}
+
+
+
+export async function getTeamGameLog(teamId: string): Promise<{ log: GameLogRecord[], error?: string }> {
+  try {
+    const supabase = await createServerClient(); // Or your preferred client
+    const { data, error } = await supabase
+      .from('game_log_view')
+      .select('*')
+      .or(`team1_id.eq.${teamId},team2_id.eq.${teamId}`)
+      .order('game_date', { ascending: false })
+      .limit(20); // Limit to the last 20 games for performance
+
+    if (error) throw error;
+
+    return { log: (data as GameLogRecord[]) || [] };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+    return { log: [], error: message };
+  }
 }
 
 /**
