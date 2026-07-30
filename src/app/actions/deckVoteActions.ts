@@ -1,13 +1,11 @@
-//src/app/actions/deckVoteActions.ts
-
+// src/app/actions/deckVoteActions.ts
 "use server";
-import { type AnySupabaseClient } from "@/lib/supabase";
 
+import { type AnySupabaseClient } from "@/lib/supabase";
 import { createClient } from "@supabase/supabase-js";
 import { submitDeckForWeek } from "./deckGenerationActions";
 import { logSystemEvent } from "@/lib/systemLogger";
 import { getTeamDraftPicks } from "./draftActions";
-
 
 function createServiceClient() {
     return createClient(
@@ -15,6 +13,7 @@ function createServiceClient() {
         process.env.SUPABASE_SERVICE_KEY!
     );
 }
+
 interface PollOptionRow {
     id: string;
     deck_id: string | null;
@@ -41,6 +40,22 @@ interface PollSummary {
     title: string;
     ends_at: string;
     poll_options: PollOptionSummaryRow[];
+}
+
+interface JoinedDeckCard {
+    quantity: number | null;
+    team_draft_picks: { cubucks_cost: number } | { cubucks_cost: number }[] | null;
+}
+
+interface CuttablePick {
+    id: string;
+    card_id: string;
+    card_name: string;
+    cubucks_cost: number;
+    cubecobra_elo: number | null;
+    is_keeper: boolean;
+    scars: string[] | null;
+    card_pool_id: string | null;
 }
 
 /**
@@ -75,7 +90,6 @@ async function getProminentBasicLandType(deckId: string): Promise<string> {
     const pipCounts: Record<string, number> = { W: 0, U: 0, B: 0, R: 0, G: 0 };
     
     nonLands.forEach(c => {
-        // Standard matching for color initials in card name or mock analysis
         const name = c.card_name.toUpperCase();
         if (name.includes("WHITE")) pipCounts.W++;
         if (name.includes("BLUE")) pipCounts.U++;
@@ -92,8 +106,7 @@ async function getProminentBasicLandType(deckId: string): Promise<string> {
 
 /**
  * Create a deck vote poll for a team for a given week.
- * Poll options are the team's current decks.
- * Called automatically when a week begins, or manually by admin.
+ * Filters out decks that exceed the season's Cubucks cap!
  */
 export async function createDeckVotePoll(
     teamId: string,
@@ -111,6 +124,14 @@ export async function createDeckVotePoll(
             .single();
 
         if (teamError || !team) return { success: false, error: 'Team not found' };
+
+        const { data: activeSeason } = await supabase
+            .from('seasons')
+            .select('cubucks_allocation')
+            .eq('is_active', true)
+            .single();
+            
+        const seasonCap = activeSeason?.cubucks_allocation || 40;
 
         const { data: decks, error: decksError } = await supabase
             .from('team_decks')
@@ -136,6 +157,36 @@ export async function createDeckVotePoll(
             return { success: false, error: 'A deck vote poll already exists for this team and week.' };
         }
 
+        // FILTER DECKS: Ensure the deck's combined value does not exceed the season cap
+        const validDecks = [];
+        for (const deck of decks) {
+            const { data: deckCards } = await supabase
+                .from('deck_cards')
+                .select(`quantity, team_draft_picks(cubucks_cost)`)
+                .eq('deck_id', deck.id)
+                .eq('category', 'mainboard')
+                .not('draft_pick_id', 'is', null);
+            
+            let deckValue = 0;
+            const safeDeckCards = (deckCards || []) as unknown as JoinedDeckCard[];
+            
+            safeDeckCards.forEach(dc => {
+                let cost = 1;
+                if (dc.team_draft_picks) {
+                    cost = Array.isArray(dc.team_draft_picks) ? dc.team_draft_picks[0]?.cubucks_cost : dc.team_draft_picks.cubucks_cost;
+                }
+                deckValue += cost * (dc.quantity || 1);
+            });
+            
+            if (deckValue <= seasonCap) {
+                validDecks.push(deck);
+            }
+        }
+
+        if (validDecks.length === 0) {
+            return { success: false, error: `Team has no decks under the season cap of ${seasonCap} Cubucks. Please adjust your decks before a vote can be initiated.` };
+        }
+
         const { data: poll, error: pollError } = await supabase
             .from('polls')
             .insert({
@@ -156,7 +207,7 @@ export async function createDeckVotePoll(
             return { success: false, error: pollError?.message || 'Failed to create poll' };
         }
 
-        const optionRows = decks.map((deck, index) => ({
+        const optionRows = validDecks.map((deck, index) => ({
             poll_id: poll.id,
             option_text: deck.deck_name,
             option_order: index,
@@ -173,11 +224,11 @@ export async function createDeckVotePoll(
         }
 
         return { success: true, pollId: poll.id };
-
     } catch (e) {
         return { success: false, error: e instanceof Error ? e.message : 'Unexpected error' };
     }
 }
+
 /**
  * Adds an existing deck as a new option to the team's currently active deck vote.
  */
@@ -188,6 +239,14 @@ export async function addDeckToActivePoll(
     const supabase = createServiceClient(); 
     
     try {
+        const { data: activeSeason } = await supabase
+            .from('seasons')
+            .select('cubucks_allocation')
+            .eq('is_active', true)
+            .single();
+            
+        const seasonCap = activeSeason?.cubucks_allocation || 40;
+
         // 1. Get the currently active team deck vote poll
         const { data: poll, error: pollError } = await supabase
             .from('polls')
@@ -213,7 +272,29 @@ export async function addDeckToActivePoll(
             return { success: false, error: "This deck is already an option in the active vote." };
         }
 
-        // 3. Get the deck's name to use as the option text
+        // 3. VALIDATE DECK CAP
+        const { data: deckCards } = await supabase
+            .from('deck_cards')
+            .select(`quantity, team_draft_picks(cubucks_cost)`)
+            .eq('deck_id', deckId)
+            .eq('category', 'mainboard')
+            .not('draft_pick_id', 'is', null);
+            
+        let deckValue = 0;
+        const safeDeckCards = (deckCards || []) as unknown as JoinedDeckCard[];
+        safeDeckCards.forEach(dc => {
+            let cost = 1;
+            if (dc.team_draft_picks) {
+                cost = Array.isArray(dc.team_draft_picks) ? dc.team_draft_picks[0]?.cubucks_cost : dc.team_draft_picks.cubucks_cost;
+            }
+            deckValue += cost * (dc.quantity || 1);
+        });
+
+        if (deckValue > seasonCap) {
+            return { success: false, error: `This deck's value (Ç${deckValue}) exceeds the season cap of Ç${seasonCap}. It cannot be submitted to the vote.` };
+        }
+
+        // 4. Get the deck's name to use as the option text
         const { data: deck, error: deckError } = await supabase
             .from('team_decks')
             .select('deck_name')
@@ -224,7 +305,7 @@ export async function addDeckToActivePoll(
             return { success: false, error: "Deck not found." };
         }
 
-        // 4. Get current max option_order so we append it to the end
+        // 5. Get current max option_order so we append it to the end
         const { data: maxOrderData } = await supabase
             .from('poll_options')
             .select('option_order')
@@ -235,7 +316,7 @@ export async function addDeckToActivePoll(
             
         const nextOrder = (maxOrderData?.option_order ?? -1) + 1;
 
-        // 5. Insert the new option
+        // 6. Insert the new option
         const { error: insertError } = await supabase
             .from('poll_options')
             .insert({
@@ -251,26 +332,30 @@ export async function addDeckToActivePoll(
         }
 
         return { success: true, message: "Deck successfully added to the active vote!" };
-
     } catch (e) {
         return { success: false, error: e instanceof Error ? e.message : 'Unexpected error' };
     }
 }
+
 /**
  * Resolve a deck vote poll — determine winner and create deck_submissions entry.
- * 
- * Winner is determined by total vote_count on poll_options.
- * On tie: the auto-generated deck wins, then alphabetical by deck name.
- * 
- * Call this when a poll's ends_at time passes (via cron or admin action).
+ * Includes automated ownership sweeps, basic land substitutions, and automatic roster over-cap cuts.
  */
 export async function resolveDeckVotePoll(
     pollId: string,
     weekId: string
 ): Promise<{ success: boolean; winningDeckId?: string; submissionId?: string; error?: string }> {
     const supabase = createServiceClient();
+
     try {
-        // 1. Fetch poll with options
+        const { data: activeSeason } = await supabase
+            .from('seasons')
+            .select('id, cubucks_allocation')
+            .eq('is_active', true)
+            .single();
+        const seasonCap = activeSeason?.cubucks_allocation || 40;
+
+        // 1. Fetch poll with options and vote counts
         const { data: rawPoll, error: pollError } = await supabase
             .from('polls')
             .select(`
@@ -288,20 +373,29 @@ export async function resolveDeckVotePoll(
             .single();
 
         const poll = rawPoll as unknown as PollWithOptions;
+
         if (pollError || !poll) return { success: false, error: 'Poll not found' };
         if (!poll.team_id) return { success: false, error: 'Poll is not associated with a team' };
 
-        const options = poll.poll_options;
+        const options: PollOptionRow[] = poll.poll_options;
+
+        if (!options || options.length === 0) {
+            return { success: false, error: 'Poll has no options' };
+        }
+
+        // 2. Find winner — highest vote count
         const sorted = [...options].sort((a, b) => {
             if (b.vote_count !== a.vote_count) return b.vote_count - a.vote_count;
             if (a.option_order !== b.option_order) return a.option_order - b.option_order;
             return a.option_text.localeCompare(b.option_text);
         });
+
         const winner = sorted[0];
+
         if (!winner.deck_id) return { success: false, error: 'Winning option has no associated deck' };
 
         // =====================================================================
-        // NEW AUTO-BACKFILL SUB-PIPELINE: Ownership & Deck legality sweep
+        // AUTO-BACKFILL SUB-PIPELINE: Ownership & Deck legality sweep
         // =====================================================================
         const { picks: teamPicks } = await getTeamDraftPicks(poll.team_id, undefined, supabase);
         const ownedPickIds = new Set(teamPicks.map(p => p.id).filter(Boolean));
@@ -320,10 +414,8 @@ export async function resolveDeckVotePoll(
             const prominentLand = await getProminentBasicLandType(winner.deck_id);
             const deleteIds = unownedCards.map(c => c.id);
 
-            // Clean unowned cards from database
             await supabase.from('deck_cards').delete().in('id', deleteIds);
 
-            // Find existing prominent land slot to increment or insert fresh
             const existingLand = (deckCards || []).find(dc => dc.card_name === prominentLand);
             if (existingLand) {
                 await supabase
@@ -346,6 +438,96 @@ export async function resolveDeckVotePoll(
 
             await logSystemEvent("DeckResolveAutoCorrect", "info", `Automatically backfilled winning deck ${winner.deck_id} with ${unownedCards.length} copies of ${prominentLand} due to ownership changes.`);
         }
+
+        // =====================================================================
+        // NEW AUTO-CUT ENGINE: Resolves over-cap limits securely
+        // =====================================================================
+        const { data: rawTeamPicks } = await supabase
+            .from('team_draft_picks')
+            .select('id, card_id, card_name, cubucks_cost, cubecobra_elo, is_keeper, scars, card_pool_id')
+            .eq('team_id', poll.team_id)
+            .neq('card_id', 'skipped-pick');
+
+        const currentTeamPicks = (rawTeamPicks || []) as unknown as CuttablePick[];
+        const currentTotalValue = currentTeamPicks.reduce((sum, p) => sum + (p.cubucks_cost || 1), 0);
+
+        if (currentTotalValue > seasonCap) {
+            console.log(`[DeckVoteResolve] Team ${poll.team_id} is over cap (${currentTotalValue} > ${seasonCap}). Initiating auto-cuts...`);
+            
+            const { data: winningDeckCards } = await supabase
+                .from('deck_cards')
+                .select('draft_pick_id')
+                .eq('deck_id', winner.deck_id)
+                .not('draft_pick_id', 'is', null);
+                
+            const winningPickIds = new Set(winningDeckCards?.map(dc => dc.draft_pick_id));
+            
+            const cuttableOutside: CuttablePick[] = [];
+            const cuttableInside: CuttablePick[] = [];
+            
+            for (const p of currentTeamPicks) {
+                if (p.is_keeper || (p.scars && p.scars.includes('eternal'))) continue;
+                if (winningPickIds.has(p.id)) {
+                    cuttableInside.push(p);
+                } else {
+                    cuttableOutside.push(p);
+                }
+            }
+            
+            // Tiebreaker: Cut lowest ELO first
+            const sortByElo = (a: CuttablePick, b: CuttablePick) => (a.cubecobra_elo || 0) - (b.cubecobra_elo || 0);
+            cuttableOutside.sort(sortByElo);
+            cuttableInside.sort(sortByElo);
+            
+            const cutQueue = [...cuttableOutside, ...cuttableInside];
+            let excessValue = currentTotalValue - seasonCap;
+            const cutsMade = [];
+            
+            for (const pickToCut of cutQueue) {
+                if (excessValue <= 0) break;
+                
+                const refundAmount = pickToCut.cubucks_cost || 1;
+                
+                // Refund Balance
+                const { data: teamRec } = await supabase.from('teams').select('cubucks_balance, cubucks_total_spent').eq('id', poll.team_id).single();
+                if (teamRec) {
+                    const newBal = teamRec.cubucks_balance + refundAmount;
+                    const newSpent = Math.max(0, teamRec.cubucks_total_spent - refundAmount);
+                    await supabase.from('teams').update({ cubucks_balance: newBal, cubucks_total_spent: newSpent }).eq('id', poll.team_id);
+                    
+                    await supabase.from('cubucks_transactions').insert({
+                        team_id: poll.team_id,
+                        season_id: activeSeason?.id,
+                        transaction_type: 'refund',
+                        amount: refundAmount,
+                        balance_after: newBal,
+                        card_id: pickToCut.card_id,
+                        card_name: pickToCut.card_name,
+                        draft_pick_id: pickToCut.id,
+                        description: `System Auto-Refund for over-cap cut: ${pickToCut.card_name}`
+                    });
+                }
+                
+                // Track Ownership History
+                await supabase.from('card_ownership_history').upsert({
+                    card_id: pickToCut.card_id, team_id: poll.team_id, season_id: activeSeason?.id
+                }, { onConflict: 'card_id,team_id,season_id' });
+                
+                // Purge & Send to Wire
+                await supabase.from('team_draft_picks').delete().eq('id', pickToCut.id);
+                if (pickToCut.card_pool_id) {
+                    await supabase.from('card_pools').update({ pool_name: 'wire', on_wire_since: new Date().toISOString() }).eq('id', pickToCut.card_pool_id);
+                }
+                
+                excessValue -= refundAmount;
+                cutsMade.push(pickToCut.card_name);
+            }
+            
+            if (cutsMade.length > 0) {
+                await logSystemEvent("DeckVoteAutoCut", "info", `Automatically cut ${cutsMade.length} cards from team ${poll.team_id} to drop under the ${seasonCap} cap: ${cutsMade.join(', ')}`);
+            }
+        }
+
         // =====================================================================
 
         // 3. Mark poll as inactive
@@ -374,7 +556,7 @@ export async function resolveDeckVotePoll(
             return { success: false, error: `Poll resolved but deck submission failed: ${error}` };
         }
 
-        // 6. Auto-generate next week's poll (FIXED: Now properly awaited)
+        // 6. Auto-generate next week's poll
         const { data: currentWeekData, error: weekError } = await supabase
             .from('schedule_weeks')
             .select('season_id, week_number, end_date')
@@ -384,7 +566,6 @@ export async function resolveDeckVotePoll(
         if (weekError || !currentWeekData) {
             await logSystemEvent('resolveDeckVotePoll', 'error', 'Could not find current week data to chain next vote', { weekId, error: weekError });
         } else {
-            // Find the next chronological week
             const { data: nextWeek, error: nextWeekError } = await supabase
                 .from('schedule_weeks')
                 .select('id, deck_submission_deadline, is_playoff_week, is_championship_week')
@@ -396,8 +577,6 @@ export async function resolveDeckVotePoll(
                 await logSystemEvent('resolveDeckVotePoll', 'info', 'No upcoming week found. End of season.', { currentWeek: currentWeekData.week_number });
             } else {
                 const nextPollEndsAt = nextWeek.deck_submission_deadline; 
-                
-                // FIXED: AWAIT the creation so the serverless function doesn't kill it!
                 const result = await createDeckVotePoll(poll.team_id, nextWeek.id, nextPollEndsAt);
                 
                 if (!result.success) {
@@ -459,25 +638,26 @@ export async function getTeamActiveDeckVotePoll(
             .order('created_at', { ascending: false })
             .limit(1);
 
-        // Filter to specific week if provided
         if (weekId) {
             query = query.eq('week_id', weekId);
         }
 
        const { data: rawData, error } = await query.maybeSingle();
+
         const data = rawData as unknown as PollSummary | null;
 
         if (error) return { poll: null, error: error.message };
         if (!data) return { poll: null };
 
-     return {
-    poll: {
-        id: data.id,
-        title: data.title,
-        ends_at: data.ends_at,
-        options: data.poll_options,
-    }
-};
+        return {
+            poll: {
+                id: data.id,
+                title: data.title,
+                ends_at: data.ends_at,
+                options: data.poll_options,
+            }
+        };
+
     } catch (e) {
         return { poll: null, error: e instanceof Error ? e.message : 'Unexpected error' };
     }
