@@ -197,7 +197,7 @@ export default function TeamPage() {
   }, [teamShortName, user?.id]);
 
   useEffect(() => {
-    loadData();
+    loadTeamData();
   }, [loadTeamData]);
   
 
