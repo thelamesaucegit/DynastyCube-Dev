@@ -76,16 +76,13 @@ async function getProminentBasicLandType(deckId: string): Promise<string> {
         }
     });
 
-    // Sort by count descending, then alphabetically descending on ties
     const sorted = Object.entries(landCounts).sort((a, b) => {
         if (b[1] !== a[1]) return b[1] - a[1];
-        return a[0].localeCompare(b[0]); // Alphabetical tie-breaker
+        return a[0].localeCompare(b[0]);
     });
 
-    // If deck has some lands, return the top one
     if (sorted[0][1] > 0) return sorted[0][0];
 
-    // Fallback: Check non-land color pips to find dominant color
     const nonLands = (cards || []).filter(c => !(c.card_name in landCounts));
     const pipCounts: Record<string, number> = { W: 0, U: 0, B: 0, R: 0, G: 0 };
     
@@ -123,14 +120,21 @@ export async function createDeckVotePoll(
             .eq('id', teamId)
             .single();
 
-        if (teamError || !team) return { success: false, error: 'Team not found' };
+        if (teamError || !team) {
+            await logSystemEvent('createDeckVotePoll', 'error', `Team not found or DB error for Team ID: ${teamId}`, { error: teamError });
+            return { success: false, error: 'Team not found' };
+        }
 
-        const { data: activeSeason } = await supabase
+        const { data: activeSeason, error: seasonError } = await supabase
             .from('seasons')
             .select('cubucks_allocation')
             .eq('is_active', true)
             .single();
             
+        if (seasonError) {
+            await logSystemEvent('createDeckVotePoll', 'error', `Could not fetch active season for cap limits`, { error: seasonError });
+        }
+
         const seasonCap = activeSeason?.cubucks_allocation || 40;
 
         const { data: decks, error: decksError } = await supabase
@@ -139,12 +143,16 @@ export async function createDeckVotePoll(
             .eq('team_id', teamId)
             .order('updated_at', { ascending: false });
 
-        if (decksError) return { success: false, error: decksError.message };
+        if (decksError) {
+            await logSystemEvent('createDeckVotePoll', 'error', `Failed to fetch team decks for team ${teamId}`, { error: decksError });
+            return { success: false, error: decksError.message };
+        }
+        
         if (!decks || decks.length === 0) {
+            await logSystemEvent('createDeckVotePoll', 'error', `Team ${teamId} has NO decks to vote on. Halting poll creation.`);
             return { success: false, error: 'Team has no decks to vote on. Generate a placeholder deck first.' };
         }
 
-        // Check if a deck vote poll already exists for this team + week
         const { data: existingPoll } = await supabase
             .from('polls')
             .select('id')
@@ -154,6 +162,7 @@ export async function createDeckVotePoll(
             .maybeSingle();
 
         if (existingPoll) {
+            await logSystemEvent('createDeckVotePoll', 'error', `Bypassed creation: A deck vote poll already exists for team ${teamId} and week ${weekId}`, { pollId: existingPoll.id });
             return { success: false, error: 'A deck vote poll already exists for this team and week.' };
         }
 
@@ -180,10 +189,13 @@ export async function createDeckVotePoll(
             
             if (deckValue <= seasonCap) {
                 validDecks.push(deck);
+            } else {
+                await logSystemEvent('createDeckVotePoll', 'error', `Deck rejected from poll: Deck "${deck.deck_name}" exceeds season cap.`, { deckId: deck.id, deckValue, seasonCap });
             }
         }
 
         if (validDecks.length === 0) {
+            await logSystemEvent('createDeckVotePoll', 'error', `Team ${teamId} has 0 legal decks under the season cap of ${seasonCap}. Poll creation aborted.`);
             return { success: false, error: `Team has no decks under the season cap of ${seasonCap} Cubucks. Please adjust your decks before a vote can be initiated.` };
         }
 
@@ -204,6 +216,7 @@ export async function createDeckVotePoll(
             .single();
 
         if (pollError || !poll) {
+            await logSystemEvent('createDeckVotePoll', 'error', `Failed to insert new poll into DB`, { error: pollError });
             return { success: false, error: pollError?.message || 'Failed to create poll' };
         }
 
@@ -220,11 +233,13 @@ export async function createDeckVotePoll(
 
         if (optionsError) {
             await supabase.from('polls').delete().eq('id', poll.id);
+            await logSystemEvent('createDeckVotePoll', 'error', `Failed to insert poll options. Poll rolled back.`, { error: optionsError });
             return { success: false, error: `Failed to create poll options: ${optionsError.message}` };
         }
 
         return { success: true, pollId: poll.id };
     } catch (e) {
+        await logSystemEvent('createDeckVotePoll', 'error', `Fatal try-catch error`, { error: String(e) });
         return { success: false, error: e instanceof Error ? e.message : 'Unexpected error' };
     }
 }
@@ -247,7 +262,6 @@ export async function addDeckToActivePoll(
             
         const seasonCap = activeSeason?.cubucks_allocation || 40;
 
-        // 1. Get the currently active team deck vote poll
         const { data: poll, error: pollError } = await supabase
             .from('polls')
             .select('id')
@@ -256,11 +270,8 @@ export async function addDeckToActivePoll(
             .eq('is_active', true)
             .single();
             
-        if (pollError || !poll) {
-            return { success: false, error: "There is no active deck vote going on right now." };
-        }
+        if (pollError || !poll) return { success: false, error: "There is no active deck vote going on right now." };
 
-        // 2. Check if this deck is already an option in this poll
         const { data: existingOption } = await supabase
             .from('poll_options')
             .select('id')
@@ -268,11 +279,8 @@ export async function addDeckToActivePoll(
             .eq('deck_id', deckId)
             .maybeSingle();
             
-        if (existingOption) {
-            return { success: false, error: "This deck is already an option in the active vote." };
-        }
+        if (existingOption) return { success: false, error: "This deck is already an option in the active vote." };
 
-        // 3. VALIDATE DECK CAP
         const { data: deckCards } = await supabase
             .from('deck_cards')
             .select(`quantity, team_draft_picks(cubucks_cost)`)
@@ -294,18 +302,14 @@ export async function addDeckToActivePoll(
             return { success: false, error: `This deck's value (Ç${deckValue}) exceeds the season cap of Ç${seasonCap}. It cannot be submitted to the vote.` };
         }
 
-        // 4. Get the deck's name to use as the option text
         const { data: deck, error: deckError } = await supabase
             .from('team_decks')
             .select('deck_name')
             .eq('id', deckId)
             .single();
             
-        if (deckError || !deck) {
-            return { success: false, error: "Deck not found." };
-        }
+        if (deckError || !deck) return { success: false, error: "Deck not found." };
 
-        // 5. Get current max option_order so we append it to the end
         const { data: maxOrderData } = await supabase
             .from('poll_options')
             .select('option_order')
@@ -316,7 +320,6 @@ export async function addDeckToActivePoll(
             
         const nextOrder = (maxOrderData?.option_order ?? -1) + 1;
 
-        // 6. Insert the new option
         const { error: insertError } = await supabase
             .from('poll_options')
             .insert({
@@ -327,9 +330,7 @@ export async function addDeckToActivePoll(
                 vote_count: 0
             });
 
-        if (insertError) {
-            return { success: false, error: `Failed to add option: ${insertError.message}` };
-        }
+        if (insertError) return { success: false, error: `Failed to add option: ${insertError.message}` };
 
         return { success: true, message: "Deck successfully added to the active vote!" };
     } catch (e) {
@@ -355,7 +356,6 @@ export async function resolveDeckVotePoll(
             .single();
         const seasonCap = activeSeason?.cubucks_allocation || 40;
 
-        // 1. Fetch poll with options and vote counts
         const { data: rawPoll, error: pollError } = await supabase
             .from('polls')
             .select(`
@@ -374,16 +374,22 @@ export async function resolveDeckVotePoll(
 
         const poll = rawPoll as unknown as PollWithOptions;
 
-        if (pollError || !poll) return { success: false, error: 'Poll not found' };
-        if (!poll.team_id) return { success: false, error: 'Poll is not associated with a team' };
+        if (pollError || !poll) {
+            await logSystemEvent('resolveDeckVotePoll', 'error', `Poll not found for resolution: ${pollId}`, { error: pollError });
+            return { success: false, error: 'Poll not found' };
+        }
+        if (!poll.team_id) {
+            await logSystemEvent('resolveDeckVotePoll', 'error', `Poll ${pollId} is orphaned (no team_id)`);
+            return { success: false, error: 'Poll is not associated with a team' };
+        }
 
         const options: PollOptionRow[] = poll.poll_options;
 
         if (!options || options.length === 0) {
+            await logSystemEvent('resolveDeckVotePoll', 'error', `Poll ${pollId} resolved with ZERO options.`);
             return { success: false, error: 'Poll has no options' };
         }
 
-        // 2. Find winner — highest vote count
         const sorted = [...options].sort((a, b) => {
             if (b.vote_count !== a.vote_count) return b.vote_count - a.vote_count;
             if (a.option_order !== b.option_order) return a.option_order - b.option_order;
@@ -392,10 +398,13 @@ export async function resolveDeckVotePoll(
 
         const winner = sorted[0];
 
-        if (!winner.deck_id) return { success: false, error: 'Winning option has no associated deck' };
+        if (!winner.deck_id) {
+            await logSystemEvent('resolveDeckVotePoll', 'error', `Winning option for Poll ${pollId} has a NULL deck_id.`);
+            return { success: false, error: 'Winning option has no associated deck' };
+        }
 
         // =====================================================================
-        // AUTO-BACKFILL SUB-PIPELINE: Ownership & Deck legality sweep
+        // AUTO-BACKFILL SUB-PIPELINE
         // =====================================================================
         const { picks: teamPicks } = await getTeamDraftPicks(poll.team_id, undefined, supabase);
         const ownedPickIds = new Set(teamPicks.map(p => p.id).filter(Boolean));
@@ -409,8 +418,6 @@ export async function resolveDeckVotePoll(
         const unownedCards = (deckCards || []).filter(dc => dc.draft_pick_id && !ownedPickIds.has(dc.draft_pick_id));
         
         if (unownedCards.length > 0) {
-            console.log(`[DeckVoteResolve] Detected ${unownedCards.length} unowned cards in winning deck. Backfilling with prominent basic land...`);
-            
             const prominentLand = await getProminentBasicLandType(winner.deck_id);
             const deleteIds = unownedCards.map(c => c.id);
 
@@ -440,7 +447,7 @@ export async function resolveDeckVotePoll(
         }
 
         // =====================================================================
-        // NEW AUTO-CUT ENGINE: Resolves over-cap limits securely
+        // NEW AUTO-CUT ENGINE
         // =====================================================================
         const { data: rawTeamPicks } = await supabase
             .from('team_draft_picks')
@@ -452,8 +459,6 @@ export async function resolveDeckVotePoll(
         const currentTotalValue = currentTeamPicks.reduce((sum, p) => sum + (p.cubucks_cost || 1), 0);
 
         if (currentTotalValue > seasonCap) {
-            console.log(`[DeckVoteResolve] Team ${poll.team_id} is over cap (${currentTotalValue} > ${seasonCap}). Initiating auto-cuts...`);
-            
             const { data: winningDeckCards } = await supabase
                 .from('deck_cards')
                 .select('draft_pick_id')
@@ -461,7 +466,6 @@ export async function resolveDeckVotePoll(
                 .not('draft_pick_id', 'is', null);
                 
             const winningPickIds = new Set(winningDeckCards?.map(dc => dc.draft_pick_id));
-            
             const cuttableOutside: CuttablePick[] = [];
             const cuttableInside: CuttablePick[] = [];
             
@@ -474,7 +478,6 @@ export async function resolveDeckVotePoll(
                 }
             }
             
-            // Tiebreaker: Cut lowest ELO first
             const sortByElo = (a: CuttablePick, b: CuttablePick) => (a.cubecobra_elo || 0) - (b.cubecobra_elo || 0);
             cuttableOutside.sort(sortByElo);
             cuttableInside.sort(sortByElo);
@@ -488,7 +491,6 @@ export async function resolveDeckVotePoll(
                 
                 const refundAmount = pickToCut.cubucks_cost || 1;
                 
-                // Refund Balance
                 const { data: teamRec } = await supabase.from('teams').select('cubucks_balance, cubucks_total_spent').eq('id', poll.team_id).single();
                 if (teamRec) {
                     const newBal = teamRec.cubucks_balance + refundAmount;
@@ -508,12 +510,10 @@ export async function resolveDeckVotePoll(
                     });
                 }
                 
-                // Track Ownership History
                 await supabase.from('card_ownership_history').upsert({
                     card_id: pickToCut.card_id, team_id: poll.team_id, season_id: activeSeason?.id
                 }, { onConflict: 'card_id,team_id,season_id' });
                 
-                // Purge & Send to Wire
                 await supabase.from('team_draft_picks').delete().eq('id', pickToCut.id);
                 if (pickToCut.card_pool_id) {
                     await supabase.from('card_pools').update({ pool_name: 'wire', on_wire_since: new Date().toISOString() }).eq('id', pickToCut.card_pool_id);
@@ -574,13 +574,20 @@ export async function resolveDeckVotePoll(
                 .single();
 
             if (nextWeekError || !nextWeek) {
-                await logSystemEvent('resolveDeckVotePoll', 'info', 'No upcoming week found. End of season.', { currentWeek: currentWeekData.week_number });
+                // If there's an actual DB error, log it as an error. If there's just no week, log as info.
+                if (nextWeekError) {
+                    await logSystemEvent('resolveDeckVotePoll', 'error', 'Database error when fetching next week', { error: nextWeekError });
+                } else {
+                    // Not an error, just the end of the season.
+                }
+            } else if (nextWeek.is_playoff_week || nextWeek.is_championship_week) {
+                await logSystemEvent('resolveDeckVotePoll', 'info', 'Next week is Playoffs. Halting auto-generation of deck votes.', { teamId: poll.team_id });
             } else {
                 const nextPollEndsAt = nextWeek.deck_submission_deadline; 
                 const result = await createDeckVotePoll(poll.team_id, nextWeek.id, nextPollEndsAt);
                 
                 if (!result.success) {
-                    await logSystemEvent('resolveDeckVotePoll', 'error', 'Failed to auto-create next poll', { teamId: poll.team_id, nextWeekId: nextWeek.id, error: result.error });
+                    await logSystemEvent('resolveDeckVotePoll', 'error', 'Failed to auto-create next poll. Chain broken.', { teamId: poll.team_id, nextWeekId: nextWeek.id, error: result.error });
                 } else {
                     await logSystemEvent('resolveDeckVotePoll', 'info', 'Successfully queued next poll', { teamId: poll.team_id, nextWeekId: nextWeek.id, newPollId: result.pollId });
                 }
@@ -596,9 +603,6 @@ export async function resolveDeckVotePoll(
     }
 }
 
-/**
- * Get the active deck vote poll for a team, if one exists.
- */
 export async function getTeamActiveDeckVotePoll(
     teamId: string,
     weekId?: string
