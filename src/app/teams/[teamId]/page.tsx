@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { TrophyCase } from "@/app/components/team/TrophyCase";
 import { TeamEssenceDisplay } from "@/app/components/team/TeamEssenceDisplay";
 import { getTeamByShortName } from "@/app/actions/teamActions";
-import { getTeamDraftPicks, getTeamDecks, toggleKeeperStatus, getTeamSkipStatus, type SkipStatus } from "@/app/actions/draftActions";
+import { getTeamDraftPicks, getTeamDecks, toggleKeeperStatus, getTeamSkipStatus, toggleSkipRemainingVote, type SkipStatus } from "@/app/actions/draftActions";
 import { getAutoDraftPreview, toggleQueuePickVote, captainForcePick, type AutoDraftPreviewResult } from "@/app/actions/autoDraftActions";
 import { refundDraftPick } from "@/app/actions/cubucksActions";
 import { getCurrentSeason } from "@/app/actions/seasonPhaseActions";
