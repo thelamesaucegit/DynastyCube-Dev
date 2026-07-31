@@ -235,12 +235,12 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
     }
     const result = await duplicateDeck(showDuplicateModal.id!, newDeckName);
     if (result.success) {
-        setSuccess(`Successfully duplicated "${showDuplicateModal.deck_name}"!`);
+        setSuccess(`Successfully cloned "${showDuplicateModal.deck_name}"!`);
         setShowDuplicateModal(null);
         setNewDeckName("");
         await loadData();
     } else {
-        setError(result.error || "Failed to duplicate deck.");
+        setError(result.error || "Failed to clone deck.");
     }
 };
 
@@ -477,7 +477,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                     {deck.description && (<p className="text-xs text-gray-500 dark:text-gray-500 line-clamp-2">{deck.description}</p>)}
                   </button>
                   
-                  {/* HOVER ACTIONS (Edit/Delete/Duplicate) */}
+                  {/* HOVER ACTIONS (Edit/Delete/Clone) */}
                   <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     {canEdit ? (
                       <>
@@ -489,7 +489,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                         </button>
                       </>
                     ) : (
-                      <button onClick={(e) => { e.stopPropagation(); setShowDuplicateModal(deck); }} className="flex items-center justify-center w-8 h-8 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title="Duplicate Deck">
+                      <button onClick={(e) => { e.stopPropagation(); setShowDuplicateModal(deck); }} className="flex items-center justify-center w-8 h-8 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title="Clone Deck">
                         📋
                       </button>
                     )}
@@ -567,7 +567,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
       {showDuplicateModal && isUserTeamMember && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full shadow-2xl">
-            <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">Duplicate Deck</h3>
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">Clone Deck</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Create a new copy of &quot;{showDuplicateModal.deck_name}&quot; under your name.</p>
             <div className="space-y-4">
               <div>
@@ -575,7 +575,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                 <input type="text" value={newDeckName} onChange={(e) => setNewDeckName(e.target.value)} placeholder="My Copy" className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" />
               </div>
               <div className="flex gap-2 pt-4">
-                <button onClick={handleDuplicateDeck} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium">Duplicate Deck</button>
+                <button onClick={handleDuplicateDeck} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium">Clone Deck</button>
                 <button onClick={() => { setShowDuplicateModal(null); setNewDeckName(""); }} className="flex-1 bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 px-4 py-2 rounded-lg font-medium">Cancel</button>
               </div>
             </div>
@@ -660,7 +660,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                       <button onClick={() => handleDeleteDeck(selectedDeck.id!)} className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 text-sm font-medium">🗑️ Delete</button>
                     </>
                   ) : (
-                    <button onClick={() => setShowDuplicateModal(selectedDeck)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium px-2 border-l border-gray-300 dark:border-gray-600 pl-4">📋 Duplicate</button>
+                    <button onClick={() => setShowDuplicateModal(selectedDeck)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium px-2 border-l border-gray-300 dark:border-gray-600 pl-4">📋 Clone</button>
                   );
                 })()}
               </div>
