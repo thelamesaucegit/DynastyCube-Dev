@@ -240,8 +240,8 @@ export async function getDeckStatistics(
     });
     
     // Calculate average CMC (mainboard only)
-    const cmcValues: number[] = [];
-    mainboardCards.forEach((card) => {
+   const cmcValues: number[] = [];
+    nonLandCards.forEach((card) => {
       const pick = card.team_draft_picks;
       if (pick && pick.cmc !== null && pick.cmc !== undefined) {
         for (let i = 0; i < (card.quantity || 1); i++) {
@@ -249,6 +249,7 @@ export async function getDeckStatistics(
         }
       }
     });
+
     const averageCMC =
       cmcValues.length > 0
         ? cmcValues.reduce((sum, cmc) => sum + cmc, 0) / cmcValues.length
