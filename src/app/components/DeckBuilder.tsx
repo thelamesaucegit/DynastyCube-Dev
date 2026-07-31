@@ -442,6 +442,8 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
   const availablePicks = draftPicks.filter((pick) => !deckCards.some((dc) => dc.draft_pick_id === pick.id));
   const activeDragPickImageUrl = activeDragPick ? getCardImageUrl(activeDragPick, useOldestArt) : null;
 
+    const { user } = useAuth();
+
   if (loading) {
     return (
       <div className="text-center py-8">
