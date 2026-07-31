@@ -25,6 +25,7 @@ import {
   getTeamDecks,
   createDeck,
   deleteDeck,
+  duplicateDeck,
   getDeckCards,
   addCardToDeck,
   updateDeckCardQuantity,
@@ -36,7 +37,7 @@ import type { DraftPick, Deck, DeckCard } from "@/app/actions/draftActions";
 import { useSettings } from "@/contexts/SettingsContext";
 import { getCardImageUrl } from "@/app/utils/cardUtils";
 import { CardPreview } from "@/app/components/CardPreview";
-import { TeamStats } from "@/app/components/TeamStats"; // <-- IMPORT TEAM STATS
+import { TeamStats } from "@/app/components/TeamStats"; 
 
 interface DeckBuilderProps {
   teamId: string;
@@ -137,6 +138,8 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
   const [showEditDeckModal, setShowEditDeckModal] = useState(false);
   const [editDeckName, setEditDeckName] = useState("");
   const [editDeckDescription, setEditDeckDescription] = useState("");
+  const [showDuplicateModal, setShowDuplicateModal] = useState<Deck | null>(null);
+
   
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -224,6 +227,23 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
       setError(result.error || "Failed to update deck");
     }
   };
+
+  const handleDuplicateDeck = async () => {
+    if (!showDuplicateModal || !newDeckName.trim()) {
+        setError("Please provide a name for the new deck.");
+        return;
+    }
+    const result = await duplicateDeck(showDuplicateModal.id!, newDeckName);
+    if (result.success) {
+        setSuccess(`Successfully duplicated "${showDuplicateModal.deck_name}"!`);
+        setShowDuplicateModal(null);
+        setNewDeckName("");
+        await loadData();
+    } else {
+        setError(result.error || "Failed to duplicate deck.");
+    }
+};
+
 
   const handleAddDeckToVote = async () => {
     if (!selectedDeck) return;
