@@ -163,7 +163,8 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
     }
   }, [selectedDeck]);
 
-    const loadData = async () => {
+   const loadData = useCallback(async () => {
+    if (!teamId) return;
     setLoading(true);
     try {
       // Fetch both picks and decks in parallel
@@ -189,7 +190,13 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
     } finally {
       setLoading(false);
     }
-  };
+  }, [teamId, selectedDeck]); // Add selectedDeck to dependency array
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  
   const loadDeckCards = async (deckId: string) => {
     try {
       const { cards } = await getDeckCards(deckId);
@@ -434,6 +441,8 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
 
   const availablePicks = draftPicks.filter((pick) => !deckCards.some((dc) => dc.draft_pick_id === pick.id));
   const activeDragPickImageUrl = activeDragPick ? getCardImageUrl(activeDragPick, useOldestArt) : null;
+
+    const { user } = useAuth();
 
   if (loading) {
     return (
