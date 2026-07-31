@@ -1,7 +1,8 @@
 // src/app/components/DeckBuilder.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback, useAuth } from "react";
+import { useAuth } from '@/hooks/useAuth';
+import React, { useState, useEffect, useCallback } from "react";
 import Link from 'next/link';
 import { ExternalLinkIcon } from 'lucide-react';
 import Image from "next/image";
