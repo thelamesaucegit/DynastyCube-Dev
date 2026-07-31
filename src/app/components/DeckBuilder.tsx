@@ -790,3 +790,4 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
       </DragOverlay>
     </DndContext>
   );
+};
