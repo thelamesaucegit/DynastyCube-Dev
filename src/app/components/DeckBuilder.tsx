@@ -25,6 +25,7 @@ import {
   getTeamDecks,
   createDeck,
   deleteDeck,
+  duplicateDeck,
   getDeckCards,
   addCardToDeck,
   updateDeckCardQuantity,
@@ -36,7 +37,7 @@ import type { DraftPick, Deck, DeckCard } from "@/app/actions/draftActions";
 import { useSettings } from "@/contexts/SettingsContext";
 import { getCardImageUrl } from "@/app/utils/cardUtils";
 import { CardPreview } from "@/app/components/CardPreview";
-import { TeamStats } from "@/app/components/TeamStats"; // <-- IMPORT TEAM STATS
+import { TeamStats } from "@/app/components/TeamStats"; 
 
 interface DeckBuilderProps {
   teamId: string;
@@ -137,6 +138,8 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
   const [showEditDeckModal, setShowEditDeckModal] = useState(false);
   const [editDeckName, setEditDeckName] = useState("");
   const [editDeckDescription, setEditDeckDescription] = useState("");
+  const [showDuplicateModal, setShowDuplicateModal] = useState<Deck | null>(null);
+
   
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -163,23 +166,30 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
     const loadData = async () => {
     setLoading(true);
     try {
-      const { picks } = await getTeamDraftPicks(teamId);
+      // Fetch both picks and decks in parallel
+      const [picksResult, decksResult] = await Promise.all([
+        getTeamDraftPicks(teamId),
+        getTeamDecks(teamId)
+      ]);
+
+      if (picksResult.picks) {
+        setDraftPicks(picksResult.picks.filter(p => p.card_id !== 'skipped-pick'));
+      }
       
-      //  Filter out skipped picks so they don't pollute the draggable card pool
-      setDraftPicks(picks.filter(p => p.card_id !== 'skipped-pick'));
-      
-      const { decks: teamDecks } = await getTeamDecks(teamId);
-      
-      if (teamDecks.length > 0 && !selectedDeck) setSelectedDeck(teamDecks[0]);
-      if (!isUserTeamMember && teamDecks.length > 0) setSelectedDeck(teamDecks[0]);
+      if (decksResult.decks) {
+        setDecks(decksResult.decks);
+        // If no deck is selected yet, and there are decks, select the first one.
+        if (!selectedDeck && decksResult.decks.length > 0) {
+          setSelectedDeck(decksResult.decks[0]);
+        }
+      }
     } catch (err) {
       console.error("Error loading data:", err);
-      setError("Failed to load data");
+      setError("Failed to load deck builder data");
     } finally {
       setLoading(false);
     }
   };
-
   const loadDeckCards = async (deckId: string) => {
     try {
       const { cards } = await getDeckCards(deckId);
@@ -217,6 +227,23 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
       setError(result.error || "Failed to update deck");
     }
   };
+
+  const handleDuplicateDeck = async () => {
+    if (!showDuplicateModal || !newDeckName.trim()) {
+        setError("Please provide a name for the new deck.");
+        return;
+    }
+    const result = await duplicateDeck(showDuplicateModal.id!, newDeckName);
+    if (result.success) {
+        setSuccess(`Successfully cloned "${showDuplicateModal.deck_name}"!`);
+        setShowDuplicateModal(null);
+        setNewDeckName("");
+        await loadData();
+    } else {
+        setError(result.error || "Failed to clone deck.");
+    }
+};
+
 
   const handleAddDeckToVote = async () => {
     if (!selectedDeck) return;
@@ -428,6 +455,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
           <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">{isUserTeamMember ? "Your Decks" : `${teamName}'s Decks`}</h3>
           {isUserTeamMember && (<button onClick={() => setShowNewDeckModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">+ New Deck</button>)}
         </div>
+
         {decks.length === 0 ? (
           <div className="text-center py-8 text-gray-500 dark:text-gray-500">
             <p className="text-lg mb-2">No decks yet</p>
@@ -435,14 +463,40 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
           </div>
         ) : isUserTeamMember ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {decks.map((deck) => (
-              <button key={deck.id} onClick={() => setSelectedDeck(deck)} className={`text-left p-4 rounded-lg border-2 transition-all ${selectedDeck?.id === deck.id ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30" : "border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600"}`}>
-                <div className="flex items-start justify-between gap-2 mb-1"><h4 className="font-semibold text-gray-900 dark:text-gray-100">{deck.deck_name}</h4></div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{deck.format}</p>
-                {deck.created_by_name && (<p className="text-xs text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-1"><span>👤</span> Created by {deck.created_by_name}</p>)}
-                {deck.description && (<p className="text-xs text-gray-500 dark:text-gray-500 line-clamp-2">{deck.description}</p>)}
-              </button>
-            ))}
+            {decks.map((deck) => {
+              const isOwner = user?.id ? deck.created_by === user.id : false;
+              const isAutoGenerated = !deck.created_by;
+              const canEdit = isOwner || isAutoGenerated;
+
+              return (
+                <div key={deck.id} className="relative group h-full">
+                  <button onClick={() => setSelectedDeck(deck)} className={`text-left p-4 rounded-lg border-2 transition-all w-full h-full ${selectedDeck?.id === deck.id ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30" : "border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600"}`}>
+                    <div className="flex items-start justify-between gap-2 mb-1"><h4 className="font-semibold text-gray-900 dark:text-gray-100">{deck.deck_name}</h4></div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{deck.format}</p>
+                    {deck.created_by_name && (<p className="text-xs text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-1"><span>👤</span> Created by {deck.created_by_name}</p>)}
+                    {deck.description && (<p className="text-xs text-gray-500 dark:text-gray-500 line-clamp-2">{deck.description}</p>)}
+                  </button>
+                  
+                  {/* HOVER ACTIONS (Edit/Delete/Clone) */}
+                  <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {canEdit ? (
+                      <>
+                        <button onClick={(e) => { e.stopPropagation(); setEditDeckName(deck.deck_name); setEditDeckDescription(deck.description || ""); setSelectedDeck(deck); setShowEditDeckModal(true); }} className="flex items-center justify-center w-8 h-8 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title="Edit Deck">
+                          ✏️
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteDeck(deck.id!); }} className="flex items-center justify-center w-8 h-8 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Delete Deck">
+                          🗑️
+                        </button>
+                      </>
+                    ) : (
+                      <button onClick={(e) => { e.stopPropagation(); setShowDuplicateModal(deck); }} className="flex items-center justify-center w-8 h-8 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title="Clone Deck">
+                        📋
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div className="text-center py-4">
@@ -508,7 +562,27 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
           </div>
         </div>
       )}
-        
+
+      {/* NEW: DUPLICATE DECK MODAL */}
+      {showDuplicateModal && isUserTeamMember && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full shadow-2xl">
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">Clone Deck</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Create a new copy of &quot;{showDuplicateModal.deck_name}&quot; under your name.</p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">New Deck Name *</label>
+                <input type="text" value={newDeckName} onChange={(e) => setNewDeckName(e.target.value)} placeholder="My Copy" className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" />
+              </div>
+              <div className="flex gap-2 pt-4">
+                <button onClick={handleDuplicateDeck} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium">Clone Deck</button>
+                <button onClick={() => { setShowDuplicateModal(null); setNewDeckName(""); }} className="flex-1 bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 px-4 py-2 rounded-lg font-medium">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedDeck && isUserTeamMember && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1 space-y-4">
@@ -538,7 +612,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                 })}
               </div>
             </div>
-
             <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">Drafted Cards</h3>
@@ -557,7 +630,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
               </div>
             </div>
           </div>
-
+          
           <div className="lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
            <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
               <div>
@@ -574,11 +647,25 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                     <button onClick={handleExportToArena} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 rounded-b-lg">MTG Arena (.txt)</button>
                   </div>
                 </div>
-                <button onClick={() => { setEditDeckName(selectedDeck.deck_name); setEditDeckDescription(selectedDeck.description || ""); setShowEditDeckModal(true); }} className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white text-sm font-medium px-2 border-l border-gray-300 dark:border-gray-600 pl-4">✏️ Edit</button>
-                <button onClick={() => handleDeleteDeck(selectedDeck.id!)} className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 text-sm font-medium">🗑️ Delete</button>
+                
+                {/* ACTION PERMISSIONS */}
+                {(() => {
+                  const isOwner = selectedDeck.created_by === user?.id;
+                  const isAutoGenerated = !selectedDeck.created_by;
+                  const canEdit = isOwner || isAutoGenerated;
+                  
+                  return canEdit ? (
+                    <>
+                      <button onClick={() => { setEditDeckName(selectedDeck.deck_name); setEditDeckDescription(selectedDeck.description || ""); setShowEditDeckModal(true); }} className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white text-sm font-medium px-2 border-l border-gray-300 dark:border-gray-600 pl-4">✏️ Edit</button>
+                      <button onClick={() => handleDeleteDeck(selectedDeck.id!)} className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 text-sm font-medium">🗑️ Delete</button>
+                    </>
+                  ) : (
+                    <button onClick={() => setShowDuplicateModal(selectedDeck)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium px-2 border-l border-gray-300 dark:border-gray-600 pl-4">📋 Clone</button>
+                  );
+                })()}
               </div>
             </div>
-
+            
             <div className="flex gap-2 mb-4 border-b border-gray-200 dark:border-gray-700">
               {[
                 { id: "mainboard" as const, label: "Mainboard", count: mainboardCards.reduce((acc, c) => acc + (c.quantity || 1), 0) },
@@ -595,7 +682,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
                 </button>
               ))}
             </div>
-
+            
             <DroppableZone id={`category-${activeCategory}`} className="space-y-2 max-h-[500px] overflow-y-auto min-h-[200px] p-4 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
               {getCardsByCategory(activeCategory).length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
@@ -626,7 +713,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
             <div className="mt-8 pt-4 border-t border-gray-200 dark:border-gray-700">
                <TeamStats teamId={teamId} />
             </div>
-
           </div>
         </div>
       )}
@@ -640,9 +726,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
             </div>
             <span className="text-sm text-gray-500 dark:text-gray-400">{deckCards.length} cards</span>
           </div>
-
           {selectedDeck.description && (<p className="text-gray-600 dark:text-gray-400 mb-4">{selectedDeck.description}</p>)}
-
          <div className="flex gap-2 mb-4 border-b border-gray-200 dark:border-gray-700">
             {[
               { id: "mainboard" as const, label: "Mainboard", count: deckCards.filter(c => c.category === "mainboard").reduce((acc, c) => acc + (c.quantity || 1), 0) },
@@ -659,7 +743,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
               </button>
             ))}
           </div>
-
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {getCardsByCategory(activeCategory).map((card) => {
               const fullPickData = draftPicks.find(p => p.card_id === card.card_id) || {
@@ -685,7 +768,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
           </div>
         </div>
       )}
-
       {!selectedDeck && decks.length > 0 && isUserTeamMember && (
         <div className="text-center py-12 text-gray-500 dark:text-gray-500">
           <p className="text-lg mb-2">Select a deck to start building</p>
@@ -693,7 +775,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
         </div>
       )}
       </div>
-
       <DragOverlay>
         {activeDragPick && activeDragPickImageUrl ? (
           <div className="w-64 p-3 bg-white dark:bg-gray-800 rounded-lg border-2 border-blue-400 shadow-2xl opacity-90">
@@ -709,4 +790,3 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
       </DragOverlay>
     </DndContext>
   );
-};

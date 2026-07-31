@@ -876,3 +876,62 @@ export async function validateCardRemovalFromDecks(
   return { allowed: true };
 }
 
+export async function duplicateDeck(
+  originalDeckId: string,
+  newDeckName: string
+): Promise<{ success: boolean; newDeckId?: string; error?: string }> {
+  const supabase = await createServerClient();
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+
+    const { data: originalDeck, error: originalDeckError } = await supabase
+      .from("team_decks")
+      .select("team_id, format")
+      .eq("id", originalDeckId)
+      .single();
+
+    if (originalDeckError || !originalDeck) return { success: false, error: "Original deck not found." };
+
+    // Create the new deck record for the current user
+    const { data: newDeck, error: newDeckError } = await supabase
+      .from("team_decks")
+      .insert({
+        team_id: originalDeck.team_id,
+        deck_name: newDeckName,
+        format: originalDeck.format,
+        created_by: user.id,
+      })
+      .select("id")
+      .single();
+
+    if (newDeckError || !newDeck) return { success: false, error: "Failed to create new deck." };
+
+    // Get cards from the original deck
+    const { data: originalCards, error: originalCardsError } = await supabase
+      .from("deck_cards")
+      .select("*")
+      .eq("deck_id", originalDeckId);
+
+    if (originalCardsError) return { success: false, error: "Failed to load original deck cards." };
+
+    // Copy the cards over to the new deck
+    const newCards = originalCards.map(card => ({
+      ...card,
+      id: undefined, // Let Supabase generate a new UUID
+      deck_id: newDeck.id,
+    }));
+
+    const { error: newCardsError } = await supabase.from("deck_cards").insert(newCards);
+
+    if (newCardsError) {
+      // Clean up if card copy fails
+      await supabase.from("team_decks").delete().eq("id", newDeck.id);
+      return { success: false, error: "Failed to copy cards to the new deck." };
+    }
+
+    return { success: true, newDeckId: newDeck.id };
+  } catch (error) {
+    return { success: false, error: "An unexpected error occurred." };
+  }
+}

@@ -233,10 +233,15 @@ export async function getDeckStatistics(
         typeDistribution[mainType] = (typeDistribution[mainType] || 0) + (card.quantity || 1);
       }
     });
-
+// Filter out lands BEFORE calculating CMC
+    const nonLandCards = mainboardCards.filter(card => {
+        const cardType = card.team_draft_picks?.card_type || '';
+        return !cardType.toLowerCase().includes('land');
+    });
+    
     // Calculate average CMC (mainboard only)
-    const cmcValues: number[] = [];
-    mainboardCards.forEach((card) => {
+   const cmcValues: number[] = [];
+    nonLandCards.forEach((card) => {
       const pick = card.team_draft_picks;
       if (pick && pick.cmc !== null && pick.cmc !== undefined) {
         for (let i = 0; i < (card.quantity || 1); i++) {
@@ -244,6 +249,7 @@ export async function getDeckStatistics(
         }
       }
     });
+
     const averageCMC =
       cmcValues.length > 0
         ? cmcValues.reduce((sum, cmc) => sum + cmc, 0) / cmcValues.length
@@ -251,7 +257,7 @@ export async function getDeckStatistics(
 
     // Calculate CMC distribution (mainboard only)
     const cmcDistribution: { [cmc: string]: number } = {};
-    mainboardCards.forEach((card) => {
+    nonLandCards.forEach((card) => {
       const pick = card.team_draft_picks;
       if (pick && pick.cmc !== null && pick.cmc !== undefined) {
         const cmcKey = pick.cmc.toString();
