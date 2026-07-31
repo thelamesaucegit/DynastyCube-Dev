@@ -445,7 +445,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
   }
 
   return (
-    return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="space-y-6">
         {success && (<div className="bg-green-50 dark:bg-green-900/20 border border-green-300 dark:border-green-700 rounded-lg p-4 text-green-800 dark:text-green-200">✓ {success}</div>)}
