@@ -108,10 +108,7 @@ export const TeamStats: React.FC<TeamStatsProps> = ({ teamId }) => {
           <div className="text-3xl font-bold text-green-600 dark:text-green-400 mb-1">{customAverageCmc}</div>
           <div className="text-xs text-gray-700 dark:text-gray-300 font-medium uppercase tracking-wider">Avg CMC (Non-Land)</div>
         </div>
-        <div className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/30 dark:to-orange-800/30 border border-orange-200 dark:border-orange-700 rounded-lg p-4 text-center">
-          <div className="text-3xl font-bold text-orange-600 dark:text-orange-400 mb-1">{stats.recentPicks}</div>
-          <div className="text-xs text-gray-700 dark:text-gray-300 font-medium uppercase tracking-wider">Recent Picks (7d)</div>
-        </div>
+       
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
