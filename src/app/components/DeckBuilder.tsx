@@ -163,23 +163,30 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({ teamId, teamName = "Th
     const loadData = async () => {
     setLoading(true);
     try {
-      const { picks } = await getTeamDraftPicks(teamId);
+      // Fetch both picks and decks in parallel
+      const [picksResult, decksResult] = await Promise.all([
+        getTeamDraftPicks(teamId),
+        getTeamDecks(teamId)
+      ]);
+
+      if (picksResult.picks) {
+        setDraftPicks(picksResult.picks.filter(p => p.card_id !== 'skipped-pick'));
+      }
       
-      //  Filter out skipped picks so they don't pollute the draggable card pool
-      setDraftPicks(picks.filter(p => p.card_id !== 'skipped-pick'));
-      
-      const { decks: teamDecks } = await getTeamDecks(teamId);
-      
-      if (teamDecks.length > 0 && !selectedDeck) setSelectedDeck(teamDecks[0]);
-      if (!isUserTeamMember && teamDecks.length > 0) setSelectedDeck(teamDecks[0]);
+      if (decksResult.decks) {
+        setDecks(decksResult.decks);
+        // If no deck is selected yet, and there are decks, select the first one.
+        if (!selectedDeck && decksResult.decks.length > 0) {
+          setSelectedDeck(decksResult.decks[0]);
+        }
+      }
     } catch (err) {
       console.error("Error loading data:", err);
-      setError("Failed to load data");
+      setError("Failed to load deck builder data");
     } finally {
       setLoading(false);
     }
   };
-
   const loadDeckCards = async (deckId: string) => {
     try {
       const { cards } = await getDeckCards(deckId);
