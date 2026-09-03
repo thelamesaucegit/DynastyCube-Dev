@@ -5,6 +5,37 @@ import { createClient } from "@supabase/supabase-js";
 import { logSystemEvent } from "@/lib/systemLogger";
 import { updateAllCubecobraElo } from "./cardRatingActions"; // Bring in your ELO syncer
 
+// --- STRICT SCRYFALL INTERFACES ---
+interface ScryfallCardFace {
+    oracle_text?: string;
+    image_uris?: {
+        normal?: string;
+        small?: string;
+        large?: string;
+    };
+}
+
+interface ScryfallCardResponse {
+    id: string;
+    name: string;
+    set: string;
+    type_line: string;
+    rarity: string;
+    colors?: string[];
+    color_identity?: string[];
+    oracle_id?: string;
+    mana_cost?: string;
+    cmc?: number;
+    oracle_text?: string;
+    image_uris?: {
+        normal?: string;
+        small?: string;
+        large?: string;
+    };
+    card_faces?: ScryfallCardFace[];
+}
+// ----------------------------------
+
 // Use service client to bypass RLS for background tasks
 function createServiceClient() {
     return createClient(
@@ -14,16 +45,16 @@ function createServiceClient() {
 }
 
 // Helper to safely extract oracle text, even for split/dual-faced cards
-const extractOracleText = (card: any) => {
+const extractOracleText = (card: ScryfallCardResponse) => {
     if (card.oracle_text) return card.oracle_text;
     if (card.card_faces) {
-        return card.card_faces.map((f: any) => f.oracle_text).filter(Boolean).join('\n//\n');
+        return card.card_faces.map((f: ScryfallCardFace) => f.oracle_text).filter(Boolean).join('\n//\n');
     }
     return null;
 };
 
 // Helper to safely extract image URLs, even for DFCs
-const extractImageUrl = (card: any) => {
+const extractImageUrl = (card: ScryfallCardResponse) => {
     if (card.image_uris?.normal) return card.image_uris.normal;
     if (card.card_faces && card.card_faces[0]?.image_uris?.normal) {
         return card.card_faces[0].image_uris.normal;
@@ -95,12 +126,13 @@ export async function processEscapeRoomRewards(seasonId: string, weekNumber: num
                 continue;
             }
 
-            const card = await response.json();
+            // Cast the JSON response to our strict interface
+            const card = (await response.json()) as ScryfallCardResponse;
 
-            // Roustly extract data
+            // Robustly extract data
             const imageUrl = extractImageUrl(card);
             const oracleText = extractOracleText(card);
-            const cardSet = String(card.set).toLowerCase(); // Fixes the uppercase issue
+            const cardSet = String(card.set).toLowerCase(); 
 
             // 6. Insert into card_pools
             const { data: poolCard, error: poolErr } = await supabase.from('card_pools').insert({
