@@ -3,6 +3,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { logSystemEvent } from "@/lib/systemLogger";
+import { updateAllCubecobraElo } from "./cardRatingActions"; // Bring in your ELO syncer
 
 // Use service client to bypass RLS for background tasks
 function createServiceClient() {
@@ -11,6 +12,24 @@ function createServiceClient() {
         process.env.SUPABASE_SERVICE_KEY!
     );
 }
+
+// Helper to safely extract oracle text, even for split/dual-faced cards
+const extractOracleText = (card: any) => {
+    if (card.oracle_text) return card.oracle_text;
+    if (card.card_faces) {
+        return card.card_faces.map((f: any) => f.oracle_text).filter(Boolean).join('\n//\n');
+    }
+    return null;
+};
+
+// Helper to safely extract image URLs, even for DFCs
+const extractImageUrl = (card: any) => {
+    if (card.image_uris?.normal) return card.image_uris.normal;
+    if (card.card_faces && card.card_faces[0]?.image_uris?.normal) {
+        return card.card_faces[0].image_uris.normal;
+    }
+    return card.image_uris?.small || card.card_faces?.[0]?.image_uris?.small || null;
+};
 
 export async function processEscapeRoomRewards(seasonId: string, weekNumber: number) {
     const supabase = createServiceClient();
@@ -24,10 +43,12 @@ export async function processEscapeRoomRewards(seasonId: string, weekNumber: num
 
     if (!escapedTeams || escapedTeams.length === 0) return;
 
+    // We will track what we insert so we can sync ELOs at the end
+    const insertedPicks: { poolId: string, pickId: string }[] = [];
+
     for (const team of escapedTeams) {
         try {
             // 2. Count how many Escape Room rewards this team has already received this season
-            // We do this by checking their draft picks for the 'escape' scar
             const { count: previousRewards } = await supabase
                 .from('team_draft_picks')
                 .select('id', { count: 'exact', head: true })
@@ -50,81 +71,117 @@ export async function processEscapeRoomRewards(seasonId: string, weekNumber: num
                 }
             }
 
-            // 4. Construct the Scryfall Random Query based on the Reward Tier
+            // 4. Construct the Scryfall Random Query
             let scryfallQuery = "-is:ub -st:funny -is:dfc -is:mdfc ";
             
             if (rewardTier === 1) {
-                // Tier 1: Any rarity from home plane
                 scryfallQuery += setQuery ? setQuery : ""; 
             } else if (rewardTier === 2) {
-                // Tier 2: Uncommon, Rare, or Mythic from home plane
                 scryfallQuery += `(r:uncommon OR r:rare OR r:mythic) ${setQuery}`;
             } else if (rewardTier === 3) {
-                // Tier 3: Rare or Mythic from home plane
                 scryfallQuery += `(r:rare OR r:mythic) ${setQuery}`;
             } else {
-                // Tier 4+: Rare or Mythic from ANY set
                 scryfallQuery += `(r:rare OR r:mythic)`;
             }
 
-            // 5. Fetch a random card matching the criteria
+            // 5. Fetch a random card
             const scryfallUrl = `https://api.scryfall.com/cards/random?q=${encodeURIComponent(scryfallQuery)}`;
             const response = await fetch(scryfallUrl, {
                 headers: { 'User-Agent': 'DynastyCube/1.0', 'Accept': 'application/json' }
             });
+
             if (!response.ok) {
                 console.warn(`[EscapeRoom] Failed to find card for ${team.name} using query: ${scryfallQuery}`);
                 continue;
             }
+
             const card = await response.json();
 
-            // 6. Insert the card into the global card_pools table first so it physically exists in the database
-            const imageUris = card.image_uris as Record<string, string> | undefined;
+            // Roustly extract data
+            const imageUrl = extractImageUrl(card);
+            const oracleText = extractOracleText(card);
+            const cardSet = String(card.set).toLowerCase(); // Fixes the uppercase issue
+
+            // 6. Insert into card_pools
             const { data: poolCard, error: poolErr } = await supabase.from('card_pools').insert({
                 card_id: String(card.id),
                 card_name: String(card.name),
-                card_set: String((card.set as string).toUpperCase()),
+                card_set: cardSet,
                 card_type: String(card.type_line),
                 rarity: String(card.rarity),
                 colors: Array.isArray(card.colors) ? card.colors : [],
                 color_identity: Array.isArray(card.color_identity) ? card.color_identity : [],
-                image_url: imageUris?.normal || imageUris?.large || null,
-                oracle_id: String(card.oracle_id),
+                image_url: imageUrl,
+                oldest_image_url: imageUrl,
+                oracle_id: card.oracle_id ? String(card.oracle_id) : null,
+                oracle_text: oracleText,
                 mana_cost: card.mana_cost ? String(card.mana_cost) : null,
                 cmc: typeof card.cmc === 'number' ? card.cmc : 0,
-                cubucks_cost: 0, // Free for now, Rollover will set it to 3 or 5% of cap
-                scars: ['escape'], // <-- Mark it!
-                pool_name: 'draft' // <-- THE FIX: Explicitly assign to 'draft' pool to pass the foreign key constraint
+                cubucks_cost: 3, // Force cost to 3
+                scars: ['escape'],
+                pool_name: 'draft'
             }).select('id').single();
 
             if (poolErr || !poolCard) throw new Error(`Pool insert failed: ${poolErr?.message}`);
 
-            // 7. Grant the card directly to the team's draft picks
-            const { error: pickErr } = await supabase.from('team_draft_picks').insert({
+            // 7. Insert into team_draft_picks
+            const { data: pickData, error: pickErr } = await supabase.from('team_draft_picks').insert({
                 team_id: team.id,
                 card_pool_id: poolCard.id,
                 card_id: String(card.id),
                 card_name: String(card.name),
-                card_set: String((card.set as string).toUpperCase()),
+                card_set: cardSet,
                 card_type: String(card.type_line),
                 rarity: String(card.rarity),
                 colors: Array.isArray(card.colors) ? card.colors : [],
                 color_identity: Array.isArray(card.color_identity) ? card.color_identity : [],
-                image_url: imageUris?.normal || imageUris?.large || null,
+                image_url: imageUrl,
+                oldest_image_url: imageUrl,
+                oracle_text: oracleText,
                 mana_cost: card.mana_cost ? String(card.mana_cost) : null,
                 cmc: typeof card.cmc === 'number' ? card.cmc : 0,
-                pick_number: 999, // Arbitrary high number for mid-season additions
+                pick_number: 999, 
                 acquisition_method: 'escape_room',
-                scars: ['escape'] // <-- Mark it here too for easy querying!
-            });
+                scars: ['escape'],
+                cubucks_cost: 3 // Force cost to 3
+            }).select('id').single();
 
-            if (pickErr) throw new Error(`Pick insert failed: ${pickErr.message}`);
+            if (pickErr || !pickData) throw new Error(`Pick insert failed: ${pickErr.message}`);
+
+            // Log it for final sync
+            insertedPicks.push({ poolId: poolCard.id, pickId: pickData.id });
 
             await logSystemEvent("EscapeRoom", "info", `Granted ${card.name} to ${team.name} (Reward Tier ${rewardTier}) for Week ${weekNumber}.`);
             console.log(`[EscapeRoom] 🚪 ${team.name} received ${card.name}!`);
 
         } catch (err) {
             console.error(`[EscapeRoom] Error processing reward for ${team.name}:`, err);
+        }
+    }
+
+    // 8. Sync ELOs for the newly imported cards
+    if (insertedPicks.length > 0) {
+        try {
+            // Re-sync all card_pools with Cubecobra
+            await updateAllCubecobraElo('card_pools');
+            
+            // Push those freshly retrieved ELOs down to the team_draft_picks table
+            for (const pick of insertedPicks) {
+                const { data: poolData } = await supabase
+                    .from('card_pools')
+                    .select('cubecobra_elo')
+                    .eq('id', pick.poolId)
+                    .single();
+                    
+                if (poolData && poolData.cubecobra_elo) {
+                    await supabase
+                        .from('team_draft_picks')
+                        .update({ cubecobra_elo: poolData.cubecobra_elo })
+                        .eq('id', pick.pickId);
+                }
+            }
+        } catch (eloErr) {
+            console.error("[EscapeRoom] Failed to sync ELOs for new escape room cards:", eloErr);
         }
     }
 }
