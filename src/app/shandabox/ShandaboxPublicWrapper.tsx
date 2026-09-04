@@ -31,7 +31,7 @@ export function ShandaboxPublicWrapper({ children }: { children: React.ReactNode
             <div 
                 className="fixed inset-0 z-0 pointer-events-none transition-opacity duration-300"
                 style={{
-                    backgroundImage: 'url(/images/shandabox/paper-texture.jpg)',
+                    backgroundImage: 'url(/images/shandabox/paper-texture.png)',
                     backgroundRepeat: 'repeat',
                     backgroundSize: 'auto',
                     opacity: isDark ? 0.5 : 1,
@@ -106,5 +106,7 @@ export function ShandaboxPublicWrapper({ children }: { children: React.ReactNode
                 <div className="flex-1 w-full max-w-5xl mx-auto p-4">
                     {children}
                 </div>
-            </div>);
+            </div>
+        </div>
+    );
 }
