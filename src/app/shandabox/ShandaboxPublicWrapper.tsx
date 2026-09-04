@@ -31,7 +31,7 @@ export function ShandaboxPublicWrapper({ children }: { children: React.ReactNode
             <div 
                 className="fixed inset-0 z-0 pointer-events-none transition-opacity duration-300"
                 style={{
-                    backgroundImage: 'url(/images/shandabox/paper-texture.png)',
+                    backgroundImage: 'url(/images/shandabox/paper-texture.jpg)',
                     backgroundRepeat: 'repeat',
                     backgroundSize: 'auto',
                     opacity: isDark ? 0.5 : 1,
