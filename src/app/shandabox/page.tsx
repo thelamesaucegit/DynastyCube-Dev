@@ -122,7 +122,7 @@ export default function ShandaboxPage() {
           <div className="shanda-panel space-y-6">
             <div className="text-center">
               <h1 className="text-6xl uppercase tracking-widest border-b-[3px] border-current pb-4 mb-4">Shandabox</h1>
-              <p className="text-2xl">Enter your credentials to continue.</p>
+              <p className="text-2xl">Login or register below to continue. </p>
             </div>
             <form onSubmit={handleLogin} className="flex flex-col gap-4">
               <input type="email" placeholder="Email Address" required className="shanda-input" value={email} onChange={e => setEmail(e.target.value)} />
