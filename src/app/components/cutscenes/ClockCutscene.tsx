@@ -13,7 +13,7 @@ const DIALOG = [
   "IT WAS ME",
   "This Timeline...so weak. Fragile. And not just from my Hands.",
   "This...COMMISSIONER of yours. He managed to 'patch things up' before I dealt with him.",
-  "No matter... We will have all the Time in the multiverse to make up for this short delay.",
+  "No matter... We will have all the Time in the Multiverse to make up for this short delay.",
   "It won't be long now... you may be able to finish this Era and crown a Champion...",
   "...and then it will be The End."
 ];
