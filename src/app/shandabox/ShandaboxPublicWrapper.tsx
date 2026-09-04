@@ -27,13 +27,14 @@ export function ShandaboxPublicWrapper({ children }: { children: React.ReactNode
 
     return (
         <div className={`min-h-screen bg-black ${pixelFont.className} ${isDark ? 'theme-dark' : 'theme-light'}`}>
-            {/* Background Layer with Opacity Trick */}
+            {/* Background Layer with Opacity Trick - FIX: Expand to fit */}
             <div 
                 className="fixed inset-0 z-0 pointer-events-none transition-opacity duration-300"
                 style={{
-                    backgroundImage: 'url(/images/shandabox/paper-texture.jpg)',
-                    backgroundRepeat: 'repeat',
-                    backgroundSize: 'auto',
+                    backgroundImage: 'url(/images/shandabox/paper-texture.png)',
+                    backgroundRepeat: 'no-repeat',
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
                     opacity: isDark ? 0.5 : 1,
                 }}
             />
