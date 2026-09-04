@@ -12,7 +12,7 @@ export default function CutscenesArchivePage() {
     <div className="container max-w-5xl mx-auto px-4 py-12 space-y-8">
       <div>
         <h1 className="text-4xl font-black tracking-tight mb-2">Cutscene Archive</h1>
-        <p className="text-muted-foreground text-lg">Replay past lore events and temporal anomalies.</p>
+        <p className="text-muted-foreground text-lg">Replay past lore events.</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
@@ -32,10 +32,10 @@ export default function CutscenesArchivePage() {
               <Play className="absolute size-12 text-white/50 group-hover:text-red-500 transition-colors" />
             </div>
             <CardHeader className="bg-card">
-              <CardTitle className="text-lg">The Clock&apos;s Return</CardTitle>
+              <CardTitle className="text-lg">The Clock Returns</CardTitle>
             </CardHeader>
             <CardContent className="bg-card text-sm text-muted-foreground pb-6">
-              Season 0 was merely a pause. The true architect of the simulation errors reveals themselves.
+              The architect of the Season 5 Corruption reveals themselves.
             </CardContent>
           </Card>
         </Link>
