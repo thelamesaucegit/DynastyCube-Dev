@@ -4,6 +4,7 @@
 import React, { useState, useEffect, use } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { Loader2 } from "lucide-react";
 import { ShandaboxPublicWrapper } from "../ShandaboxPublicWrapper";
 import { getPublicShandaboxProfile, type ShandaboxUser, type ShandaboxInventoryItem, type ShandaboxDefeatedBoss } from "@/app/actions/shandaboxActions";
 
@@ -52,7 +53,7 @@ export default function ShandaboxProfilePage({ params }: { params: Promise<{ cha
 
         {/* Header */}
         <div className="shanda-panel flex flex-col md:flex-row items-center gap-6">
-          <div className="size-24 rounded-full border-[4px] border-current flex items-center justify-center font-black text-5xl bg-black/10">
+          <div className="size-24 rounded-full border-[4px] border-current flex items-center justify-center font-black text-5xl bg-black/10 shrink-0">
               {user.level}
           </div>
           <div className="text-center md:text-left">
@@ -82,7 +83,7 @@ export default function ShandaboxProfilePage({ params }: { params: Promise<{ cha
           ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                   {inventory.map((item) => (
-                      <div key={item.code} className="border-[3px] border-current bg-black/10 flex flex-col">
+                      <div key={item.code} className="border-[3px] border-current bg-black/10 flex flex-col hover:border-current/50 transition-colors">
                           <div className="relative aspect-[2.5/3.5] border-b-[3px] border-current">
                               {item.card?.image_url ? (
                                   <Image src={item.card.image_url} alt={item.card?.card_name || 'Card'} fill className="object-cover" />
@@ -90,9 +91,11 @@ export default function ShandaboxProfilePage({ params }: { params: Promise<{ cha
                                   <div className="absolute inset-0 flex items-center justify-center text-xl text-center">No Image</div>
                               )}
                           </div>
-                          <div className="p-2">
-                              <p className="font-bold text-xl leading-tight truncate text-center" title={item.card?.card_name}>{item.card?.card_name}</p>
-                          </div>                  ))}
+                          <div className="p-2 bg-black/20 flex-1 flex flex-col justify-center">
+                              <p className="font-bold text-lg truncate text-center" title={item.card?.card_name}>{item.card?.card_name}</p>
+                          </div>
+                      </div> // <-- FIXED MISSING CLOSING DIV
+                  ))}
               </div>
           )}
         </div>

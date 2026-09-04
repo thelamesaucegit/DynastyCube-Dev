@@ -174,6 +174,7 @@ export default function ShandaboxPage() {
                               <button className="shanda-button bg-red-500/20" onClick={confirmTransfer}>Yes, Claim It</button>
                               <button className="shanda-button" onClick={() => { setTransferPrompt(null); setProcessing(false); }}>Cancel</button>
                           </div>
+                      </div> // <-- FIXED MISSING CLOSING DIV
                   ) : (
                       <button onClick={handleProcessCards} disabled={!bulkCodes.trim() || processing} className="shanda-button w-full">
                           {processing ? "PROCESSING..." : "ADD TO POOL"}
@@ -188,7 +189,9 @@ export default function ShandaboxPage() {
                       <button onClick={handleProcessBoss} disabled={!bossCode.trim() || bossProcessing} className="shanda-button w-full">
                           {bossProcessing ? "LOGGING..." : "LOG DEFEAT"}
                       </button>
-                  </div></div>
+                  </div>
+              </div>
+          </div>
 
           {/* Display */}
           <div className="md:col-span-2 space-y-8">
@@ -238,6 +241,7 @@ export default function ShandaboxPage() {
 
           </div>
         </div>
+      </div>
     </ShandaboxPublicWrapper>
   );
 }
