@@ -16,6 +16,7 @@ import { CardPreview } from "@/app/components/CardPreview";
 import { LiveStreamWidget } from "@/app/components/LiveStreamWidget";
 import { getHomepageData, type HomepageData } from "@/app/actions/homeActions"; 
 import { TargetedGlitchedText } from "@/app/components/lore/TargetedGlitchedText";
+import { ClockCutsceneManager } from "@/app/components/cutscenes/ClockCutsceneManager";
 
 function getRelativeTime(dateString: string): string {
   const date = new Date(dateString);
@@ -114,6 +115,7 @@ export default function HomePage() {
 
       {/* --- FOREGROUND CONTENT (Elevated to z-10) --- */}
       <div className="relative z-10 space-y-12 container max-w-7xl mx-auto px-4 py-8">
+        <ClockCutsceneManager />
           
         {/* --- HERO SECTION (The Full-Opacity "Window") --- */}
         <section className="relative overflow-hidden rounded-2xl min-h-[200px] flex flex-col justify-center border border-border/50 shadow-2xl">
