@@ -106,5 +106,7 @@ export function ShandaboxPublicWrapper({ children }: { children: React.ReactNode
                 <div className="flex-1 w-full max-w-5xl mx-auto p-4">
                     {children}
                 </div>
-            </div>);
+            </div>
+        </div>
+    );
 }
