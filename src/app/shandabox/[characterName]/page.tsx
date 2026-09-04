@@ -4,7 +4,7 @@
 import React, { useState, useEffect, use } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Loader2 } from "lucide-react";
+import { Loader2, Shield, Skull, ArrowLeft } from "lucide-react";
 import { ShandaboxPublicWrapper } from "../ShandaboxPublicWrapper";
 import { getPublicShandaboxProfile, type ShandaboxUser, type ShandaboxInventoryItem, type ShandaboxDefeatedBoss } from "@/app/actions/shandaboxActions";
 
@@ -12,7 +12,8 @@ export default function ShandaboxProfilePage({ params }: { params: Promise<{ cha
   const unwrappedParams = use(params);
   const characterName = decodeURIComponent(unwrappedParams.characterName);
   
-  const [user, setUser] = useState<ShandaboxUser | null>(null);
+  // THE FIX: We explicitly tell TypeScript to expect a user object without the private email field
+  const [user, setUser] = useState<Omit<ShandaboxUser, 'email'> | null>(null);
   const [inventory, setInventory] = useState<ShandaboxInventoryItem[]>([]);
   const [bosses, setBosses] = useState<ShandaboxDefeatedBoss[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,7 +22,7 @@ export default function ShandaboxProfilePage({ params }: { params: Promise<{ cha
     async function load() {
       const res = await getPublicShandaboxProfile(characterName);
       if (res.success && res.user) {
-        setUser(res.user);
+        setUser(res.user as Omit<ShandaboxUser, 'email'>);
         setInventory(res.inventory || []);
         setBosses(res.bosses || []);
       }
@@ -94,7 +95,7 @@ export default function ShandaboxProfilePage({ params }: { params: Promise<{ cha
                           <div className="p-2 bg-black/20 flex-1 flex flex-col justify-center">
                               <p className="font-bold text-lg truncate text-center" title={item.card?.card_name}>{item.card?.card_name}</p>
                           </div>
-                      </div> // <-- FIXED MISSING CLOSING DIV
+                      </div>
                   ))}
               </div>
           )}
