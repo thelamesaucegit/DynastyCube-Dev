@@ -20,13 +20,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/app/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/app/components/ui/tabs"; // ADDED TABS
-import { PlayoffBracket } from "@/app/components/PlayoffBracket"; // ADDED BRACKET
+import { Tabs, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
+import { PlayoffBracket } from "@/app/components/PlayoffBracket"; 
 import { Calendar, Clock, Loader2, AlertCircle, PlayCircle, Bot, Swords, ChevronDown, ChevronUp, Radio } from "lucide-react";
 import { formatDateTime } from "@/app/utils/timezoneUtils";
 import { useUserTimezone } from "@/hooks/useUserTimezone";
 
-// Add broadcast timing helpers to UnifiedMatch for the UI
 interface StreamMatchUI extends UnifiedMatch {
     broadcastStartTime: number;
     broadcastEndTime: number;
@@ -37,16 +36,13 @@ interface WeekWithMatches extends ScheduleWeek {
   matches: StreamMatchUI[];
 }
 
-// HELPER: Safely force the DB timestamp into US Central Time before parsing
 const parseCentralTime = (dateString: string | number) => {
   if (!dateString) return new Date();
   if (typeof dateString === 'number') return new Date(dateString);
   
-  // Remove 'Z' or '+00:00' if Supabase incorrectly returned it as UTC
   let clean = dateString.replace('Z', '').replace(/\+00:?00$/, '');
   if (clean.includes(' ')) clean = clean.replace(' ', 'T');
   
-  // If it doesn't already have an offset, force it to US Central (-05:00)
   if (!/[-+]\d{2}:?\d{2}$/.test(clean)) {
     clean += '-05:00';
   }
@@ -57,15 +53,12 @@ const getWeekStatus = (week: ScheduleWeek) => {
   const now = new Date();
   const startDate = parseCentralTime(week.start_date);
   const logicalEndDate = new Date(parseCentralTime(week.end_date).getTime() - (10 * 60000));
-
   if (now < startDate) return "upcoming";
   if (now > logicalEndDate) return "completed";
   return "current";
 };
 
-// HELPER: Attach Broadcast Timings to matches!
 function enhanceMatchWithStreamTiming(match: UnifiedMatch): StreamMatchUI {
-    // Safely cast using an intersection type to declare both potential date fields
     const matchData = match as UnifiedMatch & { 
         scheduled_for?: string; 
         match_date?: string; 
@@ -83,7 +76,6 @@ function enhanceMatchWithStreamTiming(match: UnifiedMatch): StreamMatchUI {
     
     if (now < broadcastStartTime) streamStatus = 'upcoming';
     else if (now >= broadcastStartTime && now <= broadcastEndTime) streamStatus = 'live';
-
     return {
         ...match,
         broadcastStartTime,
@@ -91,9 +83,6 @@ function enhanceMatchWithStreamTiming(match: UnifiedMatch): StreamMatchUI {
         streamStatus
     };
 }
-
-
-
 
 export default function SchedulePage() {
   const { timezone } = useUserTimezone();
@@ -104,8 +93,10 @@ export default function SchedulePage() {
   const [error, setError] = useState<string | null>(null);
   const [openWeeks, setOpenWeeks] = useState<Record<string, boolean>>({});
   
-  // NEW: State to track which view the user is looking at
   const [viewMode, setViewMode] = useState<"regular" | "bracket">("regular");
+  
+  // NEW: State for hiding completed weeks, enabled by default
+  const [hideCompleted, setHideCompleted] = useState(true);
 
   useEffect(() => { loadData(); }, []);
 
@@ -139,14 +130,12 @@ export default function SchedulePage() {
         setSelectedSeason(scheduleResult.season);
         setupDefaultOpenWeeks(weeksWithData); 
         
-        // Auto-show bracket if the season is in playoffs or finished
         if (['playoffs', 'postseason'].includes(scheduleResult.season.status)) {
             setViewMode("bracket");
         }
       } else {
         setError(scheduleResult.error || "No active season found");
       }
-
       const seasonsResult = await getAllSeasons();
       if (seasonsResult.success) setSeasons(seasonsResult.seasons);
     } catch (err) {
@@ -161,7 +150,6 @@ export default function SchedulePage() {
     if (!seasonId) return;
     const season = seasons.find((s) => s.id === seasonId);
     if (!season) return;
-
     setLoading(true);
     setError(null);
     
@@ -182,8 +170,6 @@ export default function SchedulePage() {
         setSelectedSeason(season);
         setupDefaultOpenWeeks(weeksWithData);
         
-        // Auto-switch to bracket view if this season has reached playoffs
-          // Auto-switch to bracket view if this season has reached playoffs historically or currently
         const hasPlayoffs = weeksWithData.some(w => w.is_playoff_week);
         if (hasPlayoffs || ['playoffs', 'postseason'].includes(season.status)) {
             setViewMode("bracket");
@@ -200,7 +186,8 @@ export default function SchedulePage() {
   };
 
   const toggleWeek = (weekId: string) => setOpenWeeks(prev => ({ ...prev, [weekId]: !prev[weekId] }));
- const formatWeekDate = (dateString: string) => {
+
+  const formatWeekDate = (dateString: string) => {
     return parseCentralTime(dateString).toLocaleDateString("en-US", { 
       month: "short", day: "numeric", year: "numeric", timeZone: timezone 
     });
@@ -213,6 +200,11 @@ export default function SchedulePage() {
   };
   
   const seasonHasPlayoffs = weeks.some(w => w.is_playoff_week);
+  
+  // NEW: Filter weeks based on the hideCompleted toggle
+  const visibleWeeks = hideCompleted 
+    ? weeks.filter((week) => getWeekStatus(week) !== "completed") 
+    : weeks;
 
   if (loading) {
     return (
@@ -237,7 +229,6 @@ export default function SchedulePage() {
               : "View match schedules and deadlines"}
           </p>
         </div>
-
         {seasons.length > 0 && (
           <div className="w-full md:w-64">
             <label className="block text-sm font-medium text-muted-foreground mb-2">Select Season</label>
@@ -253,7 +244,7 @@ export default function SchedulePage() {
         )}
       </div>
 
-     {/* NEW: View Mode Toggle (Visible if in playoffs, OR if the season historically had playoffs) */}
+      {/* View Mode Toggle */}
       {selectedSeason && (seasonHasPlayoffs || ['playoffs', 'postseason'].includes(selectedSeason.status)) && (
         <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "regular" | "bracket")} className="mb-6 w-full max-w-md">
           <TabsList className="grid w-full grid-cols-2">
@@ -272,7 +263,6 @@ export default function SchedulePage() {
         </Card>
       )}
 
-      {/* --- CONTENT AREA: Conditionally render Bracket or Regular Weeks --- */}
       {viewMode === "bracket" && selectedSeason ? (
         <PlayoffBracket seasonId={selectedSeason.id} seasonName={selectedSeason.name} />
       ) : weeks.length === 0 ? (
@@ -285,11 +275,37 @@ export default function SchedulePage() {
         </Card>
       ) : (
         <div className="space-y-6">
-                {weeks.map((week) => {
-        const status = getWeekStatus(week);
-        const deckDeadlinePassed = parseCentralTime(week.deck_submission_deadline) < new Date();
-        const isOpen = openWeeks[week.id] || false;
+          
+          {/* NEW: Simple, native checkbox toggle */}
+          <div className="flex justify-end mb-2">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer hover:text-foreground">
+              <input 
+                type="checkbox" 
+                checked={hideCompleted}
+                onChange={(e) => setHideCompleted(e.target.checked)}
+                className="cursor-pointer"
+              />
+              Hide completed weeks
+            </label>
+          </div>
 
+          {/* NEW: Minimal empty state when all weeks are filtered out */}
+          {visibleWeeks.length === 0 && hideCompleted && (
+             <div className="py-12 text-center">
+                <p className="text-muted-foreground mb-2">All schedule weeks have been completed.</p>
+                <button 
+                  onClick={() => setHideCompleted(false)} 
+                  className="text-sm underline hover:text-foreground"
+                >
+                  Show all weeks
+                </button>
+             </div>
+          )}
+
+          {visibleWeeks.map((week) => {
+            const status = getWeekStatus(week);
+            const deckDeadlinePassed = parseCentralTime(week.deck_submission_deadline) < new Date();
+            const isOpen = openWeeks[week.id] || false;
 
             return (
               <Card
@@ -315,7 +331,7 @@ export default function SchedulePage() {
                         </div>
                         <p className="text-sm text-muted-foreground flex items-center gap-1.5">
                           <Calendar className="h-3.5 w-3.5" />
-{formatWeekDate(week.start_date)} - {formatWeekDate(week.end_date)}
+                          {formatWeekDate(week.start_date)} - {formatWeekDate(week.end_date)}
                         </p>
                       </div>
                       
@@ -336,7 +352,6 @@ export default function SchedulePage() {
                     </div>
                   </CardHeader>
                 </div>
-
                 {isOpen && (
                   <CardContent className="pt-4 border-t border-border/50">
                     {week.notes && (
@@ -416,7 +431,6 @@ export default function SchedulePage() {
                                         </Link>
                                       )}
                                     </div>
-
                                   </div>
                                 </CardContent>
                               </Card>
