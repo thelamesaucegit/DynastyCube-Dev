@@ -651,7 +651,7 @@ export async function generateInitialPlayoffBracket(seasonId: string, isTestSeas
     const baseStart = new Date(Date.now()); 
     const weekEnd = isTestSeason 
         ? new Date(baseStart.getTime() + (playoffSpots * 3 * 10 * 60000)) 
-        : new Date(baseStart.getTime() + 7 * 86400000);
+        : getTargetDateCT(baseStart, 9, 23); // 11:00 PM CT on Day 9
 
     const { data: playoffWeek, error: weekErr } = await supabase.from('schedule_weeks').insert({
         season_id: seasonId, week_number: roundNumber,
@@ -764,9 +764,12 @@ export async function advancePlayoffBracket(seasonId: string, isTestSeason: bool
 
     const isChampionship = advancingTeams.length === 2;
     const baseStart = new Date(Date.now()); 
-    const weekEnd = isTestSeason 
+     const weekEnd = isTestSeason 
         ? new Date(baseStart.getTime() + (Math.floor(advancingTeams.length / 2) * 3 * 10 * 60000)) 
-        : new Date(baseStart.getTime() + 7 * 86400000);
+        : isChampionship
+            ? getTargetDateCT(baseStart, 10, 23) // Championship: 11:00 PM CT on Day 10
+            : getTargetDateCT(baseStart, 9, 23); // Playoffs: 11:00 PM CT on Day 9
+
 
     const { data: playoffWeek, error: weekErr } = await supabase.from('schedule_weeks').insert({
         season_id: seasonId, week_number: nextRoundNum,
